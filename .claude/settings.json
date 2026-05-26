@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git push *)"
+    ]
+  },
+  "extraKnownMarketplaces": {
+    "ui-ux-pro-max": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/nextlevelbuilder/ui-ux-pro-max-skill.git"
+      }
+    }
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport re\npath='/tmp/cc-agent/65774981/project/src/TrusteeDocumentPortal.tsx'\ntry:\n    with open(path,'r') as f: lines=f.readlines()\n    cleaned=[l for l in lines if l.strip().rstrip(';') != 'export default TrusteeDocumentPortal']\n    while cleaned and cleaned[-1].strip()=='': cleaned.pop()\n    has_fn=any('export default function TrusteeDocumentPortal' in l for l in cleaned)\n    if not has_fn: cleaned.append('\\nexport default TrusteeDocumentPortal;\\n')\n    n=sum(1 for l in cleaned if 'export default' in l)\n    if n==1:\n        with open(path,'w') as f: f.writelines(cleaned)\nexcept: pass\n\" 2>/dev/null || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

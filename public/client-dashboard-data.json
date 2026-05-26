@@ -1,0 +1,135 @@
+{
+  "caseData": {
+    "clientName": "David Kim",
+    "spouseName": "Jennifer Kim",
+    "chapter": "7",
+    "caseNumber": "Pending",
+    "attorney": "Jennifer Smith, Esq.",
+    "firm": "bankruptcy.AI Legal Group",
+    "filingType": "Individual — Non-Filing Spouse",
+    "retainerDate": "2026-03-15",
+    "estimatedFilingDate": "2026-06-10",
+    "totalFee": 1838,
+    "paidToDate": 900,
+    "payoffDate": "2026-05-28",
+    "currentStage": 2,
+    "paymentLink": "https://pay.example.com/bk-client"
+  },
+  "stages": [
+    {
+      "id": 1,
+      "label": "Intake & Retention",
+      "sub": "Signed retainer, completed intake questionnaire",
+      "status": "complete",
+      "date": "March 15, 2026",
+      "purpose": "You retained our firm to represent you in your Chapter 7 bankruptcy case. During this stage, you completed the initial intake questionnaire and signed the retainer agreement.",
+      "whatToDo": [],
+      "whatHappensNext": "Your case moves to Stage 2 — Information and Documents Collection, where you will complete the detailed financial questionnaire and begin gathering your required documents."
+    },
+    {
+      "id": 2,
+      "label": "Information & Documents Collection",
+      "sub": "Complete financial questionnaire and upload documents",
+      "status": "active",
+      "date": "In Progress",
+      "purpose": "During this stage you will complete your Financial Questionnaire in the client portal. The information you provide allows our legal team to begin preparing your bankruptcy petition and schedules.",
+      "whatToDo": [
+        "Employment and income",
+        "Monthly living expenses",
+        "Debts and creditors",
+        "Property and assets",
+        "Financial history",
+        "Lawsuits, collections, or garnishments"
+      ],
+      "uploadDocuments": "Document uploads typically become available once you are within 60 days of completing payment of your attorney fees. You will upload required documents such as pay stubs, bank statements, tax returns, and identification documents.",
+      "whyLater": "We intentionally wait to collect your documents until we are closer to your filing date. Bankruptcy law requires that the financial records in your file reflect your situation at the time of filing — not months earlier. Documents collected too early become stale and must be re-collected, which delays your case and creates extra work for you.",
+      "monthlyUpdates": true,
+      "ongoingObligations": {
+        "beforeFiling": "Once your petition draft is complete and a signing appointment is scheduled, you will need to provide updated pay stubs and updated bank statements as each new month's records become available. If your signing falls in a new calendar month, those updated records are required before we can proceed.",
+        "afterFiling": "Once your case is filed, your obligations do not end. The bankruptcy trustee has the authority to request additional documents at any time — including updated bank statements, tax returns, proof of income, and any other financial records. You are required by law to cooperate fully and supplement your file with any documents the trustee requests.",
+        "warning": "Failure to comply with trustee requests can result in dismissal of your case or denial of your discharge."
+      },
+      "whatHappensNext": "Once your questionnaire and documents are submitted, your case moves to Stage 3 — Document Analysis & Attorney Review, where our team will review your information to ensure everything required for your case has been provided."
+    },
+    {
+      "id": 3,
+      "label": "Document Analysis & Attorney Review",
+      "sub": "Attorney reviews your petition and schedules",
+      "status": "upcoming",
+      "date": "Est. Late May 2026",
+      "purpose": "Our legal team will review all information and documents you submitted to verify accuracy and completeness. Your attorney will prepare your bankruptcy petition and all required schedules.",
+      "whatToDo": [
+        "Respond promptly to any follow-up questions from your attorney",
+        "Review your draft petition for accuracy",
+        "Sign the declaration verifying the information is true and correct"
+      ],
+      "whatHappensNext": "Once your petition is finalized and all documents are verified, your case moves to Stage 4 — Signing Appointment, where you will sign the official bankruptcy documents."
+    },
+    {
+      "id": 4,
+      "label": "Signing Appointment",
+      "sub": "Sign official bankruptcy petition and schedules",
+      "status": "upcoming",
+      "date": "Est. June 2026",
+      "purpose": "You will meet with your attorney (in-person or virtually) to review and sign your completed bankruptcy petition, schedules, and all required official forms before filing.",
+      "whatToDo": [
+        "Bring a current bank balance screenshot (day-of)",
+        "Bring government-issued photo ID",
+        "Review all documents carefully before signing",
+        "Bring any outstanding required documents"
+      ],
+      "whatHappensNext": "After signing, your case moves immediately to Stage 5 — Filing with the Court. Your attorney will submit your bankruptcy petition electronically."
+    },
+    {
+      "id": 5,
+      "label": "Filing with the Court",
+      "sub": "Case filed with the U.S. Bankruptcy Court",
+      "status": "upcoming",
+      "date": "Est. June 2026",
+      "purpose": "Your attorney files your completed bankruptcy petition with the U.S. Bankruptcy Court. This triggers the automatic stay, which immediately stops most collection actions, wage garnishments, and foreclosures.",
+      "whatToDo": [
+        "No action needed — your attorney handles filing",
+        "Watch for your case number from the court",
+        "Review your Notice of Bankruptcy Case Filing"
+      ],
+      "whatHappensNext": "The court will schedule your 341 Meeting of Creditors, typically 21–40 days after filing. You will receive a notice with the date, time, and instructions."
+    },
+    {
+      "id": 6,
+      "label": "Meeting of Creditors (341)",
+      "sub": "Mandatory hearing — typically 10–15 minutes",
+      "status": "upcoming",
+      "date": "Est. July 2026",
+      "purpose": "The 341 Meeting is a brief, informal hearing required by law. You will answer questions from the bankruptcy trustee under oath about your financial affairs. Creditors may attend but rarely do in Chapter 7 cases.",
+      "whatToDo": [
+        "Bring government-issued photo ID",
+        "Bring your Social Security card",
+        "Arrive 15 minutes early",
+        "Answer all questions truthfully"
+      ],
+      "whatHappensNext": "After the 341 Meeting, there is a 60-day objection period. If no objections are filed, your case moves to Stage 7 — Discharge."
+    },
+    {
+      "id": 7,
+      "label": "Discharge",
+      "sub": "Eligible debts legally discharged by the court",
+      "status": "upcoming",
+      "date": "Est. September 2026",
+      "purpose": "The court issues a discharge order, legally eliminating your eligible debts. Most unsecured debts (credit cards, medical bills, personal loans) will be discharged. Certain debts like student loans and recent taxes are generally non-dischargeable.",
+      "whatToDo": [],
+      "whatHappensNext": "Your case is closed. You will receive the official discharge order by mail. Keep this document permanently — it is proof that your debts were legally discharged."
+    }
+  ],
+  "questionnaireSteps": [
+    { "id": "b101",      "label": "Personal Information",       "step": "1",  "status": "complete" },
+    { "id": "b106ab",    "label": "Property & Assets",          "step": "2",  "status": "active"   },
+    { "id": "secured",   "label": "Secured Creditors",          "step": "3",  "status": "pending"  },
+    { "id": "unsecured", "label": "Priority & Unsecured Debts", "step": "4",  "status": "pending"  },
+    { "id": "leases",    "label": "Leases & Contracts",         "step": "5",  "status": "pending"  },
+    { "id": "income",    "label": "Monthly Income",             "step": "6",  "status": "pending"  },
+    { "id": "expenses",  "label": "Monthly Expenses",           "step": "7",  "status": "pending"  },
+    { "id": "sofa",      "label": "Financial History",          "step": "8",  "status": "pending"  },
+    { "id": "docs",      "label": "Document Upload",            "step": "9",  "status": "pending"  },
+    { "id": "ack",       "label": "Review & Submit",            "step": "10", "status": "pending"  }
+  ]
+}

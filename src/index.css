@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Theme tokens ──────────────────────────────────────────────────────────── */
+:root {
+  /* Light mode */
+  --bg-base:        #f8f9fb;
+  --bg-surface:     #ffffff;
+  --bg-surface-2:   #f1f3f7;
+  --bg-surface-3:   #e8ebf2;
+  --border:         #dde2ec;
+  --border-subtle:  #eaecf3;
+  --text-primary:   #0f1623;
+  --text-secondary: #4b5773;
+  --text-muted:     #8b97b3;
+  --text-faint:     #b8c2d8;
+
+  /* Brand */
+  --amber:          #d97706;
+  --amber-light:    #fbbf24;
+  --emerald:        #059669;
+  --sky:            #0284c7;
+  --red:            #dc2626;
+}
+
+.dark {
+  /* Dark mode */
+  --bg-base:        #0a0e1a;
+  --bg-surface:     #0d1221;
+  --bg-surface-2:   #111827;
+  --bg-surface-3:   #1a2235;
+  --border:         rgba(148,163,184,0.12);
+  --border-subtle:  rgba(148,163,184,0.06);
+  --text-primary:   #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted:     #4b5773;
+  --text-faint:     #2d3a52;
+}
+
+/* Apply base background */
+body {
+  background-color: var(--bg-base);
+  color: var(--text-primary);
+  transition: background-color 0.2s, color 0.2s;
+}
+
+/* ── Smooth theme transitions ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* But don't apply to transforms/opacity (breaks animations) */
+*[class*="animate-"],
+*[class*="transition-"] {
+  transition: inherit;
+}

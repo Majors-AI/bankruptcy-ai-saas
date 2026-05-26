@@ -1,0 +1,2070 @@
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  User,
+  Home,
+  Car,
+  CreditCard,
+  DollarSign,
+  Briefcase,
+  RotateCcw,
+  AlertTriangle,
+  Info,
+  Shield,
+  Scale,
+  CheckCheck,
+  Flag,
+  Send,
+  RefreshCw,
+  Eye,
+  XCircle,
+  Plus,
+  Minus,
+  Mail,
+  Calendar,
+  Landmark,
+  ClipboardList,
+  BookOpen,
+  TrendingDown,
+  Activity,
+  PiggyBank,
+  Building2,
+  Gavel,
+  Package,
+} from "lucide-react";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+export interface SectionVerification {
+  id?: string;
+  review_id: string;
+  section_id: string;
+  verified: boolean;
+  verified_at?: string | null;
+  notes?: string;
+  exemptions_applied?: ExemptionEntry[] | null;
+  updated_at?: string;
+}
+
+interface ExemptionEntry {
+  asset: string;
+  statute: string;
+  amount: number;
+  unlimited: boolean;
+}
+
+interface LienEntry {
+  holder: string;
+  balance: number;
+  docRef?: string;
+  docStatus?: "current" | "review" | "stale" | "missing";
+  docDate?: string;
+  intent?: string;
+}
+
+type AssetCategory =
+  | "real_estate"
+  | "vehicles"
+  | "bank_financial"
+  | "retirement"
+  | "business"
+  | "other_financial"
+  | "household_goods";
+
+interface AssetRow {
+  category: AssetCategory;
+  asset: string;
+  address?: string;
+  description?: string;
+  fmv: number;
+  zillowValue?: number;
+  zillowConfirmedByClient?: boolean;
+  zillowConfirmedDate?: string;
+  ownershipDate?: string;
+  liens: LienEntry[];
+  lien: number;
+  lienHolder?: string;
+  lienDocRef?: string;
+  equity: number;
+  exemptionAmount: number | "unlimited";
+  exemptionStatute: string;
+  exemptionShortCite: string;
+  netAfterExemption: number;
+  nonExemptEquity: number;
+  ownershipNote?: string;
+}
+
+interface OwnershipVerification {
+  homeOwnership: string;    // answer from questionnaire
+  vehicleOwnership: string[];
+  stateResidency: string;   // state name
+  monthsInState: number;    // how long in state
+  priorState?: string;
+  exemptionEligible: boolean;
+  eligibilityNote: string;
+}
+
+interface ReviewIssue {
+  id: string;
+  section: string;
+  severity: "warning" | "error" | "info";
+  description: string;
+  resolved: boolean;
+}
+
+interface DocPreview {
+  name: string;
+  path?: string;
+  type: "pdf" | "image" | "placeholder";
+  date?: string;
+  status: "current" | "review" | "stale" | "missing";
+  note?: string;
+}
+
+// ─── Petition Sections Definition ────────────────────────────────────────────
+
+interface FieldEntry {
+  label: string;
+  value: string;
+  flag?: "ok" | "warn" | "bad";
+}
+
+interface PetitionSection {
+  key: string;
+  label: string;
+  formRef: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+  fields: FieldEntry[];
+  supportingDocs: DocPreview[];
+  exemptions?: ExemptionEntry[];
+  legalNote?: string;
+  issues?: string[];
+  assets?: AssetRow[];
+  ownershipVerification?: OwnershipVerification;
+}
+
+const PETITION_SECTIONS: PetitionSection[] = [
+  {
+    key: "voluntary_petition",
+    label: "Voluntary Petition",
+    formRef: "Official Form 101",
+    icon: BookOpen,
+    description: "Verify debtor identity, district, chapter election, and signature authority.",
+    fields: [
+      { label: "Debtor Full Legal Name", value: "David James Kim" },
+      { label: "SSN (last 4)", value: "****4821" },
+      { label: "Date of Birth", value: "08/14/1981" },
+      { label: "Address", value: "4215 Maple Ridge Dr, Austin, TX 78745" },
+      { label: "County", value: "Travis County" },
+      { label: "Chapter", value: "Chapter 7", flag: "ok" },
+      { label: "Non-Filing Spouse", value: "Jennifer Kim (income reported for means test)" },
+      { label: "Prior Bankruptcies", value: "None", flag: "ok" },
+      { label: "District", value: "Western District of Texas — Austin Division", flag: "ok" },
+      { label: "Signature", value: "Pending — will sign at appointment" },
+    ],
+    supportingDocs: [
+      { name: "Photo ID — Driver License", type: "placeholder", date: "Apr 10, 2026", status: "current" },
+      { name: "Social Security Card", type: "placeholder", date: "Apr 10, 2026", status: "current" },
+    ],
+    legalNote: "Identity must be verified against government-issued photo ID and Social Security card. Address confirms Travis County residency — Western District of Texas venue is proper under 28 U.S.C. §1408.",
+  },
+  {
+    key: "schedule_abc",
+    label: "Schedules A/B/C — Property & Exemptions",
+    formRef: "Official Forms 106A/B, 106C",
+    icon: Home,
+    description: "Verify all assets, lien balances, equity calculation, exemptions applied, and net non-exempt equity. Confirm ownership documentation and state residency eligibility.",
+    fields: [],
+    ownershipVerification: {
+      homeOwnership: "Owns — 4215 Maple Ridge Dr, Austin TX 78745 (fee simple, Wells Fargo lien)",
+      vehicleOwnership: [
+        "2020 Toyota Camry — Title in debtor's name (Chase Auto lien)",
+        "2018 Honda Pilot — Title in spouse's name (no lien, non-filing spouse)",
+      ],
+      stateResidency: "Texas",
+      monthsInState: 48,
+      priorState: "California",
+      exemptionEligible: true,
+      eligibilityNote: "Debtor has resided in Texas for 48 months (4 years). Texas exemptions apply under 11 U.S.C. §522(b)(3)(A) — domicile for 730+ days before filing confirmed.",
+    },
+    assets: [
+      // ── Real Estate ──────────────────────────────────────────────────────────
+      {
+        category: "real_estate" as AssetCategory,
+        asset: "Primary Residence",
+        address: "4215 Maple Ridge Dr, Austin TX 78745",
+        description: "Fee simple — Wells Fargo 1st mortgage",
+        fmv: 385000,
+        zillowValue: 391000,
+        zillowConfirmedByClient: true,
+        zillowConfirmedDate: "Apr 10, 2026",
+        ownershipDate: "Jun 15, 2019",
+        liens: [
+          {
+            holder: "Wells Fargo (1st Mortgage)",
+            balance: 310000,
+            docRef: "Wells Fargo Mortgage Statement — Mar 2026",
+            docStatus: "review",
+            docDate: "Mar 2026",
+            intent: "Retain & Continue Payments",
+          },
+        ],
+        lien: 310000,
+        lienHolder: "Wells Fargo",
+        lienDocRef: "Wells Fargo Mortgage Statement — Mar 2026",
+        equity: 75000,
+        exemptionAmount: "unlimited",
+        exemptionStatute: "TX Const. Art. XVI §50; TX Prop. Code §41.001",
+        exemptionShortCite: "TX Homestead — Unlimited",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      // ── Vehicles ─────────────────────────────────────────────────────────────
+      {
+        category: "vehicles" as AssetCategory,
+        asset: "2020 Toyota Camry",
+        description: "Debtor's primary vehicle — title in debtor's name",
+        fmv: 18500,
+        ownershipDate: "Mar 3, 2020",
+        liens: [
+          {
+            holder: "Chase Auto Finance",
+            balance: 14200,
+            docRef: "Chase Auto Loan Statement — Feb 2026",
+            docStatus: "stale",
+            docDate: "Feb 2026",
+            intent: "Retain & Reaffirm",
+          },
+        ],
+        lien: 14200,
+        lienHolder: "Chase Auto",
+        lienDocRef: "Chase Auto Loan Statement — Feb 2026",
+        equity: 4300,
+        exemptionAmount: 4300,
+        exemptionStatute: "TX Prop. Code §42.002(a)(9)",
+        exemptionShortCite: "TX Prop. §42.002(a)(9)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "vehicles" as AssetCategory,
+        asset: "2018 Honda Pilot",
+        description: "Non-filing spouse's vehicle — title in spouse's name",
+        fmv: 22000,
+        ownershipDate: "Aug 12, 2018",
+        liens: [],
+        lien: 0,
+        equity: 22000,
+        exemptionAmount: 22000,
+        exemptionStatute: "Not property of estate — TX Family Code §3.002",
+        exemptionShortCite: "TX Fam. §3.002 (excluded)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+        ownershipNote: "Title in spouse's name — excluded from bankruptcy estate",
+      },
+      // ── Bank & Financial Accounts ─────────────────────────────────────────────
+      {
+        category: "bank_financial" as AssetCategory,
+        asset: "Chase Checking ****1024",
+        description: "Primary checking account — Chase Bank",
+        fmv: 1842,
+        liens: [],
+        lien: 0,
+        equity: 1842,
+        exemptionAmount: 1842,
+        exemptionStatute: "TX Prop. Code §42.001 (personal property aggregate)",
+        exemptionShortCite: "TX Prop. §42.001",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "bank_financial" as AssetCategory,
+        asset: "Chase Savings ****8811",
+        description: "Savings account — Chase Bank",
+        fmv: 420,
+        liens: [],
+        lien: 0,
+        equity: 420,
+        exemptionAmount: 420,
+        exemptionStatute: "TX Prop. Code §42.001 (personal property aggregate)",
+        exemptionShortCite: "TX Prop. §42.001",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      // ── Retirement Accounts ───────────────────────────────────────────────────
+      {
+        category: "retirement" as AssetCategory,
+        asset: "Fidelity IRA",
+        description: "Traditional IRA — Fidelity Investments",
+        fmv: 47200,
+        liens: [],
+        lien: 0,
+        equity: 47200,
+        exemptionAmount: "unlimited",
+        exemptionStatute: "TX Prop. Code §42.0021; 11 U.S.C. §522(d)(12)",
+        exemptionShortCite: "TX Prop. §42.0021 — Unlimited",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      // ── Business Property ─────────────────────────────────────────────────────
+      // (none reported — no self-employment or business ownership)
+      // ── Other Financial Assets ────────────────────────────────────────────────
+      {
+        category: "other_financial" as AssetCategory,
+        asset: "Personal Injury Claim",
+        description: "Pending PI claim — auto accident Oct 2025, case open",
+        fmv: 0,
+        liens: [],
+        lien: 0,
+        equity: 0,
+        exemptionAmount: "unlimited",
+        exemptionStatute: "TX Prop. Code §42.001(b)(4) — PI recovery for personal injuries",
+        exemptionShortCite: "TX Prop. §42.001(b)(4) — PI exempt",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+        ownershipNote: "Value unliquidated — must disclose; exempt under TX law. Attorney to confirm case status.",
+      },
+      // ── Household Goods ───────────────────────────────────────────────────────
+      {
+        category: "household_goods" as AssetCategory,
+        asset: "Household Goods & Furnishings",
+        description: "Furniture, appliances, cookware, decor (estimated replacement value)",
+        fmv: 3500,
+        liens: [],
+        lien: 0,
+        equity: 3500,
+        exemptionAmount: 3500,
+        exemptionStatute: "TX Prop. Code §42.002(a)(1)",
+        exemptionShortCite: "TX Prop. §42.002(a)(1)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "household_goods" as AssetCategory,
+        asset: "Clothing & Wearing Apparel",
+        description: "Personal clothing for debtor and dependents (estimated)",
+        fmv: 800,
+        liens: [],
+        lien: 0,
+        equity: 800,
+        exemptionAmount: 800,
+        exemptionStatute: "TX Prop. Code §42.002(a)(2)",
+        exemptionShortCite: "TX Prop. §42.002(a)(2)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "household_goods" as AssetCategory,
+        asset: "Electronics & Computers",
+        description: "TV, laptop, tablets, personal electronics (estimated)",
+        fmv: 600,
+        liens: [],
+        lien: 0,
+        equity: 600,
+        exemptionAmount: 600,
+        exemptionStatute: "TX Prop. Code §42.002(a)(1)",
+        exemptionShortCite: "TX Prop. §42.002(a)(1)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "household_goods" as AssetCategory,
+        asset: "Jewelry",
+        description: "Personal jewelry — debtor and spouse (estimated)",
+        fmv: 500,
+        liens: [],
+        lien: 0,
+        equity: 500,
+        exemptionAmount: 500,
+        exemptionStatute: "TX Prop. Code §42.002(a)(6)",
+        exemptionShortCite: "TX Prop. §42.002(a)(6)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+      },
+      {
+        category: "household_goods" as AssetCategory,
+        asset: "Tools of the Trade",
+        description: "Work tools / equipment used in employment (if any)",
+        fmv: 0,
+        liens: [],
+        lien: 0,
+        equity: 0,
+        exemptionAmount: 0,
+        exemptionStatute: "TX Prop. Code §42.002(a)(4)",
+        exemptionShortCite: "TX Prop. §42.002(a)(4)",
+        netAfterExemption: 0,
+        nonExemptEquity: 0,
+        ownershipNote: "None reported — confirm with client",
+      },
+    ],
+    supportingDocs: [
+      { name: "Wells Fargo Mortgage Statement — Mar 2026", type: "placeholder", date: "Mar 2026", status: "review", note: "Over 60 days — updated balance needed before signing" },
+      { name: "Chase Auto Loan Statement — Feb 2026", type: "placeholder", date: "Feb 2026", status: "stale", note: "Stale — must obtain current statement" },
+      { name: "Chase Bank Statement — Mar 2026 (Checking)", type: "placeholder", date: "Mar 31, 2026", status: "review" },
+      { name: "Chase Bank Statement — Mar 2026 (Savings)", type: "placeholder", date: "Mar 31, 2026", status: "review" },
+      { name: "Fidelity IRA Statement", type: "placeholder", date: "Q1 2026", status: "current" },
+      { name: "Equifax Credit Report (auto/mortgage balances)", type: "pdf", date: "Apr 5, 2026", status: "current", path: "/documents/Equifax_Credit_Report_Lisa.pdf" },
+    ],
+    legalNote: "Texas has opted out of federal exemptions. All exemptions are claimed under Texas law. Homestead exemption is unlimited. Debtor has resided in TX for 48 months — §522(b)(3)(A) satisfied. Confirm mortgage and auto balances within 60 days of filing. Personal property aggregate cap is $100,000 (single) — $7,900 used of $100,000.",
+    issues: ["Mortgage statement is over 60 days old — updated statement required before signing.", "Auto loan statement from Feb 2026 is stale — must be updated."],
+  },
+  {
+    key: "schedule_d",
+    label: "Schedule D — Secured Creditors",
+    formRef: "Official Form 106D",
+    icon: Landmark,
+    description: "Verify all secured debts, collateral, current balances, and debtor's intent (retain/surrender).",
+    fields: [
+      { label: "Wells Fargo — Mortgage", value: "$310,000 — Collateral: 4215 Maple Ridge Dr" },
+      { label: "Intent — Mortgage", value: "Retain & Continue Payments", flag: "ok" },
+      { label: "Chase Auto — Vehicle", value: "$14,200 — Collateral: 2020 Toyota Camry" },
+      { label: "Intent — Auto", value: "Retain & Reaffirm / Ride-Through", flag: "ok" },
+      { label: "Other Secured Debts", value: "None" },
+    ],
+    supportingDocs: [
+      { name: "Wells Fargo Mortgage Statement — Mar 2026", type: "placeholder", date: "Mar 2026", status: "review", note: "Must obtain current — over 60 days" },
+      { name: "Chase Auto Loan Statement — Feb 2026", type: "placeholder", date: "Feb 2026", status: "stale", note: "Must update before signing" },
+      { name: "Wells Fargo Deed of Trust / Lien", type: "placeholder", date: "2021", status: "current" },
+      { name: "Chase Auto Security Agreement", type: "placeholder", date: "2022", status: "current" },
+    ],
+    legalNote: "Verify that mortgage and auto loan balances are current. Debtor must sign a Statement of Intention (Form 108) within 30 days of filing or before first meeting of creditors. Reaffirmation agreement for auto required if lender demands.",
+    issues: ["Mortgage statement must be updated before signing — current balance will differ from March figure."],
+  },
+  {
+    key: "schedule_ef",
+    label: "Schedule E/F — Unsecured Creditors",
+    formRef: "Official Form 106E/F",
+    icon: CreditCard,
+    description: "Verify all priority and general unsecured debts. Check for domestic support, taxes, and student loans.",
+    fields: [
+      { label: "Priority Debts (Part 1)", value: "None identified", flag: "ok" },
+      { label: "Domestic Support Orders", value: "None — confirm with client", flag: "ok" },
+      { label: "Recent Tax Debt (<3 yrs)", value: "None — 2023/2024 returns filed, refunds received", flag: "ok" },
+      { label: "Chase Visa ****3291", value: "$8,450 (general unsecured)" },
+      { label: "Capital One MC ****7740", value: "$5,820 — Judgment entered", flag: "warn" },
+      { label: "Citi Double Cash ****0562", value: "$3,100 (general unsecured)" },
+      { label: "Discover It ****9914", value: "$2,280 (general unsecured)" },
+      { label: "St. David's Hospital", value: "$6,700 (medical — general unsecured)" },
+      { label: "LendingClub ****4408", value: "$9,200 (personal loan — general unsecured)" },
+      { label: "Student Loans", value: "None reported", flag: "ok" },
+      { label: "Total General Unsecured", value: "$35,550" },
+    ],
+    supportingDocs: [
+      { name: "2024 Federal Tax Return", type: "placeholder", date: "Apr 15, 2026", status: "current" },
+      { name: "2023 Federal Tax Return", type: "placeholder", date: "Apr 15, 2025", status: "current" },
+      { name: "Equifax Credit Report (creditor list)", type: "pdf", date: "Apr 5, 2026", status: "current", path: "/documents/Equifax_Credit_Report_Lisa.pdf" },
+      { name: "TransUnion Credit Report", type: "pdf", date: "Apr 5, 2026", status: "current", path: "/documents/Trans_Union_Credit_Report_Lisa.pdf" },
+      { name: "Experian Credit Report", type: "pdf", date: "Apr 5, 2026", status: "current", path: "/documents/Experian_Credit_Report_Lisa.pdf" },
+    ],
+    legalNote: "Capital One has an unsecured judgment. Verify whether a judgment lien has been recorded against real property in Travis County — run judgment lien search. If lien attaches to homestead, lien avoidance motion under §522(f) is required.",
+    issues: ["Capital One judgment — run Travis County judgment lien search before filing to determine if §522(f) motion is needed."],
+  },
+  {
+    key: "schedule_g",
+    label: "Schedule G — Executory Contracts & Leases",
+    formRef: "Official Form 106G",
+    icon: ClipboardList,
+    description: "Identify any unexpired leases or executory contracts — assume or reject.",
+    fields: [
+      { label: "Residential Lease", value: "None — debtor owns home", flag: "ok" },
+      { label: "Vehicle Leases", value: "None — vehicles owned/financed", flag: "ok" },
+      { label: "Other Executory Contracts", value: "None reported", flag: "ok" },
+    ],
+    supportingDocs: [],
+    legalNote: "No executory contracts or unexpired leases identified. Schedule G will be filed as 'None.' Confirm with client prior to signing.",
+  },
+  {
+    key: "schedule_h",
+    label: "Schedule H — Codebtors",
+    formRef: "Official Form 106H",
+    icon: User,
+    description: "Identify co-signers and joint obligors on any scheduled debts.",
+    fields: [
+      { label: "Non-Filing Spouse — Joint Debts", value: "Jennifer Kim not a co-borrower on any listed debt", flag: "ok" },
+      { label: "Other Codebtors", value: "None reported", flag: "ok" },
+    ],
+    supportingDocs: [],
+    legalNote: "No codebtors identified. Jennifer Kim is a non-filing spouse and her income is included for means test purposes only. Confirm she is not an obligor on any scheduled debt.",
+  },
+  {
+    key: "schedule_i",
+    label: "Schedule I — Income",
+    formRef: "Official Form 106I",
+    icon: DollarSign,
+    description: "Verify all income sources with supporting documentation. Includes debtor and non-filing spouse income.",
+    fields: [
+      { label: "Debtor Employer", value: "Apex Solutions LLC, Austin TX" },
+      { label: "Pay Frequency", value: "Bi-weekly" },
+      { label: "Gross Monthly (David)", value: "$7,250" },
+      { label: "Payroll Deductions", value: "$1,770 (taxes $1,050 / health ins $420 / 401k $300)" },
+      { label: "Net Monthly (David)", value: "$5,480", flag: "ok" },
+      { label: "Spouse Gross Monthly (Jennifer)", value: "$4,100 — reported for Schedule I" },
+      { label: "Combined Household Net", value: "$8,680" },
+      { label: "Other Income Sources", value: "None", flag: "ok" },
+    ],
+    supportingDocs: [
+      { name: "Pay Stub — April 2026 (1 of 2)", type: "placeholder", date: "Apr 14, 2026", status: "current" },
+      { name: "Pay Stub — April 2026 (2 of 2)", type: "placeholder", date: "Apr 28, 2026", status: "current" },
+      { name: "Most Recent Pay Stub — Jennifer Kim", type: "placeholder", date: "Apr 2026", status: "current" },
+    ],
+    legalNote: "Pay stubs must cover most recent 30 days. Two full pay periods required. Confirm no other income sources: rental income, self-employment, social security, unemployment, pension, or alimony. Spouse income reported for means test even though non-filing.",
+  },
+  {
+    key: "schedule_j",
+    label: "Schedule J — Expenses",
+    formRef: "Official Form 106J",
+    icon: Briefcase,
+    description: "Verify monthly expenses against supporting documentation. Confirm residential payment, auto payment, and other obligations.",
+    fields: [
+      { label: "Mortgage/Housing Payment", value: "$2,150/mo" },
+      { label: "Utilities (Electric/Gas/Water)", value: "$320/mo" },
+      { label: "Food / Groceries", value: "$900/mo" },
+      { label: "Transportation", value: "$480/mo (gas + insurance)" },
+      { label: "Auto Loan Payment", value: "$320/mo (Toyota Camry — Chase)" },
+      { label: "Health Insurance / Medical", value: "$410/mo" },
+      { label: "Child Care / School", value: "$650/mo (2 children)" },
+      { label: "Other Expenses", value: "None reported" },
+      { label: "Total Monthly Expenses", value: "$5,230" },
+      { label: "Net After Expenses", value: "$250/mo surplus", flag: "ok" },
+    ],
+    supportingDocs: [
+      { name: "Wells Fargo Mortgage Statement (housing payment)", type: "placeholder", date: "Mar 2026", status: "review", note: "Confirms $2,150 payment — update needed" },
+      { name: "Chase Auto Statement (car payment)", type: "placeholder", date: "Feb 2026", status: "stale", note: "Confirms $320 payment — must update" },
+      { name: "Utility Bills (Electric / Gas)", type: "placeholder", date: "Apr 2026", status: "current" },
+      { name: "Health Insurance / Pay Stub Deduction", type: "placeholder", date: "Apr 2026", status: "current" },
+      { name: "Child Care Invoice / Statement", type: "placeholder", date: "Apr 2026", status: "current" },
+    ],
+    legalNote: "Confirm all expenses with supporting documentation. Mortgage payment confirmed by statement. Auto payment confirmed by loan statement. Child care requires receipts or letter. $250/mo surplus is low — does not support Chapter 13 viability.",
+  },
+  {
+    key: "means_test",
+    label: "Means Test (Form 122A)",
+    formRef: "Official Form 122A-1 & 122A-2",
+    icon: TrendingDown,
+    description: "Verify current monthly income, median income comparison, and disposable income calculation.",
+    fields: [
+      { label: "Household Size", value: "4 (debtor + non-filing spouse + 2 dependents)" },
+      { label: "Texas 4-Person Median", value: "$98,752/yr (U.S. Trustee current figures)" },
+      { label: "Debtor 6-Month Gross (annualized)", value: "$87,000/yr (David only)" },
+      { label: "Spouse 6-Month Gross (annualized)", value: "$49,200/yr (Jennifer — non-filing)" },
+      { label: "Combined CMI (annualized)", value: "$136,200/yr", flag: "warn" },
+      { label: "Above/Below Median", value: "ABOVE median — Form 122A-2 required", flag: "warn" },
+      { label: "Form 122A-2 Disposable Income", value: "-$420/mo (negative)", flag: "ok" },
+      { label: "Presumption of Abuse", value: "Does NOT arise — §707(b)(2) passed", flag: "ok" },
+    ],
+    supportingDocs: [
+      { name: "Pay Stub — April 2026 (1 of 2)", type: "placeholder", date: "Apr 14, 2026", status: "current" },
+      { name: "Pay Stub — April 2026 (2 of 2)", type: "placeholder", date: "Apr 28, 2026", status: "current" },
+      { name: "Spouse Pay Stub — April 2026", type: "placeholder", date: "Apr 2026", status: "current" },
+    ],
+    legalNote: "Client is above the Texas 4-person median. Form 122A-2 is mandatory. Allowable expense deductions under IRS standards reduce disposable income to a negative figure, so no presumption of abuse arises under 11 U.S.C. §707(b)(2). Document the 6-month look-back period carefully.",
+  },
+  {
+    key: "sofa",
+    label: "SOFA — Statement of Financial Affairs",
+    formRef: "Official Form 107",
+    icon: Activity,
+    description: "Review financial history: transfers, payments, lawsuits, prior addresses, and business interests.",
+    fields: [
+      { label: "Income — Last 2 Years", value: "2024: ~$87,000 gross; 2025: ~$87,000 gross" },
+      { label: "Payments >$600 (90 days)", value: "None outside of regular mortgage and auto (current obligations)" },
+      { label: "Insider Payments (1 yr)", value: "None reported" },
+      { label: "Lawsuits / Judgments", value: "Capital One — judgment $5,820 in Travis County", flag: "warn" },
+      { label: "Garnishments", value: "No active garnishment", flag: "ok" },
+      { label: "Foreclosure", value: "No active foreclosure", flag: "ok" },
+      { label: "Repossessions", value: "None reported", flag: "ok" },
+      { label: "Asset Transfers (2 yrs)", value: "None reported — no below-market transfers", flag: "ok" },
+      { label: "Prior Addresses (3 yrs)", value: "Same address — 4215 Maple Ridge Dr since 2019" },
+      { label: "Prior Bankruptcies", value: "None", flag: "ok" },
+      { label: "Business Ownership / Self-Employment", value: "None reported", flag: "ok" },
+      { label: "Tax Returns Filed", value: "2023 and 2024 — both provided", flag: "ok" },
+    ],
+    supportingDocs: [
+      { name: "2024 Federal Tax Return", type: "placeholder", date: "Apr 15, 2026", status: "current" },
+      { name: "2023 Federal Tax Return", type: "placeholder", date: "Apr 15, 2025", status: "current" },
+      { name: "Equifax Credit Report (judgment reference)", type: "pdf", date: "Apr 5, 2026", status: "current", path: "/documents/Equifax_Credit_Report_Lisa.pdf" },
+    ],
+    legalNote: "Capital One judgment must be researched in Travis County records before filing. If judgment lien was recorded against real property, a §522(f) motion to avoid judgment lien on exempt homestead is required. No other SOFA flags identified.",
+    issues: ["Run Travis County District Court judgment lien search — Capital One judgment $5,820. Determine if recorded lien impairs homestead exemption."],
+  },
+  {
+    key: "declaration",
+    label: "Declaration & Signature",
+    formRef: "Official Form 106Dec / 107",
+    icon: Scale,
+    description: "Final review — confirm accuracy, apply exemptions, and prepare for debtor signature.",
+    fields: [
+      { label: "All Schedules Complete", value: "Yes — A/B through J, SOFA, Means Test" },
+      { label: "Exemptions Applied", value: "All Texas exemptions confirmed — no non-exempt equity" },
+      { label: "No-Asset Case", value: "Yes — trustee no-asset report expected", flag: "ok" },
+      { label: "Means Test Result", value: "No presumption of abuse", flag: "ok" },
+      { label: "Outstanding Issues", value: "Judgment lien search required; stale loan statements" },
+      { label: "Debtor Signature", value: "Pending — signing appointment to be scheduled" },
+      { label: "Attorney Signature", value: "Pending — will be applied at filing" },
+    ],
+    supportingDocs: [],
+    legalNote: "All information and documents have been reviewed. Petition is substantially complete pending: (1) updated mortgage and auto loan statements, (2) Travis County judgment lien search, (3) debtor signing appointment.",
+  },
+];
+
+// ─── Schedule A/B/C/D Consolidated Panel ─────────────────────────────────────
+
+function fmt(n: number) {
+  return n === 0 ? "$0" : `$${n.toLocaleString()}`;
+}
+
+function DocStatusBadge({ status }: { status: "current" | "review" | "stale" | "missing" }) {
+  const map = {
+    current: "bg-emerald-900/40 text-emerald-300 border-emerald-700/50",
+    review:  "bg-amber-900/40 text-amber-300 border-amber-700/50",
+    stale:   "bg-red-900/40 text-red-300 border-red-700/50",
+    missing: "bg-slate-800 text-slate-500 border-slate-700",
+  };
+  const label = { current: "Current", review: "Update", stale: "Stale", missing: "Missing" };
+  return (
+    <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold border ${map[status]}`}>
+      {label[status]}
+    </span>
+  );
+}
+
+const CATEGORY_META: Record<AssetCategory, {
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bg: string;
+  border: string;
+}> = {
+  real_estate:    { label: "Real Estate",                icon: Building2,   color: "text-sky-400",    bg: "bg-sky-900/20",    border: "border-sky-800/50" },
+  vehicles:       { label: "Vehicles",                   icon: Car,         color: "text-blue-400",   bg: "bg-blue-900/20",   border: "border-blue-800/50" },
+  bank_financial: { label: "Bank & Financial Accounts",  icon: Landmark,    color: "text-teal-400",   bg: "bg-teal-900/20",   border: "border-teal-800/50" },
+  retirement:     { label: "Retirement Accounts",        icon: PiggyBank,   color: "text-emerald-400",bg: "bg-emerald-900/20",border: "border-emerald-800/50" },
+  business:       { label: "Business Property",          icon: Briefcase,   color: "text-amber-400",  bg: "bg-amber-900/20",  border: "border-amber-800/50" },
+  other_financial:{ label: "Other Financial Assets",     icon: Gavel,       color: "text-orange-400", bg: "bg-orange-900/20", border: "border-orange-800/50" },
+  household_goods:{ label: "Household Goods",            icon: Package,     color: "text-slate-400",  bg: "bg-slate-800/40",  border: "border-slate-700/50" },
+};
+
+const CATEGORY_ORDER: AssetCategory[] = [
+  "real_estate", "vehicles", "bank_financial", "retirement",
+  "business", "other_financial", "household_goods",
+];
+
+function ScheduleABCPanel({
+  section,
+  onViewDoc,
+}: {
+  section: PetitionSection;
+  onViewDoc: (name: string) => void;
+}) {
+  const ov = section.ownershipVerification!;
+  const assets = section.assets ?? [];
+  const totalFMV = assets.reduce((s, a) => s + a.fmv, 0);
+  const totalLien = assets.reduce((s, a) => s + a.lien, 0);
+  const totalEquity = assets.reduce((s, a) => s + a.equity, 0);
+  const totalNonExempt = assets.reduce((s, a) => s + a.nonExemptEquity, 0);
+
+  const byCategory = CATEGORY_ORDER.reduce<Record<AssetCategory, AssetRow[]>>((acc, cat) => {
+    acc[cat] = assets.filter(a => a.category === cat);
+    return acc;
+  }, {} as Record<AssetCategory, AssetRow[]>);
+
+  return (
+    <div className="space-y-4">
+      {/* ── Ownership & Residency Verification ── */}
+      <div className="bg-slate-900/60 border border-slate-700 rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-800/40">
+          <p className="text-xs font-bold text-slate-300 uppercase tracking-wider">Ownership & Residency Verification</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Required to confirm correct exemption scheme under 11 U.S.C. §522(b)(3)(A)</p>
+        </div>
+        <div className="divide-y divide-slate-800/60">
+          <div className="px-4 py-3 flex items-start gap-3">
+            <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Home className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Home Ownership</p>
+              <p className="text-sm text-slate-200">{ov.homeOwnership}</p>
+            </div>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-1" />
+          </div>
+          <div className="px-4 py-3 flex items-start gap-3">
+            <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Car className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">Vehicle Ownership</p>
+              {ov.vehicleOwnership.map((v, i) => (
+                <p key={i} className="text-sm text-slate-200">{v}</p>
+              ))}
+            </div>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-1" />
+          </div>
+          <div className="px-4 py-3 flex items-start gap-3">
+            <div className="w-7 h-7 rounded-lg bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <Scale className="w-3.5 h-3.5 text-slate-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">State Residency — Exemption Eligibility</p>
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <span className="text-sm font-semibold text-white">{ov.stateResidency}</span>
+                <span className="text-xs text-slate-400">— {ov.monthsInState} months</span>
+                {ov.priorState && <span className="text-xs text-slate-600">Prior: {ov.priorState}</span>}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  ov.exemptionEligible
+                    ? "bg-emerald-900/40 text-emerald-300 border-emerald-700/50"
+                    : "bg-red-900/40 text-red-300 border-red-700/50"
+                }`}>
+                  {ov.exemptionEligible ? "Eligible" : "Review Required"}
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed">{ov.eligibilityNote}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Consolidated Schedules A/B + D + C Table ── */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+        {/* Header */}
+        <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-800/40 flex items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold text-slate-300 uppercase tracking-wider">Consolidated Schedules A/B · D · C</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Property (A/B) · Secured Liens (D) · Net Equity · Exemption Analysis (C)</p>
+          </div>
+          <div className="flex gap-3 text-[9px] font-bold text-slate-600 uppercase tracking-wider flex-shrink-0">
+            <span className="text-sky-500">Sched A/B</span>
+            <span className="text-slate-600">·</span>
+            <span className="text-amber-500">Sched D</span>
+            <span className="text-slate-600">·</span>
+            <span className="text-emerald-500">Sched C</span>
+          </div>
+        </div>
+
+        {/* Column header row */}
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)] gap-x-3 px-3 py-2 border-b border-slate-800 bg-slate-900/80">
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-4 rounded-full bg-sky-600/70 flex-shrink-0" />
+            <p className="text-[9px] font-bold text-sky-600 uppercase tracking-wider">Schedule A/B — Property</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-4 rounded-full bg-amber-600/70 flex-shrink-0" />
+            <p className="text-[9px] font-bold text-amber-600 uppercase tracking-wider">Schedule D — Liens</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-4 rounded-full bg-slate-500 flex-shrink-0" />
+            <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Net Equity</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-1.5 h-4 rounded-full bg-emerald-600/70 flex-shrink-0" />
+            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider">Schedule C — Exemption Result</p>
+          </div>
+        </div>
+
+        {/* Asset rows — grouped by category */}
+        <div>
+          {CATEGORY_ORDER.map(cat => {
+            const rows = byCategory[cat];
+            if (rows.length === 0) return null;
+            const meta = CATEGORY_META[cat];
+            const CatIcon = meta.icon;
+            const catFMV = rows.reduce((s, r) => s + r.fmv, 0);
+            const catEquity = rows.reduce((s, r) => s + r.equity, 0);
+            return (
+              <div key={cat} className="border-t border-slate-800/60 first:border-t-0">
+                {/* Category header */}
+                <div className={`flex items-center gap-2 px-3 py-2 ${meta.bg} border-b ${meta.border}`}>
+                  <CatIcon className={`w-3.5 h-3.5 ${meta.color} flex-shrink-0`} />
+                  <p className={`text-[10px] font-bold uppercase tracking-wider ${meta.color}`}>{meta.label}</p>
+                  <span className="ml-auto text-[9px] text-slate-600 font-mono">
+                    FMV {fmt(catFMV)} · Equity {fmt(catEquity)}
+                  </span>
+                </div>
+                {/* Rows in category */}
+                <div className="divide-y divide-slate-800/40">
+                  {rows.map((row, i) => {
+                    const hasNonExempt = row.nonExemptEquity > 0;
+                    const isExcluded = !!row.ownershipNote;
+                    const isFullyExempt = !hasNonExempt && !isExcluded;
+                    const isZeroValue = row.fmv === 0;
+                    return (
+                      <div
+                        key={i}
+                        className={`grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)] gap-x-3 px-3 py-3 items-start ${
+                          hasNonExempt ? "bg-red-900/10" : isExcluded ? "opacity-60" : isZeroValue ? "opacity-70" : ""
+                        }`}
+                      >
+                        {/* ── Col 1: Schedule A/B — Property ── */}
+                        <div className="min-w-0 space-y-1">
+                          <p className="text-xs font-semibold text-slate-200 leading-tight">{row.asset}</p>
+                          {row.address && (
+                            <p className="text-[10px] text-slate-400 leading-tight flex items-center gap-1">
+                              <Home className="w-2.5 h-2.5 text-slate-600 flex-shrink-0" />
+                              {row.address}
+                            </p>
+                          )}
+                          {row.description && (
+                            <p className="text-[10px] text-slate-600 leading-tight">{row.description}</p>
+                          )}
+                          {row.ownershipNote && (
+                            <p className="text-[10px] text-amber-400 leading-tight italic">{row.ownershipNote}</p>
+                          )}
+                          {/* FMV / Zillow */}
+                          {!isZeroValue && (
+                            <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                              <span className="text-[10px] font-bold text-slate-300">{fmt(row.fmv)}</span>
+                              {row.zillowValue && (
+                                <span className="text-[9px] text-slate-500">
+                                  Zillow: <span className="text-slate-400">{fmt(row.zillowValue)}</span>
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {/* Zillow confirmation */}
+                          {row.zillowValue && (
+                            <div className="flex items-center gap-1">
+                              {row.zillowConfirmedByClient ? (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-400">
+                                  <CheckCircle2 className="w-2.5 h-2.5" />
+                                  Client confirmed — {row.zillowConfirmedDate}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-semibold text-amber-400">
+                                  <AlertTriangle className="w-2.5 h-2.5" />
+                                  Zillow not confirmed by client
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {/* Ownership date */}
+                          {row.ownershipDate && (
+                            <div className="flex items-center gap-1 text-[9px] text-slate-600">
+                              <Calendar className="w-2.5 h-2.5" />
+                              Owned since {row.ownershipDate}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* ── Col 2: Schedule D — Liens ── */}
+                        <div className="min-w-0 space-y-2">
+                          {row.liens.length === 0 ? (
+                            <p className="text-[10px] text-slate-600 italic">No liens</p>
+                          ) : (
+                            row.liens.map((lien, li) => (
+                              <div key={li} className="space-y-0.5">
+                                <div className="flex items-center justify-between gap-1 flex-wrap">
+                                  <span className="text-[10px] font-semibold text-amber-300">{lien.holder}</span>
+                                  <span className="text-[10px] font-bold text-red-400">({fmt(lien.balance)})</span>
+                                </div>
+                                {lien.intent && (
+                                  <p className="text-[9px] text-slate-500">Intent: {lien.intent}</p>
+                                )}
+                                {lien.docRef && (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                      onClick={() => onViewDoc(lien.docRef!)}
+                                      className="inline-flex items-center gap-1 text-[9px] font-medium text-sky-400 hover:text-sky-300 transition-colors"
+                                    >
+                                      <Eye className="w-2.5 h-2.5" />
+                                      {lien.docRef.split(" — ")[0]}
+                                    </button>
+                                    {lien.docStatus && <DocStatusBadge status={lien.docStatus} />}
+                                    {lien.docDate && <span className="text-[9px] text-slate-600">{lien.docDate}</span>}
+                                  </div>
+                                )}
+                              </div>
+                            ))
+                          )}
+                        </div>
+
+                        {/* ── Col 3: Net Equity ── */}
+                        <div className="min-w-0">
+                          {isZeroValue ? (
+                            <p className="text-[10px] text-slate-600 italic">Unliquidated</p>
+                          ) : (
+                            <>
+                              <p className={`text-sm font-bold leading-tight ${row.equity > 0 ? "text-slate-200" : "text-slate-500"}`}>
+                                {fmt(row.equity)}
+                              </p>
+                              {row.lien > 0 && (
+                                <p className="text-[9px] text-slate-600 mt-0.5 font-mono leading-tight">
+                                  {fmt(row.fmv)} − {fmt(row.lien)}
+                                </p>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {/* ── Col 4: Schedule C — Exemption Result ── */}
+                        <div className="min-w-0 space-y-1">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isFullyExempt && !isExcluded ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-900/50 text-emerald-300 border border-emerald-700/50">
+                                <CheckCircle2 className="w-2.5 h-2.5" />
+                                EXEMPT
+                              </span>
+                            ) : isExcluded ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+                                EXCLUDED
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold bg-red-900/50 text-red-300 border border-red-700/50">
+                                <AlertTriangle className="w-2.5 h-2.5" />
+                                NON-EXEMPT {fmt(row.nonExemptEquity)}
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[9px] font-mono text-emerald-500 leading-tight">{row.exemptionShortCite}</p>
+                          {row.exemptionAmount !== "unlimited" && row.exemptionAmount > 0 && (
+                            <p className="text-[9px] text-slate-600">
+                              Applied: {fmt(row.exemptionAmount as number)}
+                            </p>
+                          )}
+                          {row.exemptionAmount === "unlimited" && (
+                            <p className="text-[9px] text-emerald-600">Unlimited exemption</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Totals row */}
+        <div className="grid grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.4fr)] gap-x-3 px-3 py-2.5 border-t border-slate-700 bg-slate-800/50">
+          <p className="text-xs font-bold text-slate-400 self-center">TOTALS</p>
+          <p className="text-xs font-bold text-red-400 self-center">
+            {totalLien > 0 ? `Total Liens: (${fmt(totalLien)})` : "No liens"}
+          </p>
+          <div>
+            <p className="text-xs font-bold text-slate-200">{fmt(totalEquity)}</p>
+            <p className="text-[9px] text-slate-600 font-mono">{fmt(totalFMV)} FMV</p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {totalNonExempt > 0 ? (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-red-300">
+                <AlertTriangle className="w-3 h-3" />
+                {fmt(totalNonExempt)} non-exempt
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-400">
+                <CheckCircle2 className="w-3 h-3" />
+                Fully exempt
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* No-asset verdict */}
+        <div className={`px-4 py-3 border-t border-slate-800 flex items-center gap-2 ${totalNonExempt === 0 ? "bg-emerald-900/10" : "bg-red-900/15"}`}>
+          {totalNonExempt === 0 ? (
+            <>
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+              <p className="text-xs text-emerald-300 font-semibold">No-Asset Case — All equity is fully exempt. Trustee will file a no-asset report.</p>
+            </>
+          ) : (
+            <>
+              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+              <p className="text-xs text-red-300 font-semibold">Non-exempt equity of {fmt(totalNonExempt)} detected — trustee may administer assets. Attorney review required.</p>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Supporting documents ── */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="px-4 py-2.5 border-b border-slate-800">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Supporting Documents</p>
+          <p className="text-xs text-slate-600 mt-0.5">Click a document to quick-view alongside the reported values</p>
+        </div>
+        <div className="divide-y divide-slate-800/60">
+          {section.supportingDocs.map(doc => (
+            <div key={doc.name} className="flex items-center gap-3 px-4 py-3">
+              <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${
+                doc.status === "current" ? "border-emerald-700/50 bg-emerald-900/20" :
+                doc.status === "review" ? "border-amber-700/50 bg-amber-900/20" :
+                doc.status === "stale" ? "border-red-700/50 bg-red-900/20" :
+                "border-slate-700 bg-slate-800"
+              }`}>
+                <FileText className={`w-4 h-4 ${
+                  doc.status === "current" ? "text-emerald-400" :
+                  doc.status === "review" ? "text-amber-400" :
+                  doc.status === "stale" ? "text-red-400" : "text-slate-600"
+                }`} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-slate-200 leading-tight">{doc.name}</p>
+                {doc.note && <p className="text-[10px] text-amber-300 mt-0.5">{doc.note}</p>}
+                {!doc.note && doc.date && <p className="text-[10px] text-slate-600 mt-0.5">{doc.date}</p>}
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <DocStatusBadge status={doc.status} />
+                <button
+                  onClick={() => onViewDoc(doc.name)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-500 transition-all"
+                >
+                  <Eye className="w-3 h-3" />
+                  View
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Props ────────────────────────────────────────────────────────────────────
+
+interface SectionQuestion {
+  id?: string;
+  section_key: string;
+  question: string;
+  is_blocking: boolean;
+  answered: boolean;
+  answer?: string;
+  created_at?: string;
+}
+
+interface Props {
+  reviewId: string;
+  openIssues: ReviewIssue[];
+  onAddIssue: (section: string, severity: string, description: string) => Promise<void>;
+  onComplete: (outcome: "approved" | "issues_found" | "schedule_call") => void;
+  onSectionVerified?: (verifiedCount: number, totalSteps: number) => void;
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+function AttorneyDocReview({ reviewId, openIssues, onAddIssue, onComplete, onSectionVerified }: Props) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const [verifications, setVerifications] = useState<Record<string, SectionVerification>>({});
+  const [sectionNotes, setSectionNotes] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [docPreviewKey, setDocPreviewKey] = useState<string | null>(null);
+  const [flagging, setFlagging] = useState(false);
+  const [flagText, setFlagText] = useState("");
+  const [flagSeverity, setFlagSeverity] = useState<"info" | "warning" | "error">("warning");
+  const [exemptionEditing, setExemptionEditing] = useState(false);
+  const [sectionExemptions, setSectionExemptions] = useState<Record<string, ExemptionEntry[]>>({});
+  const [sectionQuestions, setSectionQuestions] = useState<Record<string, SectionQuestion[]>>({});
+  const [askingQuestion, setAskingQuestion] = useState(false);
+  const [questionText, setQuestionText] = useState("");
+  const [questionBlocking, setQuestionBlocking] = useState(false);
+
+  const totalSteps = PETITION_SECTIONS.length;
+  const section = PETITION_SECTIONS[stepIndex];
+  const isLast = stepIndex === totalSteps - 1;
+  const isFirst = stepIndex === 0;
+  const verification = verifications[section.key];
+  const isVerified = verification?.verified === true;
+
+  // ── Load existing verifications ───────────────────────────────────────────
+
+  useEffect(() => {
+    loadVerifications();
+  }, [reviewId]);
+
+  async function loadVerifications() {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/section_verifications?review_id=eq.${reviewId}`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    const rows: (SectionVerification & { id: string })[] = await res.json();
+    const map: Record<string, SectionVerification> = {};
+    const notesMap: Record<string, string> = {};
+    const exMap: Record<string, ExemptionEntry[]> = {};
+    for (const row of rows) {
+      map[row.section_id] = row;
+      if (row.notes) notesMap[row.section_id] = row.notes;
+      if (row.exemptions_applied) exMap[row.section_id] = row.exemptions_applied;
+    }
+    setVerifications(map);
+    setSectionNotes(notesMap);
+    setSectionExemptions(exMap);
+  }
+
+  // ── Verify section ────────────────────────────────────────────────────────
+
+  const verifySection = useCallback(async () => {
+    // Block if there's an unanswered blocking question for this section
+    const blockingQ = (sectionQuestions[section.key] ?? []).find(q => q.is_blocking && !q.answered);
+    if (blockingQ) return;
+
+    setSaving(true);
+    const existing = verifications[section.key];
+    const now = new Date().toISOString();
+    const notes = sectionNotes[section.key] ?? "";
+    const exemptions = sectionExemptions[section.key] ?? section.exemptions ?? null;
+
+    if (existing?.id) {
+      await fetch(`${SUPABASE_URL}/rest/v1/section_verifications?id=eq.${existing.id}`, {
+        method: "PATCH",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ verified: true, verified_at: now, notes, exemptions_applied: exemptions, updated_at: now }),
+      });
+      setVerifications(prev => {
+        const next = { ...prev, [section.key]: { ...prev[section.key], verified: true, verified_at: now } };
+        const newCount = Object.values(next).filter(v => v.verified).length;
+        onSectionVerified?.(newCount, totalSteps);
+        // Post a client notification for section reviewed
+        notifyClientSectionReviewed(newCount, totalSteps);
+        return next;
+      });
+    } else {
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/section_verifications`, {
+        method: "POST",
+        headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json", Prefer: "return=representation" },
+        body: JSON.stringify({ review_id: reviewId, section_id: section.key, verified: true, verified_at: now, notes, exemptions_applied: exemptions }),
+      });
+      const rows = await res.json();
+      if (rows[0]) {
+        setVerifications(prev => {
+          const next = { ...prev, [section.key]: rows[0] };
+          const newCount = Object.values(next).filter(v => v.verified).length;
+          onSectionVerified?.(newCount, totalSteps);
+          notifyClientSectionReviewed(newCount, totalSteps);
+          return next;
+        });
+      }
+    }
+    setSaving(false);
+    if (!isLast) {
+      setTimeout(() => setStepIndex(i => i + 1), 300);
+    }
+  }, [section, verifications, sectionNotes, sectionExemptions, reviewId, isLast, sectionQuestions, onSectionVerified, totalSteps]);
+
+  async function notifyClientSectionReviewed(verifiedCount: number, total: number) {
+    const remaining = total - verifiedCount;
+    const message = remaining === 0
+      ? `Your case petition has been fully reviewed by your attorney.`
+      : `Your case petition was reviewed — ${remaining} of ${total} section${remaining !== 1 ? "s" : ""} still under review.`;
+    await fetch(`${SUPABASE_URL}/rest/v1/client_questions`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: "client-demo",
+        question: message,
+        source: "attorney_notification",
+        status: "answered",
+        attorney_answer: "Your attorney has reviewed this section. No action required from you at this time.",
+        attorney_answered_at: new Date().toISOString(),
+        asked_at: new Date().toISOString(),
+      }),
+    }).catch(() => {});
+  }
+
+  async function submitSectionQuestion() {
+    if (!questionText.trim()) return;
+    const q: SectionQuestion = {
+      section_key: section.key,
+      question: questionText.trim(),
+      is_blocking: questionBlocking,
+      answered: false,
+      created_at: new Date().toISOString(),
+    };
+    // Persist as a review issue with special type so it's tracked
+    await onAddIssue(
+      section.label,
+      questionBlocking ? "error" : "warning",
+      `[QUESTION${questionBlocking ? " — BLOCKING" : ""}] ${questionText.trim()}`
+    );
+    setSectionQuestions(prev => ({
+      ...prev,
+      [section.key]: [...(prev[section.key] ?? []), q],
+    }));
+    setQuestionText("");
+    setAskingQuestion(false);
+  }
+
+  // ── Add flag ──────────────────────────────────────────────────────────────
+
+  async function submitFlag() {
+    if (!flagText.trim()) return;
+    await onAddIssue(section.label, flagSeverity, flagText.trim());
+    setFlagText("");
+    setFlagging(false);
+  }
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  const verifiedCount = Object.values(verifications).filter(v => v.verified).length;
+  const progressPct = Math.round((verifiedCount / totalSteps) * 100);
+  const sectionFlags = openIssues.filter(i => i.section === section.label && !i.description.startsWith("[QUESTION"));
+  const sectionQs = sectionQuestions[section.key] ?? [];
+  const hasBlockingQuestion = sectionQs.some(q => q.is_blocking && !q.answered);
+  const allVerified = PETITION_SECTIONS.every(s => verifications[s.key]?.verified);
+
+  function docStatusStyle(status: string) {
+    if (status === "current") return "border-emerald-700/50 bg-emerald-900/20 text-emerald-300";
+    if (status === "review") return "border-amber-700/50 bg-amber-900/20 text-amber-300";
+    if (status === "stale") return "border-red-700/50 bg-red-900/20 text-red-300";
+    return "border-slate-700 bg-slate-800/40 text-slate-400";
+  }
+
+  function fieldFlagStyle(flag?: string) {
+    if (flag === "ok") return "text-emerald-300";
+    if (flag === "warn") return "text-amber-300";
+    if (flag === "bad") return "text-red-300";
+    return "text-slate-200";
+  }
+
+  const SectionIcon = section.icon;
+
+  // ─── Doc Preview Modal ────────────────────────────────────────────────────
+
+  function DocPreviewModal({ doc }: { doc: DocPreview }) {
+    const isPdf = doc.type === "pdf" && doc.path;
+    return (
+      <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setDocPreviewKey(null)}>
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <FileText className="w-4 h-4 text-slate-400" />
+              <div>
+                <p className="text-sm font-semibold text-white">{doc.name}</p>
+                {doc.date && <p className="text-xs text-slate-500">{doc.date}</p>}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium border ${
+                doc.status === "current" ? "bg-emerald-900/40 text-emerald-300 border-emerald-700/50" :
+                doc.status === "review" ? "bg-amber-900/40 text-amber-300 border-amber-700/50" :
+                "bg-red-900/40 text-red-300 border-red-700/50"
+              }`}>
+                {doc.status === "current" ? "Current" : doc.status === "review" ? "Needs Update" : doc.status === "stale" ? "Stale" : "Missing"}
+              </span>
+              <button onClick={() => setDocPreviewKey(null)} className="p-1.5 rounded-lg text-slate-500 hover:text-white transition-colors">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-auto min-h-0">
+            {isPdf ? (
+              <iframe
+                src={doc.path}
+                className="w-full h-full min-h-[600px]"
+                title={doc.name}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 gap-4 text-slate-600">
+                <FileText className="w-20 h-20 text-slate-800" />
+                <p className="text-sm text-slate-400 font-medium">{doc.name}</p>
+                <p className="text-xs text-slate-600 text-center max-w-sm leading-relaxed">
+                  {doc.note
+                    ? <span className="text-amber-400">{doc.note}</span>
+                    : "Document stored in Supabase Storage. In production, the uploaded file renders here."}
+                </p>
+                {doc.status !== "current" && (
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-900/20 border border-amber-700/40">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" />
+                    <p className="text-xs text-amber-300">This document requires an updated version before signing.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const previewDoc = section.supportingDocs.find(d => d.name === docPreviewKey);
+
+  // ─── Final Step — All Verified ─────────────────────────────────────────────
+
+  if (allVerified && stepIndex === totalSteps - 1 && isVerified) {
+    return <FinalApprovalStep totalSteps={totalSteps} openIssues={openIssues} onComplete={onComplete} />;
+  }
+
+  // ─── Step Render ───────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-4">
+      {previewDoc && <DocPreviewModal doc={previewDoc} />}
+
+      {/* Progress bar */}
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Petition Review Progress</p>
+          <p className="text-xs text-slate-400">{verifiedCount} of {totalSteps} sections verified</p>
+        </div>
+        <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+            style={{ width: `${progressPct}%` }}
+          />
+        </div>
+        {/* Section pills */}
+        <div className="flex gap-1.5 flex-wrap mt-3">
+          {PETITION_SECTIONS.map((s, i) => {
+            const isVer = verifications[s.key]?.verified;
+            const isCurrent = i === stepIndex;
+            const SIcon = s.icon;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setStepIndex(i)}
+                title={s.label}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border transition-all ${
+                  isCurrent
+                    ? "bg-amber-600 border-amber-500 text-white"
+                    : isVer
+                    ? "bg-emerald-900/50 border-emerald-700/60 text-emerald-300"
+                    : "bg-slate-800/60 border-slate-700 text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {isVer ? <CheckCircle2 className="w-2.5 h-2.5" /> : <SIcon className="w-2.5 h-2.5" />}
+                <span className="hidden sm:inline">{s.label.split("—")[0].trim().split(" ").slice(0, 2).join(" ")}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Schedule A/B/C + D — full-width consolidated panel */}
+      {(section.key === "schedule_abc" || section.key === "schedule_d") && (
+        <div className="space-y-4">
+          {/* Section header */}
+          <div className={`rounded-xl border p-5 ${isVerified ? "border-emerald-700/50 bg-emerald-900/10" : "border-slate-800 bg-slate-900/60"}`}>
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isVerified ? "bg-emerald-900/60" : "bg-slate-800"}`}>
+                  <SectionIcon className={`w-5 h-5 ${isVerified ? "text-emerald-400" : "text-slate-400"}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-white">{section.label}</h2>
+                    <span className="text-xs text-slate-600 font-mono">{section.formRef}</span>
+                    {isVerified && (
+                      <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-700/50">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{section.description}</p>
+                </div>
+              </div>
+              <span className="text-xs text-slate-600 flex-shrink-0">{stepIndex + 1}/{totalSteps}</span>
+            </div>
+            {section.legalNote && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-slate-800/60 border border-slate-700/40 mt-3">
+                <Info className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-400 leading-relaxed">{section.legalNote}</p>
+              </div>
+            )}
+            {(section.issues ?? []).map((issue, i) => (
+              <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40 mt-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200 leading-relaxed">{issue}</p>
+              </div>
+            ))}
+          </div>
+
+          <ScheduleABCPanel
+            section={PETITION_SECTIONS.find(s => s.key === "schedule_abc")!}
+            onViewDoc={setDocPreviewKey}
+          />
+
+          {/* Attorney notes */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Section Notes (Internal)</p>
+            <textarea
+              value={sectionNotes[section.key] ?? ""}
+              onChange={e => setSectionNotes(prev => ({ ...prev, [section.key]: e.target.value }))}
+              placeholder="Add notes for this section…"
+              rows={2}
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500 transition-colors"
+            />
+          </div>
+
+          {/* Flags */}
+          <div className="space-y-2">
+            {sectionFlags.length > 0 && (
+              <div className="space-y-1.5">
+                {sectionFlags.map(f => (
+                  <div key={f.id} className="flex items-start gap-2 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40">
+                    <Flag className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-200 flex-1">{f.description}</p>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex-shrink-0 ${
+                      f.severity === "error" ? "bg-red-900/40 text-red-300 border-red-700/50" :
+                      f.severity === "warning" ? "bg-amber-900/40 text-amber-300 border-amber-700/50" :
+                      "bg-sky-900/40 text-sky-300 border-sky-700/50"
+                    }`}>{f.severity}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {flagging ? (
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <select value={flagSeverity} onChange={e => setFlagSeverity(e.target.value as "info" | "warning" | "error")}
+                    className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none">
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                  <p className="text-xs text-slate-500">Section: {section.label}</p>
+                </div>
+                <textarea value={flagText} onChange={e => setFlagText(e.target.value)} placeholder="Describe the issue…" rows={2}
+                  className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500" />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setFlagging(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-colors">Cancel</button>
+                  <button onClick={submitFlag} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-700 hover:bg-amber-600 text-white rounded-lg transition-colors">
+                    <Flag className="w-3 h-3" />Add Flag
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3 flex-wrap">
+                <button onClick={() => setFlagging(true)} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-amber-400 transition-colors px-1">
+                  <Flag className="w-3.5 h-3.5" />
+                  Flag an issue in this section
+                </button>
+                <button onClick={() => setAskingQuestion(true)} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-sky-400 transition-colors px-1">
+                  <Mail className="w-3.5 h-3.5" />
+                  Ask client a question
+                </button>
+              </div>
+            )}
+
+            {/* Section question panel */}
+            {sectionQs.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {sectionQs.map((q, i) => (
+                  <div key={i} className={`flex items-start gap-2 p-3 rounded-lg border ${q.is_blocking ? "bg-red-900/15 border-red-700/40" : "bg-sky-900/15 border-sky-700/40"}`}>
+                    <Mail className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${q.is_blocking ? "text-red-400" : "text-sky-400"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-semibold mb-0.5 ${q.is_blocking ? "text-red-300" : "text-sky-300"}`}>
+                        {q.is_blocking ? "Blocking Question — Must Respond Before Proceeding" : "Pending Question — Response Needed"}
+                      </p>
+                      <p className="text-xs text-slate-300">{q.question}</p>
+                    </div>
+                    {!q.answered && (
+                      <button onClick={() => setSectionQuestions(prev => ({ ...prev, [section.key]: prev[section.key].map((x, xi) => xi === i ? { ...x, answered: true } : x) }))}
+                        className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg flex-shrink-0">
+                        Mark Answered
+                      </button>
+                    )}
+                    {q.answered && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+                  </div>
+                ))}
+              </div>
+            )}
+            {askingQuestion && (
+              <div className="bg-slate-900/60 border border-sky-700/40 rounded-xl p-4 space-y-3 mt-2">
+                <p className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Ask Client a Question — {section.label}</p>
+                <textarea value={questionText} onChange={e => setQuestionText(e.target.value)} placeholder="Type your question for the client…" rows={2}
+                  className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-sky-500" />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={questionBlocking} onChange={e => setQuestionBlocking(e.target.checked)}
+                      className="rounded border-slate-600 accent-red-500" />
+                    <span className="text-xs text-slate-300">Blocking — must clarify before attorney can continue this section</span>
+                  </label>
+                </div>
+                {questionBlocking && (
+                  <div className="flex items-start gap-2 p-2.5 rounded-lg bg-red-900/15 border border-red-700/30 text-xs text-red-300">
+                    <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                    This section cannot be marked complete until the client responds and you mark it answered.
+                  </div>
+                )}
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => { setAskingQuestion(false); setQuestionText(""); }} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-colors">Cancel</button>
+                  <button onClick={submitSectionQuestion} disabled={!questionText.trim()} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-sky-700 hover:bg-sky-600 disabled:opacity-40 text-white rounded-lg transition-colors">
+                    <Send className="w-3 h-3" /> Send Question
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Verify + nav */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+            {hasBlockingQuestion && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-900/20 border border-red-700/40 text-xs text-red-300">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span><span className="font-bold">Blocking question pending.</span> Client must respond before this section can be marked complete.</span>
+              </div>
+            )}
+            {!isVerified ? (
+              <button onClick={verifySection} disabled={saving || hasBlockingQuestion}
+                className="w-full flex items-center justify-center gap-2 py-3 px-5 text-sm font-bold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-xl transition-all shadow-lg">
+                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                {saving ? "Saving…" : "Verify Schedules A/B/C"}
+              </button>
+            ) : (
+              <div className="flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl bg-emerald-900/30 border border-emerald-700/50">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <p className="text-sm font-semibold text-emerald-300">Schedules A/B/C Verified</p>
+                {verification?.verified_at && (
+                  <p className="text-xs text-emerald-600 ml-1">{new Date(verification.verified_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                )}
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <button onClick={() => setStepIndex(i => Math.max(0, i - 1))} disabled={isFirst}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-1 justify-center">
+                <ChevronLeft className="w-3.5 h-3.5" />Previous
+              </button>
+              {!isLast ? (
+                <button onClick={() => setStepIndex(i => Math.min(totalSteps - 1, i + 1))}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors flex-1 justify-center">
+                  {isVerified ? "Next Section" : "Skip for Now"}<ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : allVerified ? (
+                <button onClick={() => {}} className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-600 rounded-lg transition-colors flex-1 justify-center">
+                  Final Review<ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main review panel — split layout (all other sections) */}
+      {section.key !== "schedule_abc" && section.key !== "schedule_d" && <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+        {/* LEFT — Section info + fields */}
+        <div className="space-y-4">
+          {/* Section header */}
+          <div className={`rounded-xl border p-5 ${isVerified ? "border-emerald-700/50 bg-emerald-900/10" : "border-slate-800 bg-slate-900/60"}`}>
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-start gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${isVerified ? "bg-emerald-900/60" : "bg-slate-800"}`}>
+                  <SectionIcon className={`w-5 h-5 ${isVerified ? "text-emerald-400" : "text-slate-400"}`} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className="text-base font-bold text-white">{section.label}</h2>
+                    <span className="text-xs text-slate-600 font-mono">{section.formRef}</span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">{section.description}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                <span className="text-xs text-slate-600">{stepIndex + 1}/{totalSteps}</span>
+                {isVerified && (
+                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-700/50">
+                    <CheckCircle2 className="w-3 h-3" />
+                    Verified
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Legal note */}
+            {section.legalNote && (
+              <div className="flex items-start gap-2 p-3 rounded-lg bg-slate-800/60 border border-slate-700/40 mb-3">
+                <Info className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-400 leading-relaxed">{section.legalNote}</p>
+              </div>
+            )}
+
+            {/* Section-level issue flags */}
+            {(section.issues ?? []).map((issue, i) => (
+              <div key={i} className="flex items-start gap-2 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40 mb-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-200 leading-relaxed">{issue}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Fields table */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Reported Information</p>
+            </div>
+            <div className="divide-y divide-slate-800/60">
+              {section.fields.map(field => (
+                <div key={field.label} className="flex items-start gap-3 px-4 py-2.5">
+                  <p className="text-xs text-slate-500 w-44 flex-shrink-0 pt-0.5 leading-tight">{field.label}</p>
+                  <div className="flex items-center gap-2 flex-1">
+                    <p className={`text-sm font-medium flex-1 ${fieldFlagStyle(field.flag)}`}>{field.value}</p>
+                    {field.flag === "ok" && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />}
+                    {field.flag === "warn" && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />}
+                    {field.flag === "bad" && <XCircle className="w-3.5 h-3.5 text-red-400 flex-shrink-0" />}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Exemptions (if applicable) */}
+          {section.exemptions && section.exemptions.length > 0 && (
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-800 flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Exemptions to Apply</p>
+                <button onClick={() => setExemptionEditing(!exemptionEditing)} className="text-xs text-slate-500 hover:text-slate-300 transition-colors">
+                  {exemptionEditing ? "Done" : "Edit"}
+                </button>
+              </div>
+              <div className="divide-y divide-slate-800/60">
+                {(sectionExemptions[section.key] ?? section.exemptions).map((ex, i) => (
+                  <div key={i} className="px-4 py-2.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-slate-200">{ex.asset}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 leading-tight font-mono">{ex.statute}</p>
+                      </div>
+                      <p className={`text-sm font-bold flex-shrink-0 ${ex.unlimited ? "text-emerald-300" : "text-slate-200"}`}>
+                        {ex.unlimited ? "Unlimited" : `$${ex.amount.toLocaleString()}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Attorney notes */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Section Notes (Internal)</p>
+            <textarea
+              value={sectionNotes[section.key] ?? ""}
+              onChange={e => setSectionNotes(prev => ({ ...prev, [section.key]: e.target.value }))}
+              placeholder="Add notes for this section…"
+              rows={2}
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500 transition-colors"
+            />
+          </div>
+
+          {/* Flag / issues */}
+          <div className="space-y-2">
+            {sectionFlags.length > 0 && (
+              <div className="space-y-1.5">
+                {sectionFlags.map(f => (
+                  <div key={f.id} className="flex items-start gap-2 p-3 rounded-lg bg-amber-900/20 border border-amber-700/40">
+                    <Flag className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-amber-200 flex-1">{f.description}</p>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded border font-medium flex-shrink-0 ${
+                      f.severity === "error" ? "bg-red-900/40 text-red-300 border-red-700/50" :
+                      f.severity === "warning" ? "bg-amber-900/40 text-amber-300 border-amber-700/50" :
+                      "bg-sky-900/40 text-sky-300 border-sky-700/50"
+                    }`}>{f.severity}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {flagging ? (
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 space-y-3">
+                <div className="flex items-center gap-3">
+                  <select
+                    value={flagSeverity}
+                    onChange={e => setFlagSeverity(e.target.value as "info" | "warning" | "error")}
+                    className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-slate-200 focus:outline-none"
+                  >
+                    <option value="info">Info</option>
+                    <option value="warning">Warning</option>
+                    <option value="error">Error</option>
+                  </select>
+                  <p className="text-xs text-slate-500">Section: {section.label}</p>
+                </div>
+                <textarea
+                  value={flagText}
+                  onChange={e => setFlagText(e.target.value)}
+                  placeholder="Describe the issue…"
+                  rows={2}
+                  className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500"
+                />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setFlagging(false)} className="px-3 py-1.5 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-colors">Cancel</button>
+                  <button onClick={submitFlag} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-amber-700 hover:bg-amber-600 text-white rounded-lg transition-colors">
+                    <Flag className="w-3 h-3" />
+                    Add Flag
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setFlagging(true)}
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-amber-400 transition-colors px-1"
+              >
+                <Flag className="w-3.5 h-3.5" />
+                Flag an issue in this section
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* RIGHT — Supporting documents */}
+        <div className="space-y-4">
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-800">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Supporting Documents</p>
+              <p className="text-xs text-slate-600 mt-0.5">Click a document to preview it alongside the reported information</p>
+            </div>
+            {section.supportingDocs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-slate-700 gap-2">
+                <FileText className="w-8 h-8" />
+                <p className="text-xs">No supporting documents required for this section</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-800/60">
+                {section.supportingDocs.map(doc => (
+                  <div key={doc.name} className="flex items-center gap-3 px-4 py-3">
+                    <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${
+                      doc.status === "current" ? "border-emerald-700/50 bg-emerald-900/20" :
+                      doc.status === "review" ? "border-amber-700/50 bg-amber-900/20" :
+                      doc.status === "stale" ? "border-red-700/50 bg-red-900/20" :
+                      "border-slate-700 bg-slate-800"
+                    }`}>
+                      <FileText className={`w-4 h-4 ${
+                        doc.status === "current" ? "text-emerald-400" :
+                        doc.status === "review" ? "text-amber-400" :
+                        doc.status === "stale" ? "text-red-400" : "text-slate-600"
+                      }`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-slate-200 leading-tight">{doc.name}</p>
+                      {doc.note && <p className="text-[10px] text-amber-300 mt-0.5 leading-tight">{doc.note}</p>}
+                      {doc.date && !doc.note && <p className="text-[10px] text-slate-600 mt-0.5">{doc.date}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                        doc.status === "current" ? "bg-emerald-900/40 text-emerald-300 border-emerald-700/50" :
+                        doc.status === "review" ? "bg-amber-900/40 text-amber-300 border-amber-700/50" :
+                        doc.status === "stale" ? "bg-red-900/40 text-red-300 border-red-700/50" :
+                        "bg-slate-800 text-slate-500 border-slate-700"
+                      }`}>
+                        {doc.status === "current" ? "Current" : doc.status === "review" ? "Update" : doc.status === "stale" ? "Stale" : "Missing"}
+                      </span>
+                      <button
+                        onClick={() => setDocPreviewKey(doc.name)}
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-medium bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 hover:border-slate-500 transition-all"
+                      >
+                        <Eye className="w-3 h-3" />
+                        View
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Verify button + navigation */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 space-y-3">
+            {hasBlockingQuestion && (
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-red-900/20 border border-red-700/40 text-xs text-red-300">
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span><span className="font-bold">Blocking question pending.</span> Client must respond before this section can be marked complete.</span>
+              </div>
+            )}
+            {!isVerified ? (
+              <button
+                onClick={verifySection}
+                disabled={saving || hasBlockingQuestion}
+                className="w-full flex items-center justify-center gap-2 py-3 px-5 text-sm font-bold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-60 text-white rounded-xl transition-all shadow-lg"
+              >
+                {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCheck className="w-4 h-4" />}
+                {saving ? "Saving…" : `Verify ${section.label}`}
+              </button>
+            ) : (
+              <div className="flex items-center justify-center gap-2 py-2.5 px-5 rounded-xl bg-emerald-900/30 border border-emerald-700/50">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <p className="text-sm font-semibold text-emerald-300">Section Verified</p>
+                {verification?.verified_at && (
+                  <p className="text-xs text-emerald-600 ml-1">{new Date(verification.verified_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
+                )}
+              </div>
+            )}
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setStepIndex(i => Math.max(0, i - 1))}
+                disabled={isFirst}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-1 justify-center"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Previous
+              </button>
+              {!isLast ? (
+                <button
+                  onClick={() => setStepIndex(i => Math.min(totalSteps - 1, i + 1))}
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors flex-1 justify-center"
+                >
+                  {isVerified ? "Next Section" : "Skip for Now"}
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : allVerified ? (
+                <button
+                  onClick={() => {}} // triggers re-render to final step
+                  className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-700 hover:bg-amber-600 rounded-lg transition-colors flex-1 justify-center"
+                >
+                  Final Review
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+              ) : null}
+            </div>
+          </div>
+
+          {/* Quick jump — unverified sections */}
+          {PETITION_SECTIONS.some((s, i) => i !== stepIndex && !verifications[s.key]?.verified) && (
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Unverified Sections</p>
+              <div className="space-y-1">
+                {PETITION_SECTIONS.map((s, i) => {
+                  if (verifications[s.key]?.verified || i === stepIndex) return null;
+                  const SIcon = s.icon;
+                  return (
+                    <button key={s.key} onClick={() => setStepIndex(i)} className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800/60 transition-all text-left">
+                      <SIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                      <span className="flex-1">{s.label}</span>
+                      <span className="text-slate-600 font-mono">{s.formRef}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+// ─── Final Approval Step ──────────────────────────────────────────────────────
+
+// Issue advisory decision — how each flagged issue will be handled in the client communication
+type IssueDecision = "include_proceed" | "include_wait" | "include_intervene" | "not_included";
+
+function FinalApprovalStep({ totalSteps, openIssues, onComplete }: {
+  totalSteps: number;
+  openIssues: ReviewIssue[];
+  onComplete: (outcome: "approved" | "issues_found" | "schedule_call") => void;
+}) {
+  const unresolvedIssues = openIssues.filter(i => !i.resolved && !i.description.startsWith("[QUESTION"));
+  const hasErrors = unresolvedIssues.some(i => i.severity === "error");
+  const unresolvedCount = unresolvedIssues.length;
+
+  // Per-issue attorney decision + advisory note
+  const [decisions, setDecisions] = useState<Record<string, IssueDecision>>(() => {
+    const init: Record<string, IssueDecision> = {};
+    unresolvedIssues.forEach(i => { if (i.id) init[i.id] = "include_proceed"; });
+    return init;
+  });
+  const [advisoryNotes, setAdvisoryNotes] = useState<Record<string, string>>({});
+  const [allDecided, setAllDecided] = useState(false);
+
+  useEffect(() => {
+    setAllDecided(unresolvedIssues.every(i => i.id && decisions[i.id]));
+  }, [decisions, unresolvedIssues]);
+
+  const DECISION_OPTIONS: { value: IssueDecision; label: string; color: string; desc: string }[] = [
+    {
+      value: "include_proceed",
+      label: "Include — Advise & Proceed",
+      color: "border-emerald-700/50 bg-emerald-900/15 text-emerald-300",
+      desc: "Disclose to client with legal advice. Client decides knowing the risk. Default choice.",
+    },
+    {
+      value: "include_wait",
+      label: "Include — Advise Wait to File",
+      color: "border-amber-700/50 bg-amber-900/15 text-amber-300",
+      desc: "Disclose to client and recommend waiting until issue resolves or look-back period passes.",
+    },
+    {
+      value: "include_intervene",
+      label: "Include — Offer Voluntary Remedy",
+      color: "border-sky-700/50 bg-sky-900/15 text-sky-300",
+      desc: "Client is not obligated but may choose to proactively address (e.g., offer to repay preference).",
+    },
+    {
+      value: "not_included",
+      label: "No Client Action Needed",
+      color: "border-slate-700 bg-slate-800/40 text-slate-400",
+      desc: "Issue is informational only. Not included in client communication.",
+    },
+  ];
+
+  const ADVISORY_TEMPLATES: Record<IssueDecision, string> = {
+    include_proceed: "Based on my review of your case, there is an item that requires your attention before we proceed. I have provided my legal advice below. You have the right to make an informed decision on how to proceed. Please review carefully and let me know your decision.",
+    include_wait: "Based on my review, I recommend waiting before filing your case. The reason is explained below. Once the issue resolves or the look-back period passes, we can proceed. Please review and contact our office to discuss.",
+    include_intervene: "There is an item in your case where you have an option — though not an obligation — to proactively address a potential issue before filing. I have outlined the situation and your options below.",
+    not_included: "",
+  };
+
+  return (
+    <div className="space-y-5">
+      {/* Completion banner */}
+      <div className="flex items-center gap-4 p-5 rounded-xl bg-emerald-900/20 border border-emerald-700/40">
+        <div className="w-12 h-12 rounded-xl bg-emerald-900/60 border border-emerald-700/50 flex items-center justify-center flex-shrink-0">
+          <CheckCheck className="w-6 h-6 text-emerald-400" />
+        </div>
+        <div>
+          <p className="text-base font-bold text-emerald-300">All {totalSteps} Sections Reviewed</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            {unresolvedCount > 0
+              ? `${unresolvedCount} flagged issue${unresolvedCount !== 1 ? "s" : ""} require your advisory decision before sending the client email.`
+              : "No open issues. Case is ready to proceed."}
+          </p>
+        </div>
+      </div>
+
+      {/* Per-issue advisory decisions */}
+      {unresolvedCount > 0 && (
+        <div className="space-y-4">
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            Review Flagged Issues — Select Attorney Advisory Action for Each
+          </p>
+          {unresolvedIssues.map((issue) => {
+            if (!issue.id) return null;
+            const decision = decisions[issue.id] ?? "include_proceed";
+            const note = advisoryNotes[issue.id] ?? "";
+            const isMaterial = issue.severity === "error" || issue.severity === "warning";
+            return (
+              <div key={issue.id} className={`rounded-xl border overflow-hidden ${hasErrors && issue.severity === "error" ? "border-red-700/40" : "border-slate-700"}`}>
+                {/* Issue header */}
+                <div className={`px-4 py-3 border-b border-slate-700/50 flex items-start gap-3 ${issue.severity === "error" ? "bg-red-900/15" : issue.severity === "warning" ? "bg-amber-900/10" : "bg-slate-900/60"}`}>
+                  {issue.severity === "error" && <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />}
+                  {issue.severity === "warning" && <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />}
+                  {issue.severity === "info" && <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />}
+                  <div>
+                    <p className="text-xs text-slate-500 mb-0.5">{issue.section}</p>
+                    <p className="text-sm text-slate-200 leading-snug">{issue.description}</p>
+                  </div>
+                </div>
+
+                {/* Advisory decision */}
+                <div className="p-4 bg-slate-900/40 space-y-3">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Attorney Advisory Decision</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {DECISION_OPTIONS.filter(opt => isMaterial || opt.value === "include_proceed" || opt.value === "not_included").map(opt => (
+                      <button
+                        key={opt.value}
+                        onClick={() => {
+                          setDecisions(prev => ({ ...prev, [issue.id!]: opt.value }));
+                          if (!advisoryNotes[issue.id!] && opt.value !== "not_included") {
+                            setAdvisoryNotes(prev => ({ ...prev, [issue.id!]: ADVISORY_TEMPLATES[opt.value] }));
+                          }
+                        }}
+                        className={`flex items-start gap-2 p-3 rounded-xl border-2 text-left transition-all ${decision === opt.value ? opt.color + " ring-1 ring-offset-0" : "border-slate-800 bg-slate-800/30 text-slate-500 hover:border-slate-600"}`}
+                      >
+                        <div className={`w-3.5 h-3.5 rounded-full border-2 flex-shrink-0 mt-0.5 ${decision === opt.value ? "border-current bg-current" : "border-slate-600"}`} />
+                        <div>
+                          <p className="text-xs font-semibold">{opt.label}</p>
+                          <p className="text-[10px] mt-0.5 opacity-70 leading-snug">{opt.desc}</p>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+
+                  {decision !== "not_included" && (
+                    <div>
+                      <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Advisory Note to Client</p>
+                      <textarea
+                        value={note}
+                        onChange={e => setAdvisoryNotes(prev => ({ ...prev, [issue.id!]: e.target.value }))}
+                        rows={3}
+                        placeholder="Customize the advisory message the client will receive about this issue…"
+                        className="w-full bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2.5 text-xs text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500"
+                      />
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {unresolvedCount === 0 && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-800/40 border border-slate-700">
+          <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+          <p className="text-sm text-slate-300">No open issues flagged. Case is ready to proceed to signing appointment.</p>
+        </div>
+      )}
+
+      {/* Final send actions */}
+      <div>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Send Client Email</p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
+          {/* Approve */}
+          <div className="bg-slate-900/60 border border-emerald-700/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-emerald-900/60 flex items-center justify-center flex-shrink-0">
+                <CheckCheck className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-emerald-300">Approve — Ready to File</p>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                  {unresolvedCount > 0
+                    ? "All issues have been reviewed with advisory notes included. Client will receive advice and proceed."
+                    : "All information is accurate and complete. Client is ready to proceed."}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onComplete("approved")}
+              disabled={unresolvedCount > 0 && !allDecided}
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white rounded-lg transition-all"
+            >
+              <Send className="w-4 h-4" />
+              Approve & Send Email
+            </button>
+            {unresolvedCount > 0 && !allDecided && (
+              <p className="text-[10px] text-slate-600 text-center">Make an advisory decision for each issue above first.</p>
+            )}
+          </div>
+
+          {/* Issues Found */}
+          <div className="bg-slate-900/60 border border-amber-700/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-900/60 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-4 h-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-amber-300">Issues — Action Required</p>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Client must address specific items before we can proceed. Issues email includes advisory notes.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => onComplete("issues_found")}
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-amber-700 hover:bg-amber-600 text-white rounded-lg transition-all"
+            >
+              <Send className="w-4 h-4" />
+              Send Issues Email
+            </button>
+          </div>
+
+          {/* Schedule Call */}
+          <div className="bg-slate-900/60 border border-blue-700/30 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-lg bg-blue-900/60 flex items-center justify-center flex-shrink-0">
+                <Calendar className="w-4 h-4 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-blue-300">Schedule Appointment</p>
+                <p className="text-xs text-slate-400 mt-1 leading-relaxed">Complex issues require a call or in-person meeting before proceeding.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => onComplete("schedule_call")}
+              className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-semibold bg-blue-700 hover:bg-blue-600 text-white rounded-lg transition-all"
+            >
+              <Send className="w-4 h-4" />
+              Send Scheduling Email
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default AttorneyDocReview
