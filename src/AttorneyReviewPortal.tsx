@@ -1,0 +1,2530 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import AttorneyDocReview from "./AttorneyDocReview";
+import { MessagePortalModal } from "./MessagePortal";
+import {
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  Info,
+  FileText,
+  User,
+  ChevronDown,
+  ChevronRight,
+  Mail,
+  Clock,
+  Calendar,
+  Shield,
+  Eye,
+  Flag,
+  Trash2,
+  Plus,
+  CheckCheck,
+  Send,
+  RefreshCw,
+  Home,
+  Car,
+  CreditCard,
+  DollarSign,
+  Briefcase,
+  RotateCcw,
+  MapPin,
+  Scale,
+  TrendingDown,
+  BarChart2,
+  Landmark,
+  Layers,
+  Activity,
+  MessageSquare,
+} from "lucide-react";
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const CLIENT_ID = "client-demo";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface ClientQuestion {
+  id: string;
+  question: string;
+  ai_response: string | null;
+  status: "answered" | "needs_attorney" | "pending_review";
+  escalated: boolean;
+  needs_additional_explanation: boolean;
+  attorney_answer: string | null;
+  answered_by: string | null;
+  asked_at: string;
+  section_context: string | null;
+}
+
+interface ReviewIssue {
+  id: string;
+  review_id: string;
+  section: string;
+  severity: "warning" | "error" | "info";
+  description: string;
+  resolved: boolean;
+  created_at: string;
+}
+
+interface CaseReview {
+  id: string;
+  client_id: string;
+  attorney_name: string;
+  status: "in_progress" | "approved" | "issues_found";
+  review_notes: string | null;
+  email_sent_at: string | null;
+  email_type: "approved" | "issues_found" | null;
+  document_reminders_included: boolean;
+  credit_counseling_included: boolean;
+  filing_fee_included: boolean;
+  scheduling_approved: boolean;
+  scheduling_approved_at: string | null;
+  scheduling_approved_by: string | null;
+  scheduling_blocked_reason: string | null;
+  scheduling_doc_checklist: Record<string, boolean> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Hard-block documents required before scheduling can be approved
+const SCHEDULING_GATE_ITEMS: Array<{
+  key: string;
+  label: string;
+  description: string;
+  category: "identity" | "legal" | "financial";
+  toleranceNote?: string;
+}> = [
+  {
+    key: "photo_id",
+    label: "Government-Issued Photo ID",
+    description: "Driver's license, state ID, or passport — current, not expired",
+    category: "identity",
+  },
+  {
+    key: "ssn_card",
+    label: "Social Security Card",
+    description: "Original SSN card or official SSA document on file",
+    category: "identity",
+  },
+  {
+    key: "credit_counseling",
+    label: "Credit Counseling Certificate",
+    description: "Certificate of completion from a USCOURTS-approved agency",
+    category: "legal",
+  },
+  {
+    key: "bank_stmt",
+    label: "Bank Statement(s) — Most Recent Cycle",
+    description: "All accounts — must not be more than one statement cycle old",
+    category: "financial",
+    toleranceNote: "Must be from the most recent cycle. One month back is acceptable; two months is not.",
+  },
+  {
+    key: "mortgage_stmt",
+    label: "Mortgage Statement (if applicable)",
+    description: "Most recent lender-generated statement showing current balance",
+    category: "financial",
+    toleranceNote: "If no mortgage, mark N/A. If present, must not be over 60 days old.",
+  },
+  {
+    key: "auto_loan_stmt",
+    label: "Auto Loan Statement (if applicable)",
+    description: "Most recent statement for each financed vehicle",
+    category: "financial",
+    toleranceNote: "If no auto loan, mark N/A. If present, must be from the current or prior month.",
+  },
+];
+
+interface TimeEntry {
+  id: string;
+  client_id: string;
+  client_name: string;
+  attorney_name: string;
+  entry_type: string;
+  section_id: string;
+  section_label: string;
+  notes: string;
+  duration_seconds: number;
+  entry_source: "auto" | "manual";
+  activity_log: ActivityEvent[];
+  billable: boolean;
+  created_at: string;
+}
+
+interface ActivityEvent {
+  ts: string;
+  action: string;
+  detail?: string;
+}
+
+// ─── Filing document map ───────────────────────────────────────────────────────
+// Each bankruptcy document we prepare, with the source documents that feed it
+
+const FILING_DOCUMENTS: Array<{
+  id: string;
+  title: string;
+  subtitle: string;
+  sourceDocs: Array<{ label: string; type: string; status: string; note?: string }>;
+  reviewedAt?: string;
+}> = [
+  {
+    id: "vol_petition",
+    title: "Voluntary Petition",
+    subtitle: "Official Form 101 — Opens the bankruptcy case",
+    sourceDocs: [
+      { label: "Photo ID — Driver License", type: "id", status: "current" },
+      { label: "Social Security Card", type: "id", status: "current" },
+      { label: "Credit Counseling Certificate", type: "cert", status: "pending", note: "Required before filing" },
+    ],
+  },
+  {
+    id: "sched_ab",
+    title: "Schedule A/B — Property",
+    subtitle: "Official Form 106A/B — All real and personal property",
+    sourceDocs: [
+      { label: "Wells Fargo Mortgage Statement", type: "loan", status: "review", note: "Over 60 days — updated balance needed" },
+      { label: "Chase Auto Loan Statement", type: "loan", status: "stale", note: "Stale — update required" },
+      { label: "Equifax Credit Report", type: "credit", status: "current" },
+      { label: "Fidelity IRA Statement", type: "retirement", status: "pending", note: "Request from client" },
+    ],
+  },
+  {
+    id: "sched_c",
+    title: "Schedule C — Exemptions",
+    subtitle: "Official Form 106C — Property claimed as exempt",
+    sourceDocs: [
+      { label: "Property Tax Appraisal (TCAD)", type: "appraisal", status: "current" },
+      { label: "Wells Fargo Mortgage Statement", type: "loan", status: "review" },
+    ],
+  },
+  {
+    id: "sched_d",
+    title: "Schedule D — Secured Creditors",
+    subtitle: "Official Form 106D — Creditors holding secured claims",
+    sourceDocs: [
+      { label: "Wells Fargo Mortgage Statement", type: "loan", status: "review", note: "Verify current balance" },
+      { label: "Chase Auto Loan Statement", type: "loan", status: "stale", note: "Stale — update required" },
+      { label: "Equifax Credit Report", type: "credit", status: "current" },
+    ],
+  },
+  {
+    id: "sched_ef",
+    title: "Schedule E/F — Unsecured Creditors",
+    subtitle: "Official Form 106E/F — Priority and non-priority unsecured claims",
+    sourceDocs: [
+      { label: "Equifax Credit Report", type: "credit", status: "current" },
+      { label: "TransUnion Credit Report", type: "credit", status: "current" },
+      { label: "Experian Credit Report", type: "credit", status: "current" },
+      { label: "Collection Notices / Demand Letters", type: "collection", status: "pending", note: "Request any recent notices from client" },
+    ],
+  },
+  {
+    id: "sched_g",
+    title: "Schedule G — Executory Contracts & Leases",
+    subtitle: "Official Form 106G — Active leases and contracts",
+    sourceDocs: [
+      { label: "Lease Agreement(s)", type: "lease", status: "pending", note: "Request copy from client if applicable" },
+    ],
+  },
+  {
+    id: "sched_h",
+    title: "Schedule H — Co-Debtors",
+    subtitle: "Official Form 106H — Co-signers and joint obligors",
+    sourceDocs: [
+      { label: "Equifax Credit Report", type: "credit", status: "current" },
+      { label: "Co-Debtor information from client questionnaire", type: "questionnaire", status: "current" },
+    ],
+  },
+  {
+    id: "sched_i",
+    title: "Schedule I — Income",
+    subtitle: "Official Form 106I — Debtor's current monthly income",
+    sourceDocs: [
+      { label: "Pay Stub — April 2026 (1 of 2)", type: "income", status: "current" },
+      { label: "Pay Stub — April 2026 (2 of 2)", type: "income", status: "current" },
+      { label: "2024 Federal Tax Return", type: "tax", status: "current" },
+    ],
+  },
+  {
+    id: "sched_j",
+    title: "Schedule J — Expenses",
+    subtitle: "Official Form 106J — Debtor's current monthly expenses",
+    sourceDocs: [
+      { label: "Monthly expense questionnaire answers", type: "questionnaire", status: "current" },
+      { label: "Chase Bank Statement — March 2026", type: "bank", status: "review", note: "Over 45 days — update needed" },
+    ],
+  },
+  {
+    id: "means_test",
+    title: "Means Test",
+    subtitle: "Official Form 122A-1 — Chapter 7 Statement of Current Monthly Income",
+    sourceDocs: [
+      { label: "Pay Stub — April 2026 (1 of 2)", type: "income", status: "current" },
+      { label: "Pay Stub — April 2026 (2 of 2)", type: "income", status: "current" },
+      { label: "2024 Federal Tax Return", type: "tax", status: "current" },
+      { label: "Spouse income documentation (non-filing)", type: "income", status: "pending", note: "Request spouse pay stubs for household income calculation" },
+    ],
+  },
+  {
+    id: "sofa",
+    title: "Statement of Financial Affairs (SOFA)",
+    subtitle: "Official Form 107 — Financial history for past 2-4 years",
+    sourceDocs: [
+      { label: "2024 Federal Tax Return", type: "tax", status: "current" },
+      { label: "2023 Federal Tax Return", type: "tax", status: "current" },
+      { label: "Chase Bank Statement — March 2026", type: "bank", status: "review" },
+      { label: "Chase Bank Statement — February 2026", type: "bank", status: "stale" },
+      { label: "Lawsuit / Judgment documentation", type: "legal", status: "pending", note: "Capital One judgment — request docket printout" },
+    ],
+  },
+  {
+    id: "stmt_intent",
+    title: "Statement of Intention",
+    subtitle: "Official Form 108 — Debtor's intent for secured debts and leases",
+    sourceDocs: [
+      { label: "Chase Auto Loan Statement", type: "loan", status: "stale", note: "Confirm reaffirmation or surrender decision" },
+      { label: "Wells Fargo Mortgage Statement", type: "loan", status: "review", note: "Confirm reaffirmation decision" },
+    ],
+  },
+];
+
+// ─── Static case data (mirrors ClientDashboard) ───────────────────────────────
+
+const CASE_DATA = {
+  clientName: "David Kim",
+  spouseName: "Jennifer Kim (Non-Filing)",
+  chapter: "7",
+  attorney: "Jennifer Smith, Esq.",
+  firm: "MAJORSLAW.ai Legal Group",
+  filingType: "Individual — Non-Filing Spouse",
+  retainerDate: "March 15, 2026",
+  estimatedFilingDate: "June 10, 2026",
+  totalFee: 1838,
+  paidToDate: 900,
+  email: "david.kim@email.com",
+};
+
+// Simulated questionnaire answers — in production these come from the database
+const QUESTIONNAIRE_SECTIONS = [
+  {
+    id: "personal",
+    label: "Personal Information",
+    icon: User,
+    status: "complete",
+    fields: [
+      { label: "Full Legal Name", value: "David James Kim" },
+      { label: "SSN", value: "XXX-XX-4821" },
+      { label: "DOB", value: "08/14/1981" },
+      { label: "Address", value: "4215 Maple Ridge Dr, Austin, TX 78745" },
+      { label: "Phone", value: "(512) 555-0192" },
+      { label: "Marital Status", value: "Married — Non-Filing Spouse: Jennifer Kim" },
+      { label: "Dependents", value: "2 — Emma Kim (age 10), Noah Kim (age 7)" },
+    ],
+  },
+  {
+    id: "property",
+    label: "Property & Assets",
+    icon: Home,
+    status: "complete",
+    fields: [
+      { label: "Primary Residence", value: "4215 Maple Ridge Dr, Austin TX — FMV $385,000, Mortgage Balance $310,000" },
+      { label: "Homestead Exemption", value: "Claimed — Texas unlimited homestead" },
+      { label: "Vehicle 1", value: "2020 Toyota Camry — FMV $18,500, Loan Balance $14,200 (Chase Auto)" },
+      { label: "Vehicle 2", value: "2018 Honda Pilot — FMV $22,000, No lien (spouse, non-filing)" },
+      { label: "Checking Account", value: "Chase Bank ****1024 — Balance $1,842" },
+      { label: "Savings Account", value: "Chase Bank ****8811 — Balance $420" },
+      { label: "Retirement (IRA)", value: "Fidelity Traditional IRA — $47,200 (fully exempt)" },
+      { label: "Personal Property", value: "Household goods $3,500 | Clothing $800 | Electronics $600" },
+    ],
+  },
+  {
+    id: "secured",
+    label: "Secured Creditors",
+    icon: Home,
+    status: "complete",
+    fields: [
+      { label: "Mortgage — Wells Fargo", value: "$310,000 — 4215 Maple Ridge Dr" },
+      { label: "Auto Loan — Chase Auto", value: "$14,200 — 2020 Toyota Camry" },
+    ],
+  },
+  {
+    id: "unsecured",
+    label: "Priority & Unsecured Debts",
+    icon: CreditCard,
+    status: "complete",
+    fields: [
+      { label: "Chase Visa", value: "$8,450 — Account #****3291" },
+      { label: "Capital One MC", value: "$5,820 — Account #****7740" },
+      { label: "Citi Double Cash", value: "$3,100 — Account #****0562" },
+      { label: "Discover It", value: "$2,280 — Account #****9914" },
+      { label: "Medical — St. David's Hospital", value: "$6,700" },
+      { label: "Personal Loan — LendingClub", value: "$9,200 — Account #****4408" },
+    ],
+  },
+  {
+    id: "income",
+    label: "Monthly Income",
+    icon: DollarSign,
+    status: "complete",
+    fields: [
+      { label: "Gross Monthly Wages (David)", value: "$7,250" },
+      { label: "Spouse Gross Monthly Wages", value: "$4,100 (non-filing, included for means test)" },
+      { label: "Household Gross Monthly", value: "$11,350" },
+      { label: "Net Monthly (David after tax/deductions)", value: "$5,480" },
+      { label: "Pay Frequency", value: "Bi-weekly — Employer: Apex Solutions LLC" },
+    ],
+  },
+  {
+    id: "expenses",
+    label: "Monthly Expenses",
+    icon: Briefcase,
+    status: "complete",
+    fields: [
+      { label: "Mortgage / Rent", value: "$2,150" },
+      { label: "Utilities (Electric/Gas/Water)", value: "$320" },
+      { label: "Groceries", value: "$900" },
+      { label: "Transportation (gas, insurance)", value: "$480" },
+      { label: "Auto Loan Payment", value: "$320" },
+      { label: "Medical / Health Insurance", value: "$410" },
+      { label: "Child Care / School", value: "$650" },
+      { label: "Minimum Debt Payments", value: "$0 (being discharged)" },
+    ],
+  },
+  {
+    id: "sofa",
+    label: "Financial History (SOFA)",
+    icon: RotateCcw,
+    status: "complete",
+    fields: [
+      { label: "Transfers (90 days)", value: "None reported" },
+      { label: "Payments to Insiders (1 yr)", value: "None reported" },
+      { label: "Lawsuits / Garnishments", value: "Capital One — judgment $5,820, no garnishment active" },
+      { label: "Prior Bankruptcies", value: "None" },
+      { label: "Business Ownership", value: "None" },
+      { label: "Tax Returns Filed", value: "2023, 2024 — provided" },
+    ],
+  },
+];
+
+const UPLOADED_DOCS = [
+  { name: "Pay Stub — April 2026 (1 of 2)", date: "Apr 14, 2026", status: "current", type: "income" },
+  { name: "Pay Stub — April 2026 (2 of 2)", date: "Apr 28, 2026", status: "current", type: "income" },
+  { name: "Chase Bank Statement — March 2026", date: "Mar 31, 2026", status: "review", type: "bank", note: "Over 45 days — update needed before signing" },
+  { name: "Chase Bank Statement — February 2026", date: "Feb 28, 2026", status: "stale", type: "bank", note: "Stale — for context only" },
+  { name: "2024 Federal Tax Return", date: "Apr 15, 2026", status: "current", type: "tax" },
+  { name: "2023 Federal Tax Return", date: "Apr 15, 2025", status: "current", type: "tax" },
+  { name: "Photo ID — Driver License", date: "Apr 10, 2026", status: "current", type: "id" },
+  { name: "Social Security Card", date: "Apr 10, 2026", status: "current", type: "id" },
+  { name: "Wells Fargo Mortgage Statement", date: "Mar 2026", status: "review", type: "loan", note: "Over 60 days — updated balance needed before signing" },
+  { name: "Chase Auto Loan Statement", date: "Feb 2026", status: "stale", type: "loan", note: "Stale — update required" },
+  { name: "Equifax Credit Report", date: "Apr 5, 2026", status: "current", type: "credit" },
+  { name: "TransUnion Credit Report", date: "Apr 5, 2026", status: "current", type: "credit" },
+  { name: "Experian Credit Report", date: "Apr 5, 2026", status: "current", type: "credit" },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function docStatusBadge(status: string) {
+  if (status === "current") return "bg-emerald-900/40 text-emerald-300 border border-emerald-700/50";
+  if (status === "review") return "bg-amber-900/40 text-amber-300 border border-amber-700/50";
+  return "bg-red-900/40 text-red-300 border border-red-700/50";
+}
+
+function severityIcon(severity: string) {
+  if (severity === "error") return <XCircle className="w-4 h-4 text-red-400 flex-shrink-0" />;
+  if (severity === "warning") return <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />;
+  return <Info className="w-4 h-4 text-sky-400 flex-shrink-0" />;
+}
+
+function severityBadge(severity: string) {
+  if (severity === "error") return "bg-red-900/40 text-red-300 border border-red-700/50";
+  if (severity === "warning") return "bg-amber-900/40 text-amber-300 border border-amber-700/50";
+  return "bg-sky-900/40 text-sky-300 border border-sky-700/50";
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
+
+export default function AttorneyReviewPortal() {
+  const [review, setReview] = useState<CaseReview | null>(null);
+  const [issues, setIssues] = useState<ReviewIssue[]>([]);
+  const [questions, setQuestions] = useState<ClientQuestion[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"summary" | "answers" | "documents" | "issues" | "questions" | "time">("answers");
+  const [showEmailPreview, setShowEmailPreview] = useState<"approved" | "issues_found" | null>(null);
+  const [emailSending, setEmailSending] = useState(false);
+  const [newIssue, setNewIssue] = useState<{ section: string; severity: string; description: string } | null>(null);
+  const [reviewNotes, setReviewNotes] = useState("");
+  const [notesSaving, setNotesSaving] = useState(false);
+  const [selectedDocPreview, setSelectedDocPreview] = useState<string | null>(null);
+  const [expandedFilingDoc, setExpandedFilingDoc] = useState<string | null>(null);
+  const [docReviewedAt, setDocReviewedAt] = useState<Record<string, string>>({});
+  const [reviewVerifiedCount, setReviewVerifiedCount] = useState(0);
+  const [showSchedulingGate, setShowSchedulingGate] = useState(false);
+  const [schedGateChecked, setSchedGateChecked] = useState<Record<string, boolean | "na">>({});
+  const [schedBlockedNote, setSchedBlockedNote] = useState("");
+  const [schedApproving, setSchedApproving] = useState(false);
+
+  // Message portal
+  const [showMsgPortal, setShowMsgPortal] = useState(false);
+  const [msgPrefill, setMsgPrefill] = useState<{ subject?: string; body?: string; relatedDocument?: string } | undefined>();
+  const TOTAL_PETITION_SECTIONS = 11; // matches PETITION_SECTIONS.length in AttorneyDocReview
+
+  // ── Session / time tracking ────────────────────────────────────────────────
+  const sessionStartRef = useRef<Date>(new Date());
+  const activityLogRef = useRef<ActivityEvent[]>([]);
+  const [sessionElapsed, setSessionElapsed] = useState(0); // seconds
+  const [showExitPrompt, setShowExitPrompt] = useState(false);
+  const [exitNotes, setExitNotes] = useState("");
+  const [exitBillable, setExitBillable] = useState(true);
+
+  const logActivity = useCallback((action: string, detail?: string) => {
+    activityLogRef.current.push({ ts: new Date().toISOString(), action, detail });
+  }, []);
+
+  // Tick elapsed time every second
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setSessionElapsed(Math.floor((Date.now() - sessionStartRef.current.getTime()) / 1000));
+    }, 1000);
+    logActivity("Opened file", `Attorney: ${CASE_DATA.attorney}`);
+    return () => clearInterval(interval);
+  }, [logActivity]);
+
+  // Log tab changes
+  const handleTabChange = (tab: typeof activeTab) => {
+    logActivity("Switched tab", tab);
+    setActiveTab(tab);
+  };
+
+  // Save auto time entry (called on mount and on exit)
+  const saveAutoTimeEntry = useCallback(async (notes: string, billable: boolean, isExit: boolean) => {
+    const duration = Math.floor((Date.now() - sessionStartRef.current.getTime()) / 1000);
+    if (isExit) logActivity("Closed file");
+    await fetch(`${SUPABASE_URL}/rest/v1/case_time_entries`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        client_id: CLIENT_ID,
+        client_name: CASE_DATA.clientName,
+        attorney_name: CASE_DATA.attorney,
+        entry_type: "attorney_review",
+        section_id: "attorney_portal",
+        section_label: "Attorney Review Portal",
+        notes: notes || (isExit ? "Attorney review session" : "Attorney opened file"),
+        duration_seconds: duration,
+        entry_source: "auto",
+        activity_log: activityLogRef.current,
+        billable,
+      }),
+    });
+  }, [logActivity]);
+
+  // Fetch time entries for this client
+  const fetchTimeEntries = useCallback(async () => {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/case_time_entries?client_id=eq.${CLIENT_ID}&order=created_at.desc&limit=50`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    const rows: TimeEntry[] = await res.json();
+    setTimeEntries(rows);
+  }, []);
+
+  const formatDuration = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  // ── Fetch / init ─────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    initReview();
+    fetchQuestions();
+    fetchTimeEntries();
+    // Auto log entry when session starts (after 5s to capture intentional visits)
+    const timer = setTimeout(() => saveAutoTimeEntry("Attorney opened file", true, false), 5000);
+    return () => clearTimeout(timer);
+  }, [fetchTimeEntries, saveAutoTimeEntry]);
+
+  async function initReview() {
+    setLoading(true);
+    try {
+      // Load existing review or create one
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/attorney_case_reviews?client_id=eq.${CLIENT_ID}&order=created_at.desc&limit=1`,
+        { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+      );
+      const rows: CaseReview[] = await res.json();
+      if (rows.length > 0) {
+        setReview(rows[0]);
+        setReviewNotes(rows[0].review_notes ?? "");
+        fetchIssues(rows[0].id);
+      } else {
+        const created = await createReview();
+        if (created) {
+          setReview(created);
+          fetchIssues(created.id);
+        }
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function createReview(): Promise<CaseReview | null> {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        client_id: CLIENT_ID,
+        attorney_name: CASE_DATA.attorney,
+        status: "in_progress",
+        credit_counseling_included: true,
+        filing_fee_included: true,
+        document_reminders_included: true,
+      }),
+    });
+    const rows: CaseReview[] = await res.json();
+    return rows[0] ?? null;
+  }
+
+  async function fetchIssues(reviewId: string) {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/attorney_review_issues?review_id=eq.${reviewId}&order=created_at.asc`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    const rows: ReviewIssue[] = await res.json();
+    setIssues(rows);
+  }
+
+  async function fetchQuestions() {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/client_questions?client_id=eq.${CLIENT_ID}&order=asked_at.desc`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    );
+    const rows: ClientQuestion[] = await res.json();
+    setQuestions(rows);
+  }
+
+  // ── Mutations ─────────────────────────────────────────────────────────────────
+
+  async function saveNotes() {
+    if (!review) return;
+    setNotesSaving(true);
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews?id=eq.${review.id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ review_notes: reviewNotes, updated_at: new Date().toISOString() }),
+    });
+    setNotesSaving(false);
+  }
+
+  async function addIssue(sectionArg?: string, severityArg?: string, descriptionArg?: string) {
+    const sec = sectionArg ?? newIssue?.section ?? "";
+    const sev = severityArg ?? newIssue?.severity ?? "warning";
+    const desc = descriptionArg ?? newIssue?.description ?? "";
+    if (!review || !desc.trim()) return;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/attorney_review_issues`, {
+      method: "POST",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        review_id: review.id,
+        section: sec,
+        severity: sev,
+        description: desc,
+      }),
+    });
+    const rows: ReviewIssue[] = await res.json();
+    setIssues((prev) => [...prev, rows[0]]);
+    if (!sectionArg) setNewIssue(null);
+  }
+
+  async function resolveIssue(issueId: string) {
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_review_issues?id=eq.${issueId}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ resolved: true }),
+    });
+    setIssues((prev) => {
+      const updated = prev.map((i) => (i.id === issueId ? { ...i, resolved: true } : i));
+      // Auto-transition review to approved when all issues are resolved
+      const allResolved = updated.every((i) => i.resolved);
+      if (allResolved && review && review.status === "issues_found") {
+        const now = new Date().toISOString();
+        fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews?id=eq.${review.id}`, {
+          method: "PATCH",
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ status: "approved", updated_at: now }),
+        });
+        setReview((r) => r ? { ...r, status: "approved" } : r);
+      }
+      return updated;
+    });
+  }
+
+  async function deleteIssue(issueId: string) {
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_review_issues?id=eq.${issueId}`, {
+      method: "DELETE",
+      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` },
+    });
+    setIssues((prev) => prev.filter((i) => i.id !== issueId));
+  }
+
+  async function sendEmail(type: "approved" | "issues_found") {
+    if (!review) return;
+    setEmailSending(true);
+    const now = new Date().toISOString();
+    const status = type === "approved" ? "approved" : "issues_found";
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews?id=eq.${review.id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ status, email_sent_at: now, email_type: type, updated_at: now }),
+    });
+    setReview((prev) => prev ? { ...prev, status, email_sent_at: now, email_type: type } : prev);
+    setEmailSending(false);
+    setShowEmailPreview(null);
+  }
+
+  async function answerQuestion(questionId: string, answer: string) {
+    await fetch(`${SUPABASE_URL}/rest/v1/client_questions?id=eq.${questionId}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        attorney_answer: answer,
+        attorney_answered_at: new Date().toISOString(),
+        answered_by: CASE_DATA.attorney,
+        status: "answered",
+        updated_at: new Date().toISOString(),
+      }),
+    });
+    setQuestions((prev) =>
+      prev.map((q) =>
+        q.id === questionId
+          ? { ...q, attorney_answer: answer, status: "answered", answered_by: CASE_DATA.attorney }
+          : q
+      )
+    );
+  }
+
+  async function approveScheduling() {
+    if (!review) return;
+    setSchedApproving(true);
+    const now = new Date().toISOString();
+    const checklistSnapshot: Record<string, boolean | "na"> = {};
+    SCHEDULING_GATE_ITEMS.forEach(item => {
+      checklistSnapshot[item.key] = schedGateChecked[item.key] ?? false;
+    });
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews?id=eq.${review.id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        scheduling_approved: true,
+        scheduling_approved_at: now,
+        scheduling_approved_by: CASE_DATA.attorney,
+        scheduling_blocked_reason: null,
+        scheduling_doc_checklist: checklistSnapshot,
+        updated_at: now,
+      }),
+    });
+    setReview(prev => prev ? {
+      ...prev,
+      scheduling_approved: true,
+      scheduling_approved_at: now,
+      scheduling_approved_by: CASE_DATA.attorney,
+      scheduling_doc_checklist: checklistSnapshot,
+      scheduling_blocked_reason: null,
+    } : prev);
+    setSchedApproving(false);
+    setShowSchedulingGate(false);
+    logActivity("Approved scheduling", CASE_DATA.clientName);
+  }
+
+  async function revokeSchedulingApproval(reason: string) {
+    if (!review) return;
+    const now = new Date().toISOString();
+    await fetch(`${SUPABASE_URL}/rest/v1/attorney_case_reviews?id=eq.${review.id}`, {
+      method: "PATCH",
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        scheduling_approved: false,
+        scheduling_approved_at: null,
+        scheduling_approved_by: null,
+        scheduling_blocked_reason: reason || "Revoked by attorney",
+        updated_at: now,
+      }),
+    });
+    setReview(prev => prev ? {
+      ...prev,
+      scheduling_approved: false,
+      scheduling_approved_at: null,
+      scheduling_approved_by: null,
+      scheduling_blocked_reason: reason || "Revoked by attorney",
+    } : prev);
+    logActivity("Revoked scheduling approval", reason);
+  }
+
+  // ── Derived state ─────────────────────────────────────────────────────────────
+
+  const openIssues = issues.filter((i) => !i.resolved);
+  const resolvedIssues = issues.filter((i) => i.resolved);
+  const pendingQuestions = questions.filter((q) => q.status === "needs_attorney" || q.status === "pending_review");
+  const staleDocCount = UPLOADED_DOCS.filter((d) => d.status === "stale" || d.status === "review").length;
+
+  // All gate items must be explicitly checked true or "na" before scheduling can be approved
+  const schedGateAllCleared = SCHEDULING_GATE_ITEMS.every(
+    item => schedGateChecked[item.key] === true || schedGateChecked[item.key] === "na"
+  );
+
+  // ── Email preview content ──────────────────────────────────────────────────────
+
+  function EmailPreview({ type }: { type: "approved" | "issues_found" }) {
+    const isApproved = type === "approved";
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center justify-between p-5 border-b border-slate-700">
+            <div className="flex items-center gap-3">
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${isApproved ? "bg-emerald-900/50" : "bg-amber-900/50"}`}>
+                <Mail className={`w-4.5 h-4.5 ${isApproved ? "text-emerald-400" : "text-amber-400"}`} />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Email Preview</p>
+                <p className="text-xs text-slate-400">{isApproved ? "Approval — Ready to Proceed" : "Issues Found — Action Required"}</p>
+              </div>
+            </div>
+            <button onClick={() => setShowEmailPreview(null)} className="text-slate-500 hover:text-white transition-colors">
+              <XCircle className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Email body */}
+          <div className="p-6 space-y-4 font-mono text-sm text-slate-300">
+            <div className="space-y-1 text-xs text-slate-500">
+              <p><span className="text-slate-400">To:</span> {CASE_DATA.email}</p>
+              <p><span className="text-slate-400">From:</span> jennifer.smith@majorslaw.ai</p>
+              <p><span className="text-slate-400">Subject:</span> {isApproved ? "Your Bankruptcy Petition Is Ready — Next Steps" : "Action Required: Items to Address Before Filing"}</p>
+            </div>
+
+            <div className="border-t border-slate-700 pt-4 space-y-4 leading-relaxed">
+              <p>Dear {CASE_DATA.clientName},</p>
+
+              {isApproved ? (
+                <>
+                  <p>
+                    I have completed my review of your bankruptcy petition and all supporting documents. Everything looks good — your file is complete and your petition is accurate and ready to proceed.
+                  </p>
+
+                  {review?.credit_counseling_included && (
+                    <div className="bg-slate-800/60 border border-slate-600 rounded-lg p-4 space-y-2">
+                      <p className="font-semibold text-white">Action Required: Credit Counseling</p>
+                      <p>
+                        Before we can file your case, you are required by law to complete a Credit Counseling course from an approved provider. This typically takes 60–90 minutes and can be completed online. The cost is approximately $20–$25.
+                      </p>
+                      <p>
+                        Approved provider: <span className="text-amber-400">www.debtoredu.com</span> — Use code <span className="text-amber-400">BKREADY</span> for your firm discount.
+                      </p>
+                      <p>
+                        Once completed, please upload your Certificate of Completion through the client portal or email it directly to our office.
+                      </p>
+                    </div>
+                  )}
+
+                  {review?.filing_fee_included && (
+                    <div className="bg-slate-800/60 border border-slate-600 rounded-lg p-4 space-y-2">
+                      <p className="font-semibold text-white">Action Required: Court Filing Fee</p>
+                      <p>
+                        The U.S. Bankruptcy Court requires a filing fee of <span className="text-white font-semibold">$338</span> to open your Chapter 7 case. This fee is paid directly to the court and is separate from your attorney fee.
+                      </p>
+                      <p>
+                        You may pay this fee through our client portal or by money order made payable to "U.S. Bankruptcy Court."
+                      </p>
+                    </div>
+                  )}
+
+                  {review?.document_reminders_included && (
+                    <div className="bg-slate-800/60 border border-slate-600 rounded-lg p-4 space-y-2">
+                      <p className="font-semibold text-white">Important: Document Update Requirements</p>
+                      <p>
+                        If your signing appointment falls in a new calendar month, you will need to provide the following updated documents from the prior month before your appointment:
+                      </p>
+                      <ul className="list-disc list-inside space-y-1 text-slate-300 pl-2">
+                        <li>Bank statements (all accounts) — as soon as available</li>
+                        <li>Most recent pay stubs</li>
+                        <li>Updated mortgage or vehicle loan statements if the balance on file is more than 60 days old</li>
+                      </ul>
+                      <p className="text-amber-300 font-medium">
+                        All updated documents must be received before your signing appointment. If documents are outstanding, your appointment will be rescheduled.
+                      </p>
+                      <p className="font-semibold text-white mt-2">On the Day of Filing</p>
+                      <p>
+                        On your filing date, you must provide screenshots of all non-exempt account balances (checking, savings, investment accounts — excluding IRAs) first thing that morning. These balances will be updated in your petition before filing.
+                      </p>
+                    </div>
+                  )}
+
+                  <p>
+                    We will schedule your signing appointment once the credit counseling certificate and filing fee have been received. Please do not hesitate to reach out with any questions.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p>
+                    I have completed my initial review of your bankruptcy petition. Before we can proceed, there are a few items that need to be addressed. Please review the following carefully:
+                  </p>
+
+                  {openIssues.length > 0 && (
+                    <div className="space-y-3">
+                      {openIssues.map((issue, i) => (
+                        <div key={issue.id} className={`border rounded-lg p-4 space-y-1 ${
+                          issue.severity === "error" ? "border-red-700/50 bg-red-900/20" :
+                          issue.severity === "warning" ? "border-amber-700/50 bg-amber-900/20" :
+                          "border-sky-700/50 bg-sky-900/20"
+                        }`}>
+                          <p className={`font-semibold text-sm ${
+                            issue.severity === "error" ? "text-red-300" :
+                            issue.severity === "warning" ? "text-amber-300" : "text-sky-300"
+                          }`}>
+                            {i + 1}. {issue.section}
+                          </p>
+                          <p>{issue.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <p>
+                    Please log into the client portal to review these items and provide the requested information or documentation. Once all issues are resolved, I will complete my review and proceed with scheduling your signing appointment.
+                  </p>
+                </>
+              )}
+
+              <p>
+                Sincerely,<br />
+                <span className="text-white font-semibold">{CASE_DATA.attorney}</span><br />
+                {CASE_DATA.firm}
+              </p>
+            </div>
+          </div>
+
+          {/* Footer actions */}
+          <div className="p-5 border-t border-slate-700 flex items-center justify-between gap-3">
+            <button
+              onClick={() => setShowEmailPreview(null)}
+              className="px-4 py-2 text-sm text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => sendEmail(type)}
+              disabled={emailSending}
+              className={`flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-lg transition-all ${
+                isApproved
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                  : "bg-amber-600 hover:bg-amber-500 text-white"
+              } disabled:opacity-50`}
+            >
+              {emailSending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {emailSending ? "Sending…" : "Send Email"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render ────────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+        <div className="flex items-center gap-3 text-slate-400">
+          <RefreshCw className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Loading case review…</span>
+        </div>
+      </div>
+    );
+  }
+
+  const isEmailSent = !!review?.email_sent_at;
+
+  return (
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      {showEmailPreview && <EmailPreview type={showEmailPreview} />}
+
+      {/* ── Top Nav ── */}
+      <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 shadow-lg">
+        <div className="max-w-screen-xl mx-auto px-5 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center">
+              <Shield className="w-4 h-4 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white leading-tight">Attorney Case Review</p>
+              <p className="text-xs text-slate-500">{CASE_DATA.attorney}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {/* Message client */}
+            <button
+              onClick={() => { setMsgPrefill(undefined); setShowMsgPortal(true); }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-sky-400 bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              Message Client
+            </button>
+
+            {/* Summary pills */}
+            {openIssues.length > 0 && (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-red-900/40 text-red-300 border border-red-700/50">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                {openIssues.length} open issue{openIssues.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {pendingQuestions.length > 0 && (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-900/40 text-amber-300 border border-amber-700/50">
+                <Flag className="w-3.5 h-3.5" />
+                {pendingQuestions.length} unanswered question{pendingQuestions.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {staleDocCount > 0 && (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-orange-900/40 text-orange-300 border border-orange-700/50">
+                <Clock className="w-3.5 h-3.5" />
+                {staleDocCount} doc{staleDocCount !== 1 ? "s" : ""} need update
+              </span>
+            )}
+
+            {/* Review status */}
+            {review?.status === "approved" && (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-600/50">
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Approved
+              </span>
+            )}
+            {review?.status === "issues_found" && (
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-900/50 text-amber-300 border border-amber-600/50">
+                <AlertTriangle className="w-3.5 h-3.5" />
+                Issues Found
+              </span>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-screen-xl mx-auto px-5 py-6 space-y-6">
+
+        {/* ── Client Summary Card ── */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Case info */}
+          <div className="md:col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h1 className="text-xl font-bold text-white">{CASE_DATA.clientName}</h1>
+                <p className="text-sm text-slate-400">{CASE_DATA.spouseName}</p>
+              </div>
+              <div className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-900/40 text-blue-300 border border-blue-700/50">
+                Chapter {CASE_DATA.chapter}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+              {[
+                { label: "Filing Type", value: CASE_DATA.filingType },
+                { label: "Attorney", value: CASE_DATA.attorney },
+                { label: "Retainer Date", value: CASE_DATA.retainerDate },
+                { label: "Est. Filing Date", value: CASE_DATA.estimatedFilingDate },
+                { label: "Total Fee", value: `$${CASE_DATA.totalFee.toLocaleString()}` },
+                { label: "Paid to Date", value: `$${CASE_DATA.paidToDate.toLocaleString()}` },
+              ].map((item) => (
+                <div key={item.label}>
+                  <p className="text-slate-500 uppercase tracking-wider text-[10px] mb-0.5">{item.label}</p>
+                  <p className="text-slate-200 font-medium">{item.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Review progress panel */}
+          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 flex flex-col gap-4">
+            <div>
+              <p className="text-xs text-slate-500 uppercase tracking-wider mb-3">Review Progress</p>
+              {/* Circular progress */}
+              <div className="flex items-center gap-4">
+                <div className="relative w-16 h-16 flex-shrink-0">
+                  <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                    <circle cx="32" cy="32" r="26" stroke="currentColor" strokeWidth="6" fill="none" className="text-slate-800" />
+                    <circle
+                      cx="32" cy="32" r="26"
+                      stroke="currentColor" strokeWidth="6" fill="none"
+                      strokeLinecap="round"
+                      className={reviewVerifiedCount === TOTAL_PETITION_SECTIONS ? "text-emerald-400" : "text-amber-400"}
+                      strokeDasharray={`${2 * Math.PI * 26}`}
+                      strokeDashoffset={`${2 * Math.PI * 26 * (1 - reviewVerifiedCount / TOTAL_PETITION_SECTIONS)}`}
+                      style={{ transition: "stroke-dashoffset 0.4s ease" }}
+                    />
+                  </svg>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className={`text-sm font-bold ${reviewVerifiedCount === TOTAL_PETITION_SECTIONS ? "text-emerald-400" : "text-amber-400"}`}>
+                      {Math.round((reviewVerifiedCount / TOTAL_PETITION_SECTIONS) * 100)}%
+                    </span>
+                  </div>
+                </div>
+                <div>
+                  <p className={`text-sm font-semibold capitalize ${
+                    review?.status === "approved" ? "text-emerald-400" :
+                    review?.status === "issues_found" ? "text-amber-400" :
+                    "text-slate-300"
+                  }`}>
+                    {review?.status?.replace(/_/g, " ") ?? "In Progress"}
+                  </p>
+                  <p className="text-xs text-slate-500 mt-0.5">{reviewVerifiedCount} of {TOTAL_PETITION_SECTIONS} sections verified</p>
+                  {isEmailSent && (
+                    <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+                      <CheckCheck className="w-3 h-3" />
+                      Email sent {new Date(review!.email_sent_at!).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Section pills summary */}
+            <div className="grid grid-cols-1 gap-1.5">
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-500">Open issues</span>
+                <span className={openIssues.length > 0 ? "text-amber-400 font-bold" : "text-emerald-400 font-bold"}>
+                  {openIssues.filter(i => !i.description.startsWith("[QUESTION")).length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-slate-500">Pending questions</span>
+                <span className={pendingQuestions.length > 0 ? "text-sky-400 font-bold" : "text-slate-600 font-bold"}>
+                  {pendingQuestions.length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[10px] pt-1 border-t border-slate-800 mt-1">
+                <span className="text-slate-500">Scheduling</span>
+                <span className={review?.scheduling_approved ? "text-emerald-400 font-bold" : "text-slate-600 font-bold"}>
+                  {review?.scheduling_approved ? "Approved" : "Pending"}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Scheduling Approval Panel ── */}
+        <div className={`border rounded-xl p-5 space-y-4 ${
+          review?.scheduling_approved
+            ? "bg-emerald-900/10 border-emerald-700/40"
+            : "bg-slate-900/60 border-slate-700"
+        }`}>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                review?.scheduling_approved ? "bg-emerald-900/50" : "bg-slate-800"
+              }`}>
+                <Calendar className={`w-4 h-4 ${review?.scheduling_approved ? "text-emerald-400" : "text-slate-400"}`} />
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-bold text-white leading-tight">Signing Appointment — Scheduling Approval</p>
+                <p className="text-xs text-slate-400 mt-0.5 leading-snug">
+                  {review?.scheduling_approved
+                    ? `Approved by ${review.scheduling_approved_by} on ${new Date(review.scheduling_approved_at!).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`
+                    : "Client cannot schedule until all hard-block documents are confirmed present and you issue the green light."
+                  }
+                </p>
+              </div>
+            </div>
+            {review?.scheduling_approved ? (
+              <button
+                onClick={() => {
+                  const reason = window.prompt("Reason for revoking scheduling approval (optional):");
+                  revokeSchedulingApproval(reason ?? "Revoked by attorney");
+                }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-red-300 hover:text-red-200 bg-red-900/20 hover:bg-red-900/40 border border-red-700/40 rounded-lg transition-all"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                Revoke
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowSchedulingGate(true)}
+                className="flex-shrink-0 flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 rounded-lg transition-all shadow-lg shadow-emerald-900/30"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                Approve Scheduling
+              </button>
+            )}
+          </div>
+
+          {review?.scheduling_approved && review.scheduling_doc_checklist && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {SCHEDULING_GATE_ITEMS.map(item => {
+                const val = review.scheduling_doc_checklist![item.key];
+                return (
+                  <div key={item.key} className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs ${
+                    val === "na"
+                      ? "bg-slate-800/40 border-slate-700 text-slate-500"
+                      : val
+                        ? "bg-emerald-900/20 border-emerald-700/40 text-emerald-300"
+                        : "bg-red-900/20 border-red-700/40 text-red-300"
+                  }`}>
+                    {val === "na"
+                      ? <span className="text-[9px] font-bold text-slate-500 uppercase">N/A</span>
+                      : val
+                        ? <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
+                        : <XCircle className="w-3 h-3 flex-shrink-0" />
+                    }
+                    <span className="truncate font-medium">{item.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!review?.scheduling_approved && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Hard blocks — all must be confirmed before client can schedule</p>
+              {SCHEDULING_GATE_ITEMS.map(item => (
+                <div key={item.key} className="flex items-start gap-2.5 px-3 py-2 rounded-lg bg-slate-800/40 border border-slate-700/60">
+                  <XCircle className="w-3.5 h-3.5 text-slate-600 flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold text-slate-300">{item.label}</p>
+                    {item.toleranceNote && <p className="text-[10px] text-slate-600 mt-0.5">{item.toleranceNote}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Tab nav ── */}
+        <div className="flex gap-1 bg-slate-900/60 border border-slate-800 rounded-xl p-1 overflow-x-auto">
+          {(["summary", "answers", "documents", "issues", "questions", "time"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => handleTabChange(tab)}
+              className={`flex-shrink-0 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-lg text-xs font-semibold transition-all capitalize ${
+                activeTab === tab
+                  ? "bg-slate-700 text-white shadow"
+                  : "text-slate-500 hover:text-slate-300"
+              }`}
+            >
+              {tab === "summary" && <BarChart2 className="w-3.5 h-3.5" />}
+              {tab === "answers" && <FileText className="w-3.5 h-3.5" />}
+              {tab === "documents" && <Layers className="w-3.5 h-3.5" />}
+              {tab === "issues" && (
+                <>
+                  <Flag className="w-3.5 h-3.5" />
+                  {openIssues.length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">{openIssues.length}</span>
+                  )}
+                </>
+              )}
+              {tab === "questions" && (
+                <>
+                  <Mail className="w-3.5 h-3.5" />
+                  {pendingQuestions.length > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-amber-500 text-white text-[10px] font-bold flex items-center justify-center">{pendingQuestions.length}</span>
+                  )}
+                </>
+              )}
+              {tab === "time" && <Clock className="w-3.5 h-3.5" />}
+              {tab === "answers" ? "Petition Review" : tab === "time" ? "Time" : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Tab: Case Summary ── */}
+        {activeTab === "summary" && <CaseSummaryTab />}
+
+        {/* ── Tab: Petition Review (step-through) ── */}
+        {activeTab === "answers" && review && (
+          <AttorneyDocReview
+            reviewId={review.id}
+            openIssues={openIssues}
+            onAddIssue={async (section, severity, description) => {
+              await addIssue(section, severity, description);
+            }}
+            onSectionVerified={(count, total) => {
+              setReviewVerifiedCount(count);
+            }}
+            onComplete={(outcome) => {
+              if (outcome === "approved") setShowEmailPreview("approved");
+              else if (outcome === "issues_found") setShowEmailPreview("issues_found");
+              else setShowEmailPreview("approved");
+            }}
+          />
+        )}
+
+        {/* ── Tab: Documents ── */}
+        {activeTab === "documents" && (
+          <div className="space-y-3">
+            <div className="flex items-start gap-3 p-4 bg-slate-900/60 border border-slate-700 rounded-xl">
+              <Layers className="w-5 h-5 text-slate-400 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-white">Bankruptcy Filing — Document Checklist</p>
+                <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                  Each document we file is listed below with the source documents used to prepare it. Expand any row to review the supporting files. Click "Mark Reviewed" to timestamp your review.
+                </p>
+              </div>
+            </div>
+
+            {FILING_DOCUMENTS.map((doc) => {
+              const isOpen = expandedFilingDoc === doc.id;
+              const reviewedAt = docReviewedAt[doc.id];
+              const hasPending = doc.sourceDocs.some(s => s.status === "pending");
+              const hasStale = doc.sourceDocs.some(s => s.status === "stale" || s.status === "review");
+              const docBorderColor = hasPending ? "border-red-700/40" : hasStale ? "border-amber-700/40" : "border-emerald-700/30";
+              const docBg = hasPending ? "bg-red-900/5" : hasStale ? "bg-amber-900/5" : "bg-emerald-900/5";
+              return (
+                <div key={doc.id} className={`border rounded-xl overflow-hidden transition-all ${docBorderColor} ${docBg}`}>
+                  <button
+                    onClick={() => {
+                      setExpandedFilingDoc(isOpen ? null : doc.id);
+                      if (!isOpen) logActivity("Expanded filing doc", doc.title);
+                    }}
+                    className="w-full flex items-center gap-3 px-4 py-3.5 text-left"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-white">{doc.title}</p>
+                        {reviewedAt && (
+                          <span className="flex items-center gap-1 text-[10px] bg-emerald-900/40 text-emerald-300 border border-emerald-700/50 px-2 py-0.5 rounded-full font-semibold">
+                            <CheckCircle2 className="w-2.5 h-2.5" />
+                            Reviewed {new Date(reviewedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                        {hasPending && <span className="text-[10px] bg-red-900/40 text-red-300 border border-red-700/50 px-2 py-0.5 rounded-full font-semibold">Docs Needed</span>}
+                        {!hasPending && hasStale && <span className="text-[10px] bg-amber-900/40 text-amber-300 border border-amber-700/50 px-2 py-0.5 rounded-full font-semibold">Update Needed</span>}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-0.5">{doc.subtitle}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-xs text-slate-600">{doc.sourceDocs.length} docs</span>
+                      {isOpen ? <ChevronDown className="w-4 h-4 text-slate-500" /> : <ChevronRight className="w-4 h-4 text-slate-500" />}
+                    </div>
+                  </button>
+
+                  {isOpen && (
+                    <div className="border-t border-slate-800/60 px-4 pb-4 pt-3 space-y-2">
+                      <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Supporting Documents</p>
+                      {doc.sourceDocs.map((src, si) => (
+                        <div key={si} className="flex items-start gap-3 bg-slate-900/60 border border-slate-800 rounded-lg px-3 py-2.5">
+                          <FileText className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                            src.status === "current" ? "text-emerald-500" :
+                            src.status === "review" ? "text-amber-500" :
+                            src.status === "pending" ? "text-red-400" : "text-red-500"
+                          }`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-slate-200">{src.label}</p>
+                            {src.note && <p className="text-xs text-amber-300 mt-0.5">{src.note}</p>}
+                          </div>
+                          <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-semibold border ${
+                            src.status === "current" ? "bg-emerald-900/30 text-emerald-300 border-emerald-700/50" :
+                            src.status === "review" ? "bg-amber-900/30 text-amber-300 border-amber-700/50" :
+                            src.status === "pending" ? "bg-red-900/30 text-red-300 border-red-700/50" :
+                            "bg-red-900/30 text-red-300 border-red-700/50"
+                          }`}>
+                            {src.status === "current" ? "Current" : src.status === "review" ? "Needs Update" : src.status === "pending" ? "Needed" : "Stale"}
+                          </span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between pt-2">
+                        <button
+                          onClick={() => setSelectedDocPreview(doc.title)}
+                          className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                          Preview Draft
+                        </button>
+                        {reviewedAt ? (
+                          <button
+                            onClick={() => {
+                              setDocReviewedAt(prev => { const n = { ...prev }; delete n[doc.id]; return n; });
+                            }}
+                            className="text-xs text-slate-500 hover:text-slate-400 transition-colors"
+                          >
+                            Clear review stamp
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const ts = new Date().toISOString();
+                              setDocReviewedAt(prev => ({ ...prev, [doc.id]: ts }));
+                              logActivity("Marked reviewed", doc.title);
+                            }}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-900/40 hover:bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 text-xs font-semibold rounded-lg transition-colors"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Mark Reviewed
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Day-of-filing reminder */}
+            <div className="bg-slate-900/60 border border-blue-800/40 rounded-xl p-5">
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-900/50 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-blue-300">Day-of-Filing Requirements</p>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    On the filing date, the client must provide screenshots of all checking, savings, and non-exempt investment account balances first thing in the morning. These are required to update the petition with current balances immediately before filing. IRA and fully-exempt retirement accounts are excluded.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Tab: Issues ── */}
+        {activeTab === "issues" && (
+          <div className="space-y-4">
+            {/* Message client button */}
+            <button
+              onClick={() => {
+                setMsgPrefill(undefined);
+                setShowMsgPortal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2.5 text-sm font-semibold text-sky-400 bg-sky-500/8 border border-sky-500/20 hover:bg-sky-500/15 hover:border-sky-500/30 rounded-xl transition-all w-full justify-center"
+            >
+              <MessageSquare className="w-4 h-4" />
+              Message Client
+            </button>
+
+            {/* Add new issue form */}
+            {newIssue ? (
+              <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-5 space-y-4">
+                <p className="text-sm font-semibold text-white">Flag New Issue</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Section</label>
+                    <select
+                      value={newIssue.section}
+                      onChange={(e) => setNewIssue({ ...newIssue, section: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-slate-500"
+                    >
+                      <option value="">Select section…</option>
+                      {QUESTIONNAIRE_SECTIONS.map((s) => (
+                        <option key={s.id} value={s.label}>{s.label}</option>
+                      ))}
+                      <option value="Documents">Documents</option>
+                      <option value="General">General</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-slate-500 mb-1 block">Severity</label>
+                    <select
+                      value={newIssue.severity}
+                      onChange={(e) => setNewIssue({ ...newIssue, severity: e.target.value })}
+                      className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-slate-500"
+                    >
+                      <option value="info">Info</option>
+                      <option value="warning">Warning</option>
+                      <option value="error">Error — Must Resolve</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Description</label>
+                  <textarea
+                    value={newIssue.description}
+                    onChange={(e) => setNewIssue({ ...newIssue, description: e.target.value })}
+                    placeholder="Describe the issue clearly for the client email…"
+                    rows={3}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500"
+                  />
+                </div>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setNewIssue(null)} className="px-4 py-2 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-lg transition-colors">Cancel</button>
+                  <button onClick={() => addIssue()} className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors">
+                    <Flag className="w-3.5 h-3.5" />
+                    Add Issue
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setNewIssue({ section: "", severity: "warning", description: "" })}
+                className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white border border-dashed border-slate-700 hover:border-slate-500 rounded-xl transition-all w-full justify-center"
+              >
+                <Plus className="w-4 h-4" />
+                Flag New Issue
+              </button>
+            )}
+
+            {/* Open issues */}
+            {openIssues.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Open Issues ({openIssues.length})</p>
+                {openIssues.map((issue) => (
+                  <div key={issue.id} className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      {severityIcon(issue.severity)}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${severityBadge(issue.severity)}`}>{issue.severity}</span>
+                          <span className="text-xs text-slate-500">{issue.section}</span>
+                        </div>
+                        <p className="text-sm text-slate-200">{issue.description}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            setMsgPrefill({
+                              subject: `Action Required: ${issue.section}`,
+                              body: `Dear Client,\n\nWe need your attention on the following item:\n\n${issue.description}\n\nPlease provide the requested documents or information at your earliest convenience.`,
+                              relatedDocument: issue.section,
+                            });
+                            setShowMsgPortal(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-sky-400 hover:bg-sky-900/20 transition-colors"
+                          title="Message client about this issue"
+                        >
+                          <MessageSquare className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => resolveIssue(issue.id)} className="p-1.5 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-900/20 transition-colors">
+                          <CheckCheck className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => deleteIssue(issue.id)} className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-900/20 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Resolved issues */}
+            {resolvedIssues.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Resolved ({resolvedIssues.length})</p>
+                {resolvedIssues.map((issue) => (
+                  <div key={issue.id} className="bg-slate-900/30 border border-slate-800/50 rounded-xl p-4 opacity-60">
+                    <div className="flex items-center gap-3">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                      <div className="flex-1">
+                        <p className="text-xs text-slate-500">{issue.section}</p>
+                        <p className="text-sm text-slate-400 line-through">{issue.description}</p>
+                      </div>
+                      <button onClick={() => deleteIssue(issue.id)} className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {openIssues.length === 0 && resolvedIssues.length === 0 && !newIssue && (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-600 space-y-2">
+                <CheckCircle2 className="w-10 h-10" />
+                <p className="text-sm">No issues flagged</p>
+                <p className="text-xs">Everything looks good — or use the button above to flag an issue.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab: Client Questions ── */}
+        {activeTab === "questions" && (
+          <div className="space-y-3">
+            {questions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-600 space-y-2">
+                <Mail className="w-10 h-10" />
+                <p className="text-sm">No questions from client yet</p>
+              </div>
+            ) : (
+              <>
+                {pendingQuestions.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1">Awaiting Attorney Response ({pendingQuestions.length})</p>
+                    {pendingQuestions.map((q) => (
+                      <QuestionCard key={q.id} question={q} onAnswer={answerQuestion} />
+                    ))}
+                  </div>
+                )}
+                {questions.filter((q) => q.status === "answered").length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider px-1 mt-4">Answered</p>
+                    {questions.filter((q) => q.status === "answered").map((q) => (
+                      <QuestionCard key={q.id} question={q} onAnswer={answerQuestion} />
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {/* ── Tab: Time Entries ── */}
+        {activeTab === "time" && (
+          <div className="space-y-4">
+            {/* Current session card */}
+            <div className="bg-slate-900/60 border border-emerald-700/40 rounded-xl p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  <p className="text-sm font-semibold text-emerald-300">Active Session</p>
+                </div>
+                <span className="font-mono text-lg font-bold text-white">{formatDuration(sessionElapsed)}</span>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <User className="w-3.5 h-3.5 text-slate-500" />
+                <p className="text-xs text-slate-400">{CASE_DATA.attorney}</p>
+                <span className="text-slate-700">·</span>
+                <p className="text-xs text-slate-500">Started {sessionStartRef.current.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</p>
+              </div>
+              <p className="text-xs text-slate-600 mb-3">{activityLogRef.current.length} activity events recorded this session</p>
+              <button
+                onClick={() => setShowExitPrompt(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold rounded-lg transition-colors"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Log Time & Close File
+              </button>
+            </div>
+
+            {/* Past entries */}
+            <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+                <p className="text-sm font-semibold text-white">Time Entry History</p>
+                <p className="text-xs text-slate-500">{timeEntries.length} entries</p>
+              </div>
+              {timeEntries.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-10 text-slate-600 gap-2">
+                  <Clock className="w-8 h-8" />
+                  <p className="text-sm">No time entries yet</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/60">
+                  {timeEntries.map((entry) => (
+                    <div key={entry.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-1">
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              entry.entry_source === "auto"
+                                ? "bg-slate-800 text-slate-400 border-slate-700"
+                                : "bg-amber-900/30 text-amber-300 border-amber-700/50"
+                            }`}>
+                              {entry.entry_source === "auto" ? "Auto" : "Manual"}
+                            </span>
+                            {entry.billable && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-900/30 text-emerald-300 border border-emerald-700/50">Billable</span>
+                            )}
+                            <span className="text-xs text-slate-500">{new Date(entry.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>
+                            <span className="text-xs text-slate-600">{new Date(entry.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}</span>
+                          </div>
+                          <p className="text-sm text-slate-300">{entry.notes || "Attorney review session"}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">{entry.attorney_name || CASE_DATA.attorney}</p>
+                        </div>
+                        <span className="font-mono text-sm font-semibold text-white flex-shrink-0">
+                          {entry.duration_seconds > 0 ? formatDuration(entry.duration_seconds) : "—"}
+                        </span>
+                      </div>
+                      {Array.isArray(entry.activity_log) && entry.activity_log.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="text-xs text-slate-600 cursor-pointer hover:text-slate-400 transition-colors">
+                            View {entry.activity_log.length} activity events
+                          </summary>
+                          <div className="mt-2 space-y-1 pl-2 border-l border-slate-800">
+                            {entry.activity_log.map((ev: ActivityEvent, ei: number) => (
+                              <div key={ei} className="flex items-start gap-2">
+                                <span className="text-[10px] text-slate-600 font-mono mt-0.5 flex-shrink-0">
+                                  {new Date(ev.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                                </span>
+                                <span className="text-xs text-slate-400">{ev.action}{ev.detail ? ` — ${ev.detail}` : ""}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Message Portal Modal ── */}
+      <MessagePortalModal
+        open={showMsgPortal}
+        onClose={() => { setShowMsgPortal(false); setMsgPrefill(undefined); }}
+        preselectedClientId={CLIENT_ID}
+        prefilledMessage={msgPrefill}
+        senderName={CASE_DATA.attorney}
+        senderRole="attorney"
+      />
+
+      {/* ── Scheduling Gate Modal ── */}
+      {showSchedulingGate && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700 sticky top-0 bg-slate-900 z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-emerald-900/50 flex items-center justify-center flex-shrink-0">
+                  <Calendar className="w-4 h-4 text-emerald-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-white">Approve Client to Schedule</p>
+                  <p className="text-xs text-slate-400">Confirm all required documents are on file before issuing green light</p>
+                </div>
+              </div>
+              <button onClick={() => setShowSchedulingGate(false)} className="text-slate-500 hover:text-white transition-colors flex-shrink-0">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Explanation */}
+              <div className="flex items-start gap-3 bg-amber-900/20 border border-amber-700/40 rounded-xl px-4 py-3">
+                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Once approved, the client will see a <strong className="text-white">Schedule Signing Appointment</strong> button in their portal.
+                  <strong className="text-white"> You must confirm every item below</strong> — or mark it N/A — before you can issue approval. If any hard-block is missing, do not approve.
+                </p>
+              </div>
+
+              {/* Gate items */}
+              <div className="space-y-2">
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Document Confirmation Checklist</p>
+                {SCHEDULING_GATE_ITEMS.map(item => {
+                  const val = schedGateChecked[item.key];
+                  const categoryColor = {
+                    identity: "text-red-400",
+                    legal: "text-amber-400",
+                    financial: "text-sky-400",
+                  }[item.category];
+
+                  return (
+                    <div key={item.key} className={`rounded-xl border px-4 py-3.5 transition-all ${
+                      val === true ? "bg-emerald-900/15 border-emerald-700/40" :
+                      val === "na" ? "bg-slate-800/40 border-slate-700" :
+                      "bg-slate-800/20 border-slate-700/60"
+                    }`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className={`text-[9px] font-bold uppercase tracking-wider ${categoryColor}`}>{item.category}</span>
+                          </div>
+                          <p className="text-sm font-semibold text-white leading-snug">{item.label}</p>
+                          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">{item.description}</p>
+                          {item.toleranceNote && (
+                            <p className="text-[10px] text-amber-300/80 mt-1 italic">{item.toleranceNote}</p>
+                          )}
+                        </div>
+                        <div className="flex gap-1.5 flex-shrink-0 mt-0.5">
+                          <button
+                            onClick={() => setSchedGateChecked(prev => ({ ...prev, [item.key]: true }))}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
+                              val === true
+                                ? "bg-emerald-700 border-emerald-600 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-400 hover:border-emerald-700 hover:text-emerald-300"
+                            }`}
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            On File
+                          </button>
+                          <button
+                            onClick={() => setSchedGateChecked(prev => ({ ...prev, [item.key]: "na" }))}
+                            className={`flex items-center gap-1 px-2.5 py-1.5 text-[10px] font-bold rounded-lg border transition-all ${
+                              val === "na"
+                                ? "bg-slate-600 border-slate-500 text-white"
+                                : "bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300"
+                            }`}
+                          >
+                            N/A
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Block note (if not all clear) */}
+              {!schedGateAllCleared && (
+                <div className="flex items-start gap-3 bg-red-900/15 border border-red-700/40 rounded-xl px-4 py-3">
+                  <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-bold text-red-300 mb-1">Cannot Approve Yet</p>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      Confirm each document is on file or mark it N/A before you can issue the scheduling approval.
+                      {SCHEDULING_GATE_ITEMS.filter(i => !schedGateChecked[i.key]).length} item{SCHEDULING_GATE_ITEMS.filter(i => !schedGateChecked[i.key]).length !== 1 ? "s" : ""} still unreviewed.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {schedGateAllCleared && (
+                <div className="flex items-center gap-3 bg-emerald-900/15 border border-emerald-700/40 rounded-xl px-4 py-3">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                  <p className="text-xs text-emerald-300 font-semibold">
+                    All items confirmed. You may now issue the scheduling approval.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowSchedulingGate(false)}
+                  className="flex-1 px-4 py-2.5 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={approveScheduling}
+                  disabled={!schedGateAllCleared || schedApproving}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-emerald-900/30"
+                >
+                  {schedApproving
+                    ? <RefreshCw className="w-4 h-4 animate-spin" />
+                    : <CheckCircle2 className="w-4 h-4" />
+                  }
+                  {schedApproving ? "Approving…" : "Issue Scheduling Approval"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Session timer strip (always visible) ── */}
+      <div className="sticky bottom-0 left-0 right-0 z-20 flex items-center justify-between px-4 py-2 bg-slate-950/90 backdrop-blur border-t border-slate-800 text-xs">
+        <div className="flex items-center gap-2 text-slate-500">
+          <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+          <span>Session: <span className="font-mono text-slate-300">{formatDuration(sessionElapsed)}</span></span>
+          <span className="text-slate-700">·</span>
+          <span>{CASE_DATA.attorney}</span>
+        </div>
+        <button
+          onClick={() => setShowExitPrompt(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold rounded-lg transition-colors"
+        >
+          <Clock className="w-3 h-3" />
+          Log & Exit
+        </button>
+      </div>
+
+      {/* ── Exit / time entry prompt ── */}
+      {showExitPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-900/50 flex items-center justify-center">
+                  <Clock className="w-4.5 h-4.5 text-amber-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white">Log Time Entry</p>
+                  <p className="text-xs text-slate-400">Session: {formatDuration(sessionElapsed)}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowExitPrompt(false)} className="text-slate-500 hover:text-white transition-colors">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Activity summary */}
+              <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-3">
+                <p className="text-xs font-semibold text-slate-400 mb-2">Activity This Session</p>
+                <div className="space-y-1 max-h-32 overflow-y-auto">
+                  {activityLogRef.current.length === 0 ? (
+                    <p className="text-xs text-slate-600">No activity recorded.</p>
+                  ) : (
+                    activityLogRef.current.map((ev, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="text-[10px] text-slate-600 font-mono mt-0.5 flex-shrink-0">
+                          {new Date(ev.ts).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <span className="text-xs text-slate-400">{ev.action}{ev.detail ? ` — ${ev.detail}` : ""}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-500 mb-1.5 block">Notes (optional)</label>
+                <textarea
+                  value={exitNotes}
+                  onChange={(e) => setExitNotes(e.target.value)}
+                  placeholder="e.g. Reviewed petition, flagged income discrepancy, answered client questions…"
+                  rows={3}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={exitBillable}
+                    onChange={(e) => setExitBillable(e.target.checked)}
+                    className="w-4 h-4 rounded accent-amber-500"
+                  />
+                  <span className="text-sm text-slate-300">Mark as billable</span>
+                </label>
+                <span className="text-xs text-slate-500 font-mono">{formatDuration(sessionElapsed)}</span>
+              </div>
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => setShowExitPrompt(false)}
+                  className="flex-1 px-4 py-2.5 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-colors"
+                >
+                  Continue Working
+                </button>
+                <button
+                  onClick={async () => {
+                    await saveAutoTimeEntry(exitNotes, exitBillable, true);
+                    await fetchTimeEntries();
+                    setShowExitPrompt(false);
+                    setExitNotes("");
+                    // Reset session clock
+                    sessionStartRef.current = new Date();
+                    activityLogRef.current = [];
+                    setSessionElapsed(0);
+                  }}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  Save Time Entry
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Doc preview modal ── */}
+      {selectedDocPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl">
+            <div className="flex items-center justify-between p-5 border-b border-slate-700">
+              <p className="text-sm font-semibold text-white">{selectedDocPreview}</p>
+              <button onClick={() => setSelectedDocPreview(null)} className="text-slate-500 hover:text-white transition-colors">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-8 flex flex-col items-center justify-center text-slate-500 gap-3">
+              <FileText className="w-16 h-16 text-slate-700" />
+              <p className="text-sm">Document preview</p>
+              <p className="text-xs text-slate-600 text-center max-w-sm">
+                In production, the actual uploaded PDF or image would render here. This document is stored in Supabase Storage.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Case Summary Tab ─────────────────────────────────────────────────────────
+
+function SectionCard({ title, icon: Icon, status, children }: {
+  title: string;
+  icon: React.ComponentType<{ className?: string }>;
+  status?: "ok" | "warning" | "error" | "info";
+  children: React.ReactNode;
+}) {
+  const statusColor = {
+    ok: "border-emerald-700/40 bg-emerald-900/10",
+    warning: "border-amber-700/40 bg-amber-900/10",
+    error: "border-red-700/40 bg-red-900/10",
+    info: "border-slate-700 bg-slate-900/60",
+  }[status ?? "info"];
+
+  const iconColor = {
+    ok: "text-emerald-400 bg-emerald-900/50",
+    warning: "text-amber-400 bg-amber-900/50",
+    error: "text-red-400 bg-red-900/50",
+    info: "text-slate-400 bg-slate-800",
+  }[status ?? "info"];
+
+  const badge = {
+    ok: <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-900/50 text-emerald-300 border border-emerald-700/50"><CheckCircle2 className="w-3 h-3" />Clear</span>,
+    warning: <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-900/50 text-amber-300 border border-amber-700/50"><AlertTriangle className="w-3 h-3" />Review</span>,
+    error: <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-red-900/50 text-red-300 border border-red-700/50"><XCircle className="w-3 h-3" />Issue</span>,
+    info: null,
+  }[status ?? "info"];
+
+  return (
+    <div className={`border rounded-xl overflow-hidden ${statusColor}`}>
+      <div className="flex items-center justify-between px-5 py-3 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${iconColor}`}>
+            <Icon className="w-3.5 h-3.5" />
+          </div>
+          <p className="text-sm font-semibold text-white">{title}</p>
+        </div>
+        {badge}
+      </div>
+      <div className="px-5 py-4">{children}</div>
+    </div>
+  );
+}
+
+function Row({ label, value, sub, highlight }: { label: string; value: string; sub?: string; highlight?: "ok" | "warn" | "bad" }) {
+  const valueColor = highlight === "ok" ? "text-emerald-300" : highlight === "warn" ? "text-amber-300" : highlight === "bad" ? "text-red-300" : "text-slate-200";
+  return (
+    <div className="flex items-start justify-between gap-4 py-2 border-b border-white/5 last:border-0">
+      <p className="text-xs text-slate-500 flex-shrink-0 w-48">{label}</p>
+      <div className="text-right">
+        <p className={`text-sm font-medium ${valueColor}`}>{value}</p>
+        {sub && <p className="text-xs text-slate-600 mt-0.5">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+function CaseSummaryTab() {
+  // ── Jurisdiction & Venue ───────────────────────────────────────────────────
+  const jurisdiction = {
+    state: "Texas",
+    county: "Travis County",
+    district: "Western District of Texas",
+    division: "Austin Division",
+    court: "U.S. Bankruptcy Court — Western District of Texas",
+    courthouse: "Homer J. Thornberry Federal Judicial Building, 903 San Jacinto Blvd, Austin, TX 78701",
+    domicileDays: "730+ days (2+ years)",
+    venueCode: "28 U.S.C. § 1408",
+    jurisdictionCode: "28 U.S.C. § 1334; 28 U.S.C. § 157",
+    chapterCode: "11 U.S.C. § 301 (voluntary petition)",
+    properVenue: true,
+    properJurisdiction: true,
+  };
+
+  // ── Means Test / Median Income ─────────────────────────────────────────────
+  const meansTest = {
+    householdSize: 4,
+    state: "Texas",
+    stateMedian: 98_752,
+    clientAMI: 136_200,
+    aboveMedian: true,
+    sixMonthGross: 68_100,
+    annualized: 136_200,
+    disposableIncome: -420,
+    passesMeansTest: true,
+    meansTestNote: "Above-median income — however, Schedule I/J disposable income is negative ($-420/mo), passing the presumption of abuse test under 11 U.S.C. § 707(b)(2).",
+  };
+
+  // ── Schedule I/J Summary ───────────────────────────────────────────────────
+  const scheduleIJ = {
+    grossIncome: 7_250,
+    deductions: 1_770,
+    netIncome: 5_480,
+    totalExpenses: 5_230,
+    disposable: 250,
+    noteExpenses: "Expenses include mortgage $2,150; utilities $320; food $900; transport $480; auto loan $320; medical $410; childcare $650.",
+  };
+
+  // ── Asset Equity & Liquidation Analysis ────────────────────────────────────
+  const assets = [
+    { name: "Primary Residence", fmv: 385_000, liens: 310_000, exemption: 75_000, equity: 75_000, nonExemptEquity: 0, exemptionBasis: "Texas unlimited homestead (TX Const. Art. XVI §50; TX Prop. Code §41.001)" },
+    { name: "2020 Toyota Camry", fmv: 18_500, liens: 14_200, exemption: 4_300, equity: 4_300, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.002(a)(9) — motor vehicle exemption ($4,000 + lien payoff)" },
+    { name: "2018 Honda Pilot (spouse)", fmv: 22_000, liens: 0, exemption: 22_000, equity: 22_000, nonExemptEquity: 0, exemptionBasis: "Non-filing spouse vehicle — exempt per TX law; not property of estate" },
+    { name: "Chase Checking ****1024", fmv: 1_842, liens: 0, exemption: 1_842, equity: 1_842, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.001 — aggregate personal property exemption ($100,000 family)" },
+    { name: "Chase Savings ****8811", fmv: 420, liens: 0, exemption: 420, equity: 420, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.001 — aggregate personal property exemption" },
+    { name: "Fidelity IRA", fmv: 47_200, liens: 0, exemption: 47_200, equity: 47_200, nonExemptEquity: 0, exemptionBasis: "11 U.S.C. §522(d)(12) / TX Prop. Code §42.0021 — retirement accounts fully exempt" },
+    { name: "Household Goods", fmv: 3_500, liens: 0, exemption: 3_500, equity: 3_500, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.002 — household furnishings" },
+    { name: "Clothing", fmv: 800, liens: 0, exemption: 800, equity: 800, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.002(a)(4)" },
+    { name: "Electronics", fmv: 600, liens: 0, exemption: 600, equity: 600, nonExemptEquity: 0, exemptionBasis: "TX Prop. Code §42.002(a)(5)" },
+  ];
+
+  const totalFMV = assets.reduce((s, a) => s + a.fmv, 0);
+  const totalLiens = assets.reduce((s, a) => s + a.liens, 0);
+  const totalEquity = assets.reduce((s, a) => s + a.equity, 0);
+  const totalNonExempt = assets.reduce((s, a) => s + a.nonExemptEquity, 0);
+  const liquidationValue = Math.max(0, totalNonExempt - 1_500); // trustee admin costs ~$1,500
+
+  // ── Debt Summary ──────────────────────────────────────────────────────────
+  const debts = {
+    secured: [
+      { creditor: "Wells Fargo Mortgage", schedule: "D", balance: 310_000, type: "Mortgage — Retain" },
+      { creditor: "Chase Auto Loan", schedule: "D", balance: 14_200, type: "Auto — Retain" },
+    ],
+    priority: [] as { creditor: string; schedule: string; balance: number; type: string }[],
+    unsecured: [
+      { creditor: "Chase Visa ****3291", schedule: "E/F", balance: 8_450 },
+      { creditor: "Capital One MC ****7740", schedule: "E/F", balance: 5_820 },
+      { creditor: "Citi Double Cash ****0562", schedule: "E/F", balance: 3_100 },
+      { creditor: "Discover It ****9914", schedule: "E/F", balance: 2_280 },
+      { creditor: "St. David's Hospital (Medical)", schedule: "E/F", balance: 6_700 },
+      { creditor: "LendingClub Personal Loan ****4408", schedule: "E/F", balance: 9_200 },
+    ],
+  };
+
+  const totalSecured = debts.secured.reduce((s, d) => s + d.balance, 0);
+  const totalUnsecured = debts.unsecured.reduce((s, d) => s + d.balance, 0);
+  const totalDebt = totalSecured + totalUnsecured;
+
+  // ── SOFA Issues ────────────────────────────────────────────────────────────
+  const sofaIssues = [
+    {
+      category: "Lawsuit / Judgment",
+      severity: "warning" as const,
+      detail: "Capital One obtained a judgment of $5,820. No active garnishment. No wage garnishment or bank levy active at petition date. Judgment lien must be checked against real property — run judgment lien search in Travis County.",
+      action: "Confirm no judgment lien against homestead; if so, lien avoidance motion under §522(f) may be needed.",
+    },
+    {
+      category: "Preferential Payments (90 days)",
+      severity: "ok" as const,
+      detail: "No payments to unsecured creditors exceeding $600 in the 90 days before petition. Regular mortgage and auto payments are current installment obligations, not preferences.",
+      action: null,
+    },
+    {
+      category: "Insider Payments (1 Year)",
+      severity: "ok" as const,
+      detail: "No payments to insiders (family members, business associates, officers) reported in the 12 months preceding filing.",
+      action: null,
+    },
+    {
+      category: "Asset Transfers (2 Years)",
+      severity: "ok" as const,
+      detail: "No transfers of assets reported in the 24 months preceding filing. No below-market transfers, gifts, or fraudulent conveyances identified.",
+      action: null,
+    },
+    {
+      category: "Foreclosure",
+      severity: "ok" as const,
+      detail: "No active foreclosure proceedings. Mortgage is current. Automatic stay upon filing will protect homestead if status changes.",
+      action: null,
+    },
+    {
+      category: "Prior Bankruptcies",
+      severity: "ok" as const,
+      detail: "No prior bankruptcy filings. No §362(c)(3) or §362(c)(4) limitations on automatic stay.",
+      action: null,
+    },
+  ];
+
+  // ── Document Readiness ─────────────────────────────────────────────────────
+  const currentMonth = "June 2026";
+  const filingMonth = "June 2026";
+  const docsReady = [
+    { name: "Pay Stub — April 2026 (1 of 2)", status: "ready" as const },
+    { name: "Pay Stub — April 2026 (2 of 2)", status: "ready" as const },
+    { name: "2024 Federal Tax Return", status: "ready" as const },
+    { name: "2023 Federal Tax Return", status: "ready" as const },
+    { name: "Equifax Credit Report (Apr 5, 2026)", status: "ready" as const },
+    { name: "TransUnion Credit Report (Apr 5, 2026)", status: "ready" as const },
+    { name: "Experian Credit Report (Apr 5, 2026)", status: "ready" as const },
+    { name: "Photo ID — Driver License", status: "ready" as const },
+    { name: "Social Security Card", status: "ready" as const },
+  ];
+  const docsNeeded = [
+    { name: "Chase Bank Statement — May 2026", reason: "Filing month — needed before signing", priority: "required" as const },
+    { name: "Pay Stubs — May 2026 (both)", reason: "Filing month — needed before signing", priority: "required" as const },
+    { name: "Wells Fargo Mortgage Statement — May 2026", reason: "Current balance on file is 45+ days old", priority: "required" as const },
+    { name: "Chase Auto Loan Statement — May 2026", reason: "Balance on file is stale (Feb 2026)", priority: "required" as const },
+    { name: "Day-of-Filing Account Screenshots", reason: "All checking/savings/non-exempt investment accounts — morning of filing only", priority: "filing-day" as const },
+  ];
+
+  const sofaWarnings = sofaIssues.filter(i => (i.severity as string) === "warning").length;
+  const sofaErrors = sofaIssues.filter(i => (i.severity as string) === "error").length;
+
+  return (
+    <div className="space-y-4">
+
+      {/* ── Quick Stats Row ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        {[
+          { label: "Non-Exempt Equity", value: `$${totalNonExempt.toLocaleString()}`, sub: "Available to trustee", color: "text-emerald-300", bg: "bg-emerald-900/20 border-emerald-700/40" },
+          { label: "Liquidation Value", value: `$${liquidationValue.toLocaleString()}`, sub: "After admin costs", color: "text-emerald-300", bg: "bg-emerald-900/20 border-emerald-700/40" },
+          { label: "Total Unsecured Debt", value: `$${totalUnsecured.toLocaleString()}`, sub: "To be discharged", color: "text-sky-300", bg: "bg-sky-900/20 border-sky-700/40" },
+          { label: "Sched. J Disposable", value: `$${scheduleIJ.disposable.toLocaleString()}/mo`, sub: "After all expenses", color: scheduleIJ.disposable < 500 ? "text-emerald-300" : "text-amber-300", bg: "bg-slate-900/60 border-slate-700" },
+        ].map(stat => (
+          <div key={stat.label} className={`rounded-xl border p-4 ${stat.bg}`}>
+            <p className="text-xs text-slate-500 mb-1">{stat.label}</p>
+            <p className={`text-lg font-bold ${stat.color}`}>{stat.value}</p>
+            <p className="text-xs text-slate-600 mt-0.5">{stat.sub}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* ── Jurisdiction & Venue ── */}
+      <SectionCard title="Jurisdiction, Venue & Court" icon={MapPin} status="ok">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+          <div>
+            <Row label="Court" value={jurisdiction.court} />
+            <Row label="Courthouse" value={jurisdiction.courthouse} />
+            <Row label="District / Division" value={`${jurisdiction.district} — ${jurisdiction.division}`} />
+            <Row label="Venue Basis" value={jurisdiction.venueCode} sub="Domicile in district 180+ days before filing" highlight="ok" />
+            <Row label="Domicile Duration" value={jurisdiction.domicileDays} sub="Qualifies for home district filing" highlight="ok" />
+          </div>
+          <div>
+            <Row label="Subject Matter Jurisdiction" value={jurisdiction.jurisdictionCode} sub="Federal bankruptcy jurisdiction — exclusive" highlight="ok" />
+            <Row label="Petition Authority" value={jurisdiction.chapterCode} sub="Voluntary Chapter 7 — individual debtor" highlight="ok" />
+            <Row label="County of Residence" value={`${jurisdiction.county}, ${jurisdiction.state}`} />
+            <Row label="Venue Proper" value="Yes" highlight="ok" />
+            <Row label="Jurisdiction Proper" value="Yes" highlight="ok" />
+          </div>
+        </div>
+        <div className="mt-3 p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 leading-relaxed">
+          Client has resided at 4215 Maple Ridge Dr, Austin, TX 78745 (Travis County) for more than 730 days. The Western District of Texas — Austin Division is the proper venue under 28 U.S.C. §1408. Federal subject matter jurisdiction is established under 28 U.S.C. §1334 and 28 U.S.C. §157. No venue or jurisdictional defects identified.
+        </div>
+      </SectionCard>
+
+      {/* ── Means Test / Median Income ── */}
+      <SectionCard title="Means Test — Median Income Comparison" icon={TrendingDown} status={meansTest.passesMeansTest ? "ok" : "error"}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 mb-3">
+          <div>
+            <Row label="Household Size" value={`${meansTest.householdSize} (debtor + non-filing spouse + 2 dependents)`} />
+            <Row label="Texas Median Income (4-person)" value={`$${meansTest.stateMedian.toLocaleString()}/yr`} sub="U.S. Trustee Program — current figures" />
+            <Row label="Client 6-Month Gross (annualized)" value={`$${meansTest.annualized.toLocaleString()}/yr`} sub="Includes non-filing spouse income for means test" highlight="warn" />
+            <Row label="Above/Below Median" value="Above Median" highlight="warn" />
+          </div>
+          <div>
+            <Row label="Means Test Result" value="Passes — No Presumption of Abuse" highlight="ok" />
+            <Row label="Form B122A-2 Required" value="Yes — Full means test calculation required" />
+            <Row label="Monthly Disposable (CMI−Expenses)" value={`$${meansTest.disposableIncome.toLocaleString()}/mo`} highlight="ok" />
+            <Row label="§707(b)(2) Presumption" value="Does Not Arise" highlight="ok" />
+          </div>
+        </div>
+        <div className="p-3 rounded-lg bg-amber-900/20 border border-amber-700/30 text-xs text-amber-200 leading-relaxed">
+          <span className="font-semibold">Note:</span> {meansTest.meansTestNote}
+        </div>
+      </SectionCard>
+
+      {/* ── Schedule I / J ── */}
+      <SectionCard title="Schedule I & J — Monthly Income vs. Expenses" icon={DollarSign} status="ok">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Schedule I — Income</p>
+            <Row label="Gross Monthly Wages" value={`$${scheduleIJ.grossIncome.toLocaleString()}`} />
+            <Row label="Payroll Deductions" value={`-$${scheduleIJ.deductions.toLocaleString()}`} sub="Taxes, health ins, 401(k)" />
+            <Row label="Net Monthly Income" value={`$${scheduleIJ.netIncome.toLocaleString()}`} highlight="ok" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Schedule J — Expenses</p>
+            <Row label="Total Monthly Expenses" value={`$${scheduleIJ.totalExpenses.toLocaleString()}`} />
+            <Row label="Net After Expenses" value={`$${scheduleIJ.disposable.toLocaleString()}/mo`} highlight={scheduleIJ.disposable < 0 ? "ok" : "warn"} />
+          </div>
+        </div>
+        <div className="mt-3 p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 leading-relaxed">
+          {scheduleIJ.noteExpenses} Monthly disposable income of ${scheduleIJ.disposable.toLocaleString()} supports Chapter 7 eligibility — client cannot meaningfully fund a Chapter 13 plan.
+        </div>
+      </SectionCard>
+
+      {/* ── Asset Equity & Liquidation Analysis ── */}
+      <SectionCard title="Asset Equity & Liquidation Analysis" icon={Layers} status={totalNonExempt === 0 ? "ok" : "warning"}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-slate-700">
+                <th className="text-left text-slate-500 font-medium pb-2 pr-4">Asset</th>
+                <th className="text-right text-slate-500 font-medium pb-2 pr-4">FMV</th>
+                <th className="text-right text-slate-500 font-medium pb-2 pr-4">Liens</th>
+                <th className="text-right text-slate-500 font-medium pb-2 pr-4">Equity</th>
+                <th className="text-right text-slate-500 font-medium pb-2 pr-4">Exemption</th>
+                <th className="text-right text-slate-500 font-medium pb-2">Non-Exempt</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-800/60">
+              {assets.map(a => (
+                <tr key={a.name} className="group">
+                  <td className="py-2 pr-4">
+                    <p className="text-slate-200">{a.name}</p>
+                    <p className="text-slate-600 text-[10px] leading-tight mt-0.5">{a.exemptionBasis}</p>
+                  </td>
+                  <td className="py-2 pr-4 text-right text-slate-300">${a.fmv.toLocaleString()}</td>
+                  <td className="py-2 pr-4 text-right text-slate-400">{a.liens > 0 ? `-$${a.liens.toLocaleString()}` : "—"}</td>
+                  <td className="py-2 pr-4 text-right text-slate-300">${a.equity.toLocaleString()}</td>
+                  <td className="py-2 pr-4 text-right text-emerald-400">${a.exemption.toLocaleString()}</td>
+                  <td className={`py-2 text-right font-semibold ${a.nonExemptEquity > 0 ? "text-red-300" : "text-slate-600"}`}>
+                    {a.nonExemptEquity > 0 ? `$${a.nonExemptEquity.toLocaleString()}` : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="border-t-2 border-slate-700">
+              <tr>
+                <td className="pt-2 pr-4 text-xs font-semibold text-slate-400">Totals</td>
+                <td className="pt-2 pr-4 text-right text-xs font-semibold text-slate-300">${totalFMV.toLocaleString()}</td>
+                <td className="pt-2 pr-4 text-right text-xs font-semibold text-slate-400">-${totalLiens.toLocaleString()}</td>
+                <td className="pt-2 pr-4 text-right text-xs font-semibold text-slate-300">${totalEquity.toLocaleString()}</td>
+                <td className="pt-2 pr-4 text-right text-xs font-semibold text-emerald-400">${totalEquity.toLocaleString()}</td>
+                <td className={`pt-2 text-right text-xs font-bold ${totalNonExempt > 0 ? "text-red-300" : "text-emerald-400"}`}>
+                  {totalNonExempt > 0 ? `$${totalNonExempt.toLocaleString()}` : "$0 — Fully Exempt"}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {[
+            { label: "Total Non-Exempt Equity", value: `$${totalNonExempt.toLocaleString()}`, note: "Available to Chapter 7 trustee", color: totalNonExempt === 0 ? "text-emerald-300" : "text-red-300" },
+            { label: "Est. Trustee Admin Costs", value: "~$1,500", note: "Deducted before distribution", color: "text-slate-400" },
+            { label: "Estimated Liquidation to Creditors", value: `$${liquidationValue.toLocaleString()}`, note: totalNonExempt === 0 ? "No assets to liquidate — no-asset case" : "After admin deduction", color: liquidationValue === 0 ? "text-emerald-300" : "text-amber-300" },
+          ].map(s => (
+            <div key={s.label} className="bg-slate-800/40 rounded-lg p-3">
+              <p className="text-xs text-slate-500 mb-1">{s.label}</p>
+              <p className={`text-base font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-slate-600 mt-0.5">{s.note}</p>
+            </div>
+          ))}
+        </div>
+        {totalNonExempt === 0 && (
+          <div className="mt-3 p-3 rounded-lg bg-emerald-900/20 border border-emerald-700/30 text-xs text-emerald-200">
+            <span className="font-semibold">No-Asset Case:</span> All assets are fully exempt under Texas law. Trustee will file a no-asset report. Unsecured creditors will receive $0 distribution. This is favorable for client — no assets at risk.
+          </div>
+        )}
+      </SectionCard>
+
+      {/* ── Debt Summary ── */}
+      <SectionCard title="Overall Debt Summary" icon={CreditCard} status="info">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 mb-4">
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Schedule D — Secured</p>
+            {debts.secured.map(d => (
+              <Row key={d.creditor} label={d.creditor} value={`$${d.balance.toLocaleString()}`} sub={d.type} />
+            ))}
+            <Row label="Secured Total" value={`$${totalSecured.toLocaleString()}`} highlight="warn" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Schedule E/F — Unsecured</p>
+            {debts.unsecured.map(d => (
+              <Row key={d.creditor} label={d.creditor} value={`$${d.balance.toLocaleString()}`} />
+            ))}
+            <Row label="Unsecured Total" value={`$${totalUnsecured.toLocaleString()}`} highlight="ok" />
+          </div>
+        </div>
+        <div className="grid grid-cols-3 gap-3 border-t border-slate-700/60 pt-4">
+          {[
+            { label: "Total Secured", value: `$${totalSecured.toLocaleString()}`, note: "Retain/reaffirm", color: "text-amber-300" },
+            { label: "Total Unsecured", value: `$${totalUnsecured.toLocaleString()}`, note: "To be discharged", color: "text-sky-300" },
+            { label: "Grand Total", value: `$${totalDebt.toLocaleString()}`, note: "All scheduled debts", color: "text-slate-200" },
+          ].map(s => (
+            <div key={s.label} className="bg-slate-800/40 rounded-lg p-3">
+              <p className="text-xs text-slate-500 mb-1">{s.label}</p>
+              <p className={`text-base font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-slate-600 mt-0.5">{s.note}</p>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* ── SOFA Issues ── */}
+      <SectionCard
+        title="SOFA — Potential Issues & Flags"
+        icon={Activity}
+        status={sofaErrors > 0 ? "error" : sofaWarnings > 0 ? "warning" : "ok"}
+      >
+        <div className="space-y-3">
+          {sofaIssues.map(issue => (
+            <div key={issue.category} className={`rounded-lg p-4 border ${
+              (issue.severity as string) === "error" ? "bg-red-900/20 border-red-700/40" :
+              issue.severity === "warning" ? "bg-amber-900/20 border-amber-700/40" :
+              "bg-slate-800/30 border-slate-700/50"
+            }`}>
+              <div className="flex items-start gap-3">
+                {(issue.severity as string) === "error" && <XCircle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />}
+                {issue.severity === "warning" && <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />}
+                {issue.severity === "ok" && <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />}
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-semibold mb-1 ${
+                    (issue.severity as string) === "error" ? "text-red-300" :
+                    issue.severity === "warning" ? "text-amber-300" :
+                    "text-emerald-300"
+                  }`}>{issue.category}</p>
+                  <p className="text-xs text-slate-300 leading-relaxed">{issue.detail}</p>
+                  {issue.action && (
+                    <div className="mt-2 flex items-start gap-1.5">
+                      <Flag className="w-3 h-3 text-amber-400 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-amber-200 font-medium">{issue.action}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </SectionCard>
+
+      {/* ── Document Readiness ── */}
+      <SectionCard title={`Document Readiness — ${filingMonth} Filing`} icon={FileText} status={docsNeeded.filter(d => d.priority === "required").length > 0 ? "warning" : "ok"}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              Documents on File ({docsReady.length})
+            </p>
+            <div className="space-y-1.5">
+              {docsReady.map(d => (
+                <div key={d.name} className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                  <p className="text-xs text-slate-300">{d.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" />
+              Still Needed ({docsNeeded.length})
+            </p>
+            <div className="space-y-2">
+              {docsNeeded.map(d => (
+                <div key={d.name} className={`rounded-lg px-3 py-2 border ${d.priority === "filing-day" ? "bg-blue-900/20 border-blue-700/40" : "bg-amber-900/20 border-amber-700/40"}`}>
+                  <p className={`text-xs font-medium ${d.priority === "filing-day" ? "text-blue-300" : "text-amber-300"}`}>{d.name}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">{d.reason}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 leading-relaxed">
+          <span className="font-medium text-slate-300">Filing Month:</span> {filingMonth}. Documents marked "required" must be received before the signing appointment can proceed. Day-of-filing balance screenshots are collected the morning of filing and cannot be obtained in advance.
+        </div>
+      </SectionCard>
+
+    </div>
+  );
+}
+
+// ─── Question Card ─────────────────────────────────────────────────────────────
+
+function QuestionCard({
+  question,
+  onAnswer,
+}: {
+  question: ClientQuestion;
+  onAnswer: (id: string, answer: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [answer, setAnswer] = useState(question.attorney_answer ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const isAnswered = question.status === "answered";
+
+  return (
+    <div className={`bg-slate-900/60 border rounded-xl overflow-hidden transition-colors ${
+      isAnswered ? "border-slate-800/50" : "border-amber-700/40"
+    }`}>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-start gap-3 p-4 text-left hover:bg-slate-800/30 transition-colors"
+      >
+        {isAnswered
+          ? <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+          : <Flag className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        }
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-medium ${isAnswered ? "text-slate-400" : "text-slate-200"}`}>
+            {question.question}
+          </p>
+          {question.section_context && (
+            <p className="text-xs text-slate-600 mt-0.5">Section: {question.section_context}</p>
+          )}
+          <p className="text-xs text-slate-600 mt-0.5">{new Date(question.asked_at).toLocaleDateString()}</p>
+        </div>
+        {isAnswered
+          ? <ChevronDown className={`w-4 h-4 text-slate-600 flex-shrink-0 transition-transform ${expanded ? "rotate-180" : ""}`} />
+          : <ChevronRight className="w-4 h-4 text-slate-500 flex-shrink-0" />
+        }
+      </button>
+
+      {(expanded || !isAnswered) && (
+        <div className="border-t border-slate-800 px-4 pb-4 pt-3 space-y-3">
+          {question.ai_response && (
+            <div className="bg-slate-800/40 rounded-lg p-3">
+              <p className="text-xs text-slate-500 mb-1">AI Response</p>
+              <p className="text-xs text-slate-300">{question.ai_response}</p>
+            </div>
+          )}
+          <div>
+            <p className="text-xs text-slate-500 mb-1.5">Attorney Response</p>
+            <textarea
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              placeholder="Type your response to this question…"
+              rows={3}
+              disabled={isAnswered}
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 placeholder-slate-600 resize-none focus:outline-none focus:border-slate-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            />
+          </div>
+          {!isAnswered && (
+            <div className="flex justify-end">
+              <button
+                onClick={async () => {
+                  if (!answer.trim()) return;
+                  setSaving(true);
+                  await onAnswer(question.id, answer);
+                  setSaving(false);
+                }}
+                disabled={saving || !answer.trim()}
+                className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+              >
+                {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                {saving ? "Saving…" : "Send Response"}
+              </button>
+            </div>
+          )}
+          {isAnswered && question.answered_by && (
+            <p className="text-xs text-slate-600">Answered by {question.answered_by}</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
