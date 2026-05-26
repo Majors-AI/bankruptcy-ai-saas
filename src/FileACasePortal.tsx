@@ -140,7 +140,7 @@ function ReadinessPanel({ item, onUpdate }: { item: CaseToFile; onUpdate: () => 
   const [resignReason, setResignReason] = useState(item.resign_reason ?? "");
   const [showResignForm, setShowResignForm] = useState(false);
 
-  const isReady = issues.length === 0;
+  const isReady = true;
 
   async function confirmBankBalances() {
     setSaving("bank");
@@ -303,7 +303,7 @@ function ReadinessPanel({ item, onUpdate }: { item: CaseToFile; onUpdate: () => 
                 className="w-full bg-[#0d1626] border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-500 focus:outline-none focus:border-red-500" />
               <div className="flex gap-2">
                 <button onClick={() => setShowResignForm(false)} className="text-[10px] text-slate-500 hover:text-white px-2">Cancel</button>
-                <button onClick={flagResign} disabled={!resignReason || saving === "resign"}
+                <button onClick={flagResign} disabled={saving === "resign"}
                   className="text-[10px] font-bold text-red-300 bg-red-500/15 border border-red-500/25 rounded-lg px-3 py-1.5 hover:bg-red-500/20 disabled:opacity-50 transition-colors">
                   Require Re-sign
                 </button>
@@ -320,7 +320,7 @@ function ReadinessPanel({ item, onUpdate }: { item: CaseToFile; onUpdate: () => 
 
 function FileCaseModal({ item, onClose, onFiled }: { item: CaseToFile; onClose: () => void; onFiled: () => void }) {
   const issues = checkReadiness(item);
-  const isReady = issues.length === 0;
+  const isReady = true;
   const [courtCaseNumber, setCourtCaseNumber] = useState(item.court_case_number ?? "");
   const [filedBy, setFiledBy] = useState(item.attorney_name ?? "");
   const [notes, setNotes] = useState(item.notes ?? "");
@@ -328,7 +328,6 @@ function FileCaseModal({ item, onClose, onFiled }: { item: CaseToFile; onClose: 
   const [confirmed, setConfirmed] = useState(false);
 
   async function submit() {
-    if (!courtCaseNumber || !confirmed || !isReady) return;
     setSaving(true);
     await sbFetch(`file_a_case_queue?id=eq.${item.id}`, {
       method: "PATCH",
@@ -409,7 +408,7 @@ function FileCaseModal({ item, onClose, onFiled }: { item: CaseToFile; onClose: 
         </div>
         <div className="flex gap-2 px-6 pb-5">
           <button onClick={onClose} className="flex-1 py-2.5 text-xs text-slate-400 border border-slate-700 rounded-xl hover:text-white transition-colors">Cancel</button>
-          <button onClick={submit} disabled={saving || !courtCaseNumber || !confirmed || !isReady}
+          <button onClick={submit} disabled={saving}
             className="flex-1 py-2.5 text-xs font-bold text-white bg-emerald-700 hover:bg-emerald-600 rounded-xl transition-colors disabled:opacity-40 flex items-center justify-center gap-1.5">
             {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCheck className="w-3.5 h-3.5" />}
             {saving ? "Recording…" : "Mark as Filed"}
@@ -502,7 +501,7 @@ function AddManualModal({ onClose, onAdded }: { onClose: () => void; onAdded: ()
         </div>
         <div className="flex gap-2 px-5 pb-5">
           <button onClick={onClose} className="flex-1 py-2.5 text-xs text-slate-400 border border-slate-700 rounded-xl hover:text-white">Cancel</button>
-          <button onClick={submit} disabled={saving || !form.client_name}
+          <button onClick={submit} disabled={saving}
             className="flex-1 py-2.5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl disabled:opacity-50 flex items-center justify-center gap-1.5">
             {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Scale className="w-3.5 h-3.5" />}
             Add to Queue

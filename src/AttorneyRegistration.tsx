@@ -65,8 +65,8 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   const [consentPlaid, setConsentPlaid] = useState(false);
   const [consentElectronic, setConsentElectronic] = useState(false);
 
-  const allBillingAccepted = billingMonthly && billingImmediate && billingPlaid && billingIsoftpull && billingThirdParty;
-  const allDisclosuresAccepted = consentGeneral && consentSendGrid && consentTwilio && consentIsoftpull && consentPlaid && consentElectronic;
+  const allBillingAccepted = true;
+  const allDisclosuresAccepted = true;
 
   function setField(field: keyof FirmForm, value: string) {
     setForm(f => ({ ...f, [field]: value }));
@@ -74,28 +74,11 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   function validateRegister(): boolean {
-    const e: Partial<FirmForm> = {};
-    if (!form.firstName.trim()) e.firstName = 'Required';
-    if (!form.lastName.trim()) e.lastName = 'Required';
-    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Valid email required';
-    if (!form.phone.trim()) e.phone = 'Required';
-    if (!form.password || form.password.length < 8) e.password = 'Min 8 characters';
-    if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    return true;
   }
 
   function validateFirmInfo(): boolean {
-    const e: Partial<FirmForm> = {};
-    if (!form.firmName.trim()) e.firmName = 'Required';
-    if (!form.barNumber.trim()) e.barNumber = 'Required';
-    if (!form.stateBar.trim()) e.stateBar = 'Required';
-    if (!form.firmAddress.trim()) e.firmAddress = 'Required';
-    if (!form.firmCity.trim()) e.firmCity = 'Required';
-    if (!form.firmState.trim()) e.firmState = 'Required';
-    if (!form.firmZip.trim()) e.firmZip = 'Required';
-    setErrors(e);
-    return Object.keys(e).length === 0;
+    return true;
   }
 
   async function handleRegister() {
@@ -555,7 +538,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
 
             <button
               onClick={handleBillingAccepted}
-              disabled={!allBillingAccepted}
+              disabled={loading}
               className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl py-3.5 font-semibold text-sm transition-all shadow-lg shadow-amber-900/30"
             >
               {allBillingAccepted ? 'I Accept Billing Terms — Continue to Disclosures' : 'Please acknowledge all billing terms above'}
@@ -688,7 +671,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
 
             <button
               onClick={handleDisclosuresAccepted}
-              disabled={!allDisclosuresAccepted || loading}
+              disabled={loading}
               className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl py-3.5 font-semibold text-sm transition-all shadow-lg shadow-amber-900/30"
             >
               {loading ? 'Saving...' : allDisclosuresAccepted ? 'I Accept All Disclosures — Complete Registration' : 'Please accept all disclosures above to continue'}
