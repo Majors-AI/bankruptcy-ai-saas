@@ -2075,6 +2075,27 @@ export default function ClientIntakeForm({ onBack }: Props) {
   }
 
   function canProceed(): boolean {
+    if (step === 0) {
+      const base = !!(data.filingType && data.state && data.streetAddress && data.city && data.zipCode && data.inStateOver2Years);
+      if (!base) return false;
+      if (data.inStateOver2Years === "no") {
+        if (!data.movedToStateDate) return false;
+        const { twoYearsAgo } = getExemptionWindow();
+        const movedIn = new Date(data.movedToStateDate + "-01");
+        // If moved in after the 2-year mark, need the majority state for the lookback window
+        if (movedIn > twoYearsAgo && !data.priorResidences[0]?.state) return false;
+      }
+      return true;
+    }
+    if (step === 1) return !!(data.firstName && data.lastName && data.dob && data.ssn && data.email && data.phone);
+    if (step === 2) return !!data.maritalStatus;
+    if (step === 3) return data.incomeSources.some(s => s.sourceType && s.grossPerPeriod);
+    if (step === 4) return !!(data.expRentMortgage !== "" || data.expFood !== "");
+    if (step === 5) return !!data.ownsRealEstate;
+    if (step === 6) return !!(data.bankBalance !== "" && data.hasStocks && data.hasCrypto && data.hasLifeInsurance && data.hasFirearms && data.hasCollectibles);
+    if (step === 7) return !!data.primaryReason;
+    if (step === 8) return !!(data.hasPriorBK && data.pendingLawsuits && data.garnishment && data.hasTransfers && data.hasPreferentialPayments && data.ownedBusiness && data.expectedRefund && data.recentLuxury);
+    if (step === 9) return ackAccurate && ackComplete && ackCooperate;
     return true;
   }
 

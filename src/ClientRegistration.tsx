@@ -245,9 +245,11 @@ export default function ClientRegistration({ onComplete }: Props) {
   const [consentTimestamp, setConsentTimestamp] = useState('');
   const [registeredEmail, setRegisteredEmail]   = useState('');
 
-  const allDisclosuresAccepted = true;
+  const allDisclosuresAccepted =
+    consentGeneral && consentSendGrid && consentTwilio && consentElectronic &&
+    ackIsoftpull && ackPlaid && ackBoldsign;
 
-  const allIsoConsentAccepted = true;
+  const allIsoConsentAccepted = isoConsentFCRA && isoConsentElectronic;
 
   function setField(field: keyof FormData, value: string) {
     setForm(f => ({ ...f, [field]: value }));
@@ -255,7 +257,15 @@ export default function ClientRegistration({ onComplete }: Props) {
   }
 
   function validateRegister(): boolean {
-    return true;
+    const e: Partial<FormData> = {};
+    if (!form.firstName.trim()) e.firstName = 'Required';
+    if (!form.lastName.trim()) e.lastName = 'Required';
+    if (!form.email.trim() || !/\S+@\S+\.\S+/.test(form.email)) e.email = 'Valid email required';
+    if (!form.phone.trim()) e.phone = 'Required';
+    if (!form.password || form.password.length < 8) e.password = 'Minimum 8 characters';
+    if (form.password !== form.confirmPassword) e.confirmPassword = 'Passwords do not match';
+    setErrors(e);
+    return Object.keys(e).length === 0;
   }
 
   async function handleRegister() {
@@ -278,6 +288,10 @@ export default function ClientRegistration({ onComplete }: Props) {
   }
 
   async function handleLogin() {
+    if (!form.email || !form.password) {
+      setErrors({ email: !form.email ? 'Required' : '', password: !form.password ? 'Required' : '' });
+      return;
+    }
     setLoading(true);
     setServerError('');
     try {

@@ -510,7 +510,7 @@ function IntakeAttorneyReviewModal({
   }
 
   async function addIssue() {
-    if (!review) return;
+    if (!review || !newIssueTitle.trim()) return;
     setAddingIssue(true);
     const body: Partial<IntakeIssue> = {
       review_id: review.id,
@@ -913,7 +913,7 @@ function IntakeAttorneyReviewModal({
                     className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none" />
                   <div className="flex gap-2">
                     <button onClick={() => setShowAddIssue(false)} className="flex-1 py-2 text-xs font-semibold text-slate-400 border border-slate-700 rounded-xl hover:text-white transition-colors">Cancel</button>
-                    <button onClick={addIssue} disabled={addingIssue} className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl disabled:opacity-50 transition-colors">
+                    <button onClick={addIssue} disabled={addingIssue || !newIssueTitle.trim()} className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl disabled:opacity-50 transition-colors">
                       {addingIssue ? <RefreshCw className="w-3 h-3 animate-spin mx-auto" /> : "Add Issue"}
                     </button>
                   </div>
@@ -1194,7 +1194,7 @@ function IssueAckButton({ issue, onAcknowledge }: { issue: IntakeIssue; onAcknow
     <div className="flex items-center gap-2">
       <input type="text" maxLength={4} value={initials} onChange={e => setInitials(e.target.value.toUpperCase())}
         placeholder="Initials" className="w-20 bg-slate-800 border border-slate-700 text-white text-xs text-center rounded-xl px-2 py-1.5 focus:outline-none focus:border-emerald-500 uppercase tracking-widest" />
-      <button disabled={false} onClick={() => onAcknowledge(issue.id, initials.trim())}
+      <button disabled={!initials.trim()} onClick={() => onAcknowledge(issue.id, initials.trim())}
         className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl disabled:opacity-50 transition-colors">
         <CheckCheck className="w-3 h-3" /> Record Ack.
       </button>
@@ -1557,6 +1557,7 @@ function NewLeadModal({ onClose, onSaved, session }: { onClose: () => void; onSa
   const [saving, setSaving]   = useState(false);
 
   async function save() {
+    if (!name.trim()) return;
     setSaving(true);
     await sbPost("intake_leads", {
       full_name: name.trim(),
@@ -1690,7 +1691,7 @@ function NewLeadModal({ onClose, onSaved, session }: { onClose: () => void; onSa
         <div className="px-6 py-4 border-t border-slate-800 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
           <button
-            disabled={saving}
+            disabled={!name.trim() || saving}
             onClick={save}
             className="flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-xl transition-all"
           >
@@ -3485,7 +3486,7 @@ function BookConsultModal({ defaultDate, leads, onClose, onSaved }: {
         <div className="px-5 py-4 border-t border-slate-800 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
           <button
-            disabled={saving}
+            disabled={saving || !date || (!leadId && !isWalkIn) || (isWalkIn && !walkInName)}
             onClick={save}
             className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-xl transition-all"
           >
@@ -3788,7 +3789,7 @@ function TimeOffTab({ timeOff, onRefresh }: { timeOff: TimeOff[]; onRefresh: () 
           </div>
           <div className="flex gap-2 pt-1">
             <button onClick={() => setShowAdd(false)} className="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
-            <button disabled={saving} onClick={save}
+            <button disabled={!date || saving} onClick={save}
               className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-sky-600 hover:bg-sky-500 disabled:opacity-50 rounded-xl transition-all">
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Submit Request
@@ -4503,7 +4504,7 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
           <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
-          <button onClick={save} disabled={saving}
+          <button onClick={save} disabled={saving || !date}
             className="flex items-center gap-2 px-5 py-2.5 bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-all">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
             Schedule{sendEmail && lead.email ? " & Send Invite" : ""}

@@ -400,7 +400,7 @@ function IssueAckButton({ issue, onAck }: { issue: IntakeIssue; onAck: (id: stri
     <div className="flex items-center gap-2">
       <input type="text" maxLength={4} value={init} onChange={e => setInit(e.target.value.toUpperCase())}
         placeholder="Initials" className="w-20 bg-slate-800 border border-slate-700 text-white text-xs text-center rounded-xl px-2 py-1.5 focus:outline-none focus:border-emerald-500 uppercase tracking-widest" />
-      <button disabled={false} onClick={() => onAck(issue.id, init.trim())}
+      <button disabled={!init.trim()} onClick={() => onAck(issue.id, init.trim())}
         className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl disabled:opacity-50 transition-colors">
         <CheckCheck className="w-3 h-3" /> Record
       </button>
@@ -461,7 +461,7 @@ function ReviewModal({
   }
 
   async function addIssue() {
-    // if (!review || !newTitle.trim()) return;
+    if (!review || !newTitle.trim()) return;
     setAddingIssue(true);
     const created = await sbPost<IntakeIssue>("attorney_intake_issues", {
       review_id: review.id, category: newCat, severity: newSev,
@@ -782,7 +782,7 @@ function ReviewModal({
                     className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none" />
                   <div className="flex gap-2">
                     <button onClick={() => setShowAddIssue(false)} className="flex-1 py-2 text-xs font-semibold text-slate-400 border border-slate-700 rounded-xl hover:text-white">Cancel</button>
-                    <button onClick={addIssue} disabled={addingIssue}
+                    <button onClick={addIssue} disabled={addingIssue || !newTitle.trim()}
                       className="flex-1 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl disabled:opacity-50">
                       {addingIssue ? <RefreshCw className="w-3 h-3 animate-spin mx-auto" /> : "Add Issue"}
                     </button>
