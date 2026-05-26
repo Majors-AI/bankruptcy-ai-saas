@@ -22,7 +22,6 @@ import AIBotPortal from './AIBotPortal';
 import ClientRegistration from './ClientRegistration';
 import AttorneyRegistration from './AttorneyRegistration';
 import LegacyClientImport from './LegacyClientImport';
-import NewClientIntakePage from './NewClientIntakePage';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -44,7 +43,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'new_intake' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import';
 
 // ── Theme hook ────────────────────────────────────────────────────────────────
 function useTheme() {
@@ -92,10 +91,6 @@ function App() {
     {
       id: 'intake', label: '2. Intake Form (Client)', activeClass: 'bg-amber-500 text-white shadow-amber-500/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>,
-    },
-    {
-      id: 'new_intake', label: '2B. New Client Intake', activeClass: 'bg-amber-600 text-white shadow-amber-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>,
     },
     {
       id: 'attorney', label: '3. Attorney Intake Review', activeClass: 'bg-amber-600 text-white shadow-amber-600/20',
@@ -214,14 +209,6 @@ function App() {
     return (
       <ErrorBoundary>
         <ClientIntakeForm onBack={() => setView('dashboard')} />
-      </ErrorBoundary>
-    );
-  }
-
-  if (view === 'new_intake') {
-    return (
-      <ErrorBoundary>
-        <NewClientIntakePage onBack={() => setView('legal_admin')} />
       </ErrorBoundary>
     );
   }
