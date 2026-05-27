@@ -508,7 +508,7 @@ interface StateExemption {
 | NFS filingType missing in `ClientIntakeForm.tsx` — legally required for means test | HIGH | Add `individual-nonfiling-spouse` to destination intake form's filingType field |
 | `BankruptcyIntake.jsx` is 384KB — Babel already de-optimizes it | MEDIUM | Consider splitting into section-level components; or accept as-is since dev server handles it |
 | `FullBankruptcyQuestionnaire.tsx` `buildPreFill()` reads intake data — will break if schema doesn't match | MEDIUM | Update `buildPreFill()` to handle both `form_data.fieldName` (source schema) and `fieldName` (destination schema) via optional chaining |
-| Edge functions (`intake-ai-chat`, `send-boldsign`, `send-confirmation`) must be deployed to the destination Supabase project | MEDIUM | Verify each function exists at `https://jiufsemnrlejmhepsxya.supabase.co/functions/v1/` |
+| Edge functions (`intake-ai-chat`, `send-boldsign`, `send-confirmation`) must be deployed to the destination Supabase project | MEDIUM | Verify each function exists at `[SUPABASE_URL_REDACTED]/functions/v1/` |
 | CA 703/704 dual exemption system has no UI selector in destination | LOW | Add `ownsRealEstate` branch to exemption display in attorney portal once `exemptions.ts` is wired in |
 | `BankruptcyIntake.jsx` IRS standards file covers AZ/WA/CA only | LOW | Obtain full 50-state IRS standards JSON or implement API call to IRS data |
 
