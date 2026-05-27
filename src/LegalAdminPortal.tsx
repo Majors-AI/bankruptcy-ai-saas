@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circle, AlertTriangle, ChevronRight, RefreshCw, Plus, X, Send, Search, Filter, ChevronDown, Bot, UserCheck, FileText, DollarSign, Scale, MapPin, ArrowRight, Flag, Zap, Info, CreditCard as Edit3, Save, Eye, Briefcase, Hash, CheckCheck, PenLine, Star, TrendingUp, BarChart2, ArrowLeft, Shield, Mic, ChevronLeft, Building, Car, PiggyBank, CreditCard, Home, User, Trash2, Play, PhoneCall, PhoneMissed, PhoneOutgoing, MailCheck, MessageCircle, ListChecks, Import as SortAsc, BellRing, BellOff, Inbox } from "lucide-react";
+import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY    = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -931,6 +932,131 @@ function IntakeAttorneyReviewModal({
                   />
                 </div>
               )}
+
+              {/* ── Exemption Analyzer ───────────────────────────────────────────────────
+                   Exemption state comes from intake_submissions.exemption_state, which is
+                   computed by ClientIntakeForm.tsx using the full 11 U.S.C. § 522(b)(3)(A)
+                   730-day domicile window. This is authoritative — do not fall back to the
+                   source repo's simpler addressYears dropdown approach.
+              ─────────────────────────────────────────────────────────────────────────── */}
+              {(() => {
+                const rawState = String(submission?.exemption_state || submission?.state || lead.state || "");
+                const ownsRE = submission?.owns_real_estate === true || submission?.owns_real_estate === "yes";
+                const exemptions = getApplicableExemptions(rawState, undefined, ownsRE);
+                const isFederal = exemptions === FEDERAL_EXEMPTIONS;
+                const isWA = exemptions.code === "WA";
+                const isCA = exemptions.code === "CA";
+
+                const waElig = isWA ? getWaHomesteadEligibility(
+                  submission?.home_acquired_date as string | undefined,
+                  submission?.is_primary_residence as string | undefined,
+                  submission?.county as string | undefined,
+                ) : null;
+
+                const caCounty = isCA ? String(submission?.county || "") : "";
+                const caCountyHomestead = isCA && ownsRE ? getCaHomesteadByCounty(caCounty) : null;
+
+                const fmtEx = (v: number | 'unlimited') => {
+                  if (v === 'unlimited' || v === -1) return "Unlimited";
+                  if (v === 0) return "None";
+                  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(v as number);
+                };
+
+                const homesteadVal = isWA
+                  ? (waElig?.eligible ? waElig.amount : 0)
+                  : isCA && caCountyHomestead != null
+                  ? caCountyHomestead
+                  : (exemptions.homestead as number | 'unlimited');
+
+                const isUnlimited = homesteadVal === -1 || homesteadVal === 'unlimited';
+
+                return (
+                  <div className="rounded-2xl border p-4 bg-purple-500/5 border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-7 h-7 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                        <Shield className="w-4 h-4 text-purple-400" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-sm font-bold text-purple-300">Exemption Analysis</p>
+                        <p className="text-[10px] text-slate-500">
+                          {isFederal ? "Federal exemptions (11 U.S.C. §522(d))" : `${exemptions.state} state exemptions`}
+                          {isCA && ` — System ${ownsRE ? "704 (homeowner)" : "703 (non-homeowner)"}`}
+                          {!rawState && " — state not on file"}
+                        </p>
+                      </div>
+                      {isFederal && (
+                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20">FEDERAL</span>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+                      {[
+                        {
+                          label: "Homestead",
+                          val: isWA && waElig != null
+                            ? (waElig.eligible ? fmtEx(waElig.amount) : "Not eligible")
+                            : isCA && caCountyHomestead != null
+                            ? fmtEx(caCountyHomestead)
+                            : fmtEx(exemptions.homestead),
+                          color: isUnlimited ? "text-emerald-400" : "text-white",
+                          note: isWA && waElig ? null : (isCA && caCounty ? `${caCounty} County` : null),
+                        },
+                        { label: "Vehicle", val: fmtEx(exemptions.vehicle), color: "text-white", note: null },
+                        { label: "Wildcard", val: fmtEx(exemptions.wildcard), color: exemptions.wildcard > 0 ? "text-emerald-400" : "text-slate-500", note: null },
+                      ].map(s => (
+                        <div key={s.label} className="bg-slate-800/40 rounded-xl p-2.5 text-center">
+                          <p className="text-[9px] text-slate-500 leading-tight">{s.label}</p>
+                          <p className={`text-sm font-bold mt-0.5 ${s.color}`}>{s.val}</p>
+                          {s.note && <p className="text-[9px] text-slate-600 mt-0.5">{s.note}</p>}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="space-y-1.5 mb-3">
+                      <div className="flex items-start gap-2 bg-slate-800/30 rounded-xl px-3 py-2">
+                        <p className="text-[9px] text-slate-500 w-20 flex-shrink-0 pt-0.5">Retirement</p>
+                        <p className="text-[10px] text-slate-300 leading-snug">{exemptions.retirement}</p>
+                      </div>
+                      <div className="flex items-start gap-2 bg-slate-800/30 rounded-xl px-3 py-2">
+                        <p className="text-[9px] text-slate-500 w-20 flex-shrink-0 pt-0.5">Wages</p>
+                        <p className="text-[10px] text-slate-300 leading-snug">{exemptions.wages}</p>
+                      </div>
+                    </div>
+
+                    {/* WA-specific: 1,215-day ownership check */}
+                    {isWA && waElig && (
+                      <div className={`rounded-xl px-3 py-2 text-[10px] leading-snug mb-2 ${
+                        waElig.eligible ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-300"
+                        : "bg-amber-500/10 border border-amber-500/20 text-amber-300"
+                      }`}>
+                        {waElig.note}
+                      </div>
+                    )}
+
+                    {/* Homestead citation note */}
+                    {exemptions.homesteadNote && !isWA && (
+                      <p className="text-[9px] text-slate-600 leading-snug mb-1.5">{exemptions.homesteadNote}</p>
+                    )}
+
+                    {/* Wildcard note */}
+                    {exemptions.wildcardNote && (
+                      <p className="text-[9px] text-slate-600 leading-snug mb-1.5">{exemptions.wildcardNote}</p>
+                    )}
+
+                    {/* State-specific notes */}
+                    {exemptions.notes && (
+                      <p className="text-[9px] text-slate-500 leading-snug border-t border-slate-800 pt-2 mt-1">{exemptions.notes}</p>
+                    )}
+
+                    {/* Federal option callout */}
+                    {!isFederal && exemptions.federalOption && (
+                      <p className="text-[9px] text-sky-500 leading-snug mt-1.5">
+                        Federal exemptions also available — attorney should compare both systems for this client.
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* General eligibility notes */}
               <div>
