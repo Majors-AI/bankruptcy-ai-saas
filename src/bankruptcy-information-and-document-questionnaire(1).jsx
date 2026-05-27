@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
+import { normalizeIntake } from "./lib/intakeNormalize";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -290,6 +291,11 @@ const INTAKE_SAMPLE = {
 // Fields imported from intake are flagged so the UI can show "✓ from intake" tags.
 function mapIntakeToRetention(intake) {
   if (!intake) return { data: {}, importedKeys: new Set() };
+  // BAN-27 Blocker 2: normalize across (a) old JSONB blob nested intake.form_data.*,
+  // (b) old camelCase columns, and (c) new snake_case columns from intake_submissions.
+  // After this call, the rest of this function can read camelCase off `intake` regardless
+  // of which form wrote the row.
+  intake = normalizeIntake(intake);
   const mapped = {};
   const imp = new Set(); // tracks which keys were populated from intake
   const tag = (...keys) => keys.forEach(k => imp.add(k));
