@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import IntakeAnswersSummary from "./IntakeAnswersSummary";
 
-interface AcceptanceData {
+export interface AcceptanceData {
   chapter: string;
   attorney_fee: number;
   filing_fee: number;

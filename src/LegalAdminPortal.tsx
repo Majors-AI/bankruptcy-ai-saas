@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circle, AlertTriangle, ChevronRight, RefreshCw, Plus, X, Send, Search, Filter, ChevronDown, Bot, UserCheck, FileText, DollarSign, Scale, MapPin, ArrowRight, Flag, Zap, Info, CreditCard as Edit3, Save, Eye, Briefcase, Hash, CheckCheck, PenLine, Star, TrendingUp, BarChart2, ArrowLeft, Shield, Mic, ChevronLeft, Building, Car, PiggyBank, CreditCard, Home, User, Trash2, Play, PhoneCall, PhoneMissed, PhoneOutgoing, MailCheck, MessageCircle, ListChecks, Import as SortAsc, BellRing, BellOff, Inbox } from "lucide-react";
 import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
+import CaseAcceptanceFlow, { AcceptanceData as CaseAcceptanceData } from "./components/CaseAcceptanceFlow";
+import { CASE_TYPES, CHAPTER_FILING_FEES, ATTORNEY_FEES, CREDIT_COUNSELING_FEE } from "./lib/feeSchedule";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY    = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -146,27 +148,6 @@ const URGENCY_CONFIG: Record<string, { label: string; color: string; bg: string 
   normal:    { label: "Normal",    color: "text-slate-400", bg: "bg-slate-700/30" },
   urgent:    { label: "Urgent",    color: "text-amber-400", bg: "bg-amber-500/15" },
   emergency: { label: "Emergency", color: "text-red-400",   bg: "bg-red-500/15" },
-};
-
-const CASE_TYPES = [
-  { value: "ch7_regular",    label: "Ch. 7 Regular",      sub: "Filing fee separate — paid before signing appointment" },
-  { value: "ch7_bifurcated", label: "Ch. 7 Bifurcated",   sub: "Court filing fee rolled into attorney fee" },
-  { value: "ch13_flat_fee",  label: "Ch. 13 Flat Fee",    sub: "$13 filing fee paid before filing; portion upfront, rest through plan" },
-  { value: "limited_scope",  label: "Limited Scope",      sub: "Flat fee, defined scope of services (e.g. debt negotiation)" },
-];
-
-const CHAPTER_FILING_FEES: Record<string, number> = {
-  ch7_regular:    338,
-  ch7_bifurcated: 338,
-  ch13_flat_fee:  313,
-  limited_scope:  0,
-};
-
-const ATTORNEY_FEES: Record<string, number> = {
-  ch7_regular:    1500,
-  ch7_bifurcated: 1838,
-  ch13_flat_fee:  4000,
-  limited_scope:  750,
 };
 
 // ─── Colorado Means Test Data ─────────────────────────────────────────────────
@@ -1925,12 +1906,14 @@ function LeadDetailPanel({
   session,
   onBack,
   onRefresh,
+  onLaunchPresentation,
 }: {
   lead: Lead;
   acceptance: Acceptance | null;
   session: PortalSession;
   onBack: () => void;
   onRefresh: () => void;
+  onLaunchPresentation: (lead: Lead, acceptance: Acceptance) => void;
 }) {
   const panelRole    = session.role;
   const panelIsAtty  = isAttorney(panelRole);
@@ -2240,21 +2223,30 @@ function LeadDetailPanel({
         }
 
         // Stage 6 — Attorney accepted, present to client
-        else if (lead.status === "attorney_accepted" && canReview) {
+        else if (lead.status === "attorney_accepted" && (canDoIntake || canReview)) {
           stage = {
             icon: <DollarSign className="w-5 h-5 text-emerald-400" />,
             title: "Present Fees to Client",
-            desc: "Case accepted. Contact the client now, present their options, and mark fee quoted when done.",
+            desc: "Case accepted. Launch the guided presentation to walk the client through their options, fees, and payment plan.",
             accent: "text-emerald-400",
             bg: "bg-emerald-500/5",
             border: "border-emerald-500/25",
             cta: (
               <div className="flex flex-wrap gap-2">
-                <button onClick={markFeeQuoted} disabled={markingFeeQuoted}
-                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-colors shadow-lg shadow-emerald-500/20">
-                  {markingFeeQuoted ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
-                  Mark Fee Quoted
+                <button
+                  onClick={() => acceptance && onLaunchPresentation(lead, acceptance)}
+                  disabled={!acceptance}
+                  title={!acceptance ? "No accepted case record found" : undefined}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
+                  <Play className="w-4 h-4" /> Launch Case Presentation
                 </button>
+                {canReview && (
+                  <button onClick={markFeeQuoted} disabled={markingFeeQuoted}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors">
+                    {markingFeeQuoted ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+                    Mark Fee Quoted
+                  </button>
+                )}
                 <button onClick={() => setShowLogContact(true)}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-slate-700 hover:bg-slate-600 text-white rounded-xl transition-colors">
                   <PhoneCall className="w-4 h-4" /> Log Contact
@@ -5680,6 +5672,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showNewLead, setShowNewLead] = useState(false);
+  const [presentationContext, setPresentationContext] = useState<{ lead: Lead; acceptance: Acceptance } | null>(null);
 
   // Default tab by role: attorneys land on attorney review queue; legal admins on leads
   const defaultTab = isAtty && !isSuperAdmin ? "followup" : "leads";
@@ -5736,6 +5729,35 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
     return acceptances.find(a => a.lead_id === leadId) ?? null;
   }
 
+  // Full-screen case presentation flow — role-gated via PortalLogin upstream
+  if (presentationContext) {
+    const { lead: pLead, acceptance: pAcc } = presentationContext;
+    const isBif = pAcc.case_type === "ch7_bifurcated";
+    const chapter = String(pAcc.chapter ?? pLead.chapter_interest ?? "7");
+    // TODO (MAJ-61 Dom): confirm intake_leads.id == clients.id; CaseAcceptanceFlow writes
+    // to `clients` + `case_acceptances` tables using clientId — verify these map correctly.
+    const accData: CaseAcceptanceData = {
+      chapter,
+      attorney_fee:          pAcc.attorney_fee ?? ATTORNEY_FEES[pAcc.case_type ?? "ch7_regular"] ?? 0,
+      filing_fee:            pAcc.court_filing_fee ?? CHAPTER_FILING_FEES[pAcc.case_type ?? "ch7_regular"] ?? 0,
+      credit_counseling_fee: CREDIT_COUNSELING_FEE,
+      is_bifurcated:         isBif,
+      // TODO (MAJ-61 Dom): source from submission income_sources_json[0].payFrequency if available
+      client_pay_frequency:  "Bi-Weekly",
+      acceptance_notes:      pAcc.decision_notes ?? "",
+      accepted_by:           pAcc.attorney_name ?? session.name,
+    };
+    return (
+      <CaseAcceptanceFlow
+        clientId={pLead.id}
+        clientName={pLead.full_name}
+        acceptanceData={accData}
+        onCompleted={() => { setPresentationContext(null); load(); }}
+        onDefer={() => { setPresentationContext(null); load(); }}
+      />
+    );
+  }
+
   if (selectedLead) {
     return (
       <div className="min-h-screen bg-[#090e1a] text-white">
@@ -5762,6 +5784,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
             session={session}
             onBack={() => setSelectedLead(null)}
             onRefresh={load}
+            onLaunchPresentation={(lead, acc) => setPresentationContext({ lead, acceptance: acc })}
           />
         </div>
       </div>
