@@ -1,4 +1,5 @@
 import { useState, useEffect, Component, ReactNode } from 'react';
+import BankruptcyIntake from './BankruptcyIntake';
 import ClientDashboard from './ClientDashboard';
 import BankruptcyDocumentQuestionnaire from './bankruptcy-information-and-document-questionnaire(1).jsx';
 import ChatWidget, { ClientQuestion } from './ChatWidget';
@@ -43,7 +44,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import';
 
 // ── Theme hook ────────────────────────────────────────────────────────────────
 function useTheme() {
@@ -87,6 +88,10 @@ function App() {
     {
       id: 'legal_admin', label: '1. Intake Portal (Staff)', activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>,
+    },
+    {
+      id: 'intake_questionnaire', label: 'New Client Intake', activeClass: 'bg-amber-400 text-slate-900 shadow-amber-400/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
     },
     {
       id: 'intake', label: '2. Intake Form (Client)', activeClass: 'bg-amber-500 text-white shadow-amber-500/20',
@@ -202,6 +207,33 @@ function App() {
           {dark ? <SunIcon /> : <MoonIcon />}
         </button>
       </div>
+    );
+  }
+
+  if (view === 'intake_questionnaire') {
+    return (
+      <ErrorBoundary>
+        <div className="relative">
+          <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2.5
+            bg-slate-900/95 backdrop-blur border-b border-slate-800 shadow-sm">
+            <button
+              onClick={() => setView('legal_admin')}
+              className="flex items-center gap-2 text-slate-400 hover:text-white text-xs font-medium transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
+              </svg>
+              Back to Portal
+            </button>
+            <span className="text-xs text-slate-500 font-medium" style={{ fontFamily: "'Georgia', serif" }}>
+              bankruptcy<span className="text-amber-400">.AI</span> — New Client Intake
+            </span>
+          </div>
+          <div className="pt-12">
+            <BankruptcyIntake />
+          </div>
+        </div>
+      </ErrorBoundary>
     );
   }
 
