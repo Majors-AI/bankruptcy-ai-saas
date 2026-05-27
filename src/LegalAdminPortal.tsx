@@ -3,6 +3,7 @@ import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circl
 import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
 import CaseAcceptanceFlow, { AcceptanceData as CaseAcceptanceData } from "./components/CaseAcceptanceFlow";
 import { CASE_TYPES, CHAPTER_FILING_FEES, ATTORNEY_FEES, CREDIT_COUNSELING_FEE } from "./lib/feeSchedule";
+import { mapIntakePortalRoleToPlatformRole } from "./lib/auth";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY    = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -5828,6 +5829,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
         acceptanceData={accData}
         onCompleted={() => { setPresentationContext(null); load(); }}
         onDefer={() => { setPresentationContext(null); load(); }}
+        currentUserRole={mapIntakePortalRoleToPlatformRole(session.role)}
       />
     );
   }

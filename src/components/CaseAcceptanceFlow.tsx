@@ -8,6 +8,8 @@ import {
   Star, Zap, MessageSquare, ClipboardList
 } from "lucide-react";
 import IntakeAnswersSummary from "./IntakeAnswersSummary";
+import type { PlatformRole } from "../lib/auth";
+import { canSetPaymentPlan, canQuoteFee } from "../lib/auth";
 
 export interface AcceptanceData {
   chapter: string;
@@ -26,6 +28,11 @@ interface Props {
   acceptanceData: AcceptanceData;
   onCompleted: () => void;
   onDefer: (date: string) => void;
+  // BAN-35: current user's platform role. Optional during the transition —
+  // when undefined, behavior matches pre-BAN-35 (no gating). When set, the
+  // BoldSign send and welcome-call complete actions require legal_admin /
+  // attorney; the attorney fee display is read-only for non-attorneys.
+  currentUserRole?: PlatformRole | null;
 }
 
 const PAY_FREQ_LABEL: Record<string, string> = {
@@ -135,7 +142,16 @@ const OBJECTION_SCRIPTS: { q: string; a: string }[] = [
   },
 ];
 
-export default function CaseAcceptanceFlow({ clientId, clientName, acceptanceData, onCompleted, onDefer }: Props) {
+export default function CaseAcceptanceFlow({ clientId, clientName, acceptanceData, onCompleted, onDefer, currentUserRole }: Props) {
+  // BAN-35: opt-in role gating. When currentUserRole is undefined we treat as
+  // "legacy / no role context" and allow everything (matches pre-BAN-35
+  // behavior). Callers should pass the platform role once auth is wired in.
+  // The attorney fee itself isn't editable inside this component — fee setting
+  // lives in LegalAdminPortal's AttorneyAcceptanceModal — but canQuoteFee is
+  // referenced here so call sites can see the gating dependency.
+  const gateActive = currentUserRole !== undefined && currentUserRole !== null;
+  const canSendFeeAgreement = !gateActive || canSetPaymentPlan(currentUserRole);
+  void canQuoteFee; // placeholder reference; full enforcement is in AttorneyAcceptanceModal
   const [step, setStep] = useState<ScriptStep>("welcome");
   const [planMonths, setPlanMonths] = useState(3);
   const [downPayment, setDownPayment] = useState(0);
@@ -1165,9 +1181,21 @@ export default function CaseAcceptanceFlow({ clientId, clientName, acceptanceDat
                 ))}
               </div>
 
-              {welcomeCallStatus === 'pending' && (
+              {welcomeCallStatus === 'pending' && canSendFeeAgreement && (
                 <button onClick={requestWelcomeCall} disabled={saving} className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold py-4 rounded-2xl transition-all disabled:opacity-60">
                   <FileText size={16} /> {saving ? 'Processing...' : 'Send Fee Agreement via BoldSign'}
+                </button>
+              )}
+              {welcomeCallStatus === 'pending' && !canSendFeeAgreement && (
+                <button
+                  onClick={() => {
+                    // BAN-35 placeholder: in BAN-38 / BAN-42 this will notify the
+                    // attorney and record a clarification / approval request.
+                    console.log('Would notify attorney — Send Fee Agreement requires attorney or legal_admin');
+                  }}
+                  className="w-full flex items-center justify-center gap-2 bg-slate-700 text-slate-300 font-bold py-4 rounded-2xl transition-all"
+                >
+                  <FileText size={16} /> Pending Attorney Approval
                 </button>
               )}
 
