@@ -295,7 +295,7 @@ const CASE_DATA = {
   spouseName: "Jennifer Kim (Non-Filing)",
   chapter: "7",
   attorney: "Jennifer Smith, Esq.",
-  firm: "MAJORSLAW.ai Legal Group",
+  firm: "Majors Law Group",
   filingType: "Individual — Non-Filing Spouse",
   retainerDate: "March 15, 2026",
   estimatedFilingDate: "June 10, 2026",
@@ -849,7 +849,7 @@ export default function AttorneyReviewPortal() {
           <div className="p-6 space-y-4 font-mono text-sm text-slate-300">
             <div className="space-y-1 text-xs text-slate-500">
               <p><span className="text-slate-400">To:</span> {CASE_DATA.email}</p>
-              <p><span className="text-slate-400">From:</span> jennifer.smith@majorslaw.ai</p>
+              <p><span className="text-slate-400">From:</span> jennifer.smith@majorslawgroup.com</p>
               <p><span className="text-slate-400">Subject:</span> {isApproved ? "Your Bankruptcy Petition Is Ready — Next Steps" : "Action Required: Items to Address Before Filing"}</p>
             </div>
 

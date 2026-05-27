@@ -10822,7 +10822,7 @@ export default function AccountingPortal() {
             </div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-[var(--text-primary)] text-sm tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-                MAJORSLAW<span className="text-amber-500">.ai</span>
+                bankruptcy<span className="text-amber-500">.ai</span>
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 bg-[var(--bg-surface-2)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full">
                 Accounting

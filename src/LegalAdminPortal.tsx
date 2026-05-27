@@ -4650,7 +4650,7 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
           consultDate:     date,
           consultTime:     time,
           duration:        parseInt(duration),
-          staffName:       "MAJORSLAW Intake Team",
+          staffName:       "bankruptcy.ai Intake Team",
           chapterInterest: lead.chapter_interest ?? 7,
           intakeFormUrl,
         }),

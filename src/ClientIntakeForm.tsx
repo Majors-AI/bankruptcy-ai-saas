@@ -2249,7 +2249,7 @@ export default function ClientIntakeForm({ onBack }: Props) {
             Intake Form Received
           </h1>
           <p className="text-slate-400 text-sm leading-relaxed mb-6">
-            Thank you, <strong className="text-white">{data.firstName}</strong>. Your intake information has been submitted to MAJORSLAW.ai. A member of our team will review your eligibility and contact you within 1–2 business days to discuss next steps.
+            Thank you, <strong className="text-white">{data.firstName}</strong>. Your intake information has been submitted to bankruptcy.ai. A member of our team will review your eligibility and contact you within 1–2 business days to discuss next steps.
           </p>
           <div className="bg-slate-900 border border-slate-800 rounded-2xl px-5 py-4 text-left space-y-2.5 mb-6">
             <p className="text-xs text-slate-500 font-semibold uppercase tracking-wide mb-2">What happens next</p>
@@ -2289,7 +2289,7 @@ export default function ClientIntakeForm({ onBack }: Props) {
               <Scale className="w-4 h-4 text-slate-950" />
             </div>
             <span className="font-bold text-white text-base tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-              MAJORSLAW<span className="text-amber-400">.ai</span>
+              bankruptcy<span className="text-amber-400">.ai</span>
             </span>
           </div>
           <div className="text-right">
@@ -2341,7 +2341,7 @@ export default function ClientIntakeForm({ onBack }: Props) {
                 {[
                   { state: ackAccurate, setter: setAckAccurate, text: "I certify that all information I have provided is true and accurate to the best of my knowledge." },
                   { state: ackComplete, setter: setAckComplete, text: "I understand I must disclose all assets, income, debts, and transactions — including those involving family members." },
-                  { state: ackCooperate, setter: setAckCooperate, text: "I agree to cooperate fully with MAJORSLAW.ai and provide all requested documentation promptly." },
+                  { state: ackCooperate, setter: setAckCooperate, text: "I agree to cooperate fully with bankruptcy.ai and provide all requested documentation promptly." },
                 ].map(({ state, setter, text }, i) => (
                   <label key={i} className="flex items-start gap-3 cursor-pointer group">
                     <div onClick={() => setter(!state)}

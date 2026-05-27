@@ -28,7 +28,7 @@ const CASE_DATA = {
   case_type: "regular" as "regular" | "bifurcated",
   caseNumber: "Pending",
   attorney: "Jennifer Smith, Esq.",
-  firm: "MAJORSLAW.ai Legal Group",
+  firm: "Majors Law Group",
   filingType: "Individual — Non-Filing Spouse",
   retainerDate: "2026-03-15",
   estimatedFilingDate: "2026-06-10",
@@ -1651,7 +1651,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 <Scale className="w-4 h-4 text-slate-950" />
               </div>
               <span className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-                MAJORSLAW<span className="text-amber-400">.ai</span>
+                bankruptcy<span className="text-amber-400">.ai</span>
               </span>
             </div>
             <span className="hidden sm:block text-slate-700">|</span>

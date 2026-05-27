@@ -278,7 +278,7 @@ function App() {
             )}
             <span className="text-xs text-slate-400 dark:text-slate-600">|</span>
             <span className="text-xs text-slate-500 font-medium" style={{ fontFamily: "'Georgia', serif" }}>
-              MAJORSLAW<span className="text-amber-500">.ai</span>
+              bankruptcy<span className="text-amber-500">.ai</span>
             </span>
           </div>
         </div>
