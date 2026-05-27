@@ -104,6 +104,14 @@ async function sbPatch(table: string, id: string, body: object) {
   });
 }
 
+async function sbUpsert(table: string, body: object) {
+  await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method: "POST",
+    headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates,return=minimal" },
+    body: JSON.stringify(body),
+  });
+}
+
 function fmt(n: number | null | undefined) {
   if (n == null) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(n);
@@ -666,6 +674,28 @@ function IntakeAttorneyReviewModal({
       decided_at: fields.decided_at,
     };
     await sbPost("attorney_case_acceptances", legacyBody);
+
+    if (decision === "accepted") {
+      await sbUpsert("clients", {
+        id: lead.id,
+        lead_id: lead.id,
+        name: lead.full_name,
+        email: lead.email ?? null,
+        phone: lead.phone ?? null,
+        status: "intake_complete",
+      });
+      await sbPost("case_acceptances", {
+        client_id: lead.id,
+        lead_id: lead.id,
+        chapter: String(fields.chapter ?? "7"),
+        attorney_fee: fields.attorney_fee ?? null,
+        filing_fee: fields.court_filing_fee ?? null,
+        is_bifurcated: fields.case_type === "ch7_bifurcated",
+        accepted_by: legacyBody.attorney_name,
+        acceptance_notes: fields.decision_notes ?? null,
+        decided_at: fields.decided_at ?? null,
+      });
+    }
 
     // Update lead status
     const newStatus = decision === "accepted" ? "attorney_accepted" : decision === "declined" ? "declined" : "sent_for_attorney_review";
@@ -1462,6 +1492,27 @@ function AttorneyAcceptanceModal({
       await sbPatch("attorney_case_acceptances", existing.id, body);
     } else {
       await sbPost("attorney_case_acceptances", body);
+      if (decision === "accepted") {
+        await sbUpsert("clients", {
+          id: lead.id,
+          lead_id: lead.id,
+          name: lead.full_name,
+          email: lead.email ?? null,
+          phone: lead.phone ?? null,
+          status: "intake_complete",
+        });
+        await sbPost("case_acceptances", {
+          client_id: lead.id,
+          lead_id: lead.id,
+          chapter: String(body.chapter ?? "7"),
+          attorney_fee: body.attorney_fee ?? null,
+          filing_fee: body.court_filing_fee ?? null,
+          is_bifurcated: body.case_type === "ch7_bifurcated",
+          accepted_by: body.attorney_name ?? "",
+          acceptance_notes: body.decision_notes ?? null,
+          decided_at: body.decided_at ?? null,
+        });
+      }
     }
     // Update lead status
     await sbPatch("intake_leads", lead.id, {
