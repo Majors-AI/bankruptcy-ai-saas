@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Scale, User, Users, Home, Briefcase, CreditCard, FileText,
   ChevronRight, ChevronLeft, CheckCircle2, AlertTriangle, ArrowRight,
@@ -959,6 +959,14 @@ function StepHousehold({ data, set }: { data: FormData; set: (k: keyof FormData,
     data.filingType === "individual-nonfiling-spouse" ? "Married — Spouse Not Filing" :
     data.filingType === "individual" ? "Single / Unmarried" :
     "";
+
+  // BAN-27 Blocker 1: keep stored data.maritalStatus in sync with derived value so
+  // downstream code (LegalAdminPortal, submission payload, canProceed) sees a value.
+  useEffect(() => {
+    if (derivedMaritalStatus && data.maritalStatus !== derivedMaritalStatus) {
+      set("maritalStatus", derivedMaritalStatus);
+    }
+  }, [derivedMaritalStatus, data.maritalStatus, set]);
 
   return (
     <div>
@@ -2101,7 +2109,10 @@ export default function ClientIntakeForm({ onBack }: Props) {
       return true;
     }
     if (step === 1) return !!(data.firstName && data.lastName && data.dob && data.ssn && data.email && data.phone);
-    if (step === 2) return !!data.maritalStatus;
+    // BAN-27 Blocker 1: gate on filingType (the user-controlled field). maritalStatus
+    // is now derived from filingType and synced via useEffect in StepHousehold, but
+    // the derived value can be empty for one render cycle on first mount of Step 3.
+    if (step === 2) return !!data.filingType;
     if (step === 3) return data.incomeSources.some(s => s.sourceType && s.grossPerPeriod);
     if (step === 4) return !!(data.expRentMortgage !== "" || data.expFood !== "");
     if (step === 5) return !!data.ownsRealEstate;
