@@ -5941,7 +5941,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
       <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
 
         {/* Issue 5: Left sidebar nav, 220px, text-only, no icons */}
-        <aside className="hidden sm:flex flex-col" style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', gap: 2 }}>
+        <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {/* Staff identity block in sidebar */}
           <div style={{ padding: '0 20px 20px', borderBottom: '1px solid #2A2A28', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -6202,14 +6202,14 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
         )}
 
           {/* Spacer so fixed mobile nav doesn't overlap last content item */}
-          <div className="sm:hidden h-16" />
+          <div className="lg:hidden h-16" />
           </div>{/* end space-y-5 */}
         </div>{/* end main content */}
       </div>{/* end body flex */}
 
-      {/* Mobile bottom nav — horizontal scroll, scrollbar hidden */}
+      {/* Mobile bottom nav — hidden on lg+, horizontal scroll, scrollbar hidden */}
       <nav
-        className="sm:hidden fixed bottom-0 left-0 right-0 z-30 flex overflow-x-auto scrollbar-hide"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex overflow-x-auto scrollbar-hide"
         style={{ background: '#0F0F0E', borderTop: '1px solid #2A2A28' }}
       >
         {TABS.map(t => {
@@ -6223,9 +6223,9 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
-                gap: 4,
-                padding: '10px 16px',
-                minWidth: 72,
+                gap: 3,
+                padding: '10px 8px',
+                minWidth: 60,
                 background: 'transparent',
                 border: 'none',
                 borderTop: isActive ? '2px solid #1E3A2F' : '2px solid transparent',
@@ -6234,11 +6234,11 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
               }}
             >
               <span style={{ color: isActive ? '#FAFAF7' : '#6B6B66' }}>{t.icon}</span>
-              <span style={{ fontSize: 11, fontWeight: isActive ? 500 : 400, color: isActive ? '#FAFAF7' : '#6B6B66', whiteSpace: 'nowrap', fontFamily: "'Inter', system-ui, sans-serif" }}>
+              <span style={{ fontSize: 10, fontWeight: isActive ? 500 : 400, color: isActive ? '#FAFAF7' : '#6B6B66', whiteSpace: 'nowrap', fontFamily: "'Inter', system-ui, sans-serif" }}>
                 {t.label}
               </span>
               {t.badge != null && (
-                <span style={{ position: 'absolute', top: 6, right: 10, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#FAFAF7', background: '#B45309', borderRadius: '50%', width: 15, height: 15, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ position: 'absolute', top: 6, right: 6, fontFamily: "'JetBrains Mono', monospace", fontSize: 9, color: '#FAFAF7', background: '#B45309', borderRadius: '50%', width: 14, height: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {t.badge}
                 </span>
               )}
