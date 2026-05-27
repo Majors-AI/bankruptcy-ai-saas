@@ -386,8 +386,9 @@ function mapIntakeToRetention(intake) {
         monthlyContribution: "",
       }));
     })(),
-    // SSN, DOB, and email from intake
-    ssn:         intake.ssn        || "",
+    // SSN, DOB, and email from intake. SSN handled below — see BAN-27 Blocker 3.
+    ssn:         "",
+    ssnLastFour: "",
     ssnSpouse:   intake.ssnSpouse  || "",
     dob:         intake.dob        || "",
     dobSpouse:   intake.spouseDob  || "",
@@ -396,7 +397,26 @@ function mapIntakeToRetention(intake) {
     streetAddress: "", zipCode: "", phone: "",
     spouseStreet: "", spouseZip: "", spousePhone: "",
   };
-  if (intake.ssn)       tag("petition.ssn");
+
+  // BAN-27 Blocker 3: SSN field labeling.
+  // The new intake (ClientIntakeForm.tsx) collects only the last 4 digits (ssn_last4).
+  // The portal still requires the full SSN — we must not prefill the SSN input with
+  // a 4-digit value the user might submit as their full SSN. Cases:
+  //   - intake provided ssnLastFour (or snake-case ssn_last4) → set ssnLastFour for hint
+  //   - intake provided ssn that is exactly 4 digits → treat as last 4
+  //   - intake provided ssn longer than 4 digits → treat as legacy full SSN
+  const intakeSsnDigits      = String(intake.ssn         || "").replace(/\D/g, "");
+  const intakeSsnLast4Digits = String(intake.ssnLastFour || "").replace(/\D/g, "");
+  if (intakeSsnLast4Digits.length === 4) {
+    mapped.petition.ssnLastFour = intakeSsnLast4Digits;
+    tag("petition.ssnLastFour");
+  } else if (intakeSsnDigits.length === 4) {
+    mapped.petition.ssnLastFour = intakeSsnDigits;
+    tag("petition.ssnLastFour");
+  } else if (intakeSsnDigits.length > 4) {
+    mapped.petition.ssn = intake.ssn;
+    tag("petition.ssn");
+  }
   if (intake.ssnSpouse) tag("petition.ssnSpouse");
   if (intake.dob)       tag("petition.dob");
   if (intake.spouseDob) tag("petition.dobSpouse");
@@ -2792,6 +2812,11 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
               <F label="Date of Divorce"><TI type="date" value={pd.divorceDate} onChange={v=>up("divorceDate",v)}/></F>
               <F label="State of Divorce"><SEL value={pd.divorceState} onChange={v=>up("divorceState",v)} options={US_STATES}/></F>
             </Grid2>
+          )}
+          {pd.ssnLastFour && (
+            <p className="text-xs text-amber-300 mb-1">
+              Last 4 from intake: ***-**-{pd.ssnLastFour}. Please complete your full SSN below.
+            </p>
           )}
           <F label="Social Security Number" required hint="Filed under seal — never visible to the public or creditors" imported={imp && imp("petition.ssn")}>
             <TI value={pd.ssn} onChange={v=>up("ssn",v)} placeholder="XXX-XX-XXXX"/>
