@@ -259,16 +259,24 @@ const CMI_EXCLUDED_SOURCE_TYPES = new Set([
 
 // Compute current monthly income per Form 122A-1 (6-month lookback ÷ 6).
 // Excludes SS and VA benefits as required by statute.
+// For individual filers with a non-filing spouse (filing_type = "individual-nonfiling-spouse"),
+// NFS income (owner: "nfs") is INCLUDED per 11 U.S.C. § 101(10A). A marital adjustment
+// deduction for NFS expenses not benefiting the household is applied separately by the attorney
+// on Form 122A-1 Part 2 — that adjustment is NOT reflected in this CMI figure.
 function computeCMI(sub: Record<string, unknown>): number {
   const sources = (sub.income_sources_json as {
     grossPerPeriod?: number | string;
     payFrequency?: string;
     sourceType?: string;
+    owner?: string;  // "debtor" | "spouse" | "nfs" | "household" — set by ClientIntakeForm.tsx
   }[] | null) ?? [];
   let monthly = 0;
   for (const s of sources) {
     // Skip SS / VA — excluded from CMI per Form 122A-1
     if (s.sourceType && CMI_EXCLUDED_SOURCE_TYPES.has(s.sourceType)) continue;
+    // NFS income (owner: "nfs") is included per § 101(10A) for married individual filers.
+    // Debtor (owner: "debtor") and joint co-debtor (owner: "spouse") income are always included.
+    // Records without owner field (older submissions, BankruptcyIntake.jsx) are included by default.
     const gp = Number(s.grossPerPeriod ?? 0);
     // Normalize frequency to lowercase-hyphenated for consistent matching
     const freq = (s.payFrequency ?? "").toLowerCase().replace(/[\s/]+/g, "-");

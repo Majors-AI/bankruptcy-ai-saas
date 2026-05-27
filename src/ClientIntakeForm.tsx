@@ -1173,7 +1173,10 @@ function StepIncome({ data, set }: { data: FormData; set: (k: keyof FormData, v:
   const hasSpouse = data.filingType === "individual-nonfiling-spouse" || data.filingType === "joint";
 
   function addSource(person: "debtor" | "spouse" | "household") {
-    const label = person === "debtor" ? "Debtor" : person === "spouse" ? "Spouse" : "Household Member";
+    const label = person === "debtor" ? "Debtor"
+      : person === "spouse" && data.filingType === "individual-nonfiling-spouse" ? "Non-Filing Spouse"
+      : person === "spouse" ? "Co-Debtor Spouse"
+      : "Household Member";
     set("incomeSources", [...data.incomeSources, { ...mkIncomeSource(Date.now(), person), personLabel: label }]);
   }
   function removeSource(id: number) {
@@ -1257,9 +1260,19 @@ function StepIncome({ data, set }: { data: FormData; set: (k: keyof FormData, v:
         The means test uses the average gross income for the 6 months prior to filing. Include all income — even amounts that feel minor. If a household member contributes money toward rent, food, or household bills, include their income here.
       </InfoBox>
 
+      {data.filingType === "individual-nonfiling-spouse" && (
+        <InfoBox variant="amber">
+          <strong>Non-Filing Spouse Income Required:</strong> Because you are married but filing alone, your spouse&apos;s income must be reported and is included in the means test calculation per 11 U.S.C. § 101(10A). You may be entitled to a marital adjustment deduction on Form 122A-1 for expenses your spouse pays that do not benefit your household. Your attorney will apply this adjustment during case review.
+        </InfoBox>
+      )}
+
       {renderGroup(debtorSources, "debtor", "Debtor Income")}
 
-      {hasSpouse && renderGroup(spouseSources, "spouse", "Spouse Income")}
+      {hasSpouse && renderGroup(
+        spouseSources,
+        "spouse",
+        data.filingType === "individual-nonfiling-spouse" ? "Non-Filing Spouse Income" : "Co-Debtor Spouse Income",
+      )}
 
       {data.dependents.some(d => parseFloat(d.monthlyContribution) > 0) && (
         renderGroup(householdSources, "household", "Household Member Contributions")
@@ -2132,7 +2145,14 @@ export default function ClientIntakeForm({ onBack }: Props) {
         marital_status: data.maritalStatus,
         num_dependents: data.dependents.length,
         dependents_json: data.dependents.length > 0 ? data.dependents : null,
-        income_sources_json: data.incomeSources.filter(s => s.sourceType),
+        // Tag each source with owner so LegalAdminPortal can identify NFS income for § 101(10A)
+        income_sources_json: data.incomeSources.filter(s => s.sourceType).map(s => ({
+          ...s,
+          owner: s.person === "debtor" ? "debtor"
+            : s.person === "spouse" && data.filingType === "individual-nonfiling-spouse" ? "nfs"
+            : s.person === "spouse" ? "spouse"
+            : "household",
+        })),
         exp_rent_mortgage: parseFloat(data.expRentMortgage) || 0,
         exp_utilities: parseFloat(data.expUtilities) || 0,
         exp_food: parseFloat(data.expFood) || 0,
