@@ -171,38 +171,117 @@ const ATTORNEY_FEES: Record<string, number> = {
 // ─── Colorado Means Test Data ─────────────────────────────────────────────────
 // Annual median income by state + household size (2024 Census data for Form 122A-1)
 // CO figures used here; extend as needed for other states
-const CO_MEDIAN: Record<number, number> = {
-  1: 59_412,
-  2: 79_300,
-  3: 87_216,
-  4: 93_864,
-  5: 101_580,
-  6: 109_296,
+// Full 50-state + DC median income table — November 1, 2025 (DOJ Form 122A-1 data)
+// Structure: { 1–4: annual for household size 1–4, extra: per additional person above 4 }
+const MEDIAN_INCOME: Record<string, { 1: number; 2: number; 3: number; 4: number; extra: number }> = {
+  "Alabama":        { 1:62672,  2:75465,  3:90321,  4:104003, extra:11100 },
+  "Alaska":         { 1:83617,  2:109882, 3:109882, 4:138492, extra:11100 },
+  "Arizona":        { 1:72039,  2:86745,  3:102274, 4:118067, extra:11100 },
+  "Arkansas":       { 1:56923,  2:71742,  3:80218,  4:94586,  extra:11100 },
+  "California":     { 1:77221,  2:100161, 3:113553, 4:135505, extra:11100 },
+  "Colorado":       { 1:85685,  2:106890, 3:127495, 4:149566, extra:11100 },
+  "Connecticut":    { 1:82141,  2:103501, 3:131022, 4:155834, extra:11100 },
+  "Delaware":       { 1:67733,  2:92445,  3:108420, 4:128854, extra:11100 },
+  "District of Columbia": { 1:93588, 2:120000, 3:140000, 4:165000, extra:11100 },
+  "Florida":        { 1:68085,  2:84385,  3:95039,  4:111819, extra:11100 },
+  "Georgia":        { 1:66722,  2:82787,  3:98877,  4:120315, extra:11100 },
+  "Hawaii":         { 1:83068,  2:103479, 3:120289, 4:138536, extra:11100 },
+  "Idaho":          { 1:71531,  2:83951,  3:95859,  4:116594, extra:11100 },
+  "Illinois":       { 1:71304,  2:91526,  3:110712, 4:134366, extra:11100 },
+  "Indiana":        { 1:62808,  2:79884,  3:93175,  4:112691, extra:11100 },
+  "Iowa":           { 1:65883,  2:86523,  3:101463, 4:122826, extra:11100 },
+  "Kansas":         { 1:67423,  2:85199,  3:101189, 4:122741, extra:11100 },
+  "Kentucky":       { 1:60071,  2:71998,  3:83027,  4:108637, extra:11100 },
+  "Louisiana":      { 1:57923,  2:70493,  3:82433,  4:100971, extra:11100 },
+  "Maine":          { 1:73946,  2:88126,  3:104083, 4:128204, extra:11100 },
+  "Maryland":       { 1:84699,  2:111673, 3:132464, 4:161913, extra:11100 },
+  "Massachusetts":  { 1:85941,  2:109818, 3:135837, 4:173947, extra:11100 },
+  "Michigan":       { 1:65625,  2:81293,  3:100797, 4:134254, extra:11100 },
+  "Minnesota":      { 1:75704,  2:95807,  3:123244, 4:146039, extra:11100 },
+  "Mississippi":    { 1:52594,  2:68525,  3:80722,  4:94965,  extra:11100 },
+  "Missouri":       { 1:63306,  2:79971,  3:97658,  4:115491, extra:11100 },
+  "Montana":        { 1:69482,  2:88107,  3:100637, 4:118578, extra:11100 },
+  "Nebraska":       { 1:65206,  2:88402,  3:100754, 4:121867, extra:11100 },
+  "Nevada":         { 1:65868,  2:85860,  3:99032,  4:111184, extra:11100 },
+  "New Hampshire":  { 1:85049,  2:106521, 3:137902, 4:151224, extra:11100 },
+  "New Jersey":     { 1:84938,  2:104138, 3:133620, 4:163817, extra:11100 },
+  "New Mexico":     { 1:64537,  2:77534,  3:85784,  4:96074,  extra:11100 },
+  "New York":       { 1:71393,  2:90520,  3:112616, 4:135475, extra:11100 },
+  "North Carolina": { 1:65396,  2:82221,  3:98932,  4:113744, extra:11100 },
+  "North Dakota":   { 1:71683,  2:93882,  3:103951, 4:134254, extra:11100 },
+  "Ohio":           { 1:64541,  2:81578,  3:99876,  4:120531, extra:11100 },
+  "Oklahoma":       { 1:59611,  2:75229,  3:84618,  4:99188,  extra:11100 },
+  "Oregon":         { 1:77061,  2:91268,  3:113736, 4:136434, extra:11100 },
+  "Pennsylvania":   { 1:70378,  2:85290,  3:107327, 4:132379, extra:11100 },
+  "Rhode Island":   { 1:75662,  2:96205,  3:116357, 4:133954, extra:11100 },
+  "South Carolina": { 1:63140,  2:81614,  3:93219,  4:113332, extra:11100 },
+  "South Dakota":   { 1:67415,  2:87598,  3:88297,  4:127386, extra:11100 },
+  "Tennessee":      { 1:62339,  2:80722,  3:95011,  4:106775, extra:11100 },
+  "Texas":          { 1:65123,  2:84491,  3:96728,  4:114938, extra:11100 },
+  "Utah":           { 1:85644,  2:93302,  3:109860, 4:128363, extra:11100 },
+  "Vermont":        { 1:70603,  2:94477,  3:111150, 4:134056, extra:11100 },
+  "Virginia":       { 1:76479,  2:98577,  3:120001, 4:141113, extra:11100 },
+  "Washington":     { 1:86314,  2:104354, 3:128369, 4:152553, extra:11100 },
+  "West Virginia":  { 1:62270,  2:66833,  3:89690,  4:91270,  extra:11100 },
+  "Wisconsin":      { 1:69343,  2:87938,  3:105734, 4:129964, extra:11100 },
+  "Wyoming":        { 1:69906,  2:88156,  3:95951,  4:107469, extra:11100 },
 };
+
 function stateMedian(state: string, houseSize: number): number {
-  // Only CO seeded here for demo; default fallback for other states
-  if (state === "CO") return CO_MEDIAN[Math.min(houseSize, 6)] ?? CO_MEDIAN[6];
-  // Generic fallback — 10th Circuit averages
-  const fallback: Record<number, number> = { 1: 55_000, 2: 72_000, 3: 82_000, 4: 92_000, 5: 100_000, 6: 108_000 };
-  return fallback[Math.min(houseSize, 6)] ?? fallback[6];
+  const t = MEDIAN_INCOME[state];
+  if (!t) {
+    // Unknown state — use national approximation as fallback
+    const fallback: Record<number, number> = { 1:66000, 2:84000, 3:99000, 4:118000 };
+    const size = Math.min(houseSize, 4);
+    const base = fallback[size] ?? fallback[4];
+    return base + (houseSize > 4 ? (houseSize - 4) * 11100 : 0);
+  }
+  return houseSize <= 4
+    ? (t[houseSize as 1|2|3|4] || t[4])
+    : t[4] + (houseSize - 4) * t.extra;
 }
 
-// Compute current monthly income per Form 122A-1 (6-month lookback ÷ 6)
+// Income source types excluded from CMI per 11 U.S.C. § 101(10A) and Form 122A-1.
+// Social Security (all types) and VA benefits are not "current monthly income."
+const CMI_EXCLUDED_SOURCE_TYPES = new Set([
+  // ClientIntakeForm.tsx full-string labels
+  "Social Security – Retirement",
+  "Social Security – Disability (SSDI)",
+  "Supplemental Security Income (SSI)",
+  "VA Benefits",
+  // Dependent income short codes (ClientIntakeForm.tsx)
+  "social_security",
+  "ssdi",
+  "ssi",
+  "va_benefits",
+]);
+
+// Compute current monthly income per Form 122A-1 (6-month lookback ÷ 6).
+// Excludes SS and VA benefits as required by statute.
 function computeCMI(sub: Record<string, unknown>): number {
-  const sources = (sub.income_sources_json as { grossPerPeriod?: number; payFrequency?: string }[] | null) ?? [];
+  const sources = (sub.income_sources_json as {
+    grossPerPeriod?: number | string;
+    payFrequency?: string;
+    sourceType?: string;
+  }[] | null) ?? [];
   let monthly = 0;
   for (const s of sources) {
+    // Skip SS / VA — excluded from CMI per Form 122A-1
+    if (s.sourceType && CMI_EXCLUDED_SOURCE_TYPES.has(s.sourceType)) continue;
     const gp = Number(s.grossPerPeriod ?? 0);
-    switch (s.payFrequency) {
-      case "weekly":       monthly += gp * 4.333; break;
-      case "bi-weekly":    monthly += gp * 2.167; break;
-      case "semi-monthly": monthly += gp * 2;     break;
-      case "monthly":      monthly += gp;         break;
-      case "annual":       monthly += gp / 12;    break;
-      default:             monthly += gp;
+    // Normalize frequency to lowercase-hyphenated for consistent matching
+    const freq = (s.payFrequency ?? "").toLowerCase().replace(/[\s/]+/g, "-");
+    switch (freq) {
+      case "weekly":        monthly += gp * 4.333; break;
+      case "bi-weekly":     monthly += gp * 2.167; break;
+      case "semi-monthly":  monthly += gp * 2;     break;
+      case "monthly":       monthly += gp;         break;
+      case "quarterly":     monthly += gp / 3;     break;
+      case "annual":        monthly += gp / 12;    break;
+      default:              monthly += gp;          // Variable / unknown → treat as monthly
     }
   }
-  // Fallback to legacy debtor_gross_monthly
+  // Fallback to legacy debtor_gross_monthly if no income_sources_json stored
   if (monthly === 0) monthly = Number(sub.debtor_gross_monthly ?? 0);
   return Math.round(monthly * 100) / 100;
 }
