@@ -61,10 +61,16 @@ interface Submission {
   preferential_payments_json: PrefPay[] | null;
   vehicles_json: Vehicle[] | null;
   has_prior_bk: boolean | null;
+  prior_bankruptcies_json: { chapter: string; yearFiled: number; discharged: boolean }[] | null;
   recent_luxury: boolean | null;
   luxury_details: string | null;
   bank_balance: number | null;
   retirement_balance: number | null;
+  real_properties_json: RealProperty[] | null;
+  has_transfers: boolean | null;
+  transfers_json: Transfer[] | null;
+  garnishment: boolean | null;
+  exemption_state: string | null;
   submitted_at: string;
 }
 
@@ -90,6 +96,24 @@ interface Vehicle {
   value: number;
   hasLoan: boolean;
   loanBalance: number;
+}
+
+interface RealProperty {
+  address?: string;
+  type?: string;
+  value?: number;
+  mortgageBalance?: number;
+  lender?: string;
+  isCurrent?: boolean;
+}
+
+interface Transfer {
+  description?: string;
+  recipient?: string;
+  relationship?: string;
+  amount?: number;
+  date?: string;
+  transferType?: string;
 }
 
 interface IntakeReview {
@@ -141,6 +165,14 @@ interface IntakeIssue {
   acknowledged_at: string | null;
   sort_order: number;
 }
+
+type EligibilityCheckItem = { label: string; pass: boolean; detail: string };
+type AutoAlert = { level: "urgent" | "warning" | "info"; message: string; category: string };
+type Ch13Plan = {
+  vehicleCramDown: number; arrearsPayment: number; priorityPayment: number;
+  liquidationMin: number; basePayment: number; withTrustee: number;
+  planPayment: number; planFeasible: boolean;
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -202,39 +234,126 @@ function fmtDate(s: string | null) {
   return new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-// ─── State Median Income Data ─────────────────────────────────────────────────
+// ─── State Median Income — all 50 states, November 1, 2025 (annual) ──────────
 
-const STATE_MEDIAN: Record<string, Record<number, number>> = {
-  CO: { 1: 59412, 2: 79300, 3: 87216, 4: 93864, 5: 101580, 6: 109296 },
-  TX: { 1: 51000, 2: 68000, 3: 76000, 4: 86000, 5: 93000, 6: 100000 },
-  AZ: { 1: 50000, 2: 66000, 3: 74000, 4: 83000, 5: 90000, 6: 97000 },
-  WA: { 1: 60000, 2: 80000, 3: 89000, 4: 99000, 5: 107000, 6: 115000 },
-  IL: { 1: 53000, 2: 72000, 3: 81000, 4: 91000, 5: 99000, 6: 107000 },
-  // Fallback for unlisted states
-  DEFAULT: { 1: 52000, 2: 70000, 3: 79000, 4: 88000, 5: 96000, 6: 104000 },
+type MedianRow = { 1: number; 2: number; 3: number; 4: number; extra: number };
+const STATE_MEDIAN: Record<string, MedianRow> = {
+  AL:{1:62672, 2:75465, 3:90321,  4:104003,extra:11100}, AK:{1:83617, 2:109882,3:109882,4:138492,extra:11100},
+  AZ:{1:72039, 2:86745, 3:102274, 4:118067,extra:11100}, AR:{1:56923, 2:71742, 3:80218, 4:94586, extra:11100},
+  CA:{1:77221, 2:100161,3:113553, 4:135505,extra:11100}, CO:{1:85685, 2:106890,3:127495,4:149566,extra:11100},
+  CT:{1:82141, 2:103501,3:131022, 4:155834,extra:11100}, DE:{1:67733, 2:92445, 3:108420,4:128854,extra:11100},
+  FL:{1:68085, 2:84385, 3:95039,  4:111819,extra:11100}, GA:{1:66722, 2:82787, 3:98877, 4:120315,extra:11100},
+  HI:{1:83068, 2:103479,3:120289, 4:138536,extra:11100}, ID:{1:71531, 2:83951, 3:95859, 4:116594,extra:11100},
+  IL:{1:71304, 2:91526, 3:110712, 4:134366,extra:11100}, IN:{1:62808, 2:79884, 3:93175, 4:112691,extra:11100},
+  IA:{1:65883, 2:86523, 3:101463, 4:122826,extra:11100}, KS:{1:67423, 2:85199, 3:101189,4:122741,extra:11100},
+  KY:{1:60071, 2:71998, 3:83027,  4:108637,extra:11100}, LA:{1:57923, 2:70493, 3:82433, 4:100971,extra:11100},
+  ME:{1:73946, 2:88126, 3:104083, 4:128204,extra:11100}, MD:{1:84699, 2:111673,3:132464,4:161913,extra:11100},
+  MA:{1:85941, 2:109818,3:135837, 4:173947,extra:11100}, MI:{1:65625, 2:81293, 3:100797,4:134254,extra:11100},
+  MN:{1:75704, 2:95807, 3:123244, 4:146039,extra:11100}, MS:{1:52594, 2:68525, 3:80722, 4:94965, extra:11100},
+  MO:{1:63306, 2:79971, 3:97658,  4:115491,extra:11100}, MT:{1:69482, 2:88107, 3:100637,4:118578,extra:11100},
+  NE:{1:65206, 2:88402, 3:100754, 4:121867,extra:11100}, NV:{1:65868, 2:85860, 3:99032, 4:111184,extra:11100},
+  NH:{1:85049, 2:106521,3:137902, 4:151224,extra:11100}, NJ:{1:84938, 2:104138,3:133620,4:163817,extra:11100},
+  NM:{1:64537, 2:77534, 3:85784,  4:96074, extra:11100}, NY:{1:71393, 2:90520, 3:112616,4:135475,extra:11100},
+  NC:{1:65396, 2:82221, 3:98932,  4:113744,extra:11100}, ND:{1:71683, 2:93882, 3:103951,4:134254,extra:11100},
+  OH:{1:64541, 2:81578, 3:99876,  4:120531,extra:11100}, OK:{1:59611, 2:75229, 3:84618, 4:99188, extra:11100},
+  OR:{1:77061, 2:91268, 3:113736, 4:136434,extra:11100}, PA:{1:70378, 2:85290, 3:107327,4:132379,extra:11100},
+  RI:{1:75662, 2:96205, 3:116357, 4:133954,extra:11100}, SC:{1:63140, 2:81614, 3:93219, 4:113332,extra:11100},
+  SD:{1:67415, 2:87598, 3:88297,  4:127386,extra:11100}, TN:{1:62339, 2:80722, 3:95011, 4:106775,extra:11100},
+  TX:{1:65123, 2:84491, 3:96728,  4:114938,extra:11100}, UT:{1:85644, 2:93302, 3:109860,4:128363,extra:11100},
+  VT:{1:70603, 2:94477, 3:111150, 4:134056,extra:11100}, VA:{1:76479, 2:98577, 3:120001,4:141113,extra:11100},
+  WA:{1:86314, 2:104354,3:128369, 4:152553,extra:11100}, WV:{1:62270, 2:66833, 3:89690, 4:91270, extra:11100},
+  WI:{1:69343, 2:87938, 3:105734, 4:129964,extra:11100}, WY:{1:69906, 2:88156, 3:95951, 4:107469,extra:11100},
 };
 
-function getMedian(state: string | null, houseSize: number): number {
-  const tbl = STATE_MEDIAN[state ?? "DEFAULT"] ?? STATE_MEDIAN.DEFAULT;
-  return (tbl[Math.min(houseSize, 6)] ?? tbl[6]) / 12; // monthly
+// Maps full state names (from BankruptcyIntake.jsx) to 2-letter codes
+const STATE_NAME_TO_ABBR: Record<string, string> = {
+  Alabama:"AL",Alaska:"AK",Arizona:"AZ",Arkansas:"AR",California:"CA",Colorado:"CO",
+  Connecticut:"CT",Delaware:"DE",Florida:"FL",Georgia:"GA",Hawaii:"HI",Idaho:"ID",
+  Illinois:"IL",Indiana:"IN",Iowa:"IA",Kansas:"KS",Kentucky:"KY",Louisiana:"LA",
+  Maine:"ME",Maryland:"MD",Massachusetts:"MA",Michigan:"MI",Minnesota:"MN",
+  Mississippi:"MS",Missouri:"MO",Montana:"MT",Nebraska:"NE",Nevada:"NV",
+  "New Hampshire":"NH","New Jersey":"NJ","New Mexico":"NM","New York":"NY",
+  "North Carolina":"NC","North Dakota":"ND",Ohio:"OH",Oklahoma:"OK",Oregon:"OR",
+  Pennsylvania:"PA","Rhode Island":"RI","South Carolina":"SC","South Dakota":"SD",
+  Tennessee:"TN",Texas:"TX",Utah:"UT",Vermont:"VT",Virginia:"VA",Washington:"WA",
+  "West Virginia":"WV",Wisconsin:"WI",Wyoming:"WY",
+};
+
+function normalizeState(state: string | null | undefined): string {
+  if (!state) return "";
+  const s = state.trim();
+  return s.length === 2 ? s.toUpperCase() : (STATE_NAME_TO_ABBR[s] ?? "");
 }
 
+function getMedianData(state: string | null, houseSize: number): { monthly: number; annual: number } {
+  const abbr = normalizeState(state);
+  const tbl = STATE_MEDIAN[abbr];
+  const hhKey = Math.min(houseSize, 4) as 1 | 2 | 3 | 4;
+  const annual = tbl
+    ? (houseSize <= 4 ? tbl[hhKey] : tbl[4] + (houseSize - 4) * tbl.extra)
+    : (52000 + (houseSize - 1) * 9000);
+  return { annual, monthly: Math.round(annual / 12) };
+}
+
+// Vehicle exemption by state (single filer, approximate)
+const VEHICLE_EX: Record<string, number> = {
+  AL:3000,AK:3750,AZ:6000,AR:1200,CA:3625,CO:7500,CT:3750,DE:4425,FL:1000,GA:5000,
+  HI:2575,ID:10000,IL:2400,IN:10250,IA:7000,KS:20000,KY:3000,LA:7500,ME:5000,MD:6000,
+  MA:7500,MI:3775,MN:5000,MS:10000,MO:3000,MT:4500,NE:5000,NV:15000,NH:10000,NJ:0,
+  NM:5000,NY:11975,NC:3500,ND:5000,OH:4000,OK:7500,OR:3000,PA:0,RI:12350,SC:6325,
+  SD:7000,TN:10000,TX:100000,UT:3500,VT:5000,VA:6000,WA:15000,WV:5000,WI:4000,WY:5000,
+};
+
+// Homestead exemption by state (single filer; 9_999_999 = unlimited)
+const HOMESTEAD_EX: Record<string, number> = {
+  AL:16450,AK:75000,AZ:400000,AR:27000,CA:349402,CO:250000,CT:75000,DE:125000,
+  FL:9999999,GA:43000,HI:0,ID:175000,IL:30000,IN:22400,IA:9999999,KS:9999999,
+  KY:30000,LA:45000,ME:90000,MD:35000,MA:1000000,MI:50000,MN:450000,MS:150000,
+  MO:15000,MT:350000,NE:80000,NV:605000,NH:400000,NJ:0,NM:90000,NY:165550,
+  NC:42000,ND:150000,OH:145425,OK:9999999,OR:100000,PA:0,RI:500000,SC:87000,
+  SD:9999999,TN:20000,TX:9999999,UT:67410,VT:200000,VA:25000,WA:250000,
+  WV:35000,WI:75000,WY:80000,
+};
+
+// Legacy: keep old getMedian signature for CaseRow which uses monthly return
+function getMedian(state: string | null, houseSize: number): number {
+  return getMedianData(state, houseSize).monthly;
+}
+
+function toMonthly(gp: number, freq: string | undefined): number {
+  switch (freq) {
+    case "weekly":       return gp * 4.333;
+    case "bi-weekly":    return gp * 2.167;
+    case "semi-monthly": return gp * 2;
+    case "monthly":      return gp;
+    case "annual":       return gp / 12;
+    default:             return gp;
+  }
+}
+
+function isSSOrVA(sourceType: string | undefined): boolean {
+  if (!sourceType) return false;
+  const t = sourceType.toLowerCase();
+  return t.includes("ss_") || t.includes("ssdi") || t.includes("social_security") ||
+    t.includes("va_disability") || t.includes("veterans_disability") || t === "ssa" || t === "va";
+}
+
+// CMI per Form 122A-1: excludes SS retirement, SSDI, VA disability (§ 101(10A))
 function computeCMI(sub: Submission): number {
   const sources = sub.income_sources_json ?? [];
   let monthly = 0;
   for (const s of sources) {
-    const gp = Number(s.grossPerPeriod ?? 0);
-    switch (s.payFrequency) {
-      case "weekly":       monthly += gp * 4.333; break;
-      case "bi-weekly":    monthly += gp * 2.167; break;
-      case "semi-monthly": monthly += gp * 2;     break;
-      case "monthly":      monthly += gp;         break;
-      case "annual":       monthly += gp / 12;    break;
-      default:             monthly += gp;
-    }
+    if (isSSOrVA(s.sourceType)) continue;
+    monthly += toMonthly(Number(s.grossPerPeriod ?? 0), s.payFrequency);
   }
   if (monthly === 0) monthly = Number(sub.debtor_gross_monthly ?? 0);
   return Math.round(monthly * 100) / 100;
+}
+
+function computeCMIExcluded(sub: Submission): number {
+  return (sub.income_sources_json ?? [])
+    .filter(s => isSSOrVA(s.sourceType))
+    .reduce((sum, s) => sum + toMonthly(Number(s.grossPerPeriod ?? 0), s.payFrequency), 0);
 }
 
 function computeHouseSize(sub: Submission): number {
@@ -260,53 +379,164 @@ function computeTotalDebt(sub: Submission): number {
 }
 
 type EligibilityResult = {
-  cmi: number;
-  houseSize: number;
-  medianMonthly: number;
-  medianAnnual: number;
-  aboveMedian: boolean;
-  expenses: number;
-  disposable: number;
+  cmi: number; cmiAnnual: number; cmiExcluded: number;
+  houseSize: number; stateAbbr: string;
+  medianMonthly: number; medianAnnual: number; aboveMedian: boolean;
+  expenses: number; dmi: number; dmiEligible: boolean;
   result: "pass" | "borderline" | "fail";
-  ch7: boolean;
-  ch13: boolean;
-  totalDebt: number;
-  prefPayFlagged: boolean;
-  insiderTotal: number;
-  nonExemptEquity: number;
-  hasVehicleIssue: boolean;
+  dischargeable: number; nonDischargeable: number; totalDebt: number;
+  nonExemptVehicle: number; nonExemptHome: number; totalNonExemptAssets: number;
+  hasAssetIssue: boolean; homeEquity: number; mortgageArrears: number; hasForeclosure: boolean;
+  liquid: number; retirement: number;
+  prefPayFlagged: boolean; insiderTotal: number;
+  hasSofaIssue: boolean; hasNonDischargeableIssue: boolean;
+  ch7Eligible: boolean; ch7Checks: EligibilityCheckItem[];
+  ch13Feasible: boolean; ch13Checks: EligibilityCheckItem[];
+  ch13Plan: Ch13Plan;
+  recommendation: { chapter: "7" | "13"; reason: string; urgency: "normal" | "urgent" };
+  autoAlerts: AutoAlert[];
+  // legacy aliases for CaseRow
+  disposable: number; ch7: boolean; ch13: boolean;
+  prefPayFlagged2: boolean; nonExemptEquity: number; hasVehicleIssue: boolean;
 };
 
 function analyzeEligibility(sub: Submission): EligibilityResult {
-  const cmi = computeCMI(sub);
+  const stateAbbr = normalizeState(sub.exemption_state ?? sub.state);
   const houseSize = computeHouseSize(sub);
-  const medianMonthly = getMedian(sub.state, houseSize);
-  const medianAnnual = medianMonthly * 12;
-  const aboveMedian = cmi > medianMonthly;
+  const cmi = computeCMI(sub);
+  const cmiExcluded = computeCMIExcluded(sub);
+  const cmiAnnual = cmi * 12;
+  const { monthly: medianMonthly, annual: medianAnnual } = getMedianData(sub.state, houseSize);
+  const aboveMedian = cmiAnnual > medianAnnual;
   const expenses = computeExpenses(sub);
-  const disposable = cmi - expenses;
+  const dmi = Math.round((cmi - expenses) * 100) / 100;
+  const dmiEligible = dmi <= 500;
   const result: "pass" | "borderline" | "fail" =
-    !aboveMedian ? "pass" : disposable > 214 ? "fail" : "borderline";
+    !aboveMedian ? "pass" : dmi > 214 ? "fail" : "borderline";
 
+  // Debt
+  const dischargeable = Number(sub.credit_card_debt??0)+Number(sub.medical_debt??0)+Number(sub.personal_loan_debt??0)+Number(sub.other_unsecured??0);
+  const hasStudentLoan = Number(sub.student_loan_debt??0) > 0;
+  const hasTaxDebt = Number(sub.tax_debt??0) > 0;
+  const nonDischargeable = Number(sub.student_loan_debt??0)+Number(sub.tax_debt??0);
+  const totalDebt = dischargeable + nonDischargeable + Number(sub.secured_debt??0);
+
+  // Assets
+  const vehEx = VEHICLE_EX[stateAbbr] ?? 4450;
+  const homeEx = HOMESTEAD_EX[stateAbbr] ?? 31575;
+  const vehicles = sub.vehicles_json ?? [];
+  let nonExemptVehicle = 0;
+  for (const v of vehicles) {
+    const eq = Math.max(0, Number(v.value??0) - Number(v.loanBalance??0));
+    nonExemptVehicle += Math.max(0, eq - vehEx);
+  }
+  const props = sub.real_properties_json ?? [];
+  let homeEquity = 0, mortgageArrears = 0, hasForeclosure = false;
+  for (const p of props) {
+    homeEquity += Math.max(0, Number(p.value??0) - Number(p.mortgageBalance??0));
+    if (p.isCurrent === false) {
+      hasForeclosure = true;
+      mortgageArrears += Number(p.mortgageBalance??0) * 0.05;
+    }
+  }
+  const nonExemptHome = Math.max(0, homeEquity - homeEx);
+  const totalNonExemptAssets = nonExemptVehicle + nonExemptHome;
+  const hasAssetIssue = totalNonExemptAssets > 1000;
+  const liquid = Number(sub.bank_balance??0);
+  const retirement = Number(sub.retirement_balance??0);
+
+  // SOFA
   const prefPays = sub.preferential_payments_json ?? [];
   const insiderTotal = prefPays
-    .filter(p => /aunt|uncle|parent|sibling|relative|friend|insider/i.test(p.relationship))
+    .filter(p => /aunt|uncle|parent|sibling|relative|friend|insider|family/i.test(p.relationship))
     .reduce((s, p) => s + Number(p.amount), 0);
   const prefPayFlagged = Boolean(sub.has_preferential_payments) && prefPays.length > 0;
+  const hasTransfers = Boolean(sub.has_transfers);
+  const hasLuxury = Boolean(sub.recent_luxury);
+  const hasSofaIssue = prefPayFlagged || hasTransfers || hasLuxury;
+  const hasNonDischargeableIssue = hasStudentLoan || hasTaxDebt;
 
-  const vehicles = sub.vehicles_json ?? [];
-  const CO_VEH_EX = 7500; // simplified; use state-specific in production
-  const nonExemptEquity = vehicles.reduce((s, v) => {
-    const eq = Number(v.value ?? 0) - Number(v.loanBalance ?? 0);
-    return s + Math.max(0, eq - CO_VEH_EX);
+  // Five-point Ch.7 checks
+  const ch7Checks: EligibilityCheckItem[] = [
+    { label:"Under State Median Income (Means Test)", pass:!aboveMedian,
+      detail:`${fmt(cmiAnnual)}/yr CMI vs. ${fmt(medianAnnual)}/yr ${stateAbbr||sub.state||"state"} median` },
+    { label:"Schedule J DMI ≤ $500/mo", pass:dmiEligible,
+      detail:`DMI: ${fmt(dmi)}/mo (income minus reported expenses)` },
+    { label:"No Non-Exempt Assets", pass:!hasAssetIssue,
+      detail:hasAssetIssue ? `${fmt(totalNonExemptAssets)} non-exempt exposure (vehicle+home equity over exemptions)` : "All assets within exemption limits" },
+    { label:"No SOFA / Pre-Filing Issues", pass:!hasSofaIssue,
+      detail:hasSofaIssue ? [prefPayFlagged&&"Preferential payments",hasTransfers&&"Asset transfers",hasLuxury&&"Luxury purchases"].filter(Boolean).join(", ") : "No preferential payments, transfers, or luxury issues" },
+    { label:"No Non-Dischargeable Debt Concerns", pass:!hasNonDischargeableIssue,
+      detail:hasNonDischargeableIssue ? [hasStudentLoan&&`Student loans ${fmt(Number(sub.student_loan_debt))}`,hasTaxDebt&&`Tax debt ${fmt(Number(sub.tax_debt))}`].filter(Boolean).join("; ") : "No material non-dischargeable debt" },
+  ];
+  const ch7Eligible = ch7Checks.every(c => c.pass);
+
+  // Ch.13 plan (60-month)
+  const vehCramDown = vehicles.reduce((sum, v) => {
+    if (!v.hasLoan || !Number(v.loanBalance)) return sum;
+    const cramVal = Math.min(Number(v.loanBalance), Number(v.value??0));
+    const r = 0.10 / 12;
+    return sum + cramVal * r / (1 - Math.pow(1 + r, -60));
   }, 0);
+  const arrearsPayment = mortgageArrears / 60;
+  const priorityPayment = Number(sub.tax_debt??0) / 60;
+  const liquidationMin = totalNonExemptAssets / 60;
+  const basePayment = vehCramDown + arrearsPayment + priorityPayment + liquidationMin;
+  const withTrustee = basePayment / 0.90;
+  const planPayment = Math.max(withTrustee, Math.max(0, dmi));
+  const planFeasible = dmi >= withTrustee || totalDebt <= planPayment * 60;
+  const ch13Plan: Ch13Plan = { vehicleCramDown:vehCramDown, arrearsPayment, priorityPayment, liquidationMin, basePayment, withTrustee, planPayment, planFeasible };
+
+  // Four-point Ch.13 checks
+  const ch13Checks: EligibilityCheckItem[] = [
+    { label:"Regular Income Available", pass:cmi>0, detail:`${fmt(cmi)}/mo qualifies as regular income` },
+    { label:"Plan Feasibility — DMI Funds Plan", pass:planFeasible, detail:`DMI ${fmt(dmi)}/mo vs. est. plan ${fmt(planPayment)}/mo` },
+    { label:"Liquidation Test (§ 1325(a)(4))", pass:totalNonExemptAssets<planPayment*60, detail:`Plan pays ≥ ${fmt(totalNonExemptAssets)} liquidation value to unsecured` },
+    { label:"Secured Debt Curable Through Plan", pass:true, detail:mortgageArrears>0?`${fmt(mortgageArrears)} mortgage arrears cured over 60 months`:"No mortgage arrears to cure" },
+  ];
+  const ch13Feasible = planFeasible;
+
+  // Recommendation
+  let recommendation: EligibilityResult["recommendation"];
+  if (hasForeclosure)
+    recommendation = { chapter:"13", reason:"Foreclosure pending — Ch. 13 triggers automatic stay and cures arrears over 60 months.", urgency:"urgent" };
+  else if (!aboveMedian && dmiEligible && !hasAssetIssue && !hasSofaIssue && !hasNonDischargeableIssue)
+    recommendation = { chapter:"7", reason:"Client meets all 5 Ch. 7 criteria: under median, DMI ≤ $500, assets exempt, no SOFA issues, no non-dischargeable debt.", urgency:"normal" };
+  else if (!aboveMedian && hasAssetIssue && totalNonExemptAssets > 2000)
+    recommendation = { chapter:"13", reason:`Non-exempt assets (${fmt(totalNonExemptAssets)}) would be liquidated in Ch. 7. Ch. 13 allows client to retain assets.`, urgency:"normal" };
+  else if (!aboveMedian && hasSofaIssue)
+    recommendation = { chapter:"13", reason:"SOFA issues present — Ch. 13 reduces trustee avoidance risk for preferential payments and transfers.", urgency:"normal" };
+  else if (aboveMedian)
+    recommendation = { chapter:"13", reason:"Over median income — full means test required. Ch. 13 likely required if disposable income supports plan.", urgency:"normal" };
+  else if (ch13Feasible)
+    recommendation = { chapter:"13", reason:"Case profile favors Ch. 13. Plan appears feasible based on reported income and expenses.", urgency:"normal" };
+  else
+    recommendation = { chapter:"7", reason:"Based on available information, Ch. 7 appears most appropriate. Attorney should verify all factors.", urgency:"normal" };
+
+  // Auto-detected alerts
+  const autoAlerts: AutoAlert[] = [];
+  if (hasForeclosure) autoAlerts.push({ level:"urgent", message:"Foreclosure detected — automatic stay is critical; file immediately", category:"assets" });
+  if (Boolean(sub.garnishment)) autoAlerts.push({ level:"urgent", message:"Active wage garnishment — filing stops it immediately via automatic stay", category:"income" });
+  if (prefPayFlagged && insiderTotal>0) autoAlerts.push({ level:"warning", message:`Insider preferential payment: ${fmt(insiderTotal)} — trustee may avoid within 12mo (§ 547)`, category:"pref_payments" });
+  if (prefPayFlagged && insiderTotal===0) autoAlerts.push({ level:"warning", message:"Non-insider preferential payment detected — trustee may avoid within 90 days (§ 547)", category:"pref_payments" });
+  if (hasLuxury) autoAlerts.push({ level:"warning", message:"Recent luxury purchases — may be non-dischargeable under § 523(a)(2)(C) if > $800 within 90 days", category:"luxury" });
+  if (hasTransfers) autoAlerts.push({ level:"warning", message:"Asset transfers within prior 2 years — trustee may avoid as fraudulent transfer (§ 548)", category:"transfers" });
+  if (Boolean(sub.has_prior_bk)) autoAlerts.push({ level:"warning", message:"Prior bankruptcy on record — verify discharge eligibility and automatic stay availability", category:"prior_bk" });
+  if (hasTaxDebt) autoAlerts.push({ level:"info", message:`Tax debt ${fmt(Number(sub.tax_debt))} — not dischargeable if < 3 years old; may qualify for priority treatment in Ch. 13`, category:"other" });
+  if (hasStudentLoan) autoAlerts.push({ level:"info", message:`Student loans ${fmt(Number(sub.student_loan_debt))} — generally non-dischargeable; undue hardship required for discharge`, category:"other" });
+  if (cmiExcluded > 0) autoAlerts.push({ level:"info", message:`${fmt(cmiExcluded)}/mo SS/VA income excluded from CMI per § 101(10A) — included in household budget only`, category:"income" });
 
   return {
-    cmi, houseSize, medianMonthly, medianAnnual, aboveMedian, expenses, disposable,
-    result, ch7: result !== "fail", ch13: true,
-    totalDebt: computeTotalDebt(sub),
-    prefPayFlagged, insiderTotal,
-    nonExemptEquity, hasVehicleIssue: nonExemptEquity > 0,
+    cmi, cmiAnnual, cmiExcluded, houseSize, stateAbbr,
+    medianMonthly, medianAnnual, aboveMedian, expenses, dmi, dmiEligible, result,
+    dischargeable, nonDischargeable, totalDebt,
+    nonExemptVehicle, nonExemptHome, totalNonExemptAssets, hasAssetIssue,
+    homeEquity, mortgageArrears, hasForeclosure, liquid, retirement,
+    prefPayFlagged, insiderTotal, hasSofaIssue, hasNonDischargeableIssue,
+    ch7Eligible, ch7Checks, ch13Feasible, ch13Checks, ch13Plan, recommendation, autoAlerts,
+    // legacy aliases
+    disposable: dmi, ch7: result !== "fail", ch13: true,
+    prefPayFlagged2: prefPayFlagged, nonExemptEquity: nonExemptVehicle, hasVehicleIssue: nonExemptVehicle > 0,
   };
 }
 
@@ -585,13 +815,14 @@ function ReviewModal({
           {/* ─── ELIGIBILITY ─── */}
           {tab === "eligibility" && elig && (
             <div className="space-y-4">
+
               {/* Stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Current Monthly Income", val: fmt(elig.cmi), sub: "CMI · Form 122A-1" },
-                  { label: `${lead.state ?? "CO"} Median (${elig.houseSize}-person)`, val: fmt(elig.medianMonthly)+"/mo", sub: fmt(elig.medianAnnual)+"/yr" },
-                  { label: "Monthly Expenses", val: fmt(elig.expenses), sub: "Reported" },
-                  { label: "Disposable Income", val: fmt(elig.disposable), sub: "After expenses", warn: elig.disposable > 214 },
+                  { label: "CMI · Form 122A-1", val: fmt(elig.cmi)+"/mo", sub: fmt(elig.cmiAnnual)+"/yr" },
+                  { label: `${elig.stateAbbr||lead.state||"State"} Median (${elig.houseSize}-person)`, val: fmt(elig.medianMonthly)+"/mo", sub: fmt(elig.medianAnnual)+"/yr" },
+                  { label: "Monthly Expenses", val: fmt(elig.expenses), sub: "Reported Schedule J" },
+                  { label: "Schedule J DMI", val: fmt(elig.dmi)+"/mo", sub: elig.dmiEligible ? "≤ $500 threshold ✓" : "> $500 threshold ✗", warn: !elig.dmiEligible },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-800/40 rounded-xl p-3 text-center">
                     <p className="text-[9px] text-slate-500 leading-tight mb-1">{s.label}</p>
@@ -601,69 +832,151 @@ function ReviewModal({
                 ))}
               </div>
 
-              {/* Ch.7 card */}
-              <div className={`rounded-2xl border p-4 ${elig.ch7 ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/25"}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${elig.ch7 ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
-                    {elig.ch7 ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-red-400" />}
+              {/* Case Recommendation */}
+              <div className={`rounded-2xl border p-4 ${elig.recommendation.urgency==="urgent" ? "bg-red-500/8 border-red-500/25" : elig.recommendation.chapter==="7" ? "bg-emerald-500/5 border-emerald-500/20" : "bg-sky-500/5 border-sky-500/20"}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${elig.recommendation.urgency==="urgent"?"bg-red-500/15":elig.recommendation.chapter==="7"?"bg-emerald-500/15":"bg-sky-500/15"}`}>
+                    <Scale className={`w-5 h-5 ${elig.recommendation.urgency==="urgent"?"text-red-400":elig.recommendation.chapter==="7"?"text-emerald-400":"text-sky-400"}`} />
                   </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-bold ${elig.ch7 ? "text-emerald-300" : "text-red-300"}`}>
-                      Chapter 7 — {elig.ch7 ? "Likely Eligible" : "Likely Ineligible"}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Case Recommendation</p>
+                      {elig.recommendation.urgency==="urgent" && <span className="text-[9px] font-bold text-red-300 bg-red-500/20 border border-red-500/30 rounded-full px-1.5 py-0.5">URGENT</span>}
+                    </div>
+                    <p className={`text-sm font-bold ${elig.recommendation.urgency==="urgent"?"text-red-300":elig.recommendation.chapter==="7"?"text-emerald-300":"text-sky-300"}`}>
+                      Recommend Chapter {elig.recommendation.chapter}
                     </p>
-                    <p className="text-[10px] text-slate-500">
-                      {elig.result === "pass" ? "Below state median — means test satisfied"
-                       : elig.result === "borderline" ? "Borderline — detailed expense analysis required"
-                       : "Above median; disposable income exceeds §707(b) threshold"}
-                    </p>
-                  </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${elig.result === "pass" ? "bg-emerald-500/15 text-emerald-400" : elig.result === "borderline" ? "bg-amber-500/15 text-amber-400" : "bg-red-500/15 text-red-400"}`}>
-                    {elig.result.toUpperCase()}
-                  </span>
-                </div>
-                {/* Income bar */}
-                <div>
-                  <div className="flex justify-between text-[9px] text-slate-500 mb-1">
-                    <span>CMI: {fmt(elig.cmi)}/mo</span>
-                    <span>Median: {fmt(elig.medianMonthly)}/mo</span>
-                  </div>
-                  <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                    <div className={`h-full rounded-full ${elig.aboveMedian ? "bg-red-500" : "bg-emerald-500"}`}
-                      style={{ width: `${Math.min(100, (elig.cmi / (elig.medianMonthly * 1.4)) * 100)}%` }} />
-                  </div>
-                  <div className="flex justify-between text-[9px] mt-1">
-                    <span className="text-slate-600">$0</span>
-                    <span className="text-amber-400/80 font-semibold">↑ Median {fmt(elig.medianMonthly)}</span>
-                    <span className="text-slate-600">{fmt(elig.medianMonthly * 1.4)}</span>
+                    <p className="text-xs text-slate-400 mt-1 leading-relaxed">{elig.recommendation.reason}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Ch.13 card */}
-              <div className="rounded-2xl border p-4 bg-sky-500/5 border-sky-500/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-7 h-7 rounded-xl bg-sky-500/15 flex items-center justify-center">
-                    <CheckCircle2 className="w-4 h-4 text-sky-400" />
+              {/* Ch.7 — 5-point eligibility checks */}
+              <div className={`rounded-2xl border p-4 ${elig.ch7Eligible?"bg-emerald-500/5 border-emerald-500/20":"bg-red-500/5 border-red-500/20"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${elig.ch7Eligible?"bg-emerald-500/15":"bg-red-500/15"}`}>
+                    {elig.ch7Eligible ? <CheckCircle2 className="w-4 h-4 text-emerald-400" /> : <AlertTriangle className="w-4 h-4 text-red-400" />}
                   </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold text-sky-300">Chapter 13 — Eligible</p>
-                    <p className="text-[10px] text-slate-500">Reorganization; 3–5 yr plan; protects assets; no income ceiling</p>
-                  </div>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400">ELIGIBLE</span>
+                  <p className={`text-sm font-bold flex-1 ${elig.ch7Eligible?"text-emerald-300":"text-red-300"}`}>
+                    Chapter 7 Eligibility — {elig.ch7Eligible ? "ALL CRITERIA MET" : "CRITERIA NOT MET"}
+                  </p>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${elig.result==="pass"?"bg-emerald-500/15 text-emerald-400":elig.result==="borderline"?"bg-amber-500/15 text-amber-400":"bg-red-500/15 text-red-400"}`}>
+                    {elig.result.toUpperCase()}
+                  </span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { label: "Total Debt", val: fmt(elig.totalDebt) },
-                    { label: "Monthly Disposable", val: fmt(elig.disposable) },
-                    { label: "Est. Plan/mo", val: fmt(Math.max(0, elig.disposable)) },
-                  ].map(s => (
-                    <div key={s.label} className="bg-slate-800/40 rounded-xl p-2 text-center">
-                      <p className="text-[9px] text-slate-500">{s.label}</p>
-                      <p className="text-xs font-bold text-white mt-0.5">{s.val}</p>
+                {/* Income bar */}
+                <div className="mb-3">
+                  <div className="flex justify-between text-[9px] text-slate-500 mb-1">
+                    <span>CMI {fmt(elig.cmi)}/mo</span>
+                    <span>{elig.stateAbbr||lead.state} Median {fmt(elig.medianMonthly)}/mo</span>
+                  </div>
+                  <div className="h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${elig.aboveMedian?"bg-red-500":"bg-emerald-500"}`}
+                      style={{ width:`${Math.min(100,(elig.cmi/(elig.medianMonthly*1.4))*100)}%` }} />
+                  </div>
+                </div>
+                {/* 5 checks */}
+                <div className="space-y-1.5">
+                  {elig.ch7Checks.map((chk, i) => (
+                    <div key={i} className={`flex items-start gap-2 rounded-xl px-3 py-2 ${chk.pass?"bg-emerald-500/5":"bg-red-500/5"}`}>
+                      <div className="flex-shrink-0 mt-0.5">
+                        {chk.pass ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <X className="w-3.5 h-3.5 text-red-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${chk.pass?"text-emerald-300":"text-red-300"}`}>{chk.label}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{chk.detail}</p>
+                      </div>
                     </div>
                   ))}
                 </div>
+                {/* Dischargeable summary */}
+                {elig.dischargeable > 0 && (
+                  <div className="mt-3 pt-3 border-t border-slate-700/50 grid grid-cols-2 gap-2">
+                    <div className="bg-slate-800/40 rounded-xl p-2.5">
+                      <p className="text-[9px] text-slate-500">Dischargeable Debt</p>
+                      <p className="text-sm font-bold text-emerald-400 mt-0.5">{fmt(elig.dischargeable)}</p>
+                      <p className="text-[9px] text-slate-600">CC, medical, personal</p>
+                    </div>
+                    <div className="bg-slate-800/40 rounded-xl p-2.5">
+                      <p className="text-[9px] text-slate-500">Non-Dischargeable</p>
+                      <p className="text-sm font-bold text-amber-400 mt-0.5">{fmt(elig.nonDischargeable)}</p>
+                      <p className="text-[9px] text-slate-600">Student loans, recent taxes</p>
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Ch.13 — 4-point checks + plan funding */}
+              <div className={`rounded-2xl border p-4 ${elig.ch13Feasible?"bg-sky-500/5 border-sky-500/20":"bg-amber-500/5 border-amber-500/20"}`}>
+                <div className="flex items-center gap-2 mb-3">
+                  <div className={`w-7 h-7 rounded-xl flex items-center justify-center ${elig.ch13Feasible?"bg-sky-500/15":"bg-amber-500/15"}`}>
+                    <CheckCircle2 className={`w-4 h-4 ${elig.ch13Feasible?"text-sky-400":"text-amber-400"}`} />
+                  </div>
+                  <p className={`text-sm font-bold flex-1 ${elig.ch13Feasible?"text-sky-300":"text-amber-300"}`}>
+                    Chapter 13 — Plan {elig.ch13Feasible ? "FEASIBLE" : "AT RISK"}
+                  </p>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${elig.ch13Feasible?"bg-sky-500/15 text-sky-400":"bg-amber-500/15 text-amber-400"}`}>
+                    {elig.ch13Feasible?"FEASIBLE":"AT RISK"}
+                  </span>
+                </div>
+                {/* 4 checks */}
+                <div className="space-y-1.5 mb-3">
+                  {elig.ch13Checks.map((chk, i) => (
+                    <div key={i} className={`flex items-start gap-2 rounded-xl px-3 py-2 ${chk.pass?"bg-sky-500/5":"bg-amber-500/5"}`}>
+                      <div className="flex-shrink-0 mt-0.5">
+                        {chk.pass ? <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-xs font-semibold ${chk.pass?"text-sky-300":"text-amber-300"}`}>{chk.label}</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5 leading-snug">{chk.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Plan Funding Analysis */}
+                <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-3">
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">Plan Funding Analysis — 60-Month Plan</p>
+                  <div className="space-y-1">
+                    {([
+                      { label:"Vehicle Cram-Down (10%, 60mo)", val:elig.ch13Plan.vehicleCramDown, show:elig.ch13Plan.vehicleCramDown>0 },
+                      { label:"Mortgage Arrears Cure", val:elig.ch13Plan.arrearsPayment, show:elig.ch13Plan.arrearsPayment>0 },
+                      { label:"Priority Debt (Tax)", val:elig.ch13Plan.priorityPayment, show:elig.ch13Plan.priorityPayment>0 },
+                      { label:"Liquidation Minimum (§ 1325(a)(4))", val:elig.ch13Plan.liquidationMin, show:elig.ch13Plan.liquidationMin>0 },
+                    ] as { label:string; val:number; show:boolean }[]).filter(r => r.show).map(row => (
+                      <div key={row.label} className="flex items-center justify-between text-xs">
+                        <span className="text-slate-500">{row.label}</span>
+                        <span className="text-white font-semibold">{fmt(row.val)}/mo</span>
+                      </div>
+                    ))}
+                    <div className="flex items-center justify-between text-xs text-slate-500 pt-1 border-t border-slate-700/50">
+                      <span>+ 10% Chapter 13 Trustee Fee</span>
+                      <span className="text-slate-400">{fmt(elig.ch13Plan.withTrustee - elig.ch13Plan.basePayment)}/mo</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm font-bold pt-1 border-t border-slate-600/50 mt-1">
+                      <span className="text-white">Est. Plan Payment</span>
+                      <span className={elig.ch13Plan.planFeasible?"text-sky-300":"text-amber-300"}>{fmt(elig.ch13Plan.planPayment)}/mo</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs mt-1">
+                      <span className="text-slate-500">Client DMI Available</span>
+                      <span className={elig.dmi>=elig.ch13Plan.planPayment?"text-emerald-400 font-semibold":"text-red-400 font-semibold"}>{fmt(elig.dmi)}/mo</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-500">Total Plan (60 months)</span>
+                      <span className="text-slate-400">{fmt(elig.ch13Plan.planPayment*60)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* SS/VA excluded note */}
+              {elig.cmiExcluded > 0 && (
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-4 py-3 flex items-start gap-2">
+                  <Info className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-sky-300 leading-relaxed">
+                    <span className="font-semibold">{fmt(elig.cmiExcluded)}/mo</span> SS/VA income excluded from CMI per 11 U.S.C. § 101(10A). Included in household budget only — does not affect the means test.
+                  </p>
+                </div>
+              )}
 
               {/* Income-to-qualify projection */}
               {(elig.result === "fail" || elig.result === "borderline") && (
@@ -673,15 +986,14 @@ function ReviewModal({
                     <p className="text-sm font-bold text-amber-300">Income-to-Qualify Projection</p>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed mb-3">
-                    To qualify for Chapter 7, this client's 6-month average CMI must fall below the {lead.state ?? "CO"} {elig.houseSize}-person median of <span className="text-white font-semibold">{fmt(elig.medianMonthly)}/mo</span>.
-                    Current CMI is <span className="text-amber-300 font-semibold">{fmt(elig.cmi)}/mo</span>
-                    {elig.aboveMedian ? <span className="text-red-400"> — {fmt(elig.cmi - elig.medianMonthly)} above median</span> : null}.
+                    To qualify for Ch. 7, 6-month average CMI must be below the {elig.stateAbbr||lead.state} {elig.houseSize}-person median of <span className="text-white font-semibold">{fmt(elig.medianMonthly)}/mo</span>. Current CMI is <span className="text-amber-300 font-semibold">{fmt(elig.cmi)}/mo</span>
+                    {elig.aboveMedian && <span className="text-red-400"> — {fmt(elig.cmi - elig.medianMonthly)} above median</span>}.
                   </p>
                   <div className="grid grid-cols-3 gap-2 mb-3">
                     {[
-                      { label: "Target Income", val: fmt(elig.medianMonthly * 0.98), sub: "Stay below this" },
-                      { label: "Avg Needed (3-mo)", val: fmt(elig.medianMonthly * 0.98), sub: "Filing in 3 months" },
-                      { label: "Avg Needed (6-mo)", val: fmt(elig.medianMonthly * 0.98), sub: "Filing in 6 months" },
+                      { label:"Target Monthly", val:fmt(elig.medianMonthly*0.98), sub:"Stay below this" },
+                      { label:"Avg Needed (3-mo)", val:fmt(elig.medianMonthly*0.98), sub:"Filing in 3 months" },
+                      { label:"Avg Needed (6-mo)", val:fmt(elig.medianMonthly*0.98), sub:"Filing in 6 months" },
                     ].map(s => (
                       <div key={s.label} className="bg-slate-800/50 border border-amber-500/15 rounded-xl p-2.5 text-center">
                         <p className="text-[9px] text-slate-500">{s.label}</p>
@@ -703,9 +1015,7 @@ function ReviewModal({
                   <div className="flex items-center gap-2 mb-3">
                     <AlertTriangle className="w-4 h-4 text-red-400" />
                     <p className="text-sm font-bold text-red-300">Preferential Payment Flag</p>
-                    <span className="ml-auto text-[10px] font-bold text-red-300 bg-red-500/15 border border-red-500/25 rounded-full px-1.5 py-0.5">
-                      {fmt(elig.insiderTotal)} insider
-                    </span>
+                    {elig.insiderTotal > 0 && <span className="ml-auto text-[10px] font-bold text-red-300 bg-red-500/15 border border-red-500/25 rounded-full px-1.5 py-0.5">{fmt(elig.insiderTotal)} insider</span>}
                   </div>
                   <div className="space-y-1.5 mb-3">
                     {prefPays.map((pp, i) => (
@@ -719,9 +1029,7 @@ function ReviewModal({
                       </div>
                     ))}
                   </div>
-                  <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">
-                    11 U.S.C. § 547: Trustee may avoid and recover insider payments within 12 months. Recipient may be required to return funds to estate.
-                  </p>
+                  <p className="text-[10px] text-slate-500 mb-2 leading-relaxed">11 U.S.C. § 547: Trustee may avoid insider payments within 12 months; non-insider within 90 days. Recipient may be required to return funds to estate.</p>
                   <textarea rows={2} value={prefNotes} onChange={e => setPrefNotes(e.target.value)}
                     onBlur={() => review && patchReview({ pref_pay_notes: prefNotes })}
                     placeholder="Attorney strategy notes on preferential payments…"
@@ -742,6 +1050,29 @@ function ReviewModal({
           {/* ─── ISSUES ─── */}
           {tab === "issues" && (
             <div className="space-y-3">
+
+              {/* Auto-detected alerts (read-only, computed from intake data) */}
+              {elig && elig.autoAlerts.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Auto-Detected from Intake Data</p>
+                  {elig.autoAlerts.map((alert, i) => {
+                    const ac = alert.level === "urgent"
+                      ? { bg:"bg-red-500/8 border-red-500/25", icon:<AlertTriangle className="w-3 h-3 text-red-400 flex-shrink-0" />, text:"text-red-300", badge:"bg-red-500 text-white", label:"URGENT" }
+                      : alert.level === "warning"
+                      ? { bg:"bg-amber-500/8 border-amber-500/20", icon:<Flag className="w-3 h-3 text-amber-400 flex-shrink-0" />, text:"text-amber-300", badge:"bg-amber-500/20 text-amber-300 border border-amber-500/30", label:"WARNING" }
+                      : { bg:"bg-sky-500/5 border-sky-500/20", icon:<Info className="w-3 h-3 text-sky-400 flex-shrink-0" />, text:"text-sky-300", badge:"bg-sky-500/20 text-sky-300 border border-sky-500/30", label:"INFO" };
+                    return (
+                      <div key={i} className={`flex items-center gap-2.5 rounded-xl border px-3 py-2.5 ${ac.bg}`}>
+                        {ac.icon}
+                        <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${ac.badge}`}>{ac.label}</span>
+                        <p className={`text-xs ${ac.text} leading-snug`}>{alert.message}</p>
+                      </div>
+                    );
+                  })}
+                  <div className="border-t border-slate-800 pt-1" />
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-bold text-white">{issues.length} Issue{issues.length !== 1 ? "s" : ""}</p>
@@ -870,7 +1201,7 @@ function ReviewModal({
                 {[
                   { label: "Total Debt", val: fmt(elig?.totalDebt) },
                   { label: "Monthly Income", val: fmt(elig?.cmi) },
-                  { label: "Ch.7 Eligible", val: elig ? (elig.result === "pass" ? "Yes" : elig.result === "borderline" ? "Borderline" : "No") : "—", color: elig?.result === "pass" ? "text-emerald-400" : elig?.result === "borderline" ? "text-amber-400" : "text-red-400" },
+                  { label: "Ch.7 Eligible", val: elig ? (elig.ch7Eligible ? "Yes" : elig.result === "borderline" ? "Borderline" : "No") : "—", color: elig?.ch7Eligible ? "text-emerald-400" : elig?.result === "borderline" ? "text-amber-400" : "text-red-400" },
                   { label: "Open Issues", val: String(openIssues), color: openIssues > 0 ? "text-amber-400" : "text-emerald-400" },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-800/40 rounded-xl p-3 text-center">
@@ -1021,6 +1352,7 @@ function CaseRow({
   const elig = submission ? analyzeEligibility(submission) : null;
   const cfg = STAGE_CFG[lead.status] ?? STAGE_CFG.new;
   const hasPrefPay = elig?.prefPayFlagged;
+  const hasUrgentAlerts = elig?.recommendation.urgency === "urgent";
   const hasErrors = issues.some(i => i.severity === "error");
   const pendingReview = lead.status === "sent_for_attorney_review";
   const isDecided = Boolean(review?.decided_at);
@@ -1059,6 +1391,11 @@ function CaseRow({
             <>
               <EligBadge result={elig.result} chapter={7} />
               <EligBadge result={null} chapter={13} />
+              {hasUrgentAlerts && (
+                <span className="flex items-center gap-1 text-[9px] font-bold text-red-300 bg-red-500/10 border border-red-500/20 rounded-full px-1.5 py-0.5">
+                  <AlertTriangle className="w-2.5 h-2.5" /> Urgent
+                </span>
+              )}
             </>
           )}
           {!elig && lead.income_estimate && (
@@ -1149,7 +1486,7 @@ export default function AttorneyIntakeDashboard() {
   const load = useCallback(async () => {
     const [rawLeads, rawSubs, rawReviews, rawIssues] = await Promise.all([
       sbGet<Lead>("intake_leads?order=updated_at.desc&limit=300"),
-      sbGet<Submission>("intake_submissions?select=id,lead_id,filing_type,first_name,last_name,state,marital_status,num_dependents,income_sources_json,debtor_gross_monthly,exp_rent_mortgage,exp_utilities,exp_food,exp_transportation,exp_healthcare,exp_insurance,exp_childcare,exp_other,credit_card_debt,medical_debt,secured_debt,student_loan_debt,tax_debt,personal_loan_debt,other_unsecured,has_preferential_payments,preferential_payments_json,vehicles_json,has_prior_bk,recent_luxury,luxury_details,bank_balance,retirement_balance,submitted_at&order=submitted_at.desc&limit=300"),
+      sbGet<Submission>("intake_submissions?select=id,lead_id,filing_type,first_name,last_name,state,marital_status,num_dependents,income_sources_json,debtor_gross_monthly,exp_rent_mortgage,exp_utilities,exp_food,exp_transportation,exp_healthcare,exp_insurance,exp_childcare,exp_other,credit_card_debt,medical_debt,secured_debt,student_loan_debt,tax_debt,personal_loan_debt,other_unsecured,has_preferential_payments,preferential_payments_json,vehicles_json,has_prior_bk,prior_bankruptcies_json,recent_luxury,luxury_details,bank_balance,retirement_balance,real_properties_json,has_transfers,transfers_json,garnishment,exemption_state,submitted_at&order=submitted_at.desc&limit=300"),
       sbGet<IntakeReview>("attorney_intake_reviews?order=created_at.desc&limit=300"),
       sbGet<IntakeIssue>("attorney_intake_issues?order=sort_order.asc&limit=1000"),
     ]);
