@@ -1913,7 +1913,7 @@ function LeadDetailPanel({
   session: PortalSession;
   onBack: () => void;
   onRefresh: () => void;
-  onLaunchPresentation: (lead: Lead, acceptance: Acceptance) => void;
+  onLaunchPresentation: (lead: Lead, acceptance: Acceptance, submission: Record<string, unknown> | null) => void;
 }) {
   const panelRole    = session.role;
   const panelIsAtty  = isAttorney(panelRole);
@@ -2234,7 +2234,7 @@ function LeadDetailPanel({
             cta: (
               <div className="flex flex-wrap gap-2">
                 <button
-                  onClick={() => acceptance && onLaunchPresentation(lead, acceptance)}
+                  onClick={() => acceptance && onLaunchPresentation(lead, acceptance, submission)}
                   disabled={!acceptance}
                   title={!acceptance ? "No accepted case record found" : undefined}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-emerald-500 hover:bg-emerald-400 text-white rounded-xl transition-colors shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed">
@@ -5672,7 +5672,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [showNewLead, setShowNewLead] = useState(false);
-  const [presentationContext, setPresentationContext] = useState<{ lead: Lead; acceptance: Acceptance } | null>(null);
+  const [presentationContext, setPresentationContext] = useState<{ lead: Lead; acceptance: Acceptance; submission: Record<string, unknown> | null } | null>(null);
 
   // Default tab by role: attorneys land on attorney review queue; legal admins on leads
   const defaultTab = isAtty && !isSuperAdmin ? "followup" : "leads";
@@ -5730,20 +5730,43 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   }
 
   // Full-screen case presentation flow — role-gated via PortalLogin upstream
+  //
+  // ── MAJ-61 BLOCKING DB ISSUES — needs Dom before these writes work ────────────
+  //
+  // ISSUE 1 — clientId mismatch:
+  //   CaseAcceptanceFlow writes to the `clients` table (.eq("id", clientId)).
+  //   `clients` is a SOURCE REPO table (majorslawgroup-intake). It has NO migration in this
+  //   repo and does not exist in the destination Supabase project. intake_leads.id is NOT
+  //   the same as clients.id — they are separate pipelines with no FK relationship.
+  //   Fix options: (a) add a CREATE TABLE migration for `clients` in this repo and link
+  //   intake_leads to it, or (b) remap CaseAcceptanceFlow's DB writes to use intake_leads.
+  //
+  // ISSUE 2 — case_acceptances table missing:
+  //   CaseAcceptanceFlow writes to `case_acceptances` (.eq("client_id", clientId)).
+  //   This table also does NOT exist in the destination repo — only `attorney_case_acceptances`
+  //   exists (keyed by lead_id, not client_id). Source: 20260505234127_create_legal_admin_portal_schema.sql.
+  //   Fix options: (a) add a CREATE TABLE migration for `case_acceptances`, or (b) remap
+  //   the writes to update attorney_case_acceptances by lead_id instead.
+  //
+  // Until one of these options is resolved, the presentation UI works (all local state)
+  // but the DB persistence steps (step tracking, payment plan save, welcome call) will no-op.
+  // ─────────────────────────────────────────────────────────────────────────────────────────
   if (presentationContext) {
-    const { lead: pLead, acceptance: pAcc } = presentationContext;
+    const { lead: pLead, acceptance: pAcc, submission: pSub } = presentationContext;
     const isBif = pAcc.case_type === "ch7_bifurcated";
     const chapter = String(pAcc.chapter ?? pLead.chapter_interest ?? "7");
-    // TODO (MAJ-61 Dom): confirm intake_leads.id == clients.id; CaseAcceptanceFlow writes
-    // to `clients` + `case_acceptances` tables using clientId — verify these map correctly.
+    const incomeSources = Array.isArray(pSub?.income_sources_json)
+      ? (pSub.income_sources_json as { payFrequency?: string; owner?: string }[])
+      : [];
+    const debtorSource = incomeSources.find(s => !s.owner || s.owner === "debtor");
+    const payFreq = (debtorSource?.payFrequency as string | undefined) || "Bi-Weekly";
     const accData: CaseAcceptanceData = {
       chapter,
       attorney_fee:          pAcc.attorney_fee ?? ATTORNEY_FEES[pAcc.case_type ?? "ch7_regular"] ?? 0,
       filing_fee:            pAcc.court_filing_fee ?? CHAPTER_FILING_FEES[pAcc.case_type ?? "ch7_regular"] ?? 0,
       credit_counseling_fee: CREDIT_COUNSELING_FEE,
       is_bifurcated:         isBif,
-      // TODO (MAJ-61 Dom): source from submission income_sources_json[0].payFrequency if available
-      client_pay_frequency:  "Bi-Weekly",
+      client_pay_frequency:  payFreq,
       acceptance_notes:      pAcc.decision_notes ?? "",
       accepted_by:           pAcc.attorney_name ?? session.name,
     };
@@ -5784,7 +5807,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
             session={session}
             onBack={() => setSelectedLead(null)}
             onRefresh={load}
-            onLaunchPresentation={(lead, acc) => setPresentationContext({ lead, acceptance: acc })}
+            onLaunchPresentation={(lead, acc, sub) => setPresentationContext({ lead, acceptance: acc, submission: sub })}
           />
         </div>
       </div>
