@@ -107,6 +107,12 @@ function fmtDate(d: string | null | undefined): string {
 }
 
 export default function SuperAdminPage({ currentUserRole }: Props) {
+  // Hooks declared up-front to comply with react-hooks/rules-of-hooks — the
+  // access-denied early return below would otherwise call hooks conditionally.
+  const [activeTab, setActiveTab] = useState<AdminTab>('firms');
+  // TODO BAN-41 phase 3: replace hardcoded MLG with a firm-picker driven by firms table.
+  const [selectedFirmId] = useState<string>(MLG_FIRM_ID);
+
   // TODO BAN-40 phase 2: replace this client-side gate with a server-side
   // check via user_profiles + RLS. The current client gate is informational —
   // RLS on the BAN-41 tables already denies non-super-admins at the DB layer.
@@ -133,10 +139,6 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
       </div>
     );
   }
-
-  const [activeTab, setActiveTab] = useState<AdminTab>('firms');
-  // TODO BAN-41 phase 3: replace hardcoded MLG with a firm-picker driven by firms table.
-  const [selectedFirmId] = useState<string>(MLG_FIRM_ID);
 
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'firms',          label: 'Firms',          icon: <Building2 className="w-3.5 h-3.5" /> },
