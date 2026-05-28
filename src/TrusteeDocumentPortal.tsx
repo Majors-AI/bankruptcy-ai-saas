@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Scale, ChevronRight, ChevronDown, Plus, Trash2, CreditCard as Edit2, Save, X, Check, Clock, AlertCircle, Upload, FileText, User, Building2, Phone, Mail, MapPin, Search, RefreshCw, CheckCircle2, Circle, FolderOpen, Tag, List, ExternalLink, Send, Bell, BellOff, History, Calendar, Hash } from 'lucide-react';
+import { Scale, ChevronRight, ChevronDown, Plus, Trash2, CreditCard as Edit2, Save, X, Check, Clock, AlertCircle, Upload, FileText, User, Building2, Phone, Mail, MapPin, Search, RefreshCw, CheckCircle2, Circle, FolderOpen, Tag, List, ExternalLink, Send, Bell, BellOff, History, Calendar, Hash, ClipboardList, Download } from 'lucide-react';
 import FirmTrusteesPanel from './admin/FirmTrusteesPanel';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+// V1 pilot: both MLG and Neeley share this default; replace with auth.firm_id once multi-tenant auth lands
+const V1_DEFAULT_FIRM_ID = '00000000-0000-0000-0000-000000000001';
 
 const headers = {
   apikey: ANON_KEY,
@@ -169,6 +172,42 @@ interface PortalSubmission {
   method: string;
   status: string;
   documents_included: string[] | null;
+  notes: string | null;
+}
+interface ChecklistDefault {
+  id: string;
+  doc_type: string;
+  display_label: string;
+  description: string | null;
+  required: boolean;
+  applies_to: string | null;
+  expected_count_min: number;
+  category: string | null;
+  sort_order: number;
+}
+interface FirmChecklistItem {
+  id: string;
+  firm_id: string;
+  doc_type: string;
+  display_label: string;
+  description: string | null;
+  required: boolean;
+  applies_to: string | null;
+  expected_count_min: number;
+  expected_count_max: number | null;
+  category: string | null;
+  sort_order: number;
+  is_active: boolean;
+  added_at: string;
+}
+interface ChecklistItemState {
+  id: string;
+  request_id: string;
+  firm_id: string;
+  doc_type: string;
+  completed: boolean;
+  completed_at: string | null;
+  completed_by: string | null;
   notes: string | null;
 }
 // ─── Status helpers ───────────────────────────────────────────────────────────
@@ -677,6 +716,527 @@ function FollowupLogModal({
   );
 }
 
+// ─── 341 Checklist — per-request section shown inside expanded DocRequest ────
+
+function RequestChecklistSection({
+  req,
+  firmId,
+}: {
+  req: DocRequest;
+  firmId: string;
+}) {
+  const [checklistItems, setChecklistItems] = useState<FirmChecklistItem[]>([]);
+  const [itemStates, setItemStates] = useState<ChecklistItemState[]>([]);
+  const [clientDocs, setClientDocs] = useState<{ document_type: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(!!req.submitted_to_trustee_at);
+  const [editNotes, setEditNotes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    Promise.all([
+      sbGet<FirmChecklistItem>(
+        `firm_trustee_doc_checklist?firm_id=eq.${firmId}&is_active=eq.true&order=sort_order.asc`
+      ),
+      sbGet<ChecklistItemState>(
+        `trustee_341_checklist_state?request_id=eq.${req.id}`
+      ),
+      sbGet<{ document_type: string }>(
+        `client_documents?client_id=eq.${encodeURIComponent(req.client_id)}&phase=eq.07-trustee&select=document_type`
+      ),
+    ]).then(([items, states, docs]) => {
+      setChecklistItems(items);
+      setItemStates(states);
+      setClientDocs(docs);
+      setLoading(false);
+    });
+  }, [firmId, req.id, req.client_id]);
+
+  function getItemStatus(item: FirmChecklistItem): 'complete' | 'partial' | 'missing' {
+    const st = itemStates.find(s => s.doc_type === item.doc_type);
+    if (st?.completed) return 'complete';
+    const matching = clientDocs.filter(
+      d => d.document_type === item.doc_type || d.document_type.startsWith(item.doc_type)
+    );
+    if (matching.length >= item.expected_count_min) return 'complete';
+    if (matching.length > 0) return 'partial';
+    return 'missing';
+  }
+
+  async function toggleCompleted(item: FirmChecklistItem) {
+    const existing = itemStates.find(s => s.doc_type === item.doc_type);
+    setSaving(item.doc_type);
+    const now = new Date().toISOString();
+    if (existing) {
+      const next = !existing.completed;
+      await sbPatch('trustee_341_checklist_state', existing.id, {
+        completed: next,
+        completed_at: next ? now : null,
+        completed_by: next ? 'Staff' : null,
+        updated_at: now,
+      });
+      setItemStates(prev =>
+        prev.map(s => s.doc_type === item.doc_type
+          ? { ...s, completed: next, completed_at: next ? now : null, completed_by: next ? 'Staff' : null }
+          : s
+        )
+      );
+    } else {
+      const created = await sbPost<ChecklistItemState>('trustee_341_checklist_state', {
+        request_id: req.id,
+        firm_id: firmId,
+        doc_type: item.doc_type,
+        completed: true,
+        completed_at: now,
+        completed_by: 'Staff',
+      });
+      if (created) setItemStates(prev => [...prev, created]);
+    }
+    setSaving('');
+  }
+
+  async function saveNotes(item: FirmChecklistItem) {
+    const notes = editNotes[item.doc_type] ?? '';
+    const existing = itemStates.find(s => s.doc_type === item.doc_type);
+    if (existing) {
+      await sbPatch('trustee_341_checklist_state', existing.id, { notes, updated_at: new Date().toISOString() });
+      setItemStates(prev => prev.map(s => s.doc_type === item.doc_type ? { ...s, notes } : s));
+    } else {
+      const created = await sbPost<ChecklistItemState>('trustee_341_checklist_state', {
+        request_id: req.id, firm_id: firmId, doc_type: item.doc_type, completed: false, notes,
+      });
+      if (created) setItemStates(prev => [...prev, created]);
+    }
+    setEditNotes(prev => { const n = { ...prev }; delete n[item.doc_type]; return n; });
+  }
+
+  const requiredItems = checklistItems.filter(i => i.required);
+  const allRequiredComplete = requiredItems.length > 0 && requiredItems.every(i => getItemStatus(i) === 'complete');
+  const completeCount = requiredItems.filter(i => getItemStatus(i) === 'complete').length;
+
+  async function handleSubmit() {
+    setSubmitting(true);
+    await sbPost('trustee_submission_log', {
+      firm_id: firmId,
+      submission_method: 'portal_manual',
+      notes: `341 checklist complete for ${req.client_name}${req.case_number ? ` (case: ${req.case_number})` : ''}. Submitted via Trustee Document Portal.`,
+      documents_included: [],
+    });
+    await sbPatch('trustee_document_requests', req.id, {
+      submitted_to_trustee_at: new Date().toISOString(),
+      status: 'complete',
+    });
+    setSubmitted(true);
+    setSubmitting(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 px-4 py-3 border-t border-slate-700/40 text-xs text-slate-600">
+        <RefreshCw className="w-3 h-3 animate-spin" /> Loading 341 checklist…
+      </div>
+    );
+  }
+  if (checklistItems.length === 0) return null;
+
+  return (
+    <div className="border-t border-slate-700/40 bg-[#080c18]/40">
+      {/* Header */}
+      <div className="px-4 py-2.5 flex items-center gap-2 border-b border-slate-800/40">
+        <ClipboardList className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+        <span className="text-xs font-bold text-slate-300">341 Checklist</span>
+        <span className="text-[11px] text-slate-600 ml-1">
+          {completeCount}/{requiredItems.length} required
+        </span>
+        {allRequiredComplete && (
+          <span className="ml-auto flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 bg-emerald-900/25 border border-emerald-700/40 px-2 py-0.5 rounded-lg">
+            <CheckCircle2 className="w-3 h-3" /> Ready for 341 Meeting
+          </span>
+        )}
+      </div>
+
+      {/* Items */}
+      <div className="divide-y divide-slate-800/30">
+        {checklistItems.map(item => {
+          const status = getItemStatus(item);
+          const stateRow = itemStates.find(s => s.doc_type === item.doc_type);
+          const isEditing = item.doc_type in editNotes;
+          const notesVal = isEditing ? (editNotes[item.doc_type] ?? '') : (stateRow?.notes ?? '');
+
+          return (
+            <div key={item.id} className="px-4 py-2.5">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => toggleCompleted(item)}
+                  disabled={saving === item.doc_type}
+                  className="flex-shrink-0 transition-opacity hover:opacity-70"
+                  title={status === 'complete' ? 'Mark incomplete' : 'Mark complete'}
+                >
+                  {saving === item.doc_type
+                    ? <RefreshCw className="w-4 h-4 text-slate-600 animate-spin" />
+                    : status === 'complete'
+                    ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    : status === 'partial'
+                    ? <Circle className="w-4 h-4 text-amber-400" />
+                    : <Circle className="w-4 h-4 text-slate-600" />}
+                </button>
+                <div className="flex-1 min-w-0">
+                  <p className={`text-xs font-medium ${status === 'complete' ? 'text-slate-500 line-through' : 'text-slate-200'}`}>
+                    {item.display_label}
+                    {item.expected_count_min > 1 && (
+                      <span className="text-slate-600 font-normal ml-1">({item.expected_count_min}+ required)</span>
+                    )}
+                  </p>
+                  {item.description && <p className="text-[11px] text-slate-600 mt-0.5">{item.description}</p>}
+                </div>
+                {item.required && (
+                  <span className="text-[10px] font-bold text-red-400 border border-red-700/40 bg-red-900/20 px-1.5 py-0.5 rounded flex-shrink-0">REQ</span>
+                )}
+                {status === 'complete' && (
+                  <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-900/20 border border-emerald-700/40 px-1.5 py-0.5 rounded flex-shrink-0">
+                    {stateRow?.completed ? 'STAFF' : 'AUTO'}
+                  </span>
+                )}
+                {status === 'partial' && (
+                  <span className="text-[10px] font-semibold text-amber-400 bg-amber-900/20 border border-amber-700/40 px-1.5 py-0.5 rounded flex-shrink-0">PARTIAL</span>
+                )}
+              </div>
+
+              {/* Notes */}
+              {isEditing ? (
+                <div className="mt-1.5 ml-7 flex items-center gap-2">
+                  <input
+                    autoFocus
+                    className="flex-1 bg-slate-800/60 border border-slate-700/60 text-white text-xs rounded-lg px-2 py-1 placeholder-slate-600 focus:outline-none focus:border-slate-500"
+                    value={notesVal}
+                    onChange={e => setEditNotes(prev => ({ ...prev, [item.doc_type]: e.target.value }))}
+                    placeholder="Add note…"
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') saveNotes(item);
+                      if (e.key === 'Escape') setEditNotes(prev => { const n = { ...prev }; delete n[item.doc_type]; return n; });
+                    }}
+                  />
+                  <button onClick={() => saveNotes(item)} className="p-1 rounded text-emerald-400 hover:text-emerald-300 transition-colors">
+                    <Save className="w-3 h-3" />
+                  </button>
+                  <button
+                    onClick={() => setEditNotes(prev => { const n = { ...prev }; delete n[item.doc_type]; return n; })}
+                    className="p-1 rounded text-slate-500 hover:text-white transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : stateRow?.notes ? (
+                <div className="mt-1 ml-7 flex items-center gap-1.5">
+                  <p className="text-[11px] text-slate-500 italic flex-1">{stateRow.notes}</p>
+                  <button
+                    onClick={() => setEditNotes(prev => ({ ...prev, [item.doc_type]: stateRow.notes ?? '' }))}
+                    className="p-0.5 text-slate-600 hover:text-slate-400 transition-colors"
+                  >
+                    <Edit2 className="w-2.5 h-2.5" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setEditNotes(prev => ({ ...prev, [item.doc_type]: '' }))}
+                  className="mt-1 ml-7 text-[10px] text-slate-700 hover:text-slate-500 transition-colors"
+                >
+                  + note
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Ready banner + submit */}
+      {allRequiredComplete && (
+        <div className="m-3 flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-900/20 border border-emerald-700/40">
+          <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-emerald-300">Ready for Manual Submission</p>
+            <p className="text-xs text-emerald-500/80 mt-0.5">All required 341 documents confirmed.</p>
+          </div>
+          {submitted ? (
+            <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-900/30 border border-emerald-700/40 px-3 py-1.5 rounded-lg flex-shrink-0">
+              <Check className="w-3 h-3" /> Submitted
+            </span>
+          ) : (
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50 flex-shrink-0"
+            >
+              {submitting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              Submit to Trustee
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── 341 Checklist Config Panel — firm-level customization ────────────────────
+
+function ChecklistConfigPanel({ firmId }: { firmId: string }) {
+  const [items, setItems] = useState<FirmChecklistItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [newItem, setNewItem] = useState({
+    doc_type: '', display_label: '', description: '', required: true,
+    category: '', expected_count_min: 1,
+  });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const data = await sbGet<FirmChecklistItem>(
+      `firm_trustee_doc_checklist?firm_id=eq.${firmId}&order=sort_order.asc`
+    );
+    setItems(data);
+    setLoading(false);
+  }, [firmId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function toggleActive(item: FirmChecklistItem) {
+    await sbPatch('firm_trustee_doc_checklist', item.id, { is_active: !item.is_active });
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, is_active: !i.is_active } : i));
+  }
+
+  async function toggleRequired(item: FirmChecklistItem) {
+    await sbPatch('firm_trustee_doc_checklist', item.id, { required: !item.required });
+    setItems(prev => prev.map(i => i.id === item.id ? { ...i, required: !i.required } : i));
+  }
+
+  async function deleteItem(item: FirmChecklistItem) {
+    if (!confirm(`Remove "${item.display_label}" from your firm's 341 checklist?`)) return;
+    await sbDelete('firm_trustee_doc_checklist', item.id);
+    setItems(prev => prev.filter(i => i.id !== item.id));
+  }
+
+  async function addItem() {
+    if (!newItem.doc_type.trim() || !newItem.display_label.trim()) return;
+    setSaving(true);
+    const created = await sbPost<FirmChecklistItem>('firm_trustee_doc_checklist', {
+      firm_id: firmId,
+      doc_type: newItem.doc_type.trim().toLowerCase().replace(/\s+/g, '_'),
+      display_label: newItem.display_label.trim(),
+      description: newItem.description || null,
+      required: newItem.required,
+      category: newItem.category || null,
+      expected_count_min: newItem.expected_count_min,
+      sort_order: (items[items.length - 1]?.sort_order ?? 0) + 10,
+      is_active: true,
+    });
+    setSaving(false);
+    if (created) {
+      setItems(prev => [...prev, created]);
+      setNewItem({ doc_type: '', display_label: '', description: '', required: true, category: '', expected_count_min: 1 });
+      setShowAddForm(false);
+    }
+  }
+
+  async function resetToDefaults() {
+    if (!confirm('Reset to platform defaults? All firm-specific items will be replaced with the standard 6-item list.')) return;
+    setResetting(true);
+    for (const item of items) { await sbDelete('firm_trustee_doc_checklist', item.id); }
+    const defaults = await sbGet<ChecklistDefault>('trustee_doc_checklist_defaults?order=sort_order.asc');
+    for (const d of defaults) {
+      await sbPost('firm_trustee_doc_checklist', {
+        firm_id: firmId, doc_type: d.doc_type, display_label: d.display_label,
+        description: d.description, required: d.required, applies_to: d.applies_to,
+        expected_count_min: d.expected_count_min, category: d.category,
+        sort_order: d.sort_order, is_active: true,
+      });
+    }
+    setResetting(false);
+    load();
+  }
+
+  const byCategory = items.reduce<Record<string, FirmChecklistItem[]>>((acc, item) => {
+    const key = item.category ?? 'general';
+    acc[key] = [...(acc[key] ?? []), item];
+    return acc;
+  }, {});
+
+  const activeCount = items.filter(i => i.is_active).length;
+
+  return (
+    <div className="flex-1 overflow-y-auto p-5">
+      <div className="max-w-2xl space-y-5">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center">
+                <ClipboardList className="w-4.5 h-4.5 text-emerald-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold text-white">341 Meeting Checklist</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {activeCount} active item{activeCount !== 1 ? 's' : ''} — shown when reviewing client doc requests
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={resetToDefaults}
+              disabled={resetting || loading}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-slate-400 border border-slate-700/50 hover:text-white hover:bg-slate-800 transition-colors disabled:opacity-40"
+            >
+              <RefreshCw className={`w-3 h-3 ${resetting ? 'animate-spin' : ''}`} />
+              Reset to defaults
+            </button>
+            <button
+              onClick={() => setShowAddForm(v => !v)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600/20 border border-emerald-600/30 text-emerald-400 hover:bg-emerald-600/30 transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Add Item
+            </button>
+          </div>
+        </div>
+
+        {/* Add form */}
+        {showAddForm && (
+          <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/50 space-y-3">
+            <p className="text-xs font-bold text-white">New Checklist Item</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={lbl}>Display Label *</label>
+                <input className={inp} value={newItem.display_label}
+                  onChange={e => setNewItem(p => ({ ...p, display_label: e.target.value }))}
+                  placeholder="e.g. Recent Utility Bill" />
+              </div>
+              <div>
+                <label className={lbl}>Key (doc_type) *</label>
+                <input className={inp} value={newItem.doc_type}
+                  onChange={e => setNewItem(p => ({ ...p, doc_type: e.target.value }))}
+                  placeholder="e.g. utility_bill" />
+              </div>
+              <div>
+                <label className={lbl}>Category</label>
+                <input className={inp} value={newItem.category}
+                  onChange={e => setNewItem(p => ({ ...p, category: e.target.value }))}
+                  placeholder="identity / financial / tax / income" />
+              </div>
+              <div>
+                <label className={lbl}>Min Expected Count</label>
+                <input className={inp} type="number" min={1} value={newItem.expected_count_min}
+                  onChange={e => setNewItem(p => ({ ...p, expected_count_min: parseInt(e.target.value) || 1 }))} />
+              </div>
+            </div>
+            <div>
+              <label className={lbl}>Description</label>
+              <input className={inp} value={newItem.description}
+                onChange={e => setNewItem(p => ({ ...p, description: e.target.value }))}
+                placeholder="Optional detail shown to staff" />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setNewItem(p => ({ ...p, required: !p.required }))}
+                className={`w-9 h-5 rounded-full transition-colors relative ${newItem.required ? 'bg-red-500' : 'bg-slate-700'}`}
+              >
+                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${newItem.required ? 'translate-x-4' : 'translate-x-0.5'}`} />
+              </button>
+              <span className="text-xs text-slate-400">{newItem.required ? 'Required' : 'Optional'}</span>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button onClick={() => setShowAddForm(false)} className="flex-1 px-3 py-1.5 rounded-lg text-xs text-slate-400 border border-slate-700 hover:bg-slate-800 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={addItem}
+                disabled={saving || !newItem.doc_type.trim() || !newItem.display_label.trim()}
+                className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors disabled:opacity-50"
+              >
+                {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />}
+                Add Item
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Items by category */}
+        {loading ? (
+          <div className="flex items-center justify-center h-24">
+            <RefreshCw className="w-4 h-4 text-slate-600 animate-spin" />
+          </div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-12 text-slate-600">
+            <ClipboardList className="w-9 h-9 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">No checklist items configured.</p>
+            <p className="text-xs mt-1">Add items or reset to platform defaults to restore the standard 6-item list.</p>
+          </div>
+        ) : (
+          Object.entries(byCategory).map(([cat, catItems]) => (
+            <div key={cat}>
+              <div className="flex items-center gap-2 mb-2">
+                <Tag className="w-3 h-3 text-slate-600" />
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">{cat}</span>
+                <span className="text-[10px] text-slate-700">{catItems.length}</span>
+              </div>
+              <div className="space-y-1.5 pl-2">
+                {catItems.map(item => (
+                  <div
+                    key={item.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors ${
+                      item.is_active
+                        ? 'bg-slate-800/30 border-slate-700/30'
+                        : 'bg-slate-900/20 border-slate-800/20 opacity-50'
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium ${item.is_active ? 'text-slate-200' : 'text-slate-500 line-through'}`}>
+                        {item.display_label}
+                        {item.expected_count_min > 1 && (
+                          <span className="text-slate-600 font-normal ml-1">({item.expected_count_min}+)</span>
+                        )}
+                      </p>
+                      {item.description && <p className="text-[11px] text-slate-600 mt-0.5">{item.description}</p>}
+                    </div>
+                    {/* Required badge + toggle */}
+                    <button
+                      onClick={() => toggleRequired(item)}
+                      title={item.required ? 'Click to make optional' : 'Click to make required'}
+                      className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border flex-shrink-0 transition-colors ${
+                        item.required
+                          ? 'text-red-400 bg-red-900/25 border-red-700/30 hover:bg-red-900/40'
+                          : 'text-slate-500 bg-slate-800/40 border-slate-700/30 hover:text-slate-300'
+                      }`}
+                    >
+                      {item.required ? 'REQ' : 'OPT'}
+                    </button>
+                    {/* Active toggle */}
+                    <button
+                      onClick={() => toggleActive(item)}
+                      title={item.is_active ? 'Deactivate item' : 'Activate item'}
+                      className={`w-9 h-5 rounded-full transition-colors relative flex-shrink-0 ${item.is_active ? 'bg-emerald-500' : 'bg-slate-700'}`}
+                    >
+                      <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${item.is_active ? 'translate-x-4' : 'translate-x-0.5'}`} />
+                    </button>
+                    {/* Delete */}
+                    <button
+                      onClick={() => deleteItem(item)}
+                      className="p-1 rounded text-slate-600 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Trustee Detail Panel ─────────────────────────────────────────────────────
 
 function TrusteeDetailPanel({
@@ -1140,6 +1700,9 @@ function TrusteeDetailPanel({
                             })}
                           </div>
                         )}
+
+                        {/* 341 Checklist */}
+                        <RequestChecklistSection req={req} firmId={V1_DEFAULT_FIRM_ID} />
 
                         {/* Actions bar */}
                         <div className="px-4 py-2.5 flex items-center gap-2 border-t border-slate-800/60 flex-wrap">
@@ -2391,12 +2954,13 @@ export default function TrusteeDocumentPortal() {
   const activeStates = states.filter(s => Object.keys(grouped).includes(s.id));
 
   const NAV_TABS = [
-    { key: 'tasks',         label: 'Task List',       icon: <AlertCircle className="w-3 h-3" />,  activeClass: 'bg-red-700 text-white' },
-    { key: 'calendar',      label: 'Calendar',        icon: <Calendar className="w-3 h-3" />,     activeClass: 'bg-sky-700 text-white' },
-    { key: 'paralegal',     label: 'Review Queue',    icon: <User className="w-3 h-3" />,         activeClass: 'bg-teal-700 text-white' },
-    { key: 'trustees',      label: 'Trustees',        icon: <Scale className="w-3 h-3" />,        activeClass: 'bg-slate-700 text-white' },
-    { key: 'firm_trustees', label: 'Firm Trustees',   icon: <Scale className="w-3 h-3" />,        activeClass: 'bg-amber-500 text-slate-950' },
-    { key: 'api',           label: 'API Config',      icon: <FileText className="w-3 h-3" />,     activeClass: 'bg-slate-700 text-white' },
+    { key: 'tasks',         label: 'Task List',       icon: <AlertCircle className="w-3 h-3" />,    activeClass: 'bg-red-700 text-white' },
+    { key: 'calendar',      label: 'Calendar',        icon: <Calendar className="w-3 h-3" />,       activeClass: 'bg-sky-700 text-white' },
+    { key: 'paralegal',     label: 'Review Queue',    icon: <User className="w-3 h-3" />,           activeClass: 'bg-teal-700 text-white' },
+    { key: 'trustees',      label: 'Trustees',        icon: <Scale className="w-3 h-3" />,          activeClass: 'bg-slate-700 text-white' },
+    { key: 'firm_trustees', label: 'Firm Trustees',   icon: <Scale className="w-3 h-3" />,          activeClass: 'bg-amber-500 text-slate-950' },
+    { key: 'checklist',     label: '341 Checklist',   icon: <ClipboardList className="w-3 h-3" />,  activeClass: 'bg-emerald-700 text-white' },
+    { key: 'api',           label: 'API Config',      icon: <FileText className="w-3 h-3" />,       activeClass: 'bg-slate-700 text-white' },
   ] as const;
 
   return (
@@ -2459,6 +3023,7 @@ export default function TrusteeDocumentPortal() {
           <FirmTrusteesPanel />
         </div>
       )}
+      {mode === 'checklist' && <ChecklistConfigPanel firmId={V1_DEFAULT_FIRM_ID} />}
 
       <div className={`flex flex-1 min-h-0 ${mode !== 'trustees' ? 'hidden' : ''}`}>
         {/* Left sidebar — state/chapter/trustee tree */}
