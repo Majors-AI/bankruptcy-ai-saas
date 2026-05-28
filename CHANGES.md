@@ -85,3 +85,92 @@ a6856be fix: Step 3 Continue unblocked for single filers (BAN-27 Blocker 1)
    should list: `attorney_clarification_request`, `bot_legal_question_deflect`, `intake_bot_opening`, `intake_staff_verification_opening`, `liaison_agent_opening`, `mid_case_attorney_followup`, `post_acceptance_legal_admin`.
 
    Open the IntakeChatbot (client side, not admin) → first welcome message should be the `intake_bot_opening` script with `{firm_name}` substituted to "Majors Law Group". If the script_library lookup fails for any reason, the legacy hardcoded greeting is the fallback (no broken UI).
+
+---
+
+## Phase 2 — Per-Firm Pricing & Feature Flags (BAN-41 scaffolding)
+
+Branched from `feature/foundation-rebrand-upl` after Phase 1 PR #1.
+
+### Commits in this PR
+
+```
+c3ca49a chore: lint + type fixes for pricing scaffolding
+87b3018 feat: super-admin route stubs for pricing + features (BAN-41)
+6e36751 feat: firm-side feature flag helper (BAN-41)
+8304906 feat: migration — RLS policies on pricing + feature tables (BAN-41)
+41bf105 feat: migration — feature_flag_definitions, firm_features (BAN-41)
+edcc2cb feat: migration — tier_templates, firm_pricing, firm_discounts (BAN-41)
+```
+
+### Schema added
+
+- **`tier_templates`** — 4 seeded rows (`starter`, `pro`, `enterprise`, `custom`). All default amounts intentionally `NULL` so the operator must set every value at firm signup rather than relying on hardcoded numbers.
+- **`firm_pricing`** — PK = `firm_id`. Stores per-firm `subscription_amount_cents`, `per_case_fee_cents`, `included_cases_per_month`, `vendor_pass_through_enabled`, `vendor_markup_pct`, `autopay_enabled`, billing email, Stripe customer id + payment method id, current period dates, notes, and `updated_by`.
+- **`firm_pricing_history`** — Audit log of pricing changes (one row per field change). Indexed by `(firm_id, changed_at DESC)`.
+- **`firm_discounts`** — Stacking discounts on a firm. `discount_type` enum-via-CHECK: `subscription_pct | per_case_pct | flat_amount_cents | free_months`. `is_active` + `expires_at` for lifecycle. Indexed by `(firm_id, is_active, expires_at)`.
+- **`feature_flag_definitions`** — 24 seeded flags across 11 categories (intake, portal, credit, bank, trustee, calendar, ai, documents, cloud, reporting, advanced). Catalogue is read by everyone (anon SELECT OK); writes require super-admin.
+- **`firm_features`** — Composite PK `(firm_id, feature_key)`. Per-firm enabled state with `enabled_at`/`enabled_by` + `disabled_at`/`disabled_by` audit fields. Partial index on `enabled = true` for fast useFeatureFlag lookups.
+- **`firm_features_history`** — Audit log (one row per toggle). Indexed by `(firm_id, changed_at DESC)`.
+
+### RLS policies
+
+Migration `20260528030000_pricing_features_rls.sql` enables RLS on all 7 tables and attaches policies:
+
+- **Super-admin** (`platform_role = 'super_admin_bankruptcy_ai'`): full read/write on all 7 tables.
+- **Firm staff** (any other `user_profiles` row with a `firm_id`): SELECT only, scoped to their own `firm_id` via the `user_profiles` join — except:
+  - `feature_flag_definitions` — open SELECT to everyone (the catalogue is platform-public).
+  - `firm_discounts` — super-admin only (no firm SELECT — discounts are an internal pricing lever).
+
+All policies use `auth.uid()`; until Supabase auth is wired into the app, anon requests evaluate to no-policy-match and are denied (intentional — Phase 1's bootstrap permissive policies on `firms` / `user_profiles` are NOT extended to BAN-41 tables).
+
+### Helpers added
+
+- **`src/lib/featureFlags.ts`** — three exports:
+  - `getFirmFeatures(firmId)`: loads `firm_features` and returns a `{ feature_key: enabled }` map. In-memory cache keyed by `firmId`; concurrent calls for the same firmId are de-duped via an in-flight promise.
+  - `isFeatureEnabled(flags, key)`: pure boolean check.
+  - `clearFeatureCache()`: reset on sign-out or firm switch.
+  - No React context yet — verified the project has no `src/contexts` or `src/providers` directories. Wrap in a `useFirmFeature(key)` hook once a global firm context lands (BAN-40 phase 2).
+
+### UI added
+
+`src/admin/SuperAdminPage.tsx` was a placeholder card in Phase 1; now a tabbed shell with 5 read-only views (Option B per spec — internal `useState` for `activeTab`, no `View` union changes in `App.tsx`):
+
+- **Firms** — reads `firms` (name, slug, status, created_at) with status-color helper for `lead/trial/active/suspended/churned`.
+- **Pricing** — reads `firm_pricing` for the selected firm; vertical key/value list with USD-formatted dollar amounts.
+- **Features** — reads `feature_flag_definitions` (active only) + `firm_features` for the selected firm; grouped by category with `CheckCircle2`/`XCircle` icons + Enabled/Disabled badges. Will render all 24 features for MLG.
+- **Discounts** — reads `firm_discounts` for the selected firm; type-aware value formatting (`%`, USD, `N month(s) free`).
+- **Tier Templates** — reads `tier_templates` as a 2-col card grid.
+
+Each tab handles loading / error / loaded states. `EditDisabledNotice` banner above each tab; full edit UIs ship in a separate BAN-41 implementation PR. Selected firm hardcoded to MLG (`00000000-0000-0000-0000-000000000001`) — TODO BAN-41 phase 3 to add a firm-picker dropdown.
+
+Auth gate carried over from Phase 1 unchanged: page renders the same "Access Denied" view when `currentUserRole !== 'super_admin_bankruptcy_ai'`. `useState` calls were hoisted above the early-return to satisfy `react-hooks/rules-of-hooks`.
+
+### MLG seeded as pilot
+
+- **`firm_pricing`** — comped: `subscription_amount_cents = 0`, `per_case_fee_cents = 0`, `included_cases_per_month = NULL` (unlimited), `vendor_pass_through_enabled = true`, `vendor_markup_pct = 0` (at-cost), `autopay_enabled = false` (manual billing). Note: "MLG pilot — comped during build, vendor pass-through at-cost, manual billing".
+- **`firm_features`** — all 24 features `enabled = true` with note "MLG pilot — all features enabled". INSERT uses `SELECT FROM feature_flag_definitions` so the seed stays in sync if the catalogue grows later.
+
+### What's NOT in this PR (separate work)
+
+- Full super-admin edit UIs for pricing / features / discounts / tier-templates — separate **BAN-41** implementation PR.
+- Integration of `getFirmFeatures` / `useFirmFeature` gating into existing components (case-by-case PRs as features mature).
+- Firm picker dropdown in super-admin (currently hardcoded to MLG).
+- Billing engine — **BAN-42** (blocked on **BAN-51** outside counsel review).
+- Stripe integration — **BAN-42**.
+
+### Pre-existing issues observed (not addressed in this PR)
+
+- Same baseline as Phase 1: ~293 lint errors / ~40 tsc errors across the codebase, none in this PR's files. After the `c3ca49a` lint fix, this PR introduced zero net lint or tsc errors.
+- `npm run build` succeeds in 5.41s (main bundle 3.95 MB / gzip 923 kB — +13 kB from Phase 1, all in the SuperAdminPage additions).
+
+### How to test
+
+1. Apply migrations: `supabase db push` (or whatever the deploy script is in this repo).
+2. `SELECT count(*) FROM tier_templates;` → **4**
+3. `SELECT count(*) FROM feature_flag_definitions;` → **24**
+4. `SELECT count(*) FROM firm_features WHERE firm_id = '00000000-0000-0000-0000-000000000001' AND enabled = true;` → **24**
+5. `SELECT subscription_amount_cents, per_case_fee_cents, vendor_pass_through_enabled, autopay_enabled FROM firm_pricing WHERE firm_id = '00000000-0000-0000-0000-000000000001';` → `(0, 0, true, false)` with notes "MLG pilot — comped during build, vendor pass-through at-cost, manual billing".
+6. As a `super_admin_bankruptcy_ai` user (once auth is wired): navigate to the admin page → 5 tabs visible; Features tab shows 24 toggles grouped by category, all Enabled for MLG; Pricing tab shows the comped row; Tier Templates tab shows the 4 starter cards.
+7. As firm staff: same page → "Access Denied" view per the existing Phase 1 gate.
+8. RLS check (psql / Supabase SQL editor as a non-super-admin role) — every read on `tier_templates`, `firm_pricing` (other firm), `firm_pricing_history` (other firm), `firm_discounts`, `firm_features` (other firm) should return 0 rows. `feature_flag_definitions` should return all 24 rows.
