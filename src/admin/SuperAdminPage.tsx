@@ -33,7 +33,6 @@ import {
   Palette,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
-import { isBankruptcyAISuperAdmin } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 
 const MLG_FIRM_ID = '00000000-0000-0000-0000-000000000001';
@@ -219,29 +218,6 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
       .order('name')
       .then(({ data }) => { if (data) setAllFirms(data as Pick<Firm, 'id' | 'name'>[]); });
   }, []);
-
-  if (!isBankruptcyAISuperAdmin(currentUserRole)) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-8">
-        <div className="max-w-md text-center">
-          <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
-            <AlertTriangle className="w-7 h-7 text-red-400" />
-          </div>
-          <h1 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Georgia', serif" }}>
-            Access Denied
-          </h1>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            This area is reserved for bankruptcy.ai platform administrators.
-          </p>
-          <p className="text-xs text-slate-600 mt-4">
-            Required: <code className="text-slate-400">super_admin_bankruptcy_ai</code>
-            <br />
-            Current: <code className="text-slate-400">{currentUserRole ?? 'unauthenticated'}</code>
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
     { id: 'firms',          label: 'Firms',          icon: <Building2 className="w-3.5 h-3.5" /> },
