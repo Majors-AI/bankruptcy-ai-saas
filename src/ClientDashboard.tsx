@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, Clock, ChevronRight, CreditCard, FileText, AlertTriangle, Info, ArrowRight, User, Calendar, Briefcase, Hash, X, RefreshCw, MessageCircle, HelpCircle, ChevronDown, Scale, MapPin, Flag, DollarSign, Send, Lock, Plus, Minus, Home, Car, Building, PiggyBank, Layers, ChevronLeft, CreditCard as Edit3, Trash2, ShieldAlert, CalendarCheck, BadgeCheck, Phone, Mail, Mic, Video } from "lucide-react";
 import CreditReportUploader from "./CreditReportUploader";
+import PlaidConnectWidget from "./components/PlaidConnectWidget";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2254,6 +2255,11 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 </span>
               </div>
             </div>
+
+            {/* ── Plaid Connect (V1) — bank + payroll ── */}
+            {isValidUUID(ACTIVE_CLIENT_ID) && (
+              <PlaidConnectWidget clientId={ACTIVE_CLIENT_ID} />
+            )}
 
             {/* ── Credit Report Import ── */}
             <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">

@@ -24,6 +24,7 @@ import ClientRegistration from './ClientRegistration';
 import AttorneyRegistration from './AttorneyRegistration';
 import LegacyClientImport from './LegacyClientImport';
 import SuperAdminPage from './admin/SuperAdminPage';
+import { validateToken } from './lib/clientAccess';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -81,9 +82,54 @@ function App() {
   const [updateMode, setUpdateMode] = useState(false);
   const [questions, setQuestions] = useState<ClientQuestion[]>([]);
   const [impersonateClient, setImpersonateClient] = useState<{ clientName: string; clientId: string } | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
   const { dark, toggle } = useTheme();
 
+  // V1: magic-link client portal entry. If the URL has ?token=X and the
+  // token is valid + unexpired, route to client_view scoped to that client.
+  // Invalid or expired tokens land on a small error page and the URL param
+  // is cleared so the user can navigate away cleanly.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const token = url.searchParams.get('token');
+    if (!token) return;
+    let cancelled = false;
+    (async () => {
+      const client = await validateToken(token);
+      if (cancelled) return;
+      if (client) {
+        setImpersonateClient({ clientName: client.full_name ?? 'Client', clientId: client.id });
+        setView('client_view');
+      } else {
+        setTokenError('This portal link is invalid or has expired. Contact your attorney for a new link.');
+      }
+      // Strip token from the URL once consumed so a refresh doesn't re-trigger.
+      url.searchParams.delete('token');
+      window.history.replaceState({}, '', url.toString());
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const pendingCount = questions.filter(q => q.status === 'needs_attorney' || q.status === 'pending_review').length;
+
+  if (tokenError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 p-8">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Georgia', serif" }}>
+            Portal link unavailable
+          </h1>
+          <p className="text-slate-400 text-sm leading-relaxed">{tokenError}</p>
+          <button
+            onClick={() => setTokenError(null)}
+            className="mt-6 px-4 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg"
+          >
+            Continue to bankruptcy.ai
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const NAV_ITEMS: { id: View; label: string; icon: ReactNode; activeClass: string }[] = [
     {

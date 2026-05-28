@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { FolderOpen, User, Search, FileText, Clock, DollarSign, Calendar, MessageCircle, Shield, CheckCircle2, AlertTriangle, ChevronRight, RefreshCw, Hash, Phone, Mail, MapPin, Scale, X, ArrowLeft, Activity, Briefcase, CreditCard, Upload, Flag, CheckCheck, Lock, Eye, Filter, ChevronDown, Info, Home, Car, Landmark, Building, Users, BarChart2, ArrowRightLeft, Clipboard, GitBranch, Banknote, PenLine, SendHorizontal as Send } from "lucide-react";
 import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase } from "./lib/casePhases";
 import TrusteeSubmissionWidget from "./admin/TrusteeSubmissionWidget";
+import BciExportWidget from "./admin/BciExportWidget";
+import ClientZipDownloadButton from "./admin/ClientZipDownloadButton";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2431,6 +2433,22 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
                         are configured for the firm yet. */}
                     {selectedClient && documents.some(d => d.phase === '07-trustee') && (
                       <TrusteeSubmissionWidget clientId={selectedClient.id} />
+                    )}
+
+                    {/* V1 BCI export — always available on the docs tab so MLG /
+                        Neeley can run import-test cycles against any client. */}
+                    {selectedClient && (
+                      <BciExportWidget
+                        clientId={selectedClient.id}
+                        clientName={selectedClient.full_name}
+                      />
+                    )}
+
+                    {/* V1 Download Full File — full client ZIP with manifest.
+                        Calls generate-client-zip edge function, signed URL
+                        expires in 24 hours. */}
+                    {selectedClient && (
+                      <ClientZipDownloadButton clientId={selectedClient.id} />
                     )}
                   </div>
                 )}
