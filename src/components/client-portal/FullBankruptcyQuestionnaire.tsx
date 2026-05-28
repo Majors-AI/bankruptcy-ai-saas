@@ -274,8 +274,10 @@ function buildPreFill(fdRaw: Record<string, any>): Record<string, StepData> {
   // BAN-27 Blocker 2: normalize across (a) old JSONB blob nested form_data.*,
   // (b) old camelCase columns, and (c) new snake_case columns from intake_submissions.
   // After this call, the rest of this function can read camelCase off `fd` regardless
-  // of which form wrote the row.
-  const fd: Record<string, any> = normalizeIntake(fdRaw) as Record<string, any>;
+  // of which form wrote the row. Cast back to typeof fdRaw so the rest of this
+  // function — which deeply assumes a Record<string, any> shape — continues to type
+  // without introducing additional `any`s beyond the pre-existing parameter type.
+  const fd = normalizeIntake(fdRaw) as typeof fdRaw;
   // Derive residential address: prefer direct address fields; fall back to the primary real property address
   const residentialAddress = fd.address || fd.streetAddress || fd.realPropAddress || '';
   const residentialCity    = fd.city    || fd.realPropCity  || '';
