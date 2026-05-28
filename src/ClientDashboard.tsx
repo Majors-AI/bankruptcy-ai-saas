@@ -700,7 +700,7 @@ function MyDocumentsPanel() {
       ),
       bullets: [
         'Name, email, and phone number on file',
-        'Authentication via BankruptcyDocs.ai secure portal',
+        'Authentication via bankruptcy.ai secure portal',
         'Record retained for minimum 7 years post-case closure',
       ],
     },

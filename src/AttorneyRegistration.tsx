@@ -1,12 +1,7 @@
-import { useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
 
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
-
-type Step = 'landing' | 'register' | 'login' | 'firm_info' | 'billing' | 'disclosures' | 'vendor_consent' | 'success';
+type Step = 'landing' | 'register' | 'login' | 'firm_info' | 'disclosures' | 'success';
 
 interface Props {
   onComplete: () => void;
@@ -44,34 +39,33 @@ const US_STATES = [
 ];
 
 export default function AttorneyRegistration({ onComplete, onBack }: Props) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', textAlign: 'center', padding: '2rem' }}>
-      <p>Registration temporarily unavailable — please contact your firm administrator.</p>
-    </div>
-  );
   const [step, setStep] = useState<Step>('landing');
   const [form, setForm] = useState<FirmForm>(INITIAL_FIRM);
   const [errors, setErrors] = useState<Partial<FirmForm>>({});
   const [loading, setLoading] = useState(false);
   const [serverError, setServerError] = useState('');
+  const [platformFirmName, setPlatformFirmName] = useState('bankruptcy.ai');
 
-  // Billing acknowledgments
-  const [billingMonthly, setBillingMonthly] = useState(false);
-  const [billingImmediate, setBillingImmediate] = useState(false);
-  const [billingPlaid, setBillingPlaid] = useState(false);
-  const [billingIsoftpull, setBillingIsoftpull] = useState(false);
-  const [billingThirdParty, setBillingThirdParty] = useState(false);
+  // Load platform firm name from VITE_FIRM_ID for context display
+  useEffect(() => {
+    const firmId = import.meta.env.VITE_FIRM_ID as string | undefined;
+    if (!firmId) return;
+    supabase
+      .from('firms')
+      .select('name')
+      .eq('id', firmId)
+      .single()
+      .then(({ data }) => { if (data?.name) setPlatformFirmName(data.name); });
+  }, []);
 
-  // Vendor consents
-  const [consentGeneral, setConsentGeneral] = useState(false);
-  const [consentSendGrid, setConsentSendGrid] = useState(false);
-  const [consentTwilio, setConsentTwilio] = useState(false);
-  const [consentIsoftpull, setConsentIsoftpull] = useState(false);
-  const [consentPlaid, setConsentPlaid] = useState(false);
+  // Vendor consents (V1 pilot — iSoftpull and BoldSign removed)
+  const [consentGeneral, setConsentGeneral]     = useState(false);
+  const [consentSendGrid, setConsentSendGrid]   = useState(false);
+  const [consentTwilio, setConsentTwilio]       = useState(false);
+  const [consentPlaid, setConsentPlaid]         = useState(false);
   const [consentElectronic, setConsentElectronic] = useState(false);
 
-  const allBillingAccepted = billingMonthly && billingImmediate && billingPlaid && billingIsoftpull && billingThirdParty;
-  const allDisclosuresAccepted = consentGeneral && consentSendGrid && consentTwilio && consentIsoftpull && consentPlaid && consentElectronic;
+  const allDisclosuresAccepted = consentGeneral && consentSendGrid && consentTwilio && consentPlaid && consentElectronic;
 
   function setField(field: keyof FirmForm, value: string) {
     setForm(f => ({ ...f, [field]: value }));
@@ -112,12 +106,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
         email: form.email,
         password: form.password,
         options: {
-          data: {
-            first_name: form.firstName,
-            last_name: form.lastName,
-            phone: form.phone,
-            role: 'attorney',
-          },
+          data: { first_name: form.firstName, last_name: form.lastName, phone: form.phone, role: 'attorney' },
         },
       });
       if (error) throw error;
@@ -147,12 +136,8 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
     }
   }
 
-  async function handleFirmInfoNext() {
+  function handleFirmInfoNext() {
     if (!validateFirmInfo()) return;
-    setStep('billing');
-  }
-
-  async function handleBillingAccepted() {
     setStep('disclosures');
   }
 
@@ -175,21 +160,14 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
           firm_state: form.firmState,
           firm_zip: form.firmZip,
           firm_website: form.firmWebsite || null,
-          // Billing
-          billing_monthly_acknowledged: billingMonthly,
-          billing_immediate_acknowledged: billingImmediate,
-          billing_plaid_acknowledged: billingPlaid,
-          billing_isoftpull_acknowledged: billingIsoftpull,
-          billing_third_party_acknowledged: billingThirdParty,
-          billing_consent_timestamp: new Date().toISOString(),
-          // Vendor consents
+          // Vendor consents (V1 pilot)
           consented_general: consentGeneral,
           consented_sendgrid: consentSendGrid,
           consented_twilio: consentTwilio,
-          consented_isoftpull: consentIsoftpull,
           consented_plaid: consentPlaid,
           consented_electronic: consentElectronic,
           vendor_consent_timestamp: new Date().toISOString(),
+          v1_pilot_terms_acknowledged: true,
         });
       }
     } catch {
@@ -201,6 +179,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Shared styles ─────────────────────────────────────────────────────────
+
   const inputCls = (err?: string) =>
     `w-full bg-slate-800 border ${err ? 'border-red-500' : 'border-slate-700'} rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all`;
 
@@ -217,7 +196,16 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
     );
   }
 
+  function NeedsReview() {
+    return (
+      <div className="text-[10px] text-amber-600 border border-dashed border-amber-700/50 rounded px-2 py-0.5 inline-block mb-2 uppercase tracking-wider font-semibold">
+        [NEEDS ATTORNEY REVIEW] — Placeholder language — not final
+      </div>
+    );
+  }
+
   // ── Step: Landing ─────────────────────────────────────────────────────────
+
   if (step === 'landing') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-center p-4">
@@ -238,7 +226,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
               </svg>
             </div>
             <h1 className="text-3xl font-bold text-white tracking-tight">
-              BankruptcyDocs<span className="text-amber-400">.ai</span>
+              bankruptcy<span className="text-amber-400">.ai</span>
             </h1>
             <p className="text-slate-400 text-sm mt-2">Attorney & Law Firm Portal</p>
           </div>
@@ -264,11 +252,11 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
             </button>
           </div>
 
-          {/* Pricing callout */}
-          <div className="mt-6 bg-amber-900/20 border border-amber-700/30 rounded-xl p-4">
-            <p className="text-amber-400 text-xs font-semibold mb-2 uppercase tracking-wide">Billing Notice</p>
+          {/* V1 pilot terms notice — replaces old monthly-billing callout */}
+          <div className="mt-6 bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            <p className="text-slate-400 text-xs font-semibold mb-2 uppercase tracking-wide">V1 Pilot Program — Service Terms</p>
             <p className="text-slate-300 text-xs leading-relaxed">
-              Law firm accounts are billed monthly on the <strong className="text-white">1st of each month</strong>. Charges are due immediately upon invoice. Per-client fees apply for Plaid financial record access and iSoftpull credit pre-qualification pulls, billed through BankruptcyDocs.ai.
+              During the V1 pilot program, third-party vendor services (Plaid, SendGrid, Twilio) are included at <strong className="text-white">vendor pass-through at cost</strong>. No monthly subscription billing is in effect during the pilot. See your <strong className="text-white">Master Services Agreement</strong> for current terms. Billing model to be finalized post-pilot per MAJ-86.
             </p>
           </div>
 
@@ -279,6 +267,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Step: Register ────────────────────────────────────────────────────────
+
   if (step === 'register') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-start p-4 pt-8">
@@ -289,7 +278,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
           </button>
           <div className="text-center mb-7">
             <h2 className="text-2xl font-bold text-white">Attorney Account Setup</h2>
-            <p className="text-slate-400 text-sm mt-1">Step 1 of 4 — Account Credentials</p>
+            <p className="text-slate-400 text-sm mt-1">Step 1 of 3 — Account Credentials</p>
           </div>
 
           {serverError && <div className="bg-red-900/30 border border-red-700/50 rounded-xl p-3 mb-5 text-red-400 text-sm">{serverError}</div>}
@@ -341,6 +330,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Step: Login ───────────────────────────────────────────────────────────
+
   if (step === 'login') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-center p-4">
@@ -351,7 +341,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
           </button>
           <div className="text-center mb-7">
             <h2 className="text-2xl font-bold text-white">Attorney Sign In</h2>
-            <p className="text-slate-400 text-sm mt-1">BankruptcyDocs.ai — Law Firm Portal</p>
+            <p className="text-slate-400 text-sm mt-1">bankruptcy.ai — Law Firm Portal</p>
           </div>
           {serverError && <div className="bg-red-900/30 border border-red-700/50 rounded-xl p-3 mb-5 text-red-400 text-sm">{serverError}</div>}
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
@@ -375,18 +365,19 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Step: Firm Information ────────────────────────────────────────────────
+
   if (step === 'firm_info') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-start p-4 pt-8">
         <div className="w-full max-w-lg">
           <div className="text-center mb-7">
             <div className="flex items-center justify-center gap-2 mb-1">
-              {[1,2,3,4].map(n => (
+              {[1,2,3].map(n => (
                 <div key={n} className={`h-1.5 w-10 rounded-full transition-all ${n <= 2 ? 'bg-amber-500' : 'bg-slate-700'}`} />
               ))}
             </div>
             <h2 className="text-2xl font-bold text-white mt-4">Firm Information</h2>
-            <p className="text-slate-400 text-sm mt-1">Step 2 of 4 — Law Firm Details</p>
+            <p className="text-slate-400 text-sm mt-1">Step 2 of 3 — Law Firm Details</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-4">
@@ -440,130 +431,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
               <input className={inputCls()} value={form.firmWebsite} onChange={e => setField('firmWebsite', e.target.value)} placeholder="https://www.lawfirm.com" />
             </div>
             <button onClick={handleFirmInfoNext} className="w-full bg-amber-600 hover:bg-amber-500 text-white rounded-xl py-3 font-semibold text-sm transition-all mt-2 shadow-lg shadow-amber-900/30">
-              Continue — Billing Terms
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Step: Billing Terms ───────────────────────────────────────────────────
-  if (step === 'billing') {
-    return (
-      <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-start p-4 pt-8">
-        <div className="w-full max-w-2xl">
-          <div className="text-center mb-7">
-            <div className="flex items-center justify-center gap-2 mb-1">
-              {[1,2,3,4].map(n => (
-                <div key={n} className={`h-1.5 w-10 rounded-full transition-all ${n <= 3 ? 'bg-amber-500' : 'bg-slate-700'}`} />
-              ))}
-            </div>
-            <div className="inline-flex items-center gap-2 bg-amber-900/30 border border-amber-700/40 rounded-xl px-4 py-1.5 mb-4 mt-4">
-              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-              </svg>
-              <span className="text-amber-400 text-xs font-semibold tracking-wide uppercase">Billing Terms & Fee Schedule</span>
-            </div>
-            <h2 className="text-2xl font-bold text-white">Firm Billing Agreement</h2>
-            <p className="text-slate-400 text-sm mt-2 max-w-lg mx-auto">Step 3 of 4 — Review and acknowledge all billing terms before proceeding.</p>
-          </div>
-
-          <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5">
-
-            {/* Monthly billing cycle */}
-            <div className="bg-slate-800/60 border border-amber-700/40 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</span>
-                Monthly Billing Cycle
-              </h3>
-              <div className="text-slate-400 text-xs leading-relaxed space-y-2">
-                <p>Your law firm account is billed on a <strong className="text-white">monthly subscription cycle</strong>. Invoices are generated on the <strong className="text-white">1st of each calendar month</strong> and cover services rendered during the prior month. Payment is due <strong className="text-amber-400">immediately upon receipt of invoice</strong> — no grace period applies unless separately negotiated in writing.</p>
-                <p>Failure to pay within 15 days of the invoice date may result in suspension of service access. Accounts more than 30 days past due may be terminated and referred to collections. All overdue balances accrue interest at 1.5% per month (18% annually) or the maximum rate permitted by applicable law, whichever is lower.</p>
-              </div>
-              <Checkbox checked={billingMonthly} onChange={() => setBillingMonthly(!billingMonthly)}>
-                I acknowledge that my firm will be billed monthly on the 1st of each month and that all invoices are due immediately upon receipt.
-              </Checkbox>
-            </div>
-
-            {/* Immediate due */}
-            <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-amber-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</span>
-                Immediate Payment Upon Invoice
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                By using BankruptcyDocs.ai services, your firm authorizes automatic billing to the payment method on file. All charges are due <strong className="text-white">immediately at the time of invoicing</strong>. BankruptcyDocs.ai reserves the right to charge the payment method on file on the invoice date without further notice. Your firm is responsible for maintaining a valid payment method at all times. In the event of a failed payment, services may be suspended within 3 business days.
-              </p>
-              <div className="mt-3">
-                <Checkbox checked={billingImmediate} onChange={() => setBillingImmediate(!billingImmediate)}>
-                  I authorize BankruptcyDocs.ai to charge the payment method on file immediately upon invoice generation on the 1st of each month.
-                </Checkbox>
-              </div>
-            </div>
-
-            {/* Plaid fees */}
-            <div className="bg-slate-800/60 border border-teal-700/30 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-teal-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</span>
-                Plaid Financial Document Services — Per-Client Fees
-              </h3>
-              <div className="text-slate-400 text-xs leading-relaxed space-y-2">
-                <p>Your firm will be billed on a <strong className="text-white">per-client basis</strong> for access to Plaid financial record services, which include: bank account statement retrieval, bank balance verification, income and employment data, and digital paystub access. These fees are incurred at the time a Plaid connection is initiated for a client and are billed through BankruptcyDocs.ai on your monthly invoice.</p>
-                <p>Plaid requires a separate application and approval process. Your firm may apply through BankruptcyDocs.ai as a sub-subscriber. All Plaid-related charges will be itemized on your monthly invoice as <strong className="text-white">"Plaid Financial Services — [Client Name/ID]"</strong>. BankruptcyDocs.ai acts as the billing intermediary; your firm is responsible for the full per-client Plaid fee regardless of whether the client's case proceeds to filing.</p>
-                <div className="bg-teal-900/20 border border-teal-800/40 rounded-lg p-2 mt-2">
-                  <p className="text-teal-300 text-xs"><strong>Note:</strong> Plaid application may be required before activation. BankruptcyDocs.ai will facilitate the application process. Fees are subject to Plaid's current pricing schedule plus BankruptcyDocs.ai platform fee.</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <Checkbox checked={billingPlaid} onChange={() => setBillingPlaid(!billingPlaid)}>
-                  I understand that per-client Plaid financial document fees will be billed through BankruptcyDocs.ai on my monthly invoice, and that Plaid application may be required.
-                </Checkbox>
-              </div>
-            </div>
-
-            {/* iSoftpull fees */}
-            <div className="bg-slate-800/60 border border-blue-700/30 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</span>
-                iSoftpull Credit Pre-Qualification — Per-Pull Fees
-              </h3>
-              <div className="text-slate-400 text-xs leading-relaxed space-y-2">
-                <p>Your firm will be billed on a <strong className="text-white">per-pull basis</strong> for iSoftpull credit pre-qualification services. Each soft credit pull performed on behalf of a client generates a per-transaction fee billed through BankruptcyDocs.ai. These pulls are used to pre-qualify clients for financing options and to assist in preparing accurate Schedule E/F creditor listings.</p>
-                <p>iSoftpull requires a separate subscriber application. Your firm may apply through BankruptcyDocs.ai. All iSoftpull charges will be itemized on your monthly invoice as <strong className="text-white">"iSoftpull Credit Pull — [Client Name/ID]"</strong>. BankruptcyDocs.ai acts as the billing intermediary. Your firm is responsible for all per-pull charges regardless of case outcome.</p>
-                <div className="bg-blue-900/20 border border-blue-800/40 rounded-lg p-2 mt-2">
-                  <p className="text-blue-300 text-xs"><strong>Note:</strong> iSoftpull subscriber application may be required before activation. Only soft pulls are billed through this service. Hard pulls (full credit report for extension of credit) are a separate service and subject to additional fees.</p>
-                </div>
-              </div>
-              <div className="mt-3">
-                <Checkbox checked={billingIsoftpull} onChange={() => setBillingIsoftpull(!billingIsoftpull)}>
-                  I understand that per-pull iSoftpull credit pre-qualification fees will be billed through BankruptcyDocs.ai on my monthly invoice, and that iSoftpull subscriber application may be required.
-                </Checkbox>
-              </div>
-            </div>
-
-            {/* Third-party application requirement */}
-            <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-3 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">5</span>
-                Third-Party Vendor Application Requirement
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                Certain third-party vendors integrated with BankruptcyDocs.ai — including but not limited to <strong className="text-white">Plaid Technologies, Inc.</strong> and <strong className="text-white">iSoftpull</strong> — may require your law firm to complete a separate application, credentialing, or approval process directly with that vendor or through BankruptcyDocs.ai as a facilitated subscriber. Your firm acknowledges that: (a) access to certain features is contingent upon vendor approval, (b) BankruptcyDocs.ai does not guarantee vendor approval, (c) all third-party vendor fees incurred are payable through BankruptcyDocs.ai regardless of whether vendor approval has been completed, and (d) BankruptcyDocs.ai will assist in facilitating the application process but is not responsible for vendor approval timelines or outcomes.
-              </p>
-              <div className="mt-3">
-                <Checkbox checked={billingThirdParty} onChange={() => setBillingThirdParty(!billingThirdParty)}>
-                  I acknowledge the third-party vendor application requirement and understand that all associated fees are billed through BankruptcyDocs.ai.
-                </Checkbox>
-              </div>
-            </div>
-
-            <button
-              onClick={handleBillingAccepted}
-              disabled={!allBillingAccepted}
-              className="w-full bg-amber-600 hover:bg-amber-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl py-3.5 font-semibold text-sm transition-all shadow-lg shadow-amber-900/30"
-            >
-              {allBillingAccepted ? 'I Accept Billing Terms — Continue to Disclosures' : 'Please acknowledge all billing terms above'}
+              Continue — Service Disclosures
             </button>
           </div>
         </div>
@@ -572,14 +440,15 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Step: Disclosures & Vendor Consent ────────────────────────────────────
+
   if (step === 'disclosures') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-start p-4 pt-8">
         <div className="w-full max-w-2xl">
           <div className="text-center mb-7">
             <div className="flex items-center justify-center gap-2 mb-1">
-              {[1,2,3,4].map(n => (
-                <div key={n} className={`h-1.5 w-10 rounded-full transition-all ${n <= 4 ? 'bg-amber-500' : 'bg-slate-700'}`} />
+              {[1,2,3].map(n => (
+                <div key={n} className={`h-1.5 w-10 rounded-full transition-all ${n <= 3 ? 'bg-amber-500' : 'bg-slate-700'}`} />
               ))}
             </div>
             <div className="inline-flex items-center gap-2 bg-amber-900/30 border border-amber-700/40 rounded-xl px-4 py-1.5 mb-4 mt-4">
@@ -589,36 +458,38 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
               <span className="text-amber-400 text-xs font-semibold tracking-wide uppercase">Third-Party Vendor Disclosures & Consent</span>
             </div>
             <h2 className="text-2xl font-bold text-white">Firm Authorization & Disclosures</h2>
-            <p className="text-slate-400 text-sm mt-2 max-w-lg mx-auto">Step 4 of 4 — Review and accept all third-party vendor disclosures on behalf of your law firm.</p>
+            <p className="text-slate-400 text-sm mt-2 max-w-lg mx-auto">Step 3 of 3 — Review and accept all third-party vendor disclosures on behalf of your law firm.</p>
           </div>
 
           <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-5">
 
-            {/* General */}
-            <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
+            {/* 1 — General */}
+            <div className="bg-slate-800/60 border border-amber-700/40 rounded-xl p-4">
               <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-amber-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">1</span>
                 General Platform Disclosures & Terms of Service
               </h3>
+              <NeedsReview />
               <div className="text-slate-400 text-xs leading-relaxed space-y-1.5 max-h-28 overflow-y-auto pr-1">
-                <p>By registering your law firm on BankruptcyDocs.ai, you agree that the firm is responsible for all activities conducted under your firm's account, including actions taken by staff and attorneys authorized by your firm. You represent that you are authorized to bind the firm to these terms. BankruptcyDocs.ai is a software-as-a-service platform that provides bankruptcy document preparation, case management, and client communication tools. BankruptcyDocs.ai does not provide legal advice and is not a law firm.</p>
-                <p>Your firm remains solely responsible for all legal advice given to clients, the accuracy of all filed documents, compliance with the Bankruptcy Code (11 U.S.C. et seq.), local court rules, and all applicable Rules of Professional Conduct. BankruptcyDocs.ai does not guarantee any specific outcome for any client matter.</p>
+                <p>By registering your law firm on <strong className="text-slate-300">bankruptcy.ai</strong>, you agree that the firm is responsible for all activities conducted under your firm's account, including actions taken by staff and attorneys authorized by your firm. You represent that you are authorized to bind the firm to these terms. bankruptcy.ai is a software-as-a-service platform that provides bankruptcy document preparation, case management, and client communication tools. bankruptcy.ai does not provide legal advice and is not a law firm.</p>
+                <p>Your firm remains solely responsible for all legal advice given to clients, the accuracy of all filed documents, compliance with the Bankruptcy Code (11 U.S.C. et seq.), local court rules, and all applicable Rules of Professional Conduct. bankruptcy.ai does not guarantee any specific outcome for any client matter.</p>
+                <p>During the V1 pilot program, third-party vendor services are provided at <strong className="text-slate-300">vendor pass-through at cost</strong> per the Master Services Agreement between bankruptcy.ai and your firm. See your MSA for current terms. Pricing model to be finalized post-pilot.</p>
               </div>
               <div className="mt-3">
                 <Checkbox checked={consentGeneral} onChange={() => setConsentGeneral(!consentGeneral)}>
-                  I acknowledge the General Platform Disclosures and confirm I am authorized to bind my law firm to these terms.
+                  I acknowledge the General Platform Disclosures and confirm I am authorized to bind my law firm to these terms, including the V1 pilot vendor pass-through pricing terms in the Master Services Agreement.
                 </Checkbox>
               </div>
             </div>
 
-            {/* SendGrid */}
+            {/* 2 — SendGrid */}
             <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
               <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-emerald-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">2</span>
                 Email Communications — SendGrid
               </h3>
               <p className="text-slate-400 text-xs leading-relaxed">
-                Your firm authorizes BankruptcyDocs.ai to send transactional and operational email communications to firm staff and authorized personnel via <strong className="text-slate-300">SendGrid</strong> (Twilio Inc.). These include: case status updates, billing invoices, document alerts, deadline notifications, and system notices. Your firm also authorizes client-facing emails to be sent on your firm's behalf through SendGrid in connection with active client cases. SendGrid processes email addresses and delivery metadata per their Privacy Policy.
+                Your firm authorizes bankruptcy.ai to send transactional and operational email communications to firm staff and authorized personnel via <strong className="text-slate-300">SendGrid</strong> (Twilio Inc.). These include: case status updates, document alerts, deadline notifications, and system notices. Your firm also authorizes client-facing emails to be sent on your firm's behalf through SendGrid in connection with active client cases. For V1, emails are sent from bankruptcy.ai's master SendGrid account. A dedicated firm domain may be available in V1.1 (see MSA). SendGrid processes email addresses and delivery metadata per their Privacy Policy.
               </p>
               <div className="mt-3">
                 <Checkbox checked={consentSendGrid} onChange={() => setConsentSendGrid(!consentSendGrid)}>
@@ -627,14 +498,14 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
               </div>
             </div>
 
-            {/* Twilio */}
+            {/* 3 — Twilio */}
             <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
               <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
                 <span className="w-5 h-5 rounded-full bg-emerald-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">3</span>
                 SMS / Voice Communications — Twilio
               </h3>
               <p className="text-slate-400 text-xs leading-relaxed">
-                Your firm authorizes BankruptcyDocs.ai to deliver SMS text messages and automated voice notifications to firm staff and, where client consent has been obtained, to clients via <strong className="text-slate-300">Twilio</strong>. Firm personnel may opt out of SMS at any time. Message and data rates may apply for staff. Client SMS communications are only sent after client-level consent is captured. Twilio processes phone numbers and message metadata per their Privacy Policy.
+                Your firm authorizes bankruptcy.ai to deliver SMS text messages and automated voice notifications to firm staff and, where client consent has been obtained, to clients via <strong className="text-slate-300">Twilio</strong>. For V1, SMS is sent from bankruptcy.ai's master Twilio account. A dedicated {form.firmName || 'firm'} number may be available in V1.1 (see MSA). Firm personnel may opt out of SMS at any time. Message and data rates may apply for staff. Client SMS communications are only sent after client-level consent is captured.
               </p>
               <div className="mt-3">
                 <Checkbox checked={consentTwilio} onChange={() => setConsentTwilio(!consentTwilio)}>
@@ -643,50 +514,35 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
               </div>
             </div>
 
-            {/* iSoftpull */}
-            <div className="bg-slate-800/60 border border-blue-800/50 rounded-xl p-4">
-              <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-blue-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</span>
-                Credit Pre-Qualification — iSoftpull / TransUnion
-              </h3>
-              <p className="text-slate-400 text-xs leading-relaxed">
-                Your firm acknowledges that BankruptcyDocs.ai integrates with <strong className="text-slate-300">iSoftpull</strong> to perform soft credit inquiries on clients who have provided FCRA-compliant written consent. Your firm, as the subscriber, is responsible for ensuring that all required consumer consents are properly obtained before initiating any credit pull through the platform. Your firm acknowledges that iSoftpull may require a subscriber application and that use of iSoftpull services is subject to iSoftpull's Subscriber Agreement and the Fair Credit Reporting Act (FCRA). All credit pull fees are billed through BankruptcyDocs.ai as described in the Billing Terms.
-              </p>
-              <div className="mt-3">
-                <Checkbox checked={consentIsoftpull} onChange={() => setConsentIsoftpull(!consentIsoftpull)}>
-                  My firm acknowledges the iSoftpull integration requirements, our responsibility to obtain consumer FCRA consent, and the associated per-pull billing through BankruptcyDocs.ai.
-                </Checkbox>
-              </div>
-            </div>
-
-            {/* Plaid */}
+            {/* 4 — Plaid */}
             <div className="bg-slate-800/60 border border-teal-700/30 rounded-xl p-4">
               <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-teal-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">5</span>
-                Financial Records Access — Plaid
+                <span className="w-5 h-5 rounded-full bg-teal-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">4</span>
+                Financial Records Access — Plaid (Bank + Payroll)
               </h3>
+              <NeedsReview />
               <p className="text-slate-400 text-xs leading-relaxed">
-                Your firm acknowledges that BankruptcyDocs.ai integrates with <strong className="text-slate-300">Plaid Technologies, Inc.</strong> to retrieve client financial records — including bank statements, account balances, transaction histories, income verification, and paystubs — for bankruptcy case preparation. Your firm is responsible for ensuring that all required client-level consents are obtained before initiating a Plaid connection. Plaid processes financial institution credentials and data per their Privacy Policy and applicable financial regulations. A Plaid application may be required before activation. All Plaid service fees are billed through BankruptcyDocs.ai as described in the Billing Terms.
+                Your firm acknowledges that bankruptcy.ai integrates with <strong className="text-slate-300">Plaid Technologies, Inc.</strong> to retrieve client financial records for bankruptcy case preparation. This includes: (a) <strong className="text-slate-300">Plaid bank access</strong> for 90-day bank statements and account balances; and (b) <strong className="text-slate-300">Plaid Income</strong> for payroll records, paystubs, and W-2s. Your firm is responsible for ensuring that all required client-level consents are obtained before initiating any Plaid connection. During the V1 pilot, Plaid costs are passed through at cost per the Master Services Agreement — no per-client markup applies. All Plaid-related charges will be itemized on usage reports. Plaid application via bankruptcy.ai is required before activation.
               </p>
               <div className="mt-3">
                 <Checkbox checked={consentPlaid} onChange={() => setConsentPlaid(!consentPlaid)}>
-                  My firm acknowledges the Plaid integration, our responsibility to obtain client consent, and the associated per-client fees billed through BankruptcyDocs.ai.
+                  My firm acknowledges the Plaid bank and payroll integration, our responsibility to obtain client consent before each connection, and that Plaid costs are passed through at cost per the Master Services Agreement during the V1 pilot.
                 </Checkbox>
               </div>
             </div>
 
-            {/* E-SIGN */}
+            {/* 5 — E-SIGN */}
             <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
               <h3 className="text-white font-semibold text-sm mb-2 flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">6</span>
+                <span className="w-5 h-5 rounded-full bg-slate-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">5</span>
                 Electronic Communications & E-SIGN Consent
               </h3>
               <p className="text-slate-400 text-xs leading-relaxed">
-                Your firm consents to receive all platform notices, invoices, disclosures, and communications electronically under the E-SIGN Act (15 U.S.C. § 7001 et seq.). You confirm that your firm maintains electronic mail access and the capability to retain electronic records. You agree to promptly notify BankruptcyDocs.ai of any changes to the firm's primary contact email address. Paper copies of any electronic communication may be requested for a reasonable fee.
+                Your firm consents to receive all platform notices, disclosures, and communications electronically under the E-SIGN Act (15 U.S.C. § 7001 et seq.). You confirm that your firm maintains electronic mail access and the capability to retain electronic records. You agree to promptly notify bankruptcy.ai of any changes to the firm's primary contact email address.
               </p>
               <div className="mt-3">
                 <Checkbox checked={consentElectronic} onChange={() => setConsentElectronic(!consentElectronic)}>
-                  My firm consents to receive all platform communications and invoices electronically under the E-SIGN Act.
+                  My firm consents to receive all platform communications electronically under the E-SIGN Act.
                 </Checkbox>
               </div>
             </div>
@@ -705,6 +561,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
   }
 
   // ── Step: Success ─────────────────────────────────────────────────────────
+
   if (step === 'success') {
     return (
       <div className="min-h-screen bg-[#060c18] flex flex-col items-center justify-center p-4">
@@ -716,14 +573,14 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
           </div>
           <h2 className="text-2xl font-bold text-white mb-2">Firm Registration Complete</h2>
           <p className="text-slate-400 text-sm mb-6 leading-relaxed max-w-sm mx-auto">
-            Your law firm account is active. All billing terms and vendor consents have been recorded. You will be billed on the 1st of each month for all services rendered.
+            Your law firm account is active. All vendor disclosures have been recorded. V1 pilot terms apply per your Master Services Agreement with bankruptcy.ai.
           </p>
 
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 mb-8 text-left space-y-2">
             <p className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-3">What Happens Next</p>
             {[
-              { icon: '1', text: 'A BankruptcyDocs.ai representative will contact you regarding Plaid and iSoftpull vendor applications if applicable.' },
-              { icon: '2', text: 'Your first invoice will be generated on the 1st of the following month.' },
+              { icon: '1', text: 'A bankruptcy.ai team member will contact you to complete Plaid onboarding and confirm your pilot configuration.' },
+              { icon: '2', text: 'During the V1 pilot, vendor costs (Plaid, communications) are passed through at cost per your MSA. No monthly subscription invoices are generated during pilot.' },
               { icon: '3', text: 'You may now access all attorney portal features and begin onboarding clients.' },
             ].map(item => (
               <div key={item.icon} className="flex gap-3">

@@ -2377,7 +2377,7 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
                             </div>
                             <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5">
                               <p className="text-slate-500 text-[10px] uppercase tracking-wide font-semibold mb-1">Billing</p>
-                              <p className="text-slate-300">Per-pull via BankruptcyDocs.ai</p>
+                              <p className="text-slate-300">Per-pull via bankruptcy.ai</p>
                             </div>
                             <div className="bg-slate-800/60 border border-slate-700 rounded-lg p-2.5">
                               <p className="text-slate-500 text-[10px] uppercase tracking-wide font-semibold mb-1">FCRA Consent</p>
