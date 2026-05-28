@@ -215,6 +215,11 @@ function OptOutNote({ children }: { children: React.ReactNode }) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function ClientRegistration({ onComplete }: Props) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', textAlign: 'center', padding: '2rem' }}>
+      <p>Registration temporarily unavailable — please contact your firm administrator.</p>
+    </div>
+  );
   const [step, setStep] = useState<Step>('landing');
   const [form, setForm] = useState<FormData>(INITIAL_FORM);
   const [errors, setErrors] = useState<Partial<FormData>>({});

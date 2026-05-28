@@ -7,6 +7,11 @@ interface ClientRegistrationProps {
 }
 
 export default function ClientRegistration({ onComplete }: ClientRegistrationProps) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', textAlign: 'center', padding: '2rem' }}>
+      <p>Registration temporarily unavailable — please contact your firm administrator.</p>
+    </div>
+  );
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");

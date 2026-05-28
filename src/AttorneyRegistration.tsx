@@ -44,6 +44,11 @@ const US_STATES = [
 ];
 
 export default function AttorneyRegistration({ onComplete, onBack }: Props) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', textAlign: 'center', padding: '2rem' }}>
+      <p>Registration temporarily unavailable — please contact your firm administrator.</p>
+    </div>
+  );
   const [step, setStep] = useState<Step>('landing');
   const [form, setForm] = useState<FirmForm>(INITIAL_FIRM);
   const [errors, setErrors] = useState<Partial<FirmForm>>({});
