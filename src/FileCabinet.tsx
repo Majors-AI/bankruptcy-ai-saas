@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { FolderOpen, User, Search, FileText, Clock, DollarSign, Calendar, MessageCircle, Shield, CheckCircle2, AlertTriangle, ChevronRight, RefreshCw, Hash, Phone, Mail, MapPin, Scale, X, ArrowLeft, Activity, Briefcase, CreditCard, Upload, Flag, CheckCheck, Lock, Eye, Filter, ChevronDown, Info, Home, Car, Landmark, Building, Users, BarChart2, ArrowRightLeft, Clipboard, GitBranch, Banknote, PenLine, SendHorizontal as Send } from "lucide-react";
 import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase } from "./lib/casePhases";
+import TrusteeSubmissionWidget from "./admin/TrusteeSubmissionWidget";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2422,6 +2423,15 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
                       supabaseUrl={SUPABASE_URL}
                       anonKey={ANON_KEY}
                     />
+
+                    {/* BAN-29: per-case trustee submission widget. Renders below
+                        the documents grid whenever the client has any docs in
+                        phase 07-trustee so firm staff can submit them. The
+                        widget itself further short-circuits when no trustees
+                        are configured for the firm yet. */}
+                    {selectedClient && documents.some(d => d.phase === '07-trustee') && (
+                      <TrusteeSubmissionWidget clientId={selectedClient.id} />
+                    )}
                   </div>
                 )}
 

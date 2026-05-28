@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Scale, ChevronRight, ChevronDown, Plus, Trash2, CreditCard as Edit2, Save, X, Check, Clock, AlertCircle, Upload, FileText, User, Building2, Phone, Mail, MapPin, Search, RefreshCw, CheckCircle2, Circle, FolderOpen, Tag, List, ExternalLink, Send, Bell, BellOff, History, Calendar, Hash } from 'lucide-react';
+import FirmTrusteesPanel from './admin/FirmTrusteesPanel';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2324,7 +2325,7 @@ function ApiConfigPanel() {
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 
 export default function TrusteeDocumentPortal() {
-  const [mode, setMode] = useState<'trustees' | 'calendar' | 'tasks' | 'paralegal' | 'api'>('tasks');
+  const [mode, setMode] = useState<'trustees' | 'calendar' | 'tasks' | 'paralegal' | 'api' | 'firm_trustees'>('tasks');
   const [states, setStates] = useState<TrusteeState[]>([]);
   const [chapters, setChapters] = useState<ChapterType[]>([]);
   const [trustees, setTrustees] = useState<Trustee[]>([]);
@@ -2390,11 +2391,12 @@ export default function TrusteeDocumentPortal() {
   const activeStates = states.filter(s => Object.keys(grouped).includes(s.id));
 
   const NAV_TABS = [
-    { key: 'tasks',    label: 'Task List',    icon: <AlertCircle className="w-3 h-3" />,  activeClass: 'bg-red-700 text-white' },
-    { key: 'calendar', label: 'Calendar',     icon: <Calendar className="w-3 h-3" />,     activeClass: 'bg-sky-700 text-white' },
-    { key: 'paralegal',label: 'Review Queue', icon: <User className="w-3 h-3" />,         activeClass: 'bg-teal-700 text-white' },
-    { key: 'trustees', label: 'Trustees',     icon: <Scale className="w-3 h-3" />,        activeClass: 'bg-slate-700 text-white' },
-    { key: 'api',      label: 'API Config',   icon: <FileText className="w-3 h-3" />,     activeClass: 'bg-slate-700 text-white' },
+    { key: 'tasks',         label: 'Task List',       icon: <AlertCircle className="w-3 h-3" />,  activeClass: 'bg-red-700 text-white' },
+    { key: 'calendar',      label: 'Calendar',        icon: <Calendar className="w-3 h-3" />,     activeClass: 'bg-sky-700 text-white' },
+    { key: 'paralegal',     label: 'Review Queue',    icon: <User className="w-3 h-3" />,         activeClass: 'bg-teal-700 text-white' },
+    { key: 'trustees',      label: 'Trustees',        icon: <Scale className="w-3 h-3" />,        activeClass: 'bg-slate-700 text-white' },
+    { key: 'firm_trustees', label: 'Firm Trustees',   icon: <Scale className="w-3 h-3" />,        activeClass: 'bg-amber-500 text-slate-950' },
+    { key: 'api',           label: 'API Config',      icon: <FileText className="w-3 h-3" />,     activeClass: 'bg-slate-700 text-white' },
   ] as const;
 
   return (
@@ -2448,10 +2450,15 @@ export default function TrusteeDocumentPortal() {
       </div>
 
       {/* Full-width panels */}
-      {mode === 'calendar'  && <CalendarPanel />}
-      {mode === 'tasks'     && <TaskListPanel />}
-      {mode === 'paralegal' && <ParalegalReviewPanel />}
-      {mode === 'api'       && <ApiConfigPanel />}
+      {mode === 'calendar'      && <CalendarPanel />}
+      {mode === 'tasks'         && <TaskListPanel />}
+      {mode === 'paralegal'     && <ParalegalReviewPanel />}
+      {mode === 'api'           && <ApiConfigPanel />}
+      {mode === 'firm_trustees' && (
+        <div className="flex-1 overflow-y-auto p-5">
+          <FirmTrusteesPanel />
+        </div>
+      )}
 
       <div className={`flex flex-1 min-h-0 ${mode !== 'trustees' ? 'hidden' : ''}`}>
         {/* Left sidebar — state/chapter/trustee tree */}
