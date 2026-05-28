@@ -257,3 +257,160 @@ Branched from `feature/per-firm-pricing-flags` after Phase 2 PR #2.
    ```
 8. **BAN-29 management UI:** TrusteeDocumentPortal → "Firm Trustees" tab → "Add Trustee" → fill name + district + submission method → save. Row appears in table. Edit / deactivate works.
 9. **BAN-29 submission UI:** FileCabinet → client with at least one `07-trustee` document → Documents tab → scroll to "Trustee Submission" widget. Pick a trustee, leave the default doc selection, click "Mark as Submitted". Row appears under "Submission history" with the chosen trustee, method, and timestamp.
+
+---
+
+## V1 Launch — MLG + Neeley pilot (BAN-54)
+
+Branched from `feature/portal-and-trustee-cleanup` after Phase 3 PR #3. Ships the **information gathering + document collection + BCI export** layer to MLG and Neeley Law Firm. V1 explicitly does NOT generate final filing documents, sign retainers, schedule signing appointments, or calendar 341 deadlines — those stay in Best Case / the firm's existing workflow until V2.
+
+### Commits in this PR
+
+```
+dafc391 docs: V1 staff quick-start guide (BAN-54)
+99bea8f feat: MLG + Neeley V1 feature flag config (BAN-54)
+74c5699 feat: Plaid integration — Auth + Transactions + Income (BAN-54)
+4bdc683 feat: one-click client file ZIP download with manifest + 24-hour expiry (BAN-54)
+7f36700 feat: BCI export verification + .bci download + field gap tracker (BAN-54)
+3a3dac1 feat: NewClientModal + magic-link client access (BAN-54)
+3b6fd5b feat: Neeley Law Firm seed + AWS S3 scaffolding (BAN-54)
+```
+
+### Two firms in V1
+
+- **MLG**    — `firm_id 00000000-0000-0000-0000-000000000001` (seeded in Phase 1)
+- **Neeley** — `firm_id 00000000-0000-0000-0000-000000000002` (seeded in this PR; comped, vendor pass-through at-cost, autopay off)
+
+### What changed
+
+- **iSoftpull dropped.** `credit_report_isoftpull` is disabled for both firms via the V1 feature flag migration. Manual credit-report upload remains; Plaid covers the bank + payroll workflow that previously required iSoftpull.
+- **Plaid Bank + Plaid Income live.** `plaid_items` table with RLS (super-admin + firm-own); four edge functions (`plaid-link-token`, `plaid-exchange-token`, `plaid-fetch-bank-statements`, `plaid-fetch-income`). Each successful link materializes PDFs into `client_documents` with `phase='03-credit-bank'`. Bank and payroll are two separate opt-ins per Plaid Income consent requirements. New `payroll_link_plaid` feature flag added to the catalogue.
+- **One-click ZIP download added.** `client_zip_exports` table tracks every build. `generate-client-zip` edge function downloads each document, groups by phase, adds BCI export + manifest.csv + README.txt, uploads to the `client-zips` bucket, returns a 24-hour signed URL. `zip-export-cleanup-cron` runs daily to expire stale ZIPs.
+- **BCI verification + `.bci` download added.** `bci_verification_logs` table records every test cycle with populated count + missing required / optional field arrays + file size. `src/lib/bciValidator.ts` mirrors the SQL backfill from Phase 3 and the questionnaire generator. New `BciExportWidget` runs the validation modal + builds + uploads + logs the file. `docs/BCI_FIELD_GAPS.md` is the working log MLG / Neeley populate during testing.
+- **Manual onboarding workflow.** `NewClientModal` lets attorneys onboard already-accepted clients in ~90 seconds. Magic-link tokens (`generateAccessToken`, 90-day expiry) are sent via `send-client-message` using the two new BAN-36 scripts `v1_manual_onboarding_welcome` (email) and `v1_manual_onboarding_welcome_sms`. `App.tsx` reads `?token=…` on mount, validates via Supabase, and routes to `client_view` scoped to that client (or shows a "Portal link unavailable" page on invalid/expired).
+- **LegalAdminPortal nav re-shaped for V1.** New `Manual Clients` tab visible to everyone (replaces Leads when `intake_bot` is off, which is the V1 default for both firms). `+ New Client` button visible to attorneys (`canAcceptCase`). Nav reads `getFirmFeatures(V1_DEFAULT_FIRM_ID)` to drive the Leads-tab visibility.
+- **AWS S3 scaffolding.** `src/lib/awsStorage.ts` defines `buildS3Key` + `buildZipExportKey`. V1 keeps doc writes on Supabase Storage to match existing patterns; ZIP exports are S3-bound under `client-zips/` in V1.1. Full doc-store migration to S3 is V1.1 work.
+
+### V1 scope summary
+
+| Capability                          | In V1 |
+|-------------------------------------|-------|
+| Manual client onboarding            | ✅    |
+| Magic-link client portal access     | ✅    |
+| 17-section questionnaire            | ✅    |
+| Plaid bank + payroll (live)         | ✅    |
+| Manual credit-report upload         | ✅    |
+| Manual bank-statement upload        | ✅    |
+| Trustee directory + manual submission| ✅   |
+| BCI export + field-gap log          | ✅    |
+| Full client file ZIP                | ✅    |
+| PACER email ingestion               | ✅    |
+| Best Case import (post-BCI)         | ✅    |
+| AI intake bot                       | ❌    |
+| iSoftpull                           | ❌    |
+| In-platform fee-agreement signing   | ❌    |
+| In-platform final doc generation    | ❌    |
+| Signing-appointment scheduling      | ❌    |
+| 341-deadline auto-calendaring       | ❌ (Best Case calendar) |
+| Cloud sync (Drive / Dropbox)        | ❌ V1.1 |
+| Billing engine                      | ❌ Comped during V1 |
+| PDF fillable forms                  | ❌ V1.1 |
+
+### Deploy checklist
+
+1. **Apply 6 new migrations** in order:
+   - `20260528100000_neeley_firm_seed.sql`
+   - `20260528110000_v1_client_access.sql`
+   - `20260528130000_bci_verification.sql`
+   - `20260528140000_zip_exports.sql`
+   - `20260528150000_plaid_integration.sql`
+   - `20260528160000_v1_feature_flags.sql`
+
+2. **Create storage buckets** (private):
+   - `client-zips` — used by `generate-client-zip`.
+   - `bci-exports` — used by `BciExportWidget`.
+   - `client-documents` already exists from earlier work.
+
+3. **Deploy 5 edge functions:**
+   ```bash
+   supabase functions deploy generate-client-zip
+   supabase functions deploy zip-export-cleanup-cron
+   supabase functions deploy plaid-link-token
+   supabase functions deploy plaid-exchange-token
+   supabase functions deploy plaid-fetch-bank-statements
+   supabase functions deploy plaid-fetch-income
+   ```
+
+4. **Schedule the cleanup cron** (daily at ~04:00 UTC):
+   ```sql
+   SELECT cron.schedule(
+     'zip-export-cleanup-daily',
+     '0 4 * * *',
+     $$ SELECT net.http_post(
+          url      := current_setting('app.functions_url') || '/zip-export-cleanup-cron',
+          headers  := jsonb_build_object(
+            'Authorization', 'Bearer ' || current_setting('app.service_role_key'),
+            'Content-Type', 'application/json'
+          )
+        ); $$
+   );
+   ```
+   …or schedule via Supabase Dashboard → Database → Cron Jobs.
+
+5. **Set Plaid env vars** (sandbox first; flip to production after Plaid approval):
+   ```bash
+   supabase secrets set PLAID_CLIENT_ID=...
+   supabase secrets set PLAID_SECRET=...
+   supabase secrets set PLAID_ENV=sandbox
+   ```
+
+6. **Set client app URL** for magic-link generation:
+   ```bash
+   # In Vite env file (.env.production or branch deploy config)
+   VITE_APP_URL=https://app.bankruptcy.ai
+   ```
+
+7. **Verify** with the test plan below.
+
+### How to test
+
+1. **Neeley firm seeded:**
+   ```sql
+   SELECT id, name, slug, status FROM firms WHERE id = '00000000-0000-0000-0000-000000000002';
+   -- → 1 row, Neeley Law Firm, slug='neeley', status='active'
+   ```
+2. **NewClientModal renders for both firms:** Intake Portal → Manual Clients tab → "+ New Client" → submit a test client → toast shows portal URL.
+3. **Magic-link works end-to-end:** Open the portal URL in a fresh incognito → lands on the client portal scoped to that client → URL `?token` param is removed from the address bar after consume.
+4. **`bci_verification_logs` table created with RLS:**
+   ```sql
+   SELECT count(*) FROM bci_verification_logs;  -- → 0 initially
+   SELECT polname FROM pg_policies WHERE tablename = 'bci_verification_logs';
+   -- → bci_verification_logs_super_admin_all, bci_verification_logs_firm_all
+   ```
+5. **`BCI_FIELD_GAPS.md` placeholder in docs/:** present; references `src/lib/bciValidator.ts`.
+6. **`client_zip_exports` table created with RLS:**
+   ```sql
+   SELECT polname FROM pg_policies WHERE tablename = 'client_zip_exports';
+   -- → client_zip_exports_super_admin_all, client_zip_exports_firm_all
+   ```
+7. **`generate-client-zip` edge function deployed:** appears in `supabase functions list`; invoking with a valid client_id + firm_id returns a signed_url that downloads a ZIP with the 10 phase folders + manifest.csv + README.txt.
+8. **`zip-export-cleanup-cron` edge function deployed:** appears in `supabase functions list`; manual invocation returns `{ ran_at, deleted, skipped, total_expired_found }`.
+9. **`plaid_items` table created with RLS:**
+   ```sql
+   SELECT polname FROM pg_policies WHERE tablename = 'plaid_items';
+   -- → plaid_items_super_admin_all, plaid_items_firm_all
+   ```
+10. **4 Plaid edge functions deployed:** `plaid-link-token`, `plaid-exchange-token`, `plaid-fetch-bank-statements`, `plaid-fetch-income` all in `supabase functions list`. With sandbox credentials set, the Connect Bank button on ClientDashboard opens Plaid Link → completing the sandbox flow lands a row in `plaid_items` and creates client_documents rows in phase `03-credit-bank`.
+11. **MLG + Neeley feature flags configured for V1 scope:**
+    ```sql
+    SELECT firm_id, feature_key, enabled, notes
+    FROM firm_features
+    WHERE firm_id IN (
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002'
+    )
+      AND feature_key IN ('intake_bot', 'credit_report_isoftpull', 'bank_link_plaid', 'payroll_link_plaid', 'best_case_export', 'boldsign_esign');
+    ```
+    intake_bot, credit_report_isoftpull, boldsign_esign → `enabled = false` for both firms.
+    bank_link_plaid, payroll_link_plaid, best_case_export → `enabled = true` for both firms.
+12. **`V1_STAFF_GUIDE.md` in docs/:** present; covers onboarding, BCI testing, Plaid consent, trustee workflow, V1 feature profile, V1 limitations, reporting issues.
