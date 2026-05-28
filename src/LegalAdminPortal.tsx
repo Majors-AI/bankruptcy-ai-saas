@@ -3,7 +3,15 @@ import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circl
 import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
 import CaseAcceptanceFlow, { AcceptanceData as CaseAcceptanceData } from "./components/CaseAcceptanceFlow";
 import { CASE_TYPES, CHAPTER_FILING_FEES, ATTORNEY_FEES, CREDIT_COUNSELING_FEE } from "./lib/feeSchedule";
-import { mapIntakePortalRoleToPlatformRole } from "./lib/auth";
+import { mapIntakePortalRoleToPlatformRole, canAcceptCase } from "./lib/auth";
+import { getFirmFeatures } from "./lib/featureFlags";
+import NewClientModal from "./admin/NewClientModal";
+
+// V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
+// firms get the same feature-flag config per Section 6 of the V1 migration,
+// so the hardcoded MLG id is functionally equivalent to whichever firm a
+// user belongs to during the pilot.
+const V1_DEFAULT_FIRM_ID = "00000000-0000-0000-0000-000000000001";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY    = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -5728,7 +5736,22 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
 
   // Default tab by role: attorneys land on attorney review queue; legal admins on leads
   const defaultTab = isAtty && !isSuperAdmin ? "followup" : "leads";
-  const [activeTab, setActiveTab]     = useState<"leads" | "followup" | "calendar" | "availability" | "timeoff" | "sick_admin">(defaultTab);
+  const [activeTab, setActiveTab]     = useState<"leads" | "followup" | "calendar" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+
+  // V1: firm feature flags drive nav visibility (Leads hidden when intake_bot
+  // is off; Manual Clients always visible). NewClientModal is gated to roles
+  // that pass canAcceptCase per the platform_role mapping.
+  const [firmFlags, setFirmFlags] = useState<Record<string, boolean>>({});
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [manualClients, setManualClients] = useState<Array<{ id: string; name: string; email: string | null; phone: string | null; status: string | null; case_status: string | null; created_at: string }>>([]);
+  const platformRole = mapIntakePortalRoleToPlatformRole(session.role);
+  const canCreateClient = canAcceptCase(platformRole);
+  useEffect(() => {
+    getFirmFeatures(V1_DEFAULT_FIRM_ID).then(setFirmFlags).catch(err => {
+      console.error("[LegalAdminPortal] getFirmFeatures failed", err);
+    });
+  }, []);
+  const showLeadsTab = firmFlags.intake_bot !== false; // default visible until flags load
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -5883,13 +5906,29 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   // attorney: Follow-Up (review queue), Calendar
   // attorney_super_admin / super_admin: all tabs
   const TABS = [
-    ...( canManageLeads || isSuperAdmin ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }] : []),
+    ...( (canManageLeads || isSuperAdmin) && showLeadsTab ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }] : []),
+    // V1 — Manual Clients tab (always visible; replaces Leads when intake_bot is off)
+    { id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null },
     { id: "followup" as const,     label: isAtty && !isSuperAdmin ? "Review Queue" : "Follow-Up", icon: <BellRing className="w-3.5 h-3.5" />,  badge: isAtty ? (reviewQueue.length + feeQuotedLeads.length || null) : followUpBadge },
     { id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null },
     ...( canManageLeads || isSuperAdmin ? [{ id: "availability" as const, label: "Availability", icon: <Clock className="w-3.5 h-3.5" />, badge: null }] : []),
     ...( canManageLeads || isSuperAdmin ? [{ id: "timeoff" as const, label: "Time Off", icon: <CheckCircle2 className="w-3.5 h-3.5" />, badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null }] : []),
     ...(isSuperAdmin ? [{ id: "sick_admin" as const, label: "Out-of-Office", icon: <span className="text-sm leading-none">🤒</span>, badge: null }] : []),
   ];
+
+  // V1: load manual clients (onboarding_source='manual') for the current
+  // pilot firm. Refreshes whenever a new client is created via NewClientModal.
+  const loadManualClients = useCallback(async () => {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/clients?onboarding_source=eq.manual&firm_id=eq.${V1_DEFAULT_FIRM_ID}&order=created_at.desc&limit=200&select=id,name,email,phone,status,case_status,created_at`,
+      { headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` } },
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      setManualClients(rows.map((c: { id: string; name: string; email: string | null; phone: string | null; status: string | null; case_status: string | null; created_at: string }) => ({ ...c })));
+    }
+  }, []);
+  useEffect(() => { loadManualClients(); }, [loadManualClients]);
 
   return (
     <div className="min-h-screen text-white" style={{ background: '#0F0F0E' }}>
@@ -6203,6 +6242,69 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
           <SuperAdminSickPanel onRefresh={load} />
         )}
 
+        {/* ── MANUAL CLIENTS TAB (V1) ── */}
+        {activeTab === "manual_clients" && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div>
+                <p className="text-sm font-bold text-white">Manual Clients</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Already-accepted clients onboarded outside the AI intake bot. Each gets a magic-link portal URL.
+                </p>
+              </div>
+              {canCreateClient && (
+                <button
+                  onClick={() => setShowNewClient(true)}
+                  className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg"
+                >
+                  <Plus className="w-3.5 h-3.5" /> New Client
+                </button>
+              )}
+            </div>
+            {manualClients.length === 0 ? (
+              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl py-12 text-center">
+                <Users className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+                <p className="text-sm text-slate-500">No manually-onboarded clients yet.</p>
+                {canCreateClient && (
+                  <p className="text-[11px] text-slate-700 mt-1">
+                    Click <span className="text-amber-400 font-semibold">+ New Client</span> to onboard one.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                      <th className="text-left px-5 py-3">Client</th>
+                      <th className="text-left px-4 py-3">Contact</th>
+                      <th className="text-left px-4 py-3">Case status</th>
+                      <th className="text-left px-4 py-3">Onboarded</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/40">
+                    {manualClients.map(c => (
+                      <tr key={c.id} className="hover:bg-slate-800/30 transition-colors">
+                        <td className="px-5 py-3">
+                          <p className="text-sm font-semibold text-white">{c.name}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          {c.email && <p className="text-xs text-slate-400">{c.email}</p>}
+                          {c.phone && <p className="text-[10px] text-slate-600">{c.phone}</p>}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {c.case_status ?? c.status ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(c.created_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
           {/* Spacer so fixed mobile nav doesn't overlap last content item */}
           <div className="lg:hidden h-16" />
           </div>{/* end space-y-5 */}
@@ -6254,6 +6356,15 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
           onClose={() => setShowNewLead(false)}
           onSaved={() => { setShowNewLead(false); load(); }}
           session={session}
+        />
+      )}
+
+      {showNewClient && (
+        <NewClientModal
+          firmId={V1_DEFAULT_FIRM_ID}
+          firmName="Majors Law Group"
+          onClose={() => setShowNewClient(false)}
+          onCreated={() => { setShowNewClient(false); loadManualClients(); }}
         />
       )}
     </div>
