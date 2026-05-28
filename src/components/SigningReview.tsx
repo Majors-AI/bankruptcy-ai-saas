@@ -475,7 +475,7 @@ export default function SigningReview() {
           <div className="md:col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-5">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h1 className="text-xl font-bold text-white">David Kim</h1>
+                <h1 className="text-xl font-bold text-white">Jane Sample</h1>
                 <p className="text-sm text-slate-400">Chapter 7 — Individual</p>
               </div>
               <div className="px-3 py-1 rounded-full text-xs font-semibold bg-blue-900/40 text-blue-300 border border-blue-700/50">

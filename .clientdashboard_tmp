@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import {
   CheckCircle2,
   Circle,
@@ -40,18 +40,18 @@ interface ClientQuestion {
 
 // ─── CASE DATA ────────────────────────────────────────────────────────────────
 const CASE_DATA = {
-  clientName: "David Kim",
-  spouseName: "Jennifer Kim",
+  clientName: "Jane Sample",
+  spouseName: "John Sample",
   chapter: "7",
   caseNumber: "Pending",
-  attorney: "Jennifer Smith, Esq.",
+  attorney: "Test Attorney, Esq.",
   firm: "bankruptcy.AI Legal Group",
   filingType: "Individual — Non-Filing Spouse",
-  retainerDate: "2026-03-15",
+  retainerDate: "2026-01-01",
   estimatedFilingDate: "2026-06-10",
-  totalFee: 1838,
-  paidToDate: 900,
-  payoffDate: "2026-05-28",
+  totalFee: 1500,
+  paidToDate: 750,
+  payoffDate: "2026-05-01",
   currentStage: 2,
   paymentLink: "https://pay.example.com/bk-client",
 };
@@ -68,7 +68,7 @@ const STAGES = [
     label: "Intake & Retention",
     sub: "Signed retainer, completed intake questionnaire",
     status: "complete",
-    date: "March 15, 2026",
+    date: "January 1, 2026",
     purpose:
       "You retained our firm to represent you in your Chapter 7 bankruptcy case. During this stage, you completed the initial intake questionnaire and signed the retainer agreement.",
     whatToDo: [] as string[],

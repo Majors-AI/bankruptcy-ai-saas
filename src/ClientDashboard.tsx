@@ -21,8 +21,8 @@ interface ClientQuestion {
 }
 
 const CASE_DATA = {
-  clientName: "David Kim",
-  spouseName: "Jennifer Kim",
+  clientName: "Jane Sample",
+  spouseName: "John Sample",
   chapter: "7",
   // "regular" = Ch. 7 Prepaid (full payment required before filing)
   // "bifurcated" = Ch. 7 Bifurcated (can file, then continue paying)

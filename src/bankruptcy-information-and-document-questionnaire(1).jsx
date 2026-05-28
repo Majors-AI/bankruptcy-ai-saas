@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
 import { normalizeIntake } from "./lib/intakeNormalize";
 import { phaseFromDocType } from "./lib/casePhases";
+import CommCredUrl from "./data/CommCred_complete.csv?url";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -156,22 +157,22 @@ const isStaleDate = (dateStr, days = 30) => {
 const INTAKE_SAMPLE = {
   // Step 0 — Identity & Residence
   filingType: "individual-nonfiling-spouse",
-  firstName: "David", lastName: "Kim",
-  dob: "1981-03-14",
-  email: "david.kim@email.com",
-  ssn: "542-88-3197",
-  spouseFirstName: "Jennifer", spouseLastName: "Kim",
-  spouseDob: "1983-07-22",
-  spouseEmail: "jennifer.kim@email.com",
+  firstName: "Jane", lastName: "Sample",
+  dob: "1970-01-01",
+  email: "jane.sample@example.com",
+  ssn: "000-00-0000",
+  spouseFirstName: "John", spouseLastName: "Sample",
+  spouseDob: "1970-01-01",
+  spouseEmail: "john.sample@example.com",
   ssnSpouse: "",
-  state: "Washington", county: "Benton", city: "Kennewick",
-  streetAddress: "1247 Maple Grove Drive", zipCode: "99336",
+  state: "Arizona", county: "Maricopa", city: "Anytown",
+  streetAddress: "123 Test St", zipCode: "85001",
   // Prior names
   priorNames: [
-    { roleCode: "FKA", firstName: "David", middleName: "K.", lastName: "Kimura", suffix: "" }
+    { roleCode: "FKA", firstName: "Jane", middleName: "", lastName: "Doe", suffix: "" }
   ],
   spousePriorNames: [
-    { roleCode: "FKA", firstName: "Jennifer", middleName: "Anne", lastName: "Walters", suffix: "" }
+    { roleCode: "FKA", firstName: "Jane", middleName: "", lastName: "Doe", suffix: "" }
   ],
   addressYears: "2+ years",
   mailingAddressSameAsPrimary: "yes",
@@ -190,7 +191,7 @@ const INTAKE_SAMPLE = {
   ],
   spouseWorkStatus: "employed",
   spouseSources: [
-    { id:1, sourceType:"employment", employerName:"Kennewick School District", payFrequency:"Semi-Monthly",
+    { id:1, sourceType:"employment", employerName:"Sample School District", payFrequency:"Semi-Monthly",
       grossPerPeriod:"1650", netPerPeriod:"1310", receiveBonus:"no", bonusIncludedInIncome:"",
       bonusGross:"", bonusFrequency:"" }
   ],
@@ -218,7 +219,7 @@ const INTAKE_SAMPLE = {
   expAddlTaxes:"", expAlimonyPaid:"", expSupportOthers:"", expGovFines:"", expOther:"",
   // Step 4 — Real Property
   ownsRealEstate: "yes", realPropType:"Primary Residence",
-  realPropAddress:"1247 Maple Grove Drive, Kennewick, WA 99336",
+  realPropAddress:"123 Test St, Anytown, AZ 85001",
   realPropValue:"348000", realPropPurchaseDate:"06/15/2018",
   mortgageBalance:"287400", mortgageCurrent:"yes", mortgageArrears:"0",
   mortgageLenderName:"Wells Fargo Home Mortgage",
@@ -241,20 +242,20 @@ const INTAKE_SAMPLE = {
   ],
   noBankAccounts: false,
   retirementAccounts: [
-    { id:1, accountType:"401(k)", institution:"Fidelity Investments", balance:"42800", ownerName:"David Kim" },
-    { id:2, accountType:"IRA (Traditional)", institution:"Vanguard", balance:"18600", ownerName:"David Kim" },
-    { id:3, accountType:"403(b)", institution:"TIAA", balance:"31200", ownerName:"Jennifer Kim" },
+    { id:1, accountType:"401(k)", institution:"Fidelity Investments", balance:"42800", ownerName:"Jane Sample" },
+    { id:2, accountType:"IRA (Traditional)", institution:"Vanguard", balance:"18600", ownerName:"Jane Sample" },
+    { id:3, accountType:"403(b)", institution:"TIAA", balance:"31200", ownerName:"John Sample" },
   ],
   noRetirement: false,
   hasLifeInsurance:"yes",
   lifePolicies:[
-    { id:1, policyType:"Term Life", faceValue:"500000", cashValue:"0", beneficiary:"Jennifer Kim" },
-    { id:2, policyType:"Whole Life", faceValue:"50000", cashValue:"4200", beneficiary:"David Kim Jr." },
+    { id:1, policyType:"Term Life", faceValue:"500000", cashValue:"0", beneficiary:"John Sample" },
+    { id:2, policyType:"Whole Life", faceValue:"50000", cashValue:"4200", beneficiary:"Jane Sample Jr." },
   ],
   hasAnnuities:"no", annuities:[{ id:1, annuityType:"", currentValue:"", yearsHeld:"", beneficiary:"" }],
   hasPendingClaims:"no", pendingClaimsDesc:"", pendingClaimsValue:"",
   hasSsClaim:"no", ssPendingDesc:"",
-  hasMoneyOwed:"yes", moneyOwedDesc:"Personal loan owed by brother-in-law (James Walters)", moneyOwedAmt:"3500",
+  hasMoneyOwed:"yes", moneyOwedDesc:"Personal loan owed by brother-in-law (John Doe)", moneyOwedAmt:"3500",
   noHouseholdGoods: false, householdGoodsValue:"4800", electronicsValue:"1200",
   jewelryValue:"1800", toolsValue:"650",
   hasStocks:"yes", stocksValue:"6400", stocksDesc:"Apple (AAPL) — 22 shares; Tesla (TSLA) — 8 shares (held in Robinhood)",
@@ -895,7 +896,7 @@ function useCreditorList() {
     if (creditorListCache.data) { setList(creditorListCache.data); return; }
     if (creditorListCache.loading) { creditorListCache.listeners.push(setList); return; }
     creditorListCache.loading = true;
-    fetch("/CommCred_complete.csv")
+    fetch(CommCredUrl)
       .then(r => r.text())
       .then(text => {
         // RFC-4180 quoted CSV parser — handles commas inside quoted fields
@@ -3309,7 +3310,7 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
         )}
 
         <F label="Street Address" required imported={imp && imp("petition.addr1")}>
-          <TI value={pd.addr1} onChange={v=>up("addr1",v)} placeholder="1247 Maple Grove Drive"/>
+          <TI value={pd.addr1} onChange={v=>up("addr1",v)} placeholder="123 Main St"/>
         </F>
         <F label="Apt / Unit / Suite"><TI value={pd.addr2} onChange={v=>up("addr2",v)} placeholder="Apt 4B"/></F>
         <Grid3>

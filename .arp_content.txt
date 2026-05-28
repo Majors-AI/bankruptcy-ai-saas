@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+﻿import React, { useState, useEffect, useRef, useCallback } from "react";
 import AttorneyDocReview from "./AttorneyDocReview";
 import {
   CheckCircle2,
@@ -235,17 +235,17 @@ const FILING_DOCUMENTS: Array<{
 // ─── Static case data (mirrors ClientDashboard) ───────────────────────────────
 
 const CASE_DATA = {
-  clientName: "David Kim",
-  spouseName: "Jennifer Kim (Non-Filing)",
+  clientName: "Jane Sample",
+  spouseName: "John Sample (Non-Filing)",
   chapter: "7",
-  attorney: "Jennifer Smith, Esq.",
+  attorney: "Test Attorney, Esq.",
   firm: "bankruptcy.AI Legal Group",
   filingType: "Individual — Non-Filing Spouse",
-  retainerDate: "March 15, 2026",
+  retainerDate: "January 1, 2026",
   estimatedFilingDate: "June 10, 2026",
-  totalFee: 1838,
-  paidToDate: 900,
-  email: "david.kim@email.com",
+  totalFee: 1500,
+  paidToDate: 750,
+  email: "jane.sample@example.com",
 };
 
 // Simulated questionnaire answers — in production these come from the database
@@ -256,13 +256,13 @@ const QUESTIONNAIRE_SECTIONS = [
     icon: User,
     status: "complete",
     fields: [
-      { label: "Full Legal Name", value: "David James Kim" },
-      { label: "SSN", value: "XXX-XX-4821" },
-      { label: "DOB", value: "08/14/1981" },
-      { label: "Address", value: "4215 Maple Ridge Dr, Austin, TX 78745" },
-      { label: "Phone", value: "(512) 555-0192" },
-      { label: "Marital Status", value: "Married — Non-Filing Spouse: Jennifer Kim" },
-      { label: "Dependents", value: "2 — Emma Kim (age 10), Noah Kim (age 7)" },
+      { label: "Full Legal Name", value: "Jane Sample" },
+      { label: "SSN", value: "XXX-XX-0000" },
+      { label: "DOB", value: "01/01/1970" },
+      { label: "Address", value: "123 Test St, Anytown, AZ 85001" },
+      { label: "Phone", value: "(555) 555-0000" },
+      { label: "Marital Status", value: "Married — Non-Filing Spouse: John Sample" },
+      { label: "Dependents", value: "2 — Sample Child (age 10), Sample Child (age 7)" },
     ],
   },
   {
@@ -271,7 +271,7 @@ const QUESTIONNAIRE_SECTIONS = [
     icon: Home,
     status: "complete",
     fields: [
-      { label: "Primary Residence", value: "4215 Maple Ridge Dr, Austin TX — FMV $385,000, Mortgage Balance $310,000" },
+      { label: "Primary Residence", value: "123 Test St, Anytown AZ — FMV $385,000, Mortgage Balance $310,000" },
       { label: "Homestead Exemption", value: "Claimed — Texas unlimited homestead" },
       { label: "Vehicle 1", value: "2020 Toyota Camry — FMV $18,500, Loan Balance $14,200 (Chase Auto)" },
       { label: "Vehicle 2", value: "2018 Honda Pilot — FMV $22,000, No lien (spouse, non-filing)" },
@@ -287,7 +287,7 @@ const QUESTIONNAIRE_SECTIONS = [
     icon: Home,
     status: "complete",
     fields: [
-      { label: "Mortgage — Wells Fargo", value: "$310,000 — 4215 Maple Ridge Dr" },
+      { label: "Mortgage — Wells Fargo", value: "$310,000 — 123 Test St" },
       { label: "Auto Loan — Chase Auto", value: "$14,200 — 2020 Toyota Camry" },
     ],
   },
@@ -1647,11 +1647,11 @@ function CaseSummaryTab() {
   // ── Jurisdiction & Venue ───────────────────────────────────────────────────
   const jurisdiction = {
     state: "Texas",
-    county: "Travis County",
-    district: "Western District of Texas",
-    division: "Austin Division",
-    court: "U.S. Bankruptcy Court — Western District of Texas",
-    courthouse: "Homer J. Thornberry Federal Judicial Building, 903 San Jacinto Blvd, Austin, TX 78701",
+    county: "Maricopa County",
+    district: "District of Arizona",
+    division: "Phoenix Division",
+    court: "U.S. Bankruptcy Court — District of Arizona",
+    courthouse: "Sandra Day O'Connor U.S. Courthouse, 401 W Washington St, Phoenix, AZ 85003",
     domicileDays: "730+ days (2+ years)",
     venueCode: "28 U.S.C. § 1408",
     jurisdictionCode: "28 U.S.C. § 1334; 28 U.S.C. § 157",
@@ -1729,7 +1729,7 @@ function CaseSummaryTab() {
     {
       category: "Lawsuit / Judgment",
       severity: "warning" as const,
-      detail: "Capital One obtained a judgment of $5,820. No active garnishment. No wage garnishment or bank levy active at petition date. Judgment lien must be checked against real property — run judgment lien search in Travis County.",
+      detail: "Capital One obtained a judgment of $5,820. No active garnishment. No wage garnishment or bank levy active at petition date. Judgment lien must be checked against real property — run judgment lien search in Maricopa County.",
       action: "Confirm no judgment lien against homestead; if so, lien avoidance motion under §522(f) may be needed.",
     },
     {
@@ -1827,7 +1827,7 @@ function CaseSummaryTab() {
           </div>
         </div>
         <div className="mt-3 p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 leading-relaxed">
-          Client has resided at 4215 Maple Ridge Dr, Austin, TX 78745 (Travis County) for more than 730 days. The Western District of Texas — Austin Division is the proper venue under 28 U.S.C. §1408. Federal subject matter jurisdiction is established under 28 U.S.C. §1334 and 28 U.S.C. §157. No venue or jurisdictional defects identified.
+          Client has resided at 123 Test St, Anytown, AZ 85001 (Maricopa County) for more than 730 days. The District of Arizona — Phoenix Division is the proper venue under 28 U.S.C. §1408. Federal subject matter jurisdiction is established under 28 U.S.C. §1334 and 28 U.S.C. §157. No venue or jurisdictional defects identified.
         </div>
       </SectionCard>
 

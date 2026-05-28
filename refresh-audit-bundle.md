@@ -1,4 +1,4 @@
-# Refresh Audit Bundle — bankruptcy-ai-saas
+﻿# Refresh Audit Bundle — bankruptcy-ai-saas
 
 **Branch:** `feature/maj-61-intake-portal-funding`
 **Repo:** `bankruptcy-ai-saas`
@@ -665,7 +665,7 @@ function IntakeAttorneyReviewModal({
       if (!rev && submission) {
         const created = await sbPost("attorney_intake_reviews", {
           lead_id: lead.id, submission_id: String(submission.id ?? ""),
-          attorney_name: "Jennifer Smith, Esq.", review_status: "in_progress",
+          attorney_name: "Test Attorney, Esq.", review_status: "in_progress",
           ch7_eligible: ch7Eligible, ch13_eligible: ch13Eligible,
           household_size: houseSize, state: lead.state ?? "CO",
           current_monthly_income: cmi, six_month_gross_total: cmi * 6,
@@ -767,7 +767,7 @@ function IntakeAttorneyReviewModal({
         attorney_fee: fields.attorney_fee ?? null,
         filing_fee: fields.court_filing_fee ?? null,
         is_bifurcated: fields.case_type === "ch7_bifurcated",
-        accepted_by: "Jennifer Smith, Esq.",
+        accepted_by: "Test Attorney, Esq.",
         acceptance_notes: fields.decision_notes ?? null,
         decided_at: fields.decided_at ?? null,
       });
@@ -1037,21 +1037,21 @@ interface ClientQuestion {
 }
 
 const CASE_DATA = {
-  clientName: "David Kim",
-  spouseName: "Jennifer Kim",
+  clientName: "Jane Sample",
+  spouseName: "John Sample",
   chapter: "7",
   // "regular" = Ch. 7 Prepaid (full payment required before filing)
   // "bifurcated" = Ch. 7 Bifurcated (can file, then continue paying)
   case_type: "regular" as "regular" | "bifurcated",
   caseNumber: "Pending",
-  attorney: "Jennifer Smith, Esq.",
+  attorney: "Test Attorney, Esq.",
   firm: "MAJORSLAW.ai Legal Group",
   filingType: "Individual — Non-Filing Spouse",
-  retainerDate: "2026-03-15",
+  retainerDate: "2026-01-01",
   estimatedFilingDate: "2026-06-10",
-  totalFee: 1838,
-  paidToDate: 900,
-  payoffDate: "2026-05-28",
+  totalFee: 1500,
+  paidToDate: 750,
+  payoffDate: "2026-05-01",
   currentStage: 2,
   paymentLink: "https://pay.example.com/bk-client",
 };
@@ -1080,7 +1080,7 @@ const isDocUnlocked = daysToPayoff <= DOC_UNLOCK_THRESHOLD;
 const CASE_TYPE_LABEL = CASE_DATA.case_type === "regular" ? "Ch. 7 — Prepaid" : "Ch. 7 — Bifurcated";
 
 const STAGES = [
-  { id: 1, label: "Intake & Retention",       status: "complete", date: "March 15, 2026", icon: "📋",
+  { id: 1, label: "Intake & Retention",       status: "complete", date: "January 1, 2026", icon: "📋",
     purpose: "You retained our firm to represent you in your Chapter 7 bankruptcy case…",
     whatToDo: [], whatHappensNext: "Your case moves to Stage 2 — Information and Documents Collection…" },
   { id: 2, label: "Information & Documents", status: "active",   date: "In Progress",    icon: "📝",
