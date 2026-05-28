@@ -23,6 +23,9 @@ import {
   Layers,
   CheckCircle2,
   XCircle,
+  Activity,
+  TrendingUp,
+  RefreshCw,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
 import { isBankruptcyAISuperAdmin } from '../lib/auth';
@@ -37,7 +40,7 @@ interface Props {
   currentUserRole?: PlatformRole | null;
 }
 
-type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates';
+type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage';
 
 interface Firm {
   id: string;
@@ -146,6 +149,7 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
     { id: 'features',       label: 'Features',       icon: <ToggleRight className="w-3.5 h-3.5" /> },
     { id: 'discounts',      label: 'Discounts',      icon: <Tag className="w-3.5 h-3.5" /> },
     { id: 'tier_templates', label: 'Tier Templates', icon: <Layers className="w-3.5 h-3.5" /> },
+    { id: 'usage',          label: 'Usage & Billing', icon: <Activity className="w-3.5 h-3.5" /> },
   ];
 
   return (
@@ -194,6 +198,7 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
         {activeTab === 'features' && <FeaturesTab firmId={selectedFirmId} />}
         {activeTab === 'discounts' && <DiscountsTab firmId={selectedFirmId} />}
         {activeTab === 'tier_templates' && <TierTemplatesTab />}
+        {activeTab === 'usage' && <UsageTab />}
       </div>
     </div>
   );
@@ -516,6 +521,309 @@ function discountValueLabel(type: string, value: number): string {
     case 'free_months':        return `${value} month${value === 1 ? '' : 's'} free`;
     default:                   return String(value);
   }
+}
+
+// ─── Usage & Billing tab ─────────────────────────────────────────────────────
+
+// Raw row returned from firm_usage_events
+interface UsageEvent {
+  firm_id: string;
+  event_type: string;
+  vendor_cost_cents: number;
+  recorded_at: string;
+}
+
+// Aggregated per-firm per-event_type counts
+interface FirmUsageSummary {
+  firmId: string;
+  firmName: string;
+  allTime: Record<string, number>;
+  currentMonth: Record<string, number>;
+  vendorCostCentsAllTime: number;
+  vendorCostCentsCurrentMonth: number;
+}
+
+const USAGE_EVENT_LABELS: Record<string, string> = {
+  client_created:                   'Clients Created',
+  plaid_bank_connected:             'Plaid Bank Connections',
+  plaid_income_connected:           'Plaid Income Connections',
+  plaid_bank_statement_generated:   'Bank Statements Generated',
+  plaid_income_doc_generated:       'Income Docs Generated',
+  document_uploaded:                'Documents Uploaded',
+  bci_export_generated:             'BCI Exports',
+  zip_export_generated:             'ZIP Exports',
+  sms_sent:                         'SMS Sent',
+  email_sent:                       'Emails Sent',
+};
+
+const PLAID_EVENT_TYPES = new Set([
+  'plaid_bank_connected',
+  'plaid_income_connected',
+  'plaid_bank_statement_generated',
+  'plaid_income_doc_generated',
+]);
+
+function startOfCurrentMonth(): string {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+}
+
+function UsageTab() {
+  const [firms, setFirms] = useState<Firm[] | null>(null);
+  const [events, setEvents] = useState<UsageEvent[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [window, setWindow] = useState<'month' | 'all'>('month');
+
+  const load = async () => {
+    setLoading(true);
+    setErr(null);
+    const [firmsRes, eventsRes] = await Promise.all([
+      supabase.from('firms').select('id, name, slug, status').order('name'),
+      supabase
+        .from('firm_usage_events')
+        .select('firm_id, event_type, vendor_cost_cents, recorded_at')
+        .order('recorded_at', { ascending: false }),
+    ]);
+    if (firmsRes.error) { setErr(firmsRes.error.message); setLoading(false); return; }
+    if (eventsRes.error) { setErr(eventsRes.error.message); setLoading(false); return; }
+    setFirms(firmsRes.data ?? []);
+    setEvents(eventsRes.data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { let cancelled = false; load().then(() => { if (cancelled) return; }); return () => { cancelled = true; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Aggregate events into per-firm summaries
+  const summaries: FirmUsageSummary[] = (firms ?? []).map((firm) => {
+    const monthStart = startOfCurrentMonth();
+    const firmEvents = (events ?? []).filter((e) => e.firm_id === firm.id);
+
+    const allTime: Record<string, number> = {};
+    const currentMonth: Record<string, number> = {};
+    let vendorCostAllTime = 0;
+    let vendorCostMonth = 0;
+
+    for (const ev of firmEvents) {
+      allTime[ev.event_type] = (allTime[ev.event_type] ?? 0) + 1;
+      vendorCostAllTime += ev.vendor_cost_cents ?? 0;
+      if (ev.recorded_at >= monthStart) {
+        currentMonth[ev.event_type] = (currentMonth[ev.event_type] ?? 0) + 1;
+        vendorCostMonth += ev.vendor_cost_cents ?? 0;
+      }
+    }
+
+    return {
+      firmId: firm.id,
+      firmName: firm.name,
+      allTime,
+      currentMonth,
+      vendorCostCentsAllTime: vendorCostAllTime,
+      vendorCostCentsCurrentMonth: vendorCostMonth,
+    };
+  });
+
+  const activeSummaries = summaries.filter((s) =>
+    (firms ?? []).find((f) => f.id === s.firmId)?.status === 'active'
+  );
+
+  const totalEvents = (events ?? []).length;
+  const monthStart = startOfCurrentMonth();
+  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+  return (
+    <section className="space-y-5">
+      {/* Comped notice */}
+      <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
+        <DollarSign className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-bold text-amber-300">V1 Pilot — Both firms are comped</p>
+          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+            MLG and Neeley run at no charge during the pilot. This dashboard captures usage data
+            so pricing can be set from real numbers after the pilot ends.
+          </p>
+        </div>
+      </div>
+
+      {/* Header row */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Usage by Firm</h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {totalEvents.toLocaleString()} total events recorded across all firms
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            disabled={loading}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+          <div className="flex items-center bg-slate-800/70 border border-slate-700/50 rounded-lg p-0.5 gap-0.5">
+            {(['month', 'all'] as const).map((w) => (
+              <button
+                key={w}
+                onClick={() => setWindow(w)}
+                className={`px-3 py-1 rounded-md text-xs font-semibold transition-colors ${
+                  window === w
+                    ? 'bg-amber-500 text-slate-950'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                {w === 'month' ? monthLabel : 'All Time'}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {err ? <ErrorRow message={err} /> : loading ? <LoadingRow /> : events!.length === 0 ? (
+        /* ── Empty state ── */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 text-center">
+          <Activity className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+          <p className="text-sm font-semibold text-slate-400">No usage events recorded yet</p>
+          <p className="text-xs text-slate-600 mt-1.5 max-w-sm mx-auto leading-relaxed">
+            Events are logged as clients are created, documents uploaded, Plaid connected, and
+            exports generated. Data will appear here as the pilot runs.
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* ── Per-firm summary cards ── */}
+          <div className={`grid gap-4 ${activeSummaries.length >= 2 ? 'grid-cols-2' : 'grid-cols-1 max-w-lg'}`}>
+            {activeSummaries.map((s) => {
+              const counts = window === 'month' ? s.currentMonth : s.allTime;
+              const vendorCost = window === 'month' ? s.vendorCostCentsCurrentMonth : s.vendorCostCentsAllTime;
+              const caseCount = counts['client_created'] ?? 0;
+              const plaidCost = (events ?? [])
+                .filter((e) => e.firm_id === s.firmId && PLAID_EVENT_TYPES.has(e.event_type))
+                .filter((e) => window === 'all' || e.recorded_at >= monthStart)
+                .reduce((sum, e) => sum + (e.vendor_cost_cents ?? 0), 0);
+
+              return (
+                <div key={s.firmId} className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+                  {/* Card header */}
+                  <div className="px-5 py-4 border-b border-slate-800 bg-slate-800/40 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-bold text-white">{s.firmName}</p>
+                      <p className="text-[11px] text-slate-500 mt-0.5 font-mono">{s.firmId.slice(0, 8)}…</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-lg font-bold text-amber-400">{caseCount.toLocaleString()}</p>
+                      <p className="text-[11px] text-slate-500">cases</p>
+                    </div>
+                  </div>
+
+                  {/* Metrics grid */}
+                  <div className="divide-y divide-slate-800/50">
+                    {Object.entries(USAGE_EVENT_LABELS).map(([key, label]) => {
+                      const count = counts[key] ?? 0;
+                      const isPlaid = PLAID_EVENT_TYPES.has(key);
+                      return (
+                        <div key={key} className="px-5 py-2.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-xs text-slate-400 truncate">{label}</span>
+                            {isPlaid && (
+                              <span className="text-[9px] font-bold text-sky-400 bg-sky-900/30 border border-sky-700/30 px-1 py-0.5 rounded flex-shrink-0">PLAID</span>
+                            )}
+                          </div>
+                          <span className={`text-sm font-semibold tabular-nums flex-shrink-0 ml-4 ${
+                            count > 0 ? 'text-white' : 'text-slate-700'
+                          }`}>
+                            {count.toLocaleString()}
+                          </span>
+                        </div>
+                      );
+                    })}
+
+                    {/* Vendor cost row */}
+                    <div className="px-5 py-2.5 flex items-center justify-between bg-slate-800/20">
+                      <span className="text-xs font-semibold text-slate-400">Plaid Vendor Cost</span>
+                      <span className={`text-sm font-semibold ${plaidCost > 0 ? 'text-amber-300' : 'text-slate-700'}`}>
+                        {plaidCost > 0 ? fmtCents(plaidCost) : '—'}
+                      </span>
+                    </div>
+                    <div className="px-5 py-2.5 flex items-center justify-between bg-slate-800/20">
+                      <span className="text-xs font-semibold text-slate-400">Total Vendor Cost</span>
+                      <span className={`text-sm font-semibold ${vendorCost > 0 ? 'text-amber-300' : 'text-slate-700'}`}>
+                        {vendorCost > 0 ? fmtCents(vendorCost) : '—'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── Side-by-side comparison + per-case averages ── */}
+          {activeSummaries.length >= 2 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/40 flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                <p className="text-xs font-bold text-white">Per-Case Averages — {window === 'month' ? monthLabel : 'All Time'}</p>
+                <p className="text-xs text-slate-500 ml-1">(feeds V1 pricing model)</p>
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+                    <th className="text-left px-5 py-3">Metric</th>
+                    {activeSummaries.map((s) => (
+                      <th key={s.firmId} className="text-right px-4 py-3">{s.firmName}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/40">
+                  {Object.entries(USAGE_EVENT_LABELS).map(([key, label]) => (
+                    <tr key={key} className="hover:bg-slate-800/20 transition-colors">
+                      <td className="px-5 py-2.5 text-xs text-slate-400">{label}</td>
+                      {activeSummaries.map((s) => {
+                        const counts = window === 'month' ? s.currentMonth : s.allTime;
+                        const cases = counts['client_created'] ?? 0;
+                        const count = counts[key] ?? 0;
+                        const avg = cases > 0 ? (count / cases).toFixed(1) : '—';
+                        return (
+                          <td key={s.firmId} className="px-4 py-2.5 text-sm text-right tabular-nums">
+                            <span className={count > 0 ? 'text-white' : 'text-slate-700'}>
+                              {count.toLocaleString()}
+                            </span>
+                            {cases > 0 && count > 0 && (
+                              <span className="text-[11px] text-slate-600 ml-1.5">({avg}/case)</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                  {/* Vendor cost per case */}
+                  <tr className="bg-slate-800/20">
+                    <td className="px-5 py-2.5 text-xs font-semibold text-slate-400">Total Vendor Cost</td>
+                    {activeSummaries.map((s) => {
+                      const cost = window === 'month' ? s.vendorCostCentsCurrentMonth : s.vendorCostCentsAllTime;
+                      const cases = (window === 'month' ? s.currentMonth : s.allTime)['client_created'] ?? 0;
+                      const perCase = cases > 0 && cost > 0 ? fmtCents(Math.round(cost / cases)) : null;
+                      return (
+                        <td key={s.firmId} className="px-4 py-2.5 text-sm text-right">
+                          <span className={cost > 0 ? 'text-amber-300 font-semibold' : 'text-slate-700'}>
+                            {cost > 0 ? fmtCents(cost) : '—'}
+                          </span>
+                          {perCase && (
+                            <span className="text-[11px] text-slate-600 ml-1.5">({perCase}/case)</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
 }
 
 // ─── Tier templates tab ───────────────────────────────────────────────────────
