@@ -174,3 +174,86 @@ Auth gate carried over from Phase 1 unchanged: page renders the same "Access Den
 6. As a `super_admin_bankruptcy_ai` user (once auth is wired): navigate to the admin page → 5 tabs visible; Features tab shows 24 toggles grouped by category, all Enabled for MLG; Pricing tab shows the comped row; Tier Templates tab shows the 4 starter cards.
 7. As firm staff: same page → "Access Denied" view per the existing Phase 1 gate.
 8. RLS check (psql / Supabase SQL editor as a non-super-admin role) — every read on `tier_templates`, `firm_pricing` (other firm), `firm_pricing_history` (other firm), `firm_discounts`, `firm_features` (other firm) should return 0 rows. `feature_flag_definitions` should return all 24 rows.
+
+---
+
+## Phase 3 — Portal cleanup + trustee org + file cabinet phases (BAN-28, BAN-29, BAN-30)
+
+Branched from `feature/per-firm-pricing-flags` after Phase 2 PR #2.
+
+### Commits in this PR
+
+```
+52fbb35 feat: firm-configurable trustees + manual submission workflow (BAN-29)
+1aa119a feat: phase-based client file structure (BAN-30)
+7920cb1 chore: delete orphan BankruptcyQuestionnaire.tsx (BAN-28)
+```
+
+### Changes
+
+- **BAN-28** — Deleted `src/components/client-portal/BankruptcyQuestionnaire.tsx` (2,441 lines). Re-verified orphan via `grep -rn "from.*['\"].*BankruptcyQuestionnaire['\"]" src/` and the import-form variant → 0 hits. The "comment reference in `IntakeAnswersSummary.tsx`" the Phase 1 audit mentioned was actually about `FullBankruptcyQuestionnaire` (the active component), so that comment stayed.
+- **BAN-30** — Phase-based client file structure.
+  - Migration `20260528040000_client_file_phases.sql` adds the `case_file_phase` Postgres enum (10 values, `01-intake` through `10-discharge`, ordering encoded in labels), a nullable `phase` column on `client_documents`, an index `(client_id, phase)`, and a best-effort backfill UPDATE matching common `document_type` / `document_category` patterns.
+  - New helper `src/lib/casePhases.ts` exports `CaseFilePhase` type, `CASE_FILE_PHASES` ordered list, `PHASE_LABELS`, `PHASE_DESCRIPTIONS`, and `phaseFromDocType(docType, docCategory?)` mirroring the SQL backfill.
+  - 3 upload sites updated to set `phase` at insert time:
+    - `src/DocumentChecklist.tsx` → computes phase from `slotKey`.
+    - `src/bankruptcy-information-and-document-questionnaire(1).jsx` → `saveDocumentToStorage()` helper threads phase through every persisted doc.
+    - `src/components/client-portal/FullBankruptcyQuestionnaire.tsx` → bulk questionnaire-generated document REQUEST records tagged `'04-questionnaire'` explicitly.
+  - `src/FileCabinet.tsx`:
+    - `Document` interface gains `phase: CaseFilePhase | null`.
+    - `client_documents` SELECT now includes `phase`.
+    - `BankruptcyDocumentSections` gains a **By Schedule / By Phase** view-mode toggle. By Schedule preserves the legacy `BKDOC_SECTIONS` grouping unchanged. By Phase groups by `case_file_phase` using `PHASE_LABELS` / `PHASE_DESCRIPTIONS`, auto-expands phases that have docs, and shows an "Unclassified (pending phase assignment)" bucket for NULL-phase rows so they remain visible during backfill review.
+- **BAN-29** — Firm-configurable trustees + manual submission workflow.
+  - Migration `20260528050000_firm_trustees.sql` creates `firm_trustees` (per-firm directory, UNIQUE on `(firm_id, trustee_name, district)`, `submission_method` CHECK to one of `email | portal_manual | portal_api | mail` with `portal_manual` default) and `trustee_submission_log` (records every submission with `documents_included uuid[]`, optional `confirmation_receipt_url`, `status` enum-via-CHECK `submitted | acknowledged | rejected`). RLS: super_admin full; firm staff read/write scoped to own `firm_id`. No seed rows — even MLG starts empty.
+  - New `src/admin/FirmTrusteesPanel.tsx` is the management view: list table with active/inactive toggle, "Add Trustee" button, edit modal with submission-method-aware field visibility (email field shows only when method=`email`; portal URL shows only when `portal_manual`/`portal_api`), deactivate/reactivate actions.
+  - New `src/admin/TrusteeSubmissionWidget.tsx` is the per-case widget: reads `client_documents WHERE phase='07-trustee'`, auto-selects all (operator can deselect individuals), trustee picker from active `firm_trustees`, optional confirmation receipt URL + notes, "Mark as Submitted" writes to `trustee_submission_log`. Includes a submission history list with timestamps and status badges. Helpful empty-state nudge when zero firm trustees are configured.
+  - Wiring: `TrusteeDocumentPortal.tsx` gains a new "Firm Trustees" tab in `NAV_TABS` that mounts `FirmTrusteesPanel`. `FileCabinet.tsx` docs tab renders `TrusteeSubmissionWidget` below `BankruptcyDocumentSections` whenever the active client has any documents in phase `07-trustee`.
+
+### NOT in this PR (separate work)
+
+- Trustee API auto-submission (waits on individual trustee API onboarding).
+- PACER email ingestion (BAN-29 follow-up, separate PR).
+- Calendar 341-deadline auto-flagging (Phase 5).
+- Plaid / iSoftpull live integration (BAN-31, blocked on counsel).
+- Billing engine (BAN-42, blocked on BAN-51 outside counsel review).
+- Replacing the hardcoded `MLG_FIRM_ID` defaults in `FirmTrusteesPanel` / `TrusteeSubmissionWidget` with a global firm context (BAN-40 phase 2).
+- Full duplication review of `FullBankruptcyQuestionnaire.tsx` vs the primary `.jsx` questionnaire — Phase 1's audit noted convergence is needed but it's its own large project.
+
+### Pre-existing issues observed (not addressed)
+
+- Same baseline as Phases 1 + 2: ~280 lint errors / ~40 tsc errors across the codebase, none in this PR's new files. `FirmTrusteesPanel.tsx`, `TrusteeSubmissionWidget.tsx`, `casePhases.ts`, and `20260528040000_client_file_phases.sql` / `20260528050000_firm_trustees.sql` are clean.
+- `npm run build` succeeds in 6.46s. Main bundle is now 3.98 MB / gzip 928 kB (+19 kB from Phase 2, all in the two new admin components).
+
+### How to test
+
+1. Apply migrations (`supabase db push` or whatever the deploy script is).
+2. **BAN-28:**
+   ```
+   ls src/components/client-portal/BankruptcyQuestionnaire.tsx
+   ```
+   should error — file no longer exists.
+3. **BAN-30 schema:**
+   ```sql
+   SELECT typname FROM pg_type WHERE typname = 'case_file_phase';  -- → 1 row
+   SELECT column_name FROM information_schema.columns
+     WHERE table_name = 'client_documents' AND column_name = 'phase';  -- → 1 row
+   ```
+4. **BAN-30 backfill** (with some legacy data):
+   ```sql
+   SELECT phase, COUNT(*) FROM client_documents GROUP BY phase ORDER BY phase;
+   ```
+   The backfill mapping covers `debtor1_*` / `debtor2_*` → `01-intake`, `credit_*` / `isoftpull_*` / `bank_*` → `03-credit-bank`, `sched_*` / `means_*` / `tax_return_*` / `retirement_*` → `04-questionnaire`, etc. Unmatched rows stay NULL.
+5. **BAN-30 UI:** open FileCabinet → client → Documents tab. The header shows a By Schedule / By Phase toggle. Switching to By Phase groups documents into the 10 phase cards with file counts.
+6. **BAN-29 schema:**
+   ```sql
+   SELECT count(*) FROM firm_trustees;
+     -- → 0 (no seed rows for any firm, MLG included)
+   SELECT count(*) FROM trustee_submission_log;  -- → 0
+   ```
+7. **BAN-29 RLS** (as a firm staff user via Supabase SQL editor / authenticated request):
+   ```sql
+   SELECT * FROM firm_trustees;
+     -- returns only your firm's rows
+   ```
+8. **BAN-29 management UI:** TrusteeDocumentPortal → "Firm Trustees" tab → "Add Trustee" → fill name + district + submission method → save. Row appears in table. Edit / deactivate works.
+9. **BAN-29 submission UI:** FileCabinet → client with at least one `07-trustee` document → Documents tab → scroll to "Trustee Submission" widget. Pick a trustee, leave the default doc selection, click "Mark as Submitted". Row appears under "Submission history" with the chosen trustee, method, and timestamp.

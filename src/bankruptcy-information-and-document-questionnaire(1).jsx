@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
 import { normalizeIntake } from "./lib/intakeNormalize";
+import { phaseFromDocType } from "./lib/casePhases";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -15261,6 +15262,10 @@ async function saveDocumentToStorage(clientId, file, docType, category, contextR
     ai_verified: !!aiVerified,
     ai_note: aiNote || null,
     context_ref: contextRef || null,
+    // BAN-30: classify into case_file_phase so the file cabinet groups
+    // this doc correctly. phaseFromDocType returns null when nothing
+    // matches — column is left NULL for manual review in that case.
+    phase: phaseFromDocType(docType, category),
   });
   if (dbErr) throw dbErr;
   return path;

@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import * as pdfjsLib from "pdfjs-dist";
+import { phaseFromDocType } from "./lib/casePhases";
 import {
   CheckCircle2,
   Clock,
@@ -480,16 +481,23 @@ async function uploadToSupabase(clientId: string, slotKey: string, file: File, l
       "Content-Type": "application/json",
       "Prefer": "return=minimal",
     },
-    body: JSON.stringify({
-      client_id: clientId,
-      document_type: slotKey,
-      document_category: slotKey.startsWith("means_") ? "means_test" : slotKey.split("_")[0],
-      storage_path: storageKey,
-      original_filename: file.name,
-      mime_type: file.type,
-      ai_verified: true,
-      ai_note: legibilityNote,
-    }),
+    body: JSON.stringify((() => {
+      const category = slotKey.startsWith("means_") ? "means_test" : slotKey.split("_")[0];
+      return {
+        client_id: clientId,
+        document_type: slotKey,
+        document_category: category,
+        storage_path: storageKey,
+        original_filename: file.name,
+        mime_type: file.type,
+        ai_verified: true,
+        ai_note: legibilityNote,
+        // BAN-30: classify into case_file_phase so the file cabinet groups
+        // this doc correctly. phaseFromDocType returns null when nothing
+        // matches; we leave the column NULL in that case for manual review.
+        phase: phaseFromDocType(slotKey, category),
+      };
+    })()),
   });
 }
 
