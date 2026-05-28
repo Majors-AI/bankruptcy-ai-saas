@@ -22,7 +22,7 @@ Deno.serve(async (req: Request) => {
       duration,      // minutes
       staffName,
       chapterInterest,
-      intakeFormUrl, // base URL for client intake form, e.g. https://app.majorslaw.ai/intake?lead=xxx
+      intakeFormUrl, // base URL for client intake form, e.g. https://app.bankruptcy.ai/intake?lead=xxx
     } = await req.json();
 
     if (!email) {
@@ -50,7 +50,7 @@ Deno.serve(async (req: Request) => {
     }
     const durationLabel = duration ? `${duration} minutes` : "45 minutes";
 
-    const formLink = intakeFormUrl || "https://app.majorslaw.ai/intake";
+    const formLink = intakeFormUrl || "https://app.bankruptcy.ai/intake";
 
     const htmlBody = `
 <!DOCTYPE html>
@@ -98,7 +98,7 @@ Deno.serve(async (req: Request) => {
   <div class="card">
     <div class="header">
       <h1>Consultation Scheduled</h1>
-      <p>MAJORSLAW.ai · ${chapterLabel} Bankruptcy</p>
+      <p>bankruptcy.ai · ${chapterLabel} Bankruptcy</p>
     </div>
     <div class="body">
       <p class="greeting">Dear ${firstName},</p>
@@ -123,7 +123,7 @@ Deno.serve(async (req: Request) => {
           <div class="appt-icon icon-user">👤</div>
           <div>
             <p class="appt-label">Your Intake Specialist</p>
-            <p class="appt-value">${staffName || "MAJORSLAW Intake Team"}</p>
+            <p class="appt-value">${staffName || "bankruptcy.ai Intake Team"}</p>
           </div>
         </div>
       </div>
@@ -148,7 +148,7 @@ Deno.serve(async (req: Request) => {
       </div>
     </div>
     <div class="footer">
-      <p>MAJORSLAW.ai · Bankruptcy Legal Services<br>
+      <p>bankruptcy.ai · Bankruptcy Legal Services<br>
       This is a confidential communication intended only for ${leadName}.<br>
       Please do not reply to this automated email — contact us directly with any questions.</p>
     </div>
@@ -168,7 +168,7 @@ Deno.serve(async (req: Request) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "MAJORSLAW.ai <noreply@majorslaw.ai>",
+          from: "bankruptcy.ai <noreply@bankruptcy.ai>",
           to: [email],
           subject: `Your Consultation is Scheduled — ${apptDate} at ${apptTime}`,
           html: htmlBody,

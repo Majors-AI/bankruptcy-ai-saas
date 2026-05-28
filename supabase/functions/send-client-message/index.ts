@@ -64,7 +64,7 @@ Deno.serve(async (req: Request) => {
       const TWILIO_PHONE_NUMBER = Deno.env.get("TWILIO_PHONE_NUMBER");
 
       if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
-        const smsBody = `[MAJORSLAW] ${senderName}: ${body}`;
+        const smsBody = `[bankruptcy.ai] ${senderName}: ${body}`;
         const params = new URLSearchParams({
           From: TWILIO_PHONE_NUMBER,
           To: clientPhone,
@@ -97,12 +97,12 @@ Deno.serve(async (req: Request) => {
     // ── Email via SendGrid ────────────────────────────────────────────────────
     if (channel === "email" && clientEmail) {
       const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-      const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@majorslaw.ai";
+      const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@bankruptcy.ai";
 
       if (SENDGRID_API_KEY) {
         const emailPayload = {
           personalizations: [{ to: [{ email: clientEmail, name: clientName }] }],
-          from: { email: SENDGRID_FROM, name: `${senderName} — MAJORSLAW` },
+          from: { email: SENDGRID_FROM, name: `${senderName} — bankruptcy.ai` },
           subject: subject ?? `Message from your attorney — ${senderName}`,
           content: [
             {
@@ -110,14 +110,14 @@ Deno.serve(async (req: Request) => {
               value: `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8fafc; border-radius: 12px;">
                   <div style="background: #1e293b; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;">
-                    <h2 style="color: #f8fafc; margin: 0; font-size: 18px;">Message from MAJORSLAW</h2>
+                    <h2 style="color: #f8fafc; margin: 0; font-size: 18px;">Message from bankruptcy.ai</h2>
                     <p style="color: #94a3b8; margin: 4px 0 0; font-size: 13px;">${senderName} · ${senderRole}</p>
                   </div>
                   <div style="background: #ffffff; border-radius: 8px; padding: 20px 24px; border: 1px solid #e2e8f0;">
                     <p style="color: #1e293b; font-size: 15px; line-height: 1.6; white-space: pre-wrap;">${body}</p>
                     ${meetLink ? `<div style="margin-top: 20px; padding: 16px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bbf7d0;"><p style="margin: 0; color: #166534; font-weight: bold; font-size: 13px;">Google Meet Link</p><a href="${meetLink}" style="color: #15803d; font-size: 13px;">${meetLink}</a></div>` : ""}
                   </div>
-                  <p style="color: #94a3b8; font-size: 11px; margin-top: 16px; text-align: center;">This message is from your MAJORSLAW legal team. Do not reply to this email — contact your office directly.</p>
+                  <p style="color: #94a3b8; font-size: 11px; margin-top: 16px; text-align: center;">This message is from your bankruptcy.ai legal team. Do not reply to this email — contact your office directly.</p>
                 </div>
               `,
             },
@@ -153,7 +153,7 @@ Deno.serve(async (req: Request) => {
       const TWILIO_PHONE_NUMBER = Deno.env.get("TWILIO_PHONE_NUMBER");
 
       if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
-        const twiml = `<Response><Say voice="alice">Hello ${clientName.split(" ")[0]}, this is a call from MAJORSLAW regarding your bankruptcy case. ${body}</Say></Response>`;
+        const twiml = `<Response><Say voice="alice">Hello ${clientName.split(" ")[0]}, this is a call from bankruptcy.ai regarding your bankruptcy case. ${body}</Say></Response>`;
         const params = new URLSearchParams({
           From: TWILIO_PHONE_NUMBER,
           To: clientPhone,
@@ -195,7 +195,7 @@ Deno.serve(async (req: Request) => {
       // Notify via email if available
       if (clientEmail) {
         const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-        const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@majorslaw.ai";
+        const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@bankruptcy.ai";
         if (SENDGRID_API_KEY) {
           await fetch("https://api.sendgrid.com/v3/mail/send", {
             method: "POST",
@@ -205,11 +205,11 @@ Deno.serve(async (req: Request) => {
             },
             body: JSON.stringify({
               personalizations: [{ to: [{ email: clientEmail }] }],
-              from: { email: SENDGRID_FROM, name: `${senderName} — MAJORSLAW` },
+              from: { email: SENDGRID_FROM, name: `${senderName} — bankruptcy.ai` },
               subject: subject ?? `Video Meeting Invitation — ${senderName}`,
               content: [{
                 type: "text/html",
-                value: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><h2 style="color:#1e293b;">You have a video meeting invitation</h2><p style="color:#475569;">${body}</p><div style="margin:20px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;"><strong>Join Google Meet:</strong><br/><a href="${resolvedMeetLink}" style="color:#15803d;">${resolvedMeetLink}</a></div><p style="color:#94a3b8;font-size:12px;">From your MAJORSLAW legal team.</p></div>`,
+                value: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;"><h2 style="color:#1e293b;">You have a video meeting invitation</h2><p style="color:#475569;">${body}</p><div style="margin:20px 0;padding:16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;"><strong>Join Google Meet:</strong><br/><a href="${resolvedMeetLink}" style="color:#15803d;">${resolvedMeetLink}</a></div><p style="color:#94a3b8;font-size:12px;">From your bankruptcy.ai legal team.</p></div>`,
               }],
             }),
           });

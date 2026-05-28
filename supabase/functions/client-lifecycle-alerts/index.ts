@@ -10,7 +10,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const RESEND_KEY   = Deno.env.get("RESEND_API_KEY");
 
-const FROM = "MAJORSLAW.ai <noreply@majorslaw.ai>";
+const FROM = "bankruptcy.ai <noreply@bankruptcy.ai>";
 
 async function dbGet(path: string) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
@@ -212,7 +212,7 @@ Deadline: ${new Date(today.getTime() + 60 * 86400000).toLocaleDateString("en-US"
 If you have any questions, please contact our office immediately.
 
 Sincerely,
-MAJORSLAW.ai — Client Services Team
+bankruptcy.ai — Client Services Team
 This is an automated notice. Please do not reply to this email.`.trim();
 
       await sendEmail(client.email, subject, body);
@@ -301,7 +301,7 @@ You deserve to have someone in your corner during this process — please give u
 To discuss your case or ask any questions before our call, you can reply to this email or call our office directly.
 
 Sincerely,
-MAJORSLAW.ai — Client Services Team`.trim();
+bankruptcy.ai — Client Services Team`.trim();
 
     await sendEmail(client_email, subject, body);
 
@@ -336,7 +336,7 @@ async function handleDisengagement(payload: {
 
 NOTICE OF DISENGAGEMENT
 
-This letter serves as formal notice that MAJORSLAW.ai has withdrawn from your legal representation effective as of the date of this notice.
+This letter serves as formal notice that bankruptcy.ai has withdrawn from your legal representation effective as of the date of this notice.
 
 We have processed your cancellation request and wish you the best going forward.
 
@@ -357,14 +357,14 @@ After reviewing your account, all fees paid have been earned based on services r
 
 IMPORTANT NOTICE
 ----------------
-As of the effective date of this disengagement, MAJORSLAW.ai no longer represents you in any legal matter. You should seek independent legal counsel if you wish to continue with your bankruptcy case or any other legal matter.
+As of the effective date of this disengagement, bankruptcy.ai no longer represents you in any legal matter. You should seek independent legal counsel if you wish to continue with your bankruptcy case or any other legal matter.
 
 Any deadlines, court dates, or filing requirements remain your responsibility after the date of this notice.
 
 Please retain this notice for your records.
 
 Sincerely,
-MAJORSLAW.ai — Legal Services Team
+bankruptcy.ai — Legal Services Team
 This is an official correspondence. Please do not disregard this notice.`.trim();
 
   // Send the disengagement email

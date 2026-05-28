@@ -34,7 +34,7 @@ function buildFollowupMessage(c: CollectionCase, contactNumber: number): string 
 
   // Escalating urgency tone based on contact count and days past due
   if (contactNumber <= 1 || daysLate <= 35) {
-    return `Hi ${firstName}, this is a friendly reminder from MAJORSLAW about your bankruptcy case. You have an outstanding balance of ${balance}. We understand things can be tough right now — even a small payment helps keep your case moving forward. If you can make any payment at all, please log in to your client portal or call our office. We're here to work with you.`;
+    return `Hi ${firstName}, this is a friendly reminder from bankruptcy.ai about your bankruptcy case. You have an outstanding balance of ${balance}. We understand things can be tough right now — even a small payment helps keep your case moving forward. If you can make any payment at all, please log in to your client portal or call our office. We're here to work with you.`;
   }
 
   if (contactNumber <= 3 || daysLate <= 60) {
@@ -42,7 +42,7 @@ function buildFollowupMessage(c: CollectionCase, contactNumber: number): string 
   }
 
   if (contactNumber <= 5 || daysLate <= 80) {
-    return `${firstName}, this is an important message regarding your MAJORSLAW account. Your outstanding balance of ${balance} is now ${daysLate} days overdue. We've made several attempts to reach you. Please contact us as soon as possible — we want to help you complete your bankruptcy filing and protect you from creditors. Even a partial payment restarts your case progress. Please call or log in to your portal today.`;
+    return `${firstName}, this is an important message regarding your bankruptcy.ai account. Your outstanding balance of ${balance} is now ${daysLate} days overdue. We've made several attempts to reach you. Please contact us as soon as possible — we want to help you complete your bankruptcy filing and protect you from creditors. Even a partial payment restarts your case progress. Please call or log in to your portal today.`;
   }
 
   // High urgency — escalate to staff review
@@ -118,7 +118,7 @@ Deno.serve(async (req: Request) => {
       channel: channel,
       message_sent: message,
       sent_by: "AI Agent",
-      ai_model: "majorslaw-collections-agent",
+      ai_model: "bankruptcy-ai-collections-agent",
       notes: shouldEscalate ? `Escalated after ${nextContactNum} attempts, ${ccase.days_past_due} days past due` : null,
     };
 
@@ -179,7 +179,7 @@ Deno.serve(async (req: Request) => {
             thread_id: threadId,
             client_id: ccase.client_id,
             sender_role: "staff",
-            sender_name: "MAJORSLAW Collections",
+            sender_name: "bankruptcy.ai Collections",
             subject: "Payment Reminder — Action Required",
             body: message,
             channel: "in_app",

@@ -2068,7 +2068,7 @@ export default function FirmCalendar() {
             </div>
             <div>
               <span className="font-bold text-white text-base tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-                MAJORSLAW<span className="text-amber-400">.ai</span>
+                bankruptcy<span className="text-amber-400">.ai</span>
               </span>
               <span className="hidden sm:inline text-slate-600 mx-2">|</span>
               <span className="hidden sm:inline text-slate-500 text-xs font-medium uppercase tracking-wide">Firm Calendar</span>

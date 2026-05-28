@@ -59,7 +59,7 @@ If you have any questions, please do not hesitate to contact our office.
 
 Sincerely,
 
-MAJORSLAW.ai — Client Services Team
+bankruptcy.ai — Client Services Team
 This is an automated confirmation. Please do not reply to this email.
 `.trim();
 
@@ -73,7 +73,7 @@ This is an automated confirmation. Please do not reply to this email.
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          from: "MAJORSLAW.ai <noreply@majorslaw.ai>",
+          from: "bankruptcy.ai <noreply@bankruptcy.ai>",
           to: [email],
           subject: `Questionnaire Received — ${chapterLabel} Bankruptcy — ${clientName || name}`,
           text: emailBody,

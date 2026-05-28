@@ -199,7 +199,7 @@ function buildEmailHtml(
     <div style="background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:24px 28px;margin-bottom:24px">
       <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
         <div>
-          <div style="font-size:18px;font-weight:800;color:#f59e0b;letter-spacing:-0.02em">MAJORSLAW<span style="color:#94a3b8">.ai</span></div>
+          <div style="font-size:18px;font-weight:800;color:#f59e0b;letter-spacing:-0.02em">bankruptcy<span style="color:#94a3b8">.ai</span></div>
           <div style="font-size:22px;font-weight:700;color:#f1f5f9;margin-top:4px">Daily Client Status Report</div>
           <div style="font-size:13px;color:#64748b;margin-top:2px">${reportDate} · For ${sub.admin_name}</div>
           ${filterNote ? `<div style="font-size:11px;color:#475569;margin-top:4px">Filters: ${filterNote}</div>` : ""}
@@ -231,7 +231,7 @@ function buildEmailHtml(
     <!-- Footer -->
     <div style="border-top:1px solid #1e293b;padding-top:20px;margin-top:8px">
       <p style="font-size:11px;color:#334155;margin:0">
-        This report was generated automatically by MAJORSLAW.ai.
+        This report was generated automatically by bankruptcy.ai.
         To adjust your report preferences, visit the Staff Hub → Reports tab.
         To unsubscribe, contact your system administrator.
       </p>
@@ -255,7 +255,7 @@ async function sendEmail(to: string, subject: string, html: string): Promise<boo
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      from: "MAJORSLAW.ai Reports <reports@majorslaw.ai>",
+      from: "bankruptcy.ai Reports <reports@bankruptcy.ai>",
       to: [to],
       subject,
       html,

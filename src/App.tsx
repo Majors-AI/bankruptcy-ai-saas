@@ -23,6 +23,7 @@ import AIBotPortal from './AIBotPortal';
 import ClientRegistration from './ClientRegistration';
 import AttorneyRegistration from './AttorneyRegistration';
 import LegacyClientImport from './LegacyClientImport';
+import SuperAdminPage from './admin/SuperAdminPage';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -44,7 +45,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'bankruptcy_ai_admin';
 
 // ── Theme hook ────────────────────────────────────────────────────────────────
 function useTheme() {
@@ -173,6 +174,10 @@ function App() {
       id: 'staff_comms', label: 'Comms', activeClass: 'bg-violet-700 text-white shadow-violet-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>,
     },
+    {
+      id: 'bankruptcy_ai_admin', label: 'bankruptcy.ai Admin', activeClass: 'bg-amber-500 text-slate-950 shadow-amber-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
+    },
   ];
 
   // ── Portal toggle bar ─────────────────────────────────────────────────────
@@ -278,7 +283,7 @@ function App() {
             )}
             <span className="text-xs text-slate-400 dark:text-slate-600">|</span>
             <span className="text-xs text-slate-500 font-medium" style={{ fontFamily: "'Georgia', serif" }}>
-              MAJORSLAW<span className="text-amber-500">.ai</span>
+              bankruptcy<span className="text-amber-500">.ai</span>
             </span>
           </div>
         </div>
@@ -441,6 +446,18 @@ function App() {
     return (
       <ErrorBoundary>
         <div className="pb-24"><SuperAdminPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'bankruptcy_ai_admin') {
+    // BAN-40 stub: full Supabase-auth gate pending. For now we pass undefined
+    // so the page renders its "Access Denied" view. Once auth context is wired
+    // up, pass the current user's platform_role here.
+    return (
+      <ErrorBoundary>
+        <div className="pb-24"><SuperAdminPage currentUserRole={undefined} /></div>
         <PortalToggle />
       </ErrorBoundary>
     );

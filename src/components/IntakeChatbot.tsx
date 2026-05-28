@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Bot, User, Loader, MessageSquare, ChevronDown, Sparkles } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { getScript } from "../lib/scriptLibrary";
 
 interface ChatMessage {
   id: string;
@@ -111,9 +112,26 @@ export default function IntakeChatbot({
   async function sendWelcome() {
     if (initialized) return;
     setInitialized(true);
-    const welcomeText = isAdmin
-      ? `Welcome to the intake chat. You are viewing this conversation as ${adminName ?? "a legal admin"}. You can send messages to the client from here — all messages are retained with the file.`
-      : `Hi${clientName ? ` ${clientName.split(" ")[0]}` : ""}! I'm your AI assistant for the intake process. I can answer questions about the form, explain bankruptcy concepts, or help clarify anything as you go. What would you like to know?`;
+
+    // BAN-36: client-facing opening line is sourced from script_library so it
+    // can be updated platform-wide without a code change. The admin variant is
+    // staff-internal and stays inline. firmName isn't available in component
+    // scope today — TODO BAN-40: thread firmName from the firm context once
+    // user_profiles/firms is wired in. For now pass the literal MLG.
+    // NOTE: the system prompt inside supabase/functions/intake-ai-chat/index.ts
+    // also needs UPL review (separate PR per BAN-34) — this only updates the
+    // client-visible welcome message that appears before the LLM is involved.
+    let welcomeText: string;
+    if (isAdmin) {
+      welcomeText = `Welcome to the intake chat. You are viewing this conversation as ${adminName ?? "a legal admin"}. You can send messages to the client from here — all messages are retained with the file.`;
+    } else {
+      const scripted = await getScript('intake_bot_opening', {
+        firm_name: 'Majors Law Group', // TODO BAN-40: replace with firmName from auth/firm context
+      });
+      // Fallback to legacy inline copy if script_library lookup fails.
+      welcomeText = scripted ||
+        `Hi${clientName ? ` ${clientName.split(" ")[0]}` : ""}! I'm your AI assistant for the intake process. I can answer questions about the form, explain bankruptcy concepts, or help clarify anything as you go. What would you like to know?`;
+    }
 
     const saved = await saveMessage({
       sender: "ai",
