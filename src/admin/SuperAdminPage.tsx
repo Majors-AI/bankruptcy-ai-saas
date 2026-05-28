@@ -12,6 +12,7 @@
 // Gated to platform_role = 'super_admin_bankruptcy_ai'.
 
 import { useEffect, useCallback, useState } from 'react';
+import FirmBrandingPanel from './FirmBrandingPanel';
 import {
   Shield,
   AlertTriangle,
@@ -29,6 +30,7 @@ import {
   Activity,
   TrendingUp,
   RefreshCw,
+  Palette,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
 import { isBankruptcyAISuperAdmin } from '../lib/auth';
@@ -48,7 +50,7 @@ interface Props {
   currentUserRole?: PlatformRole | null;
 }
 
-type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage';
+type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding';
 
 interface Firm {
   id: string;
@@ -248,6 +250,7 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
     { id: 'discounts',      label: 'Discounts',      icon: <Tag className="w-3.5 h-3.5" /> },
     { id: 'tier_templates', label: 'Tier Templates', icon: <Layers className="w-3.5 h-3.5" /> },
     { id: 'usage',          label: 'Usage & Billing', icon: <Activity className="w-3.5 h-3.5" /> },
+    { id: 'branding',       label: 'Branding',        icon: <Palette className="w-3.5 h-3.5" /> },
   ];
 
   const selectedFirmName = allFirms.find((f) => f.id === selectedFirmId)?.name ?? selectedFirmId.slice(0, 8);
@@ -315,7 +318,10 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
         {activeTab === 'features'       && <FeaturesTab firmId={selectedFirmId} firmName={selectedFirmName} />}
         {activeTab === 'discounts'      && <DiscountsTab firmId={selectedFirmId} firmName={selectedFirmName} />}
         {activeTab === 'tier_templates' && <TierTemplatesTab />}
-        {activeTab === 'usage' && <UsageTab />}
+        {activeTab === 'usage'          && <UsageTab />}
+        {activeTab === 'branding'       && (
+          <FirmBrandingPanel firmId={selectedFirmId} firmName={selectedFirmName} />
+        )}
       </div>
     </div>
   );

@@ -7,6 +7,19 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const CLIENT_ID = "client-demo";
 
+// V1: MLG firm ID. In production this comes from the client's case record.
+const V1_FIRM_ID = "00000000-0000-0000-0000-000000000001";
+
+interface FirmBranding {
+  display_name: string | null;
+  short_name: string | null;
+  logo_url: string | null;
+  primary_color: string | null;
+  accent_color: string | null;
+  client_portal_welcome_message: string | null;
+  client_portal_footer_message: string | null;
+}
+
 interface ClientQuestion {
   id: string;
   question: string;
@@ -1507,6 +1520,20 @@ interface ClientDashboardProps {
 export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformation, clientId, staffImpersonation }: ClientDashboardProps) {
   const ACTIVE_CLIENT_ID = clientId ?? CLIENT_ID;
   const [activeStageId, setActiveStageId] = useState<number | null>(null);
+
+  // Firm branding — loaded once, falls back to platform defaults when null
+  const [firmBranding, setFirmBranding] = useState<FirmBranding | null>(null);
+  const [welcomeDismissed, setWelcomeDismissed] = useState(false);
+
+  useEffect(() => {
+    fetch(
+      `${SUPABASE_URL}/rest/v1/firm_branding?firm_id=eq.${V1_FIRM_ID}&select=display_name,short_name,logo_url,primary_color,accent_color,client_portal_welcome_message,client_portal_footer_message`,
+      { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
+    )
+      .then((r) => r.ok ? r.json() : [])
+      .then((rows: FirmBranding[]) => { if (rows.length > 0) setFirmBranding(rows[0]); })
+      .catch(() => { /* silently fail — defaults apply */ });
+  }, []);
   const [showStage2Panel, setShowStage2Panel] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [questions, setQuestions] = useState<ClientQuestion[]>([]);
@@ -1643,20 +1670,53 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
         </div>
       )}
 
+      {/* ── Firm welcome message banner (dismissible) ── */}
+      {firmBranding?.client_portal_welcome_message && !welcomeDismissed && (
+        <div className="bg-[#0d1221]/95 border-b border-amber-500/20">
+          <div className="max-w-7xl mx-auto px-5 py-2.5 flex items-start justify-between gap-3">
+            <p className="text-xs text-slate-300 leading-relaxed flex-1">
+              {firmBranding.client_portal_welcome_message}
+            </p>
+            <button
+              onClick={() => setWelcomeDismissed(true)}
+              className="flex-shrink-0 p-1 text-slate-600 hover:text-white transition-colors mt-0.5"
+              aria-label="Dismiss welcome message"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Top Navigation ── */}
       <header className="bg-[#0d1221]/95 border-b border-slate-800/60 sticky top-0 z-30 backdrop-blur">
         <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center">
-                <Scale className="w-4 h-4 text-slate-950" />
-              </div>
-              <span className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-                bankruptcy<span className="text-amber-400">.ai</span>
-              </span>
+              {firmBranding?.logo_url ? (
+                <img
+                  src={firmBranding.logo_url}
+                  alt={firmBranding.display_name ?? 'Firm logo'}
+                  className="h-7 w-auto object-contain"
+                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              ) : (
+                <>
+                  <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center">
+                    <Scale className="w-4 h-4 text-slate-950" />
+                  </div>
+                  <span className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
+                    {firmBranding?.display_name ?? (
+                      <>bankruptcy<span className="text-amber-400">.ai</span></>
+                    )}
+                  </span>
+                </>
+              )}
             </div>
             <span className="hidden sm:block text-slate-700">|</span>
-            <span className="hidden sm:block text-slate-500 text-xs font-medium tracking-wide uppercase">Client Portal</span>
+            <span className="hidden sm:block text-slate-500 text-xs font-medium tracking-wide uppercase">
+              {firmBranding?.short_name ? `${firmBranding.short_name} Client Portal` : 'Client Portal'}
+            </span>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
