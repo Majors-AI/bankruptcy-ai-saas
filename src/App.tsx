@@ -27,6 +27,7 @@ import SuperAdminPage from './admin/SuperAdminPage';
 import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
 import type { NavFlags } from './lib/useFirmFlags';
+import SigningReview from './components/SigningReview';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -48,7 +49,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'bankruptcy_ai_admin';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'bankruptcy_ai_admin';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -64,6 +65,7 @@ const VIEW_FLAGS: Partial<Record<View, keyof NavFlags>> = {
   questionnaire:         'feature_client_portal',
   paralegal:             'feature_paralegal_review',
   attorney_sign:         'feature_attorney_review',
+  signing_review:        'feature_signing_review',
   file_a_case:           'feature_file_a_case',
   ecf_notices:           'feature_ecf_notices',
   creditor_verification: 'feature_creditor_verification',
@@ -283,6 +285,11 @@ function App() {
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
     },
     {
+      id: 'signing_review', label: '7.5. Signing Review', flagKey: 'feature_signing_review',
+      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
+    },
+    {
       id: 'file_a_case', label: '8. File a Case', flagKey: 'feature_file_a_case',
       activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
@@ -490,6 +497,16 @@ function App() {
       <ErrorBoundary>
         <GateToastOverlay />
         <div className="pb-24"><AttorneyReviewPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'signing_review') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><SigningReview /></div>
         <PortalToggle />
       </ErrorBoundary>
     );
