@@ -2867,6 +2867,9 @@ function FullBankruptcyQuestionnaire({ clientId, clientName, onComplete, onBack,
         file_name: req.file_name,
         notes: req.notes,
         requested: true,
+        // BAN-30: questionnaire-generated document requests are always
+        // categorized into the questionnaire phase.
+        phase: '04-questionnaire',
       });
     }
 

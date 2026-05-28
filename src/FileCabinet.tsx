@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { FolderOpen, User, Search, FileText, Clock, DollarSign, Calendar, MessageCircle, Shield, CheckCircle2, AlertTriangle, ChevronRight, RefreshCw, Hash, Phone, Mail, MapPin, Scale, X, ArrowLeft, Activity, Briefcase, CreditCard, Upload, Flag, CheckCheck, Lock, Eye, Filter, ChevronDown, Info, Home, Car, Landmark, Building, Users, BarChart2, ArrowRightLeft, Clipboard, GitBranch, Banknote, PenLine, SendHorizontal as Send } from "lucide-react";
+import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase } from "./lib/casePhases";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -108,6 +109,8 @@ interface Document {
   ai_verified: boolean;
   ai_note: string | null;
   uploaded_at: string;
+  // BAN-30: nullable until backfill is reviewed manually.
+  phase: CaseFilePhase | null;
 }
 
 interface IntakeSubmission {
@@ -951,6 +954,8 @@ function slotLabel(docType: string): string {
   return docType.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 }
 
+type DocViewMode = "by_schedule" | "by_phase";
+
 function BankruptcyDocumentSections({
   documents, supabaseUrl, anonKey,
 }: {
@@ -958,13 +963,31 @@ function BankruptcyDocumentSections({
   supabaseUrl: string;
   anonKey: string;
 }) {
+  // BAN-30: view-mode toggle. "by_schedule" keeps the legacy BKDOC_SECTIONS
+  // grouping (matches document_type prefix against bankruptcy schedule slots).
+  // "by_phase" groups by case_file_phase from the docs table — useful for
+  // reviewing what's been collected at each stage of the case lifecycle.
+  const [viewMode, setViewMode] = useState<DocViewMode>("by_schedule");
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(
     // Auto-expand sections that have documents
     BKDOC_SECTIONS.filter(s => documents.some(d => s.matchFn(d.document_type))).map(s => s.id)
   ));
+  const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set(
+    // Auto-expand phases that have documents
+    CASE_FILE_PHASES.filter(p => documents.some(d => d.phase === p)) as string[]
+  ));
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewName, setPreviewName] = useState<string>("");
   const [loadingPreview, setLoadingPreview] = useState<string | null>(null);
+
+  function togglePhase(phaseKey: string) {
+    setExpandedPhases(prev => {
+      const next = new Set(prev);
+      if (next.has(phaseKey)) next.delete(phaseKey);
+      else next.add(phaseKey);
+      return next;
+    });
+  }
 
   function toggleSection(id: string) {
     setExpandedSections(prev => {
@@ -1009,25 +1032,198 @@ function BankruptcyDocumentSections({
 
   const totalDocs = documents.length;
 
+  // Phase-grouped view buckets. NULL-phase docs land in "unclassified" so
+  // they're still visible (matches behavior of the schedule-view "uncategorized" bucket).
+  const docsByPhase: Record<string, Document[]> = {};
+  for (const p of CASE_FILE_PHASES) docsByPhase[p] = [];
+  const unclassifiedPhase: Document[] = [];
+  for (const d of documents) {
+    if (d.phase && docsByPhase[d.phase]) docsByPhase[d.phase].push(d);
+    else unclassifiedPhase.push(d);
+  }
+
   return (
     <div className="space-y-3">
       {/* Header row */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-xs text-slate-500">
           {totalDocs} document{totalDocs !== 1 ? "s" : ""} on file
         </p>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setExpandedSections(new Set(BKDOC_SECTIONS.map(s => s.id).concat(["uncategorized"])))}
-            className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
-          >Expand All</button>
-          <span className="text-slate-700">·</span>
-          <button
-            onClick={() => setExpandedSections(new Set())}
-            className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
-          >Collapse All</button>
+        <div className="flex items-center gap-3">
+          {/* BAN-30: view-mode toggle */}
+          <div className="flex items-center gap-0.5 p-0.5 bg-slate-800/60 border border-slate-700 rounded-lg">
+            {([
+              { id: "by_schedule" as const, label: "By Schedule" },
+              { id: "by_phase" as const,    label: "By Phase" },
+            ]).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setViewMode(opt.id)}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded transition-colors ${
+                  viewMode === opt.id
+                    ? "bg-slate-700 text-white"
+                    : "text-slate-500 hover:text-slate-300"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {viewMode === "by_schedule" && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setExpandedSections(new Set(BKDOC_SECTIONS.map(s => s.id).concat(["uncategorized"])))}
+                className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
+              >Expand All</button>
+              <span className="text-slate-700">·</span>
+              <button
+                onClick={() => setExpandedSections(new Set())}
+                className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
+              >Collapse All</button>
+            </div>
+          )}
+          {viewMode === "by_phase" && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setExpandedPhases(new Set([...CASE_FILE_PHASES, "unclassified"]))}
+                className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
+              >Expand All</button>
+              <span className="text-slate-700">·</span>
+              <button
+                onClick={() => setExpandedPhases(new Set())}
+                className="text-[10px] font-semibold text-slate-500 hover:text-white transition-colors"
+              >Collapse All</button>
+            </div>
+          )}
         </div>
       </div>
+
+      {viewMode === "by_phase" && (
+        <>
+          {CASE_FILE_PHASES.map(phaseKey => {
+            const phaseDocs = docsByPhase[phaseKey];
+            const isExpanded = expandedPhases.has(phaseKey);
+            const hasDocs = phaseDocs.length > 0;
+            return (
+              <div key={phaseKey} className={`rounded-2xl border overflow-hidden ${hasDocs ? "bg-slate-800/30 border-slate-700/60" : "bg-[#0d1221] border-slate-800"}`}>
+                <button
+                  onClick={() => togglePhase(phaseKey)}
+                  className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-white/[0.02] transition-colors"
+                >
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${hasDocs ? "bg-amber-500/10 border border-amber-500/20" : "bg-slate-800/60 border border-slate-700/60"}`}>
+                    <span className={`text-xs font-mono font-bold ${hasDocs ? "text-amber-400" : "text-slate-600"}`}>
+                      {phaseKey.slice(0, 2)}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={`text-sm font-bold ${hasDocs ? "text-white" : "text-slate-600"}`}>{PHASE_LABELS[phaseKey]}</p>
+                      {hasDocs ? (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
+                          {phaseDocs.length} file{phaseDocs.length !== 1 ? "s" : ""}
+                        </span>
+                      ) : (
+                        <span className="text-[9px] font-semibold text-slate-600 bg-slate-800/50 border border-slate-700/40 rounded-full px-1.5 py-0.5">
+                          No documents
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-0.5 truncate">{PHASE_DESCRIPTIONS[phaseKey]}</p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+                </button>
+                {isExpanded && hasDocs && (
+                  <div className="border-t border-slate-800/60 divide-y divide-slate-800/40">
+                    {phaseDocs.map(doc => (
+                      <div key={doc.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                        <div className="w-8 h-8 rounded-xl bg-slate-800/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+                          {(doc.mime_type?.includes("image") || doc.original_filename?.match(/\.(jpg|jpeg|png|webp|gif)$/i))
+                            ? <Eye className="w-3.5 h-3.5 text-sky-400" />
+                            : <FileText className="w-3.5 h-3.5 text-slate-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-semibold text-white">{slotLabel(doc.document_type)}</p>
+                          <p className="text-[10px] text-slate-500 truncate mt-0.5">{doc.original_filename}</p>
+                          <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                            <span className="text-[9px] text-slate-600">{fmtDate(doc.uploaded_at)}</span>
+                            {doc.ai_verified ? (
+                              <span className="flex items-center gap-1 text-[9px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-0.5">
+                                <CheckCircle2 className="w-2.5 h-2.5" /> Verified
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-semibold text-slate-600 bg-slate-800/50 border border-slate-700/40 rounded-full px-1.5 py-0.5">
+                                Pending Review
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        {doc.storage_path && (
+                          <button
+                            onClick={() => openDocument(doc)}
+                            disabled={loadingPreview === doc.id}
+                            className="flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl px-2.5 py-1.5 transition-colors disabled:opacity-50"
+                          >
+                            {loadingPreview === doc.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
+                            View
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {unclassifiedPhase.length > 0 && (
+            <div className="rounded-2xl border border-slate-700/60 overflow-hidden bg-[#0d1221]">
+              <button
+                onClick={() => togglePhase("unclassified")}
+                className="w-full flex items-center gap-3 px-5 py-4 text-left hover:bg-white/[0.02] transition-colors"
+              >
+                <div className="w-8 h-8 rounded-xl bg-slate-800/60 border border-slate-700/60 flex items-center justify-center flex-shrink-0">
+                  <FolderOpen className="w-4 h-4 text-slate-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-bold text-slate-400">Unclassified (pending phase assignment)</p>
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-slate-700/40 text-slate-400 border-slate-600/40">{unclassifiedPhase.length}</span>
+                  </div>
+                  <p className="text-[10px] text-slate-600 mt-0.5">Docs uploaded before BAN-30 backfill or where the doc type didn't match a known phase pattern.</p>
+                </div>
+                <ChevronDown className={`w-4 h-4 text-slate-500 flex-shrink-0 transition-transform ${expandedPhases.has("unclassified") ? "rotate-180" : ""}`} />
+              </button>
+              {expandedPhases.has("unclassified") && (
+                <div className="border-t border-slate-800/60 divide-y divide-slate-800/40">
+                  {unclassifiedPhase.map(doc => (
+                    <div key={doc.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-white/[0.02] transition-colors">
+                      <div className="w-8 h-8 rounded-xl bg-slate-800/60 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <FileText className="w-3.5 h-3.5 text-slate-500" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-white">{slotLabel(doc.document_type)}</p>
+                        <p className="text-[10px] text-slate-500 truncate mt-0.5">{doc.original_filename}</p>
+                        <p className="text-[9px] text-slate-600 mt-1">{fmtDate(doc.uploaded_at)}</p>
+                      </div>
+                      {doc.storage_path && (
+                        <button
+                          onClick={() => openDocument(doc)}
+                          disabled={loadingPreview === doc.id}
+                          className="flex-shrink-0 flex items-center gap-1 text-[10px] font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 rounded-xl px-2.5 py-1.5 transition-colors"
+                        >
+                          {loadingPreview === doc.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Eye className="w-3 h-3" />}
+                          View
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {viewMode === "by_schedule" && (<>
 
       {/* Per-section cards */}
       {BKDOC_SECTIONS.map(section => {
@@ -1174,6 +1370,7 @@ function BankruptcyDocumentSections({
           )}
         </div>
       )}
+      </>)}
 
       {documents.length === 0 && (
         <div className="bg-[#0d1221] border border-slate-800 rounded-2xl text-center py-16">
@@ -1285,7 +1482,7 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
       sbGet<Message>(`client_messages?client_id=eq.${clientId}&order=created_at.desc&limit=50`),
       sbGet<WorkflowStatus>(`case_workflow_status?client_id=eq.${clientId}&limit=1`),
       sbGet<Task>(`staff_tasks?client_id=eq.${clientId}&order=created_at.desc&limit=50`),
-      sbGet<Document>(`client_documents?select=id,document_type,document_category,original_filename,storage_path,mime_type,ai_verified,ai_note,uploaded_at&client_id=eq.${clientId}&order=uploaded_at.desc&limit=200`),
+      sbGet<Document>(`client_documents?select=id,document_type,document_category,original_filename,storage_path,mime_type,ai_verified,ai_note,uploaded_at,phase&client_id=eq.${clientId}&order=uploaded_at.desc&limit=200`),
       sbGet<IntakeSubmission>(`intake_submissions?lead_id=eq.${clientId}&limit=1`).catch(() =>
         Promise.resolve([] as IntakeSubmission[])
       ),
