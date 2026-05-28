@@ -3,6 +3,7 @@ import { FolderOpen, User, Search, FileText, Clock, DollarSign, Calendar, Messag
 import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase } from "./lib/casePhases";
 import TrusteeSubmissionWidget from "./admin/TrusteeSubmissionWidget";
 import BciExportWidget from "./admin/BciExportWidget";
+import ClientZipDownloadButton from "./admin/ClientZipDownloadButton";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2441,6 +2442,13 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
                         clientId={selectedClient.id}
                         clientName={selectedClient.full_name}
                       />
+                    )}
+
+                    {/* V1 Download Full File — full client ZIP with manifest.
+                        Calls generate-client-zip edge function, signed URL
+                        expires in 24 hours. */}
+                    {selectedClient && (
+                      <ClientZipDownloadButton clientId={selectedClient.id} />
                     )}
                   </div>
                 )}
