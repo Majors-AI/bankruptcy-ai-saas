@@ -2823,6 +2823,10 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
           <F label="Social Security Number" required hint="Filed under seal — never visible to the public or creditors" imported={imp && imp("petition.ssn")}>
             <TI value={pd.ssn} onChange={v=>up("ssn",v)} placeholder="XXX-XX-XXXX"/>
           </F>
+          <Grid2>
+            <F label="Driver's License Number"><TI value={pd.driversLicense} onChange={v=>up("driversLicense",v)} placeholder="DL number"/></F>
+            <F label="DL State"><SEL value={pd.driversLicenseState} onChange={v=>up("driversLicenseState",v)} options={US_STATES} placeholder="State"/></F>
+          </Grid2>
 
           {/* ── Identity Document Capture ── */}
           {clientId && (
@@ -3024,6 +3028,10 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
               <F label="Middle Name"><TI value={pd.spouseMiddle} onChange={v=>up("spouseMiddle",v)} placeholder="Middle"/></F>
               <F label="Last Name" required imported={imp && imp("petition.spouseLast")}><TI value={pd.spouseLast} onChange={v=>up("spouseLast",v)} placeholder="Last"/></F>
             </Grid3>
+            <Grid2>
+              <F label="Driver's License Number"><TI value={pd.driversLicenseSpouse} onChange={v=>up("driversLicenseSpouse",v)} placeholder="DL number"/></F>
+              <F label="DL State"><SEL value={pd.driversLicenseStateSpouse} onChange={v=>up("driversLicenseStateSpouse",v)} options={US_STATES} placeholder="State"/></F>
+            </Grid2>
             {isJoint && (
               <>
                 <Grid2>
