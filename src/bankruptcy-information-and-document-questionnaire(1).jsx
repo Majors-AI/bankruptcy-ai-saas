@@ -13096,6 +13096,54 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                           )}
 
                           {/* ── QUESTION 6: What do you want to do with this? (Chapter 7 only) ── */}
+                          {/* ── QUESTION 6 (Ch13): What do you want to do with this? ── */}
+                          {!isChapter7 && chapter === "13" && collateralAnswered && balanceAnswered && paymentStatusAnswered && arrearsAnswered && (
+                            <div className={`rounded-2xl border px-5 py-4 transition-all ${c.intent ? "border-green-500/30 bg-green-500/5" : "border-amber-400/40 bg-amber-400/5"}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${c.intent ? "bg-green-500/20 text-green-400" : "bg-amber-400/20 text-amber-400"}`}>
+                                  {c.intent ? "✓" : isRE ? "4" : isVeh ? (c.isCurrent === "No" ? "5" : "4") : "4"}
+                                </span>
+                                <p className="text-sm font-bold text-white">
+                                  {isRE ? "What would you like to do with this property?" : isVeh ? "What would you like to do with this vehicle?" : "What would you like to do with this secured debt?"}
+                                </p>
+                              </div>
+                              <p className="text-xs text-slate-400 mb-4 leading-relaxed ml-8">
+                                In Chapter 13, your plan will address this debt. Let us know your intent — your attorney will confirm the approach and structure it in your repayment plan.
+                              </p>
+                              <div className="ml-8 space-y-2.5">
+                                {[
+                                  { value:"keep",      emoji:"✅", label:"Keep it and pay through the plan",      tagline:"You keep the property — payments are included in your Chapter 13 plan.",        plain:"Your monthly plan payment will cover any arrears and ongoing obligations on this debt. You keep the property as long as you complete your plan." },
+                                  { value:"surrender", emoji:"🔄", label:"Give it back to the lender (Surrender)", tagline:"Hand it over — the remaining balance is addressed in the plan.",                   plain:"You return the property to the lender. Any remaining balance after surrender is treated as an unsecured claim in your plan, which is often paid pennies on the dollar." },
+                                  { value:"other",     emoji:"📋", label:"Something else",                        tagline:"Describe your situation.",                                                         plain:"If neither option fits, choose this and explain. Your attorney will review it and determine the best approach for your plan." },
+                                ].map(opt => (
+                                  <label key={opt.value}
+                                    className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
+                                      c.intent===opt.value ? "border-amber-400/60 bg-amber-400/10" : "border-slate-700 hover:border-slate-600 bg-slate-800/30"
+                                    }`}>
+                                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-1 flex items-center justify-center transition-all ${
+                                      c.intent===opt.value ? "border-amber-400 bg-amber-400" : "border-slate-600"
+                                    }`}>
+                                      {c.intent===opt.value && <span className="w-1.5 h-1.5 rounded-full bg-slate-950 block"/>}
+                                    </div>
+                                    <input type="radio" className="sr-only" name={`intent-${schedKey}-${i}`} value={opt.value} checked={c.intent===opt.value} onChange={()=>updC(i,"intent",opt.value)}/>
+                                    <div className="flex-1">
+                                      <p className={`text-sm font-bold ${c.intent===opt.value?"text-amber-300":"text-slate-200"}`}>{opt.emoji} {opt.label}</p>
+                                      <p className={`text-xs mt-0.5 mb-1 font-medium ${c.intent===opt.value?"text-amber-400/80":"text-slate-500"}`}>{opt.tagline}</p>
+                                      <p className="text-xs text-slate-400 leading-relaxed">{opt.plain}</p>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                              {c.intent==="other" && (
+                                <div className="mt-3 ml-8">
+                                  <F label="Describe what you'd like to do">
+                                    <TI value={c.intentOther||""} onChange={v=>updC(i,"intentOther",v)} placeholder="Tell us what you have in mind — your attorney will review it"/>
+                                  </F>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {isChapter7 && collateralAnswered && balanceAnswered && paymentStatusAnswered && arrearsAnswered && (
                             <div className={`rounded-2xl border px-5 py-4 transition-all ${intentAnswered ? "border-green-500/30 bg-green-500/5" : "border-amber-400/40 bg-amber-400/5"}`}>
                               <div className="flex items-center gap-2 mb-2">
