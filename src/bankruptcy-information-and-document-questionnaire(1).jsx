@@ -1924,7 +1924,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <SBlock title="Unexpired Contracts & Leases">
             {leases.length === 0
               ? <SRow label="Contracts / Leases" value="None listed"/>
-              : leases.map((l,i) => <SRow key={i} label={`Contract ${i+1}`} value={`${l.counterparty||"Unknown"} — ${l.description||""}`} missing={!l.counterparty}/>)
+              : leases.map((l,i) => <SRow key={i} label={`Contract ${i+1}`} value={`${l.name||"Unknown"} — ${l.description||""}`} missing={!l.name}/>)
             }
           </SBlock>
         );
@@ -14064,7 +14064,7 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
 function SectionSchedG({d,u}) {
   const sd = d.schedG||{contracts:[]};
   const items = sd.contracts||[];
-  const add = () => u("schedG",{...sd,contracts:[...items,{name:"",addr:"",description:"",payment:""}]});
+  const add = () => u("schedG",{...sd,contracts:[...items,{name:"",addr:"",city:"",state:"",zip:"",description:"",payment:"",contractType:"",startDate:"",endDate:"",intent:""}]});
   const upd = (i,f,v) => { const a=[...items]; a[i]={...a[i],[f]:v}; u("schedG",{...sd,contracts:a}); };
   const rem = (i) => { const a=[...items]; a.splice(i,1); u("schedG",{...sd,contracts:a}); };
   return (
@@ -14078,17 +14078,30 @@ function SectionSchedG({d,u}) {
       {sd.hasContracts==="Yes" && (
         <>
           {items.map((c,i)=>(
-            <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
-              <div className="flex justify-between items-center mb-2">
+            <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2 space-y-3">
+              <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Contract / Lease {i+1}</span>
                 <RemBtn onClick={()=>rem(i)}/>
               </div>
               <Grid2>
-                <F label="Other Party Name"><TI value={c.name} onChange={v=>upd(i,"name",v)} placeholder="Landlord / lessor name"/></F>
-                <F label="Monthly Payment"><TI type="number" value={c.payment} onChange={v=>upd(i,"payment",v)} placeholder="$0"/></F>
+                <F label="Other Party Name"><TI value={c.name||""} onChange={v=>upd(i,"name",v)} placeholder="Landlord / lessor name"/></F>
+                <F label="Contract / Lease Type"><SEL value={c.contractType||""} onChange={v=>upd(i,"contractType",v)} options={["Residential Lease","Vehicle Lease","Lease-to-Own / Rent-to-Own","Equipment / Furniture Lease","Service Contract","Timeshare","Other"]}/></F>
               </Grid2>
-              <F label="Other Party Address"><TI value={c.addr} onChange={v=>upd(i,"addr",v)} placeholder="Address"/></F>
-              <F label="Description of Contract / Lease"><TI value={c.description} onChange={v=>upd(i,"description",v)} placeholder="e.g. Residential lease at 123 Main St, expires Dec 2026"/></F>
+              <F label="Other Party Street Address"><TI value={c.addr||""} onChange={v=>upd(i,"addr",v)} placeholder="Street address or PO Box"/></F>
+              <Grid3>
+                <F label="City"><TI value={c.city||""} onChange={v=>upd(i,"city",v)} placeholder="City"/></F>
+                <F label="State"><SEL value={c.state||""} onChange={v=>upd(i,"state",v)} options={US_STATES} placeholder="State"/></F>
+                <F label="ZIP"><TI value={c.zip||""} onChange={v=>upd(i,"zip",v)} placeholder="ZIP"/></F>
+              </Grid3>
+              <F label="Description of Contract / Lease"><TI value={c.description||""} onChange={v=>upd(i,"description",v)} placeholder="e.g. Residential lease at 123 Main St, expires Dec 2026"/></F>
+              <Grid2>
+                <F label="Start Date"><TI type="date" value={c.startDate||""} onChange={v=>upd(i,"startDate",v)}/></F>
+                <F label="End / Expiration Date"><TI type="date" value={c.endDate||""} onChange={v=>upd(i,"endDate",v)}/></F>
+              </Grid2>
+              <Grid2>
+                <F label="Monthly Payment"><TI type="number" value={c.payment||""} onChange={v=>upd(i,"payment",v)} placeholder="$0"/></F>
+                <F label="Intent"><SEL value={c.intent||""} onChange={v=>upd(i,"intent",v)} options={["Assume / keep it","Reject / surrender it","Undecided — attorney to advise"]}/></F>
+              </Grid2>
             </div>
           ))}
           <AddBtn onClick={add} label="Add Contract / Lease"/>
