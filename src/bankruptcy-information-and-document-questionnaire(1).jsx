@@ -14985,10 +14985,10 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
         )}
       </Card>
 
-      {/* Preferential payments — pre-populated from intake */}
+      {/* Preferential payments — ordinary creditors, 90 days */}
       <Card>
-        <CardTitle icon="💳" title="SOFA Part 3 — Preferential Payments" sub="Payments to insiders in last 12 months, or any creditor in last 90 days totaling more than $7,575"/>
-        <F label="Did you make any large payments to creditors or family?" imported={imp&&imp("sofa2.hasPreferential")}>
+        <CardTitle icon="💳" title="SOFA Part 3 — Payments to Creditors (Last 90 Days)" sub="Payments totaling $7,575 or more to any single creditor in the 90 days before filing — banks, lenders, credit cards, medical providers"/>
+        <F label="Did you make payments of $7,575 or more to any single creditor in the last 90 days?" imported={imp&&imp("sofa2.hasPreferential")}>
           <div className="flex gap-3 mb-3">
             {["yes","no"].map(v=><RAD key={v} name="hasPrefer" value={v} current={sd.hasPreferential} onChange={val=>up("hasPreferential",val)} label={v==="yes"?"Yes":"No"}/>)}
           </div>
@@ -15012,12 +15012,46 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
                 <Grid2>
                   <F label="Amount Paid" imported={!!(p.amount)}><TI type="number" value={p.amount} onChange={v=>prefer.upd(i,"amount",v)} placeholder="$0"/></F>
                   <F label="Date" imported={!!(p.date)}><TI type="date" value={p.date} onChange={v=>prefer.upd(i,"date",v)}/></F>
-                  <F label="Relationship" imported={!!(p.relationship)}><TI value={p.relationship} onChange={v=>prefer.upd(i,"relationship",v)} placeholder="Insider / arm's length"/></F>
+                  <F label="Relationship" imported={!!(p.relationship)}><TI value={p.relationship} onChange={v=>prefer.upd(i,"relationship",v)} placeholder="e.g. Credit card issuer, bank, medical provider"/></F>
                 </Grid2>
                 <F label="Creditor Full Address" hint="Required for petition"><TI value={p.creditorAddr} onChange={v=>prefer.upd(i,"creditorAddr",v)} placeholder="Street, City, State, ZIP"/></F>
               </div>
             ))}
             <AddBtn onClick={prefer.add} label="Add Payment"/>
+          </>
+        )}
+      </Card>
+
+      {/* Insider payments — Q7/Q8 */}
+      <Card>
+        <CardTitle icon="👥" title="SOFA Part 3 — Payments to Insiders / Family / Friends (Last 1 Year)" sub="Relatives, business partners, or close associates paid for any reason in the 12 months before filing (SOFA Q7/Q8)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>This means relatives, business partners, or close associates — <strong className="text-white">not</strong> regular credit-card or loan payments to banks and lenders (those belong in the card above).</span>
+        </div>
+        <F label="Did you pay any relative, business partner, or close associate within the last 1 year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasInsiderPayments" value={v} current={sd.hasInsiderPayments} onChange={val=>up("hasInsiderPayments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasInsiderPayments==="Yes" && (
+          <>
+            {insider.items.map((p,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Payment {i+1}</span>
+                  <RemBtn onClick={()=>insider.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Name"><TI value={p.name} onChange={v=>insider.upd(i,"name",v)} placeholder="Full name"/></F>
+                  <F label="Relationship"><TI value={p.relationship} onChange={v=>insider.upd(i,"relationship",v)} placeholder="e.g. Spouse, parent, business partner"/></F>
+                  <F label="Amount Paid"><TI type="number" value={p.amount} onChange={v=>insider.upd(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={p.date} onChange={v=>insider.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Reason for Payment"><TI value={p.reason} onChange={v=>insider.upd(i,"reason",v)} placeholder="e.g. Loan repayment, gift, services rendered"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={insider.add} label="Add Payment"/>
           </>
         )}
       </Card>
