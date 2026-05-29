@@ -14615,6 +14615,9 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
       {/* Payroll deductions */}
       <Card>
         <CardTitle icon="📉" title="Monthly Payroll Deductions" sub="From current pay stub — not collected during intake"/>
+        <div className="mb-4 px-4 py-3 bg-blue-500/8 border border-blue-500/25 rounded-xl text-xs text-blue-200 leading-relaxed">
+          <strong className="text-white">Optional</strong> — if you have uploaded recent pay stubs, you can skip this section. Your attorney will complete these figures directly from your pay stubs before filing.
+        </div>
         <Grid2>
           <F label="Federal Income Tax Withheld"><TI type="number" value={id_.fedTaxWH} onChange={v=>up("fedTaxWH",v)} placeholder="$0"/></F>
           <F label="State Income Tax Withheld"><TI type="number" value={id_.stateTaxWH} onChange={v=>up("stateTaxWH",v)} placeholder="$0"/></F>
