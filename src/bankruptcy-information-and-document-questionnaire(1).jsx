@@ -791,8 +791,9 @@ function mapIntakeToRetention(intake) {
   mapped.sofa3 = {
     priorBkFiled: intake.priorBankruptcy,
     priorBankruptcies: intake.priorBankruptcy === "yes" ? (intake.priorBankruptcies || []).map(b => ({
-      chapter: b.chapter, yearFiled: b.yearFiled, disposition: b.disposition,
-      caseNumber: b.caseNumber, district: b.district,
+      chapter: b.chapter, disposition: b.disposition, district: b.district,
+      caseNo: b.caseNumber,
+      dateFiled: b.yearFiled ? `${b.yearFiled}-01-01` : "",
     })) : [],
     hasLawsuits: intake.pendingLawsuits, lawsuitDetails: intake.lawsuitDetails,
     dsoObligation: intake.dsoObligation, dsoAmount: intake.dsoAmount,
@@ -15238,13 +15239,17 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
   const sd = d.sofa3||{lawsuits:[],priorBankruptcies:[]};
   const up = (f,v) => u("sofa3",{...sd,[f]:v});
   const suits = sd.lawsuits||[];
-  const addSuit = () => u("sofa3",{...sd,lawsuits:[...suits,{title:"",caseNo:"",court:"",status:"",nature:""}]});
+  const addSuit = () => u("sofa3",{...sd,lawsuits:[...suits,{title:"",caseNo:"",court:"",status:"",nature:"",opposingParty:"",dateFiled:"",amount:"",propertyDescription:""}]});
   const updSuit = (i,f,v) => { const a=[...suits]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,lawsuits:a}); };
   const remSuit = (i) => { const a=[...suits]; a.splice(i,1); u("sofa3",{...sd,lawsuits:a}); };
   const bks = sd.priorBankruptcies||[];
   const addBk = () => u("sofa3",{...sd,priorBankruptcies:[...bks,{caseNo:"",district:"",dateFiled:"",chapter:"",disposition:""}]});
   const updBk = (i,f,v) => { const a=[...bks]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorBankruptcies:a}); };
   const remBk = (i) => { const a=[...bks]; a.splice(i,1); u("sofa3",{...sd,priorBankruptcies:a}); };
+  const repos = sd.repos||[];
+  const addRepo = () => u("sofa3",{...sd,repos:[...repos,{actionType:"",creditor:"",propertyDescription:"",date:"",value:""}]});
+  const updRepo = (i,f,v) => { const a=[...repos]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,repos:a}); };
+  const remRepo = (i) => { const a=[...repos]; a.splice(i,1); u("sofa3",{...sd,repos:a}); };
   const addrs = sd.priorAddresses||[];
   const addAddr = () => u("sofa3",{...sd,priorAddresses:[...addrs,{address:"",city:"",state:"",zip:"",fromDate:"",toDate:""}]});
   const updAddr = (i,f,v) => { const a=[...addrs]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorAddresses:a}); };
@@ -15278,6 +15283,12 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
                   <F label="Status"><SEL value={s.status} onChange={v=>updSuit(i,"status",v)} options={["Pending","Judgment against me","Judgment in my favor","Settled","Default judgment"]}/></F>
                 </Grid2>
                 <F label="Nature of Case"><TI value={s.nature} onChange={v=>updSuit(i,"nature",v)} placeholder="e.g. Debt collection, personal injury, foreclosure"/></F>
+                <Grid2>
+                  <F label="Opposing Party (Creditor / Plaintiff)"><TI value={s.opposingParty} onChange={v=>updSuit(i,"opposingParty",v)} placeholder="Full name of creditor or plaintiff"/></F>
+                  <F label="Date Filed"><TI type="date" value={s.dateFiled} onChange={v=>updSuit(i,"dateFiled",v)}/></F>
+                  <F label="Amount at Issue / Judgment"><TI type="number" value={s.amount} onChange={v=>updSuit(i,"amount",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Involved (if any)"><TI value={s.propertyDescription} onChange={v=>updSuit(i,"propertyDescription",v)} placeholder="e.g. Home at 123 Main St — leave blank if none"/></F>
               </div>
             ))}
             <AddBtn onClick={addSuit} label="Add Lawsuit"/>
@@ -15349,7 +15360,27 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
             {["Yes","No"].map(v=><RAD key={v} name="hasRepo" value={v} current={sd.hasRepo} onChange={val=>up("hasRepo",val)} label={v}/>)}
           </div>
         </F>
-        {sd.hasRepo==="Yes" && <F label="Describe the property and circumstances"><TI value={sd.repoDetails} onChange={v=>up("repoDetails",v)} placeholder="What was repossessed, by whom, and when?"/></F>}
+        {sd.hasRepo==="Yes" && (
+          <>
+            {repos.map((r,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Action {i+1}</span>
+                  <RemBtn onClick={()=>remRepo(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Action Type"><SEL value={r.actionType} onChange={v=>updRepo(i,"actionType",v)} options={["Repossession","Foreclosure","Garnishment","Seizure","Other"]}/></F>
+                  <F label="Creditor / Party"><TI value={r.creditor} onChange={v=>updRepo(i,"creditor",v)} placeholder="Creditor or party name"/></F>
+                  <F label="Date"><TI type="date" value={r.date} onChange={v=>updRepo(i,"date",v)}/></F>
+                  <F label="Value"><TI type="number" value={r.value} onChange={v=>updRepo(i,"value",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Description"><TI value={r.propertyDescription} onChange={v=>updRepo(i,"propertyDescription",v)} placeholder="Describe the property"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addRepo} label="Add Action"/>
+            <F label="Additional Notes"><TI value={sd.repoDetails} onChange={v=>up("repoDetails",v)} placeholder="Any additional context (optional)"/></F>
+          </>
+        )}
       </Card>
 
       {/* Prior addresses — SOFA Q20 */}
