@@ -14731,8 +14731,26 @@ function SectionSchedJ({d,u,imp,ImportBanner}) {
       </Card>
       <Card>
         <CardTitle icon="🏥" title="Health & Insurance"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>If an expense like health insurance or retirement is already deducted from your paycheck, don't enter it again here — it's already counted in your payroll deductions on the Income page.</span>
+        </div>
         <Grid2>
-          <F label="Health Insurance Premium" imported={imp&&imp("schedJ.healthInsurance")}><TI type="number" value={jd.healthInsurance} onChange={v=>up("healthInsurance",v)} placeholder="$0"/></F>
+          <div>
+            <F label="Health Insurance Premium" imported={imp&&imp("schedJ.healthInsurance")}><TI type="number" value={jd.healthInsurance} onChange={v=>up("healthInsurance",v)} placeholder="$0"/></F>
+            <label className="flex items-center gap-2 mt-1.5 cursor-pointer group">
+              <div
+                className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${jd.healthInsInPaycheck ? "bg-amber-400 border-amber-400" : "border-slate-600 group-hover:border-slate-400"}`}
+                onClick={() => up("healthInsInPaycheck", !jd.healthInsInPaycheck)}
+              >
+                {jd.healthInsInPaycheck && <svg className="w-2.5 h-2.5 text-slate-950" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
+              </div>
+              <span className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">Already withheld from my paycheck</span>
+            </label>
+            {jd.healthInsInPaycheck && (
+              <p className="text-xs text-amber-300/80 mt-1 leading-relaxed">If checked, leave the amount blank above to avoid double-counting with your payroll deductions.</p>
+            )}
+          </div>
           <F label="Life Insurance Premium"><TI type="number" value={jd.lifePremium} onChange={v=>up("lifePremium",v)} placeholder="$0"/></F>
           <F label="Out-of-Pocket Medical Expenses" imported={imp&&imp("schedJ.medical")}><TI type="number" value={jd.medical} onChange={v=>up("medical",v)} placeholder="$0"/></F>
           <F label="Dental Expenses"><TI type="number" value={jd.dental} onChange={v=>up("dental",v)} placeholder="$0"/></F>
