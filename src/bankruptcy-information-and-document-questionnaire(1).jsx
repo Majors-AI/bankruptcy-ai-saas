@@ -1978,7 +1978,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
         return (
           <SBlock title="Income (Prior 2 Years)">
             <SRow label="Gross — Prior Year 1" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
-            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossPrior2) || "Not provided"}/>
+            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
             <SRow label="Owned a Business?" value={sd.ownedBusiness === "yes" ? "Yes" : "No"}/>
           </SBlock>
         );
@@ -14851,9 +14851,13 @@ function SectionSOFA1({d,u,imp,ImportBanner}) {
   const sd = d.sofa1||{businesses:[]};
   const up = (f,v) => u("sofa1",{...sd,[f]:v});
   const bizs = sd.businesses||[];
-  const addBiz = () => u("sofa1",{...sd,businesses:[...bizs,{name:"",ein:"",type:"",from:"",to:"",role:""}]});
+  const addBiz = () => u("sofa1",{...sd,businesses:[...bizs,{name:"",ein:"",type:"",from:"",to:"",role:"",address:""}]});
   const updBiz = (i,f,v) => { const a=[...bizs]; a[i]={...a[i],[f]:v}; u("sofa1",{...sd,businesses:a}); };
   const remBiz = (i) => { const a=[...bizs]; a.splice(i,1); u("sofa1",{...sd,businesses:a}); };
+  const stmts = sd.finStmtRecipients||[];
+  const addStmt = () => u("sofa1",{...sd,finStmtRecipients:[...stmts,{name:"",address:"",date:""}]});
+  const updStmt = (i,f,v) => { const a=[...stmts]; a[i]={...a[i],[f]:v}; u("sofa1",{...sd,finStmtRecipients:a}); };
+  const remStmt = (i) => { const a=[...stmts]; a.splice(i,1); u("sofa1",{...sd,finStmtRecipients:a}); };
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={["sofa1.grossPrior"]}/>}
@@ -14889,9 +14893,36 @@ function SectionSOFA1({d,u,imp,ImportBanner}) {
                   <F label="From (date)"><TI type="month" value={b.from} onChange={v=>updBiz(i,"from",v)}/></F>
                   <F label="To (or 'Present')"><TI value={b.to} onChange={v=>updBiz(i,"to",v)} placeholder="Present or MM/YYYY"/></F>
                 </Grid2>
+                <F label="Business Address"><TI value={b.address} onChange={v=>updBiz(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
               </div>
             ))}
             <AddBtn onClick={addBiz} label="Add Business"/>
+          </>
+        )}
+      </Card>
+      <Card>
+        <CardTitle icon="📄" title="SOFA Part 7 — Financial Statements" sub="Did you provide financial statements to any creditor, bank, or other party in the last 2 years? (SOFA Q28)"/>
+        <F label="Did you provide financial statements to any creditor, bank, or other party in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="gaveFinancialStmt" value={v} current={sd.gaveFinancialStmt} onChange={val=>up("gaveFinancialStmt",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.gaveFinancialStmt==="Yes" && (
+          <>
+            {stmts.map((s,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Recipient {i+1}</span>
+                  <RemBtn onClick={()=>remStmt(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Recipient Name"><TI value={s.name} onChange={v=>updStmt(i,"name",v)} placeholder="Full name or entity"/></F>
+                  <F label="Date Provided"><TI type="date" value={s.date} onChange={v=>updStmt(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Recipient Address"><TI value={s.address} onChange={v=>updStmt(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addStmt} label="Add Recipient"/>
           </>
         )}
       </Card>
