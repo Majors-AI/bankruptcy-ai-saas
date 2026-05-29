@@ -9226,6 +9226,57 @@ function SectionSchedC({d,u}) {
         </p>
       </div>
 
+      {/* Residency & Jurisdiction Confirmation */}
+      <div className="border border-slate-600 rounded-2xl overflow-hidden mb-5">
+        <div className="bg-slate-800 px-5 py-3 border-b border-slate-700 flex items-center gap-2">
+          <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <div>
+            <p className="text-sm font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>Residency &amp; Filing Jurisdiction</p>
+            <p className="text-xs text-slate-400 mt-0.5">Confirm the domicile information your attorney will use to determine which exemption laws apply to your case.</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Filing State</p>
+              <p className="text-sm text-white font-medium">{d.petition?.state || <span className="text-slate-500 italic">Not set</span>}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Exemption System</p>
+              <p className="text-sm text-white font-medium">{exemptSystem}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time at Current Address</p>
+              <p className="text-sm text-white font-medium">{d.petition?.addressYears || <span className="text-slate-500 italic">Not answered</span>}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">In This State 2+ Years?</p>
+              <p className="text-sm text-white font-medium">
+                {d.petition?.inStateTwo === "yes" ? "Yes" : d.petition?.inStateTwo === "no" ? "No" : d.petition?.addressYears === "2+ years" ? "Yes (2+ years at address)" : <span className="text-slate-500 italic">Not answered</span>}
+              </p>
+            </div>
+            {d.petition?.domicileState180 && (
+              <div className="bg-amber-400/10 border border-amber-400/25 rounded-xl px-3 py-2.5 col-span-2">
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1">Prior Domicile State (180-Day Lookback)</p>
+                <p className="text-sm text-white font-medium">{d.petition.domicileState180}</p>
+                <p className="text-xs text-slate-400 mt-1">Your attorney will apply <strong className="text-white">{d.petition.domicileState180}</strong> exemption laws based on your prior domicile.</p>
+              </div>
+            )}
+          </div>
+          <div className="bg-slate-900/40 border-t border-slate-800 -mx-5 px-5 pt-4 mt-4">
+            <ConfirmCheck
+              id="schedC_residency_confirm"
+              checked={!!d.schedC?.residencyConfirmed}
+              onChange={v => u("schedC", {...(d.schedC||{}), residencyConfirmed: v})}
+            >
+              <span className="text-sm text-slate-200 leading-relaxed">
+                I confirm the residency and filing-jurisdiction information above is correct. I understand my attorney will use this to determine which state's exemption laws apply to my case.
+              </span>
+            </ConfirmCheck>
+          </div>
+        </div>
+      </div>
+
       {/* Net Equity Summary Table */}
       {(() => {
         const fin = d.schedAB_fin || {};
