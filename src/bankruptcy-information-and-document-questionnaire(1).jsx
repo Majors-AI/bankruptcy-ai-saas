@@ -4391,74 +4391,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           );
                         })()}
 
-                        {/* Option C — County Tax Assessment */}
-                        {(() => {
-                          const pend = otherValPending[i];
-                          const isThisOption = pend?.optionKey === "tax";
-                          const county = p.county?.trim() || "";
-                          const state = p.state?.trim() || "";
-                          const taxSearchUrl = `https://www.google.com/search?q=${encodeURIComponent([county ? `${county} County` : "", state, "property tax assessor assessed value"].filter(Boolean).join(" "))}`;
-                          return (
-                            <div className="border border-slate-600 hover:border-teal-500/40 rounded-xl p-4 transition-colors bg-slate-900/30">
-                              <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-xs font-bold text-teal-300 flex-shrink-0 mt-0.5">C</div>
-                                <div>
-                                  <p className="text-xs font-semibold text-white mb-0.5">County Tax Assessed Value</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">Look up the most recent assessed value from your county tax assessor's office and enter it below.</p>
-                                </div>
-                              </div>
-                              {isThisOption ? (
-                                <div className="mt-2 space-y-2.5">
-                                  <div className="bg-teal-500/8 border border-teal-500/20 rounded-lg px-3 py-2.5 text-xs text-teal-200 leading-relaxed">
-                                    <p className="font-semibold text-teal-300 mb-1">Find your county assessor:</p>
-                                    <a href={taxSearchUrl} target="_blank" rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 text-teal-400 hover:text-teal-300 underline transition-colors">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                      Search for {[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}
-                                    </a>
-                                    <p className="mt-1.5 text-teal-200/70">Visit the assessor's website, look up this property, and enter the most recent <strong className="text-white">assessed value</strong> below. Note: assessed value may differ from market value.</p>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Tax assessed value <span className="text-red-400">*</span></label>
-                                    <div className="flex gap-2 items-center">
-                                      <span className="text-slate-400 text-sm font-semibold">$</span>
-                                      <input type="number" className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-teal-400"
-                                        placeholder="e.g. 275000" value={pend.value||""}
-                                        onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],value:e.target.value}}))}/>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button type="button"
-                                      disabled={!pend.value}
-                                      onClick={() => {
-                                        const val = pend.value;
-                                        const today = new Date();
-                                        const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
-                                        const formatted = `$${Number(val).toLocaleString()}`;
-                                        updProp(i,"value",val); updProp(i,"otherValSource","County Tax Assessed Value");
-                                        updProp(i,"_valConfirmedAt", new Date().toISOString());
-                                        updProp(i,"otherInfo",`Tax assessed value of ${formatted} provided by Debtor on ${dateStr}. Source: ${[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}. Note: Trustee may reference Zillow independently.`);
-                                        setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                                      }}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/20 border border-teal-500/40 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                                      Confirm this value
-                                    </button>
-                                    <button type="button" onClick={() => setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; })} className="text-slate-500 hover:text-slate-300 text-xs transition-colors px-2">cancel</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => setOtherValPending(prev => ({...prev,[i]:{value:"",source:"",optionKey:"tax"}}))}
-                                  className="mt-1 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30 hover:bg-teal-500/20 text-teal-300 text-xs font-semibold transition-all">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                  Use county tax assessed value
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Option D — Request help */}
+                        {/* Option C — Request help */}
                         {(() => {
                           const pend = otherValPending[i];
                           const isThisOption = pend?.optionKey === "help";
@@ -5612,6 +5545,11 @@ function SectionSchedAB_Fin({d,u,imp,ImportBanner}) {
   const addInv = () => up("investments",[...investments,{institution:"",description:"",value:"",accountNumberLast4:""}]);
   const remInv = (i) => { const a=[...investments]; a.splice(i,1); up("investments",a); };
 
+  const paymentApps = fd.paymentApps || [];
+  const updPA = (i,f,v) => { const a=[...paymentApps]; a[i]={...a[i],[f]:v}; up("paymentApps",a); };
+  const addPA = () => up("paymentApps",[...paymentApps,{provider:"",balance:""}]);
+  const remPA = (i) => { const a=[...paymentApps]; a.splice(i,1); up("paymentApps",a); };
+
   const bankLabel = (a) => {
     const parts = [a.bankName, a.accountType].filter(Boolean).join(" ");
     if (!parts) return "New Account";
@@ -6027,6 +5965,29 @@ function SectionSchedAB_Fin({d,u,imp,ImportBanner}) {
         <AddBtn onClick={addInv} label="Add Investment Account"/>
         <Divider label="Other"/>
         <F label="Interest in LLC / Partnership / Corporation"><TI type="number" value={fd.interestInCorp} onChange={v=>up("interestInCorp",v)} placeholder="$0"/></F>
+      </Card>
+
+      {/* ── Payment Apps & Digital Wallets ── */}
+      <Card>
+        <CardTitle icon="📱" title="Payment Apps & Digital Wallets" sub="Do you have a balance in Venmo, Cash App, Zelle, PayPal, Chime, or Apple Pay? Any stored balance counts as an asset."/>
+        {paymentApps.length === 0 && <p className="text-slate-500 text-xs mb-3">No payment app balances on file. Add each account below if you have one.</p>}
+        {paymentApps.map((pa,i) => (
+          <div key={i} className="border border-slate-600 rounded-xl p-4 mb-3">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">{pa.provider || `Account ${i+1}`}</span>
+              <RemBtn onClick={()=>remPA(i)}/>
+            </div>
+            <Grid2>
+              <F label="Provider" required>
+                <SEL value={pa.provider} onChange={v=>updPA(i,"provider",v)} options={["Zelle","Venmo","Cash App","Apple Pay","Chime","PayPal","Other"]} placeholder="Select app..."/>
+              </F>
+              <F label="Current Balance" hint="Amount currently held in the app — not a linked bank account">
+                <TI type="number" value={pa.balance} onChange={v=>updPA(i,"balance",v)} placeholder="$0"/>
+              </F>
+            </Grid2>
+          </div>
+        ))}
+        <AddBtn onClick={addPA} label="Add Payment App / Digital Wallet"/>
       </Card>
 
       {/* ── Life Insurance & Annuities ── */}
