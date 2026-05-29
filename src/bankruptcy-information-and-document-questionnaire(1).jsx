@@ -1989,7 +1989,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <>
             <SBlock title="Transfers (Last 2 Years)">
               <SRow label="Any Transfers?" value={sd.hasTransfers === "yes" ? "Yes" : "No"}/>
-              {(sd.transfers||[]).map((t,i) => <SRow key={i} label={`Transfer ${i+1}`} value={`${t.transferee||"Unknown"} — ${fmtMoney(t.value)||"?"}`}/>)}
+              {(sd.transfers||[]).map((t,i) => <SRow key={i} label={`Transfer ${i+1}`} value={`${t.recipient||"Unknown"} — ${fmtMoney(t.amount)||"?"}`}/>)}
             </SBlock>
             <SBlock title="Preferential Payments (90 days)">
               <SRow label="Any Preferential Payments?" value={sd.hasPreferential === "yes" ? "Yes" : "No"}/>
@@ -14943,6 +14943,10 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
   const prefer = mkList("preferentialEntries",{creditor:"",amount:"",date:"",relationship:"",type:""});
   const p90 = mkList("payments90",{creditor:"",addr:"",dates:"",amount:"",balance:""});
   const insider = mkList("insiderPayments",{name:"",relationship:"",reason:"",amount:"",date:""});
+  const setoffs = mkList("setoffs",{creditor:"",accountDescription:"",amount:"",date:""});
+  const assignments = mkList("assignments",{assignee:"",address:"",description:"",date:""});
+  const gifts = mkList("gifts",{recipient:"",relationship:"",description:"",value:"",date:""});
+  const charitable = mkList("charitable",{organization:"",address:"",value:"",date:""});
 
   return (
     <div>
@@ -15086,6 +15090,123 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
               </div>
             ))}
             <AddBtn onClick={p90.add} label="Add Payment"/>
+          </>
+        )}
+      </Card>
+
+      {/* Setoffs — Q11 */}
+      <Card>
+        <CardTitle icon="🔒" title="SOFA Part 3 — Setoffs (Last 90 Days)" sub="Did any creditor take money from your account to apply against a debt you owed them? (SOFA Q11)"/>
+        <F label="In the last 90 days, did any creditor set off (take) money from an account to apply against a debt you owed them?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasSetoffs" value={v} current={sd.hasSetoffs} onChange={val=>up("hasSetoffs",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasSetoffs==="Yes" && (
+          <>
+            {setoffs.items.map((s,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Setoff {i+1}</span>
+                  <RemBtn onClick={()=>setoffs.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Creditor"><TI value={s.creditor} onChange={v=>setoffs.upd(i,"creditor",v)} placeholder="Creditor name"/></F>
+                  <F label="Amount"><TI type="number" value={s.amount} onChange={v=>setoffs.upd(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={s.date} onChange={v=>setoffs.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Account Description"><TI value={s.accountDescription} onChange={v=>setoffs.upd(i,"accountDescription",v)} placeholder="e.g. Checking account ending in 1234"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={setoffs.add} label="Add Setoff"/>
+          </>
+        )}
+      </Card>
+
+      {/* Assignments for benefit of creditors — Q12 */}
+      <Card>
+        <CardTitle icon="📋" title="SOFA Part 3 — Assignment for Benefit of Creditors" sub="Did you assign property for the benefit of creditors? (SOFA Q12)"/>
+        <F label="Did you make any assignment of property for the benefit of creditors?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasAssignments" value={v} current={sd.hasAssignments} onChange={val=>up("hasAssignments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasAssignments==="Yes" && (
+          <>
+            {assignments.items.map((a,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Assignment {i+1}</span>
+                  <RemBtn onClick={()=>assignments.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Assignee Name"><TI value={a.assignee} onChange={v=>assignments.upd(i,"assignee",v)} placeholder="Full name or entity"/></F>
+                  <F label="Date"><TI type="date" value={a.date} onChange={v=>assignments.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Assignee Address"><TI value={a.address} onChange={v=>assignments.upd(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+                <F label="Property Description"><TI value={a.description} onChange={v=>assignments.upd(i,"description",v)} placeholder="Describe the property assigned"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={assignments.add} label="Add Assignment"/>
+          </>
+        )}
+      </Card>
+
+      {/* Gifts — Q13 */}
+      <Card>
+        <CardTitle icon="🎁" title="SOFA Part 6 — Gifts (Last 2 Years)" sub="Gifts totaling more than $600 to any one person in the last 2 years (SOFA Q13)"/>
+        <F label="Did you give gifts totaling more than $600 to any one person in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasGifts" value={v} current={sd.hasGifts} onChange={val=>up("hasGifts",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasGifts==="Yes" && (
+          <>
+            {gifts.items.map((g,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Gift {i+1}</span>
+                  <RemBtn onClick={()=>gifts.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Recipient Name"><TI value={g.recipient} onChange={v=>gifts.upd(i,"recipient",v)} placeholder="Full name"/></F>
+                  <F label="Relationship"><TI value={g.relationship} onChange={v=>gifts.upd(i,"relationship",v)} placeholder="e.g. Son, friend, none"/></F>
+                  <F label="Value"><TI type="number" value={g.value} onChange={v=>gifts.upd(i,"value",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={g.date} onChange={v=>gifts.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Description"><TI value={g.description} onChange={v=>gifts.upd(i,"description",v)} placeholder="What was given?"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={gifts.add} label="Add Gift"/>
+          </>
+        )}
+      </Card>
+
+      {/* Charitable contributions — Q14 */}
+      <Card>
+        <CardTitle icon="🤝" title="SOFA Part 6 — Charitable Contributions (Last 2 Years)" sub="Contributions totaling more than $600 to any one organization in the last 2 years (SOFA Q14)"/>
+        <F label="Did you make charitable contributions totaling more than $600 to any one organization in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasCharitable" value={v} current={sd.hasCharitable} onChange={val=>up("hasCharitable",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasCharitable==="Yes" && (
+          <>
+            {charitable.items.map((c,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Contribution {i+1}</span>
+                  <RemBtn onClick={()=>charitable.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Organization Name"><TI value={c.organization} onChange={v=>charitable.upd(i,"organization",v)} placeholder="Charity or organization name"/></F>
+                  <F label="Value"><TI type="number" value={c.value} onChange={v=>charitable.upd(i,"value",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={c.date} onChange={v=>charitable.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Organization Address"><TI value={c.address} onChange={v=>charitable.upd(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={charitable.add} label="Add Contribution"/>
           </>
         )}
       </Card>
