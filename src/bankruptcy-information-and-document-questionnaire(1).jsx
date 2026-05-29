@@ -12452,6 +12452,13 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
     }
   };
 
+  // Cross-schedule duplicate detection — Schedule F only, excludes taxDebts
+  const normName = (n) => (n||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const xSchedNames = (!isD && !isPri) ? new Set(
+    [...(d.schedD?.creditors||[]), ...(d.schedEF_pri?.creditors||[])]
+      .map(c => normName(c.name)).filter(Boolean)
+  ) : null;
+
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={importKeys[schedKey]||[]}/>}
@@ -12585,6 +12592,7 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
             const collapsed = isD && started && isCredCollapsed(gi);
             const allDone = tabDone.info && tabDone.creditor && tabDone.other;
             const verifyState = aiVerify[gi];
+            const isDupAdvisory = !isD && !isPri && xSchedNames && c.name && xSchedNames.has(normName(c.name));
 
             return (
             <div key={gi} className="border border-slate-600 rounded-2xl mb-5 overflow-hidden">
@@ -12639,6 +12647,14 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                   <RemBtn onClick={()=>remC(gi)}/>
                 </div>
               </div>
+
+              {/* Cross-schedule duplicate advisory — Schedule F only, non-blocking */}
+              {isDupAdvisory && (
+                <div className="px-5 py-3 border-t border-amber-400/25 bg-amber-400/8 flex items-start gap-2">
+                  <svg className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                  <p className="text-xs text-amber-300 leading-relaxed"><strong className="text-white">"{c.name}"</strong> may already be listed in Schedule D or E. If it&apos;s the same debt, remove it here to avoid a duplicate — if it&apos;s a separate account with the same creditor, you can ignore this.</p>
+                </div>
+              )}
 
               {/* Collapsed: AI verification summary strip */}
               {collapsed && verifyState && verifyState !== "loading" && (
