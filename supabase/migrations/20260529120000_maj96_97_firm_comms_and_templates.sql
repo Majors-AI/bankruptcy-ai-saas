@@ -37,8 +37,20 @@ CREATE POLICY firm_comms_config_firm_staff
 CREATE POLICY firm_comms_config_super_admin
   ON firm_communications_config
   FOR ALL
-  USING ( is_bankruptcy_ai_super_admin() )
-  WITH CHECK ( is_bankruptcy_ai_super_admin() );
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = auth.uid()
+        AND user_profiles.role = 'super_admin_bankruptcy_ai'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = auth.uid()
+        AND user_profiles.role = 'super_admin_bankruptcy_ai'
+    )
+  );
 
 -- ============================================================
 -- MAJ-97: Per-firm email template customization
@@ -67,5 +79,17 @@ CREATE POLICY firm_email_templates_firm_staff
 CREATE POLICY firm_email_templates_super_admin
   ON firm_email_templates
   FOR ALL
-  USING ( is_bankruptcy_ai_super_admin() )
-  WITH CHECK ( is_bankruptcy_ai_super_admin() );
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = auth.uid()
+        AND user_profiles.role = 'super_admin_bankruptcy_ai'
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = auth.uid()
+        AND user_profiles.role = 'super_admin_bankruptcy_ai'
+    )
+  );

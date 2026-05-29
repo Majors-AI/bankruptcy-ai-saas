@@ -25,4 +25,10 @@ CREATE POLICY comm_audit_firm_staff_read
 CREATE POLICY comm_audit_super_admin_read
   ON communication_audit_log
   FOR SELECT
-  USING ( is_bankruptcy_ai_super_admin() );
+  USING (
+    EXISTS (
+      SELECT 1 FROM user_profiles
+      WHERE id = auth.uid()
+        AND user_profiles.role = 'super_admin_bankruptcy_ai'
+    )
+  );
