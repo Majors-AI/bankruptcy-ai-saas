@@ -15245,6 +15245,14 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
   const addBk = () => u("sofa3",{...sd,priorBankruptcies:[...bks,{caseNo:"",district:"",dateFiled:"",chapter:"",disposition:""}]});
   const updBk = (i,f,v) => { const a=[...bks]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorBankruptcies:a}); };
   const remBk = (i) => { const a=[...bks]; a.splice(i,1); u("sofa3",{...sd,priorBankruptcies:a}); };
+  const addrs = sd.priorAddresses||[];
+  const addAddr = () => u("sofa3",{...sd,priorAddresses:[...addrs,{address:"",city:"",state:"",zip:"",fromDate:"",toDate:""}]});
+  const updAddr = (i,f,v) => { const a=[...addrs]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorAddresses:a}); };
+  const remAddr = (i) => { const a=[...addrs]; a.splice(i,1); u("sofa3",{...sd,priorAddresses:a}); };
+  const helpPmts = sd.creditorHelpPayments||[];
+  const addHelpPmt = () => u("sofa3",{...sd,creditorHelpPayments:[...helpPmts,{payee:"",payeeType:"",address:"",amount:"",date:""}]});
+  const updHelpPmt = (i,f,v) => { const a=[...helpPmts]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,creditorHelpPayments:a}); };
+  const remHelpPmt = (i) => { const a=[...helpPmts]; a.splice(i,1); u("sofa3",{...sd,creditorHelpPayments:a}); };
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={["sofa3.priorBkFiled","sofa3.priorBankruptcies","sofa3.hasLawsuits","sofa3.dsoObligation","sofa3.expectedRefund"]}/>}
@@ -15342,6 +15350,73 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
           </div>
         </F>
         {sd.hasRepo==="Yes" && <F label="Describe the property and circumstances"><TI value={sd.repoDetails} onChange={v=>up("repoDetails",v)} placeholder="What was repossessed, by whom, and when?"/></F>}
+      </Card>
+
+      {/* Prior addresses — SOFA Q20 */}
+      <Card>
+        <CardTitle icon="📍" title="SOFA Part 9 — Prior Addresses (Last 3 Years)" sub="All addresses where you lived in the 3 years before filing (SOFA Q20)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>List addresses <strong className="text-white">other than your current one</strong> — your current address is already captured in the Petition.</span>
+        </div>
+        <F label="Did you live at any other address in the last 3 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasPriorAddresses" value={v} current={sd.hasPriorAddresses} onChange={val=>up("hasPriorAddresses",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasPriorAddresses==="Yes" && (
+          <>
+            {addrs.map((a,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Address {i+1}</span>
+                  <RemBtn onClick={()=>remAddr(i)}/>
+                </div>
+                <F label="Street Address"><TI value={a.address} onChange={v=>updAddr(i,"address",v)} placeholder="Street address"/></F>
+                <Grid2>
+                  <F label="City"><TI value={a.city} onChange={v=>updAddr(i,"city",v)} placeholder="City"/></F>
+                  <F label="State"><SEL value={a.state} onChange={v=>updAddr(i,"state",v)} options={US_STATES}/></F>
+                  <F label="ZIP"><TI value={a.zip} onChange={v=>updAddr(i,"zip",v)} placeholder="ZIP code"/></F>
+                </Grid2>
+                <Grid2>
+                  <F label="From"><TI type="month" value={a.fromDate} onChange={v=>updAddr(i,"fromDate",v)}/></F>
+                  <F label="To"><TI type="month" value={a.toDate} onChange={v=>updAddr(i,"toDate",v)}/></F>
+                </Grid2>
+              </div>
+            ))}
+            <AddBtn onClick={addAddr} label="Add Address"/>
+          </>
+        )}
+      </Card>
+
+      {/* Payments for help with creditors — Q16/Q17 */}
+      <Card>
+        <CardTitle icon="🤝" title="SOFA Part 4 — Payments for Help with Creditors (Last 1 Year)" sub="Any payments to an attorney, bankruptcy petition preparer, or credit counseling agency in the last year (SOFA Q16/Q17)"/>
+        <F label="Did you pay anyone to help you deal with your creditors or file for bankruptcy in the last year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasCreditorHelpPayments" value={v} current={sd.hasCreditorHelpPayments} onChange={val=>up("hasCreditorHelpPayments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasCreditorHelpPayments==="Yes" && (
+          <>
+            {helpPmts.map((p,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Payment {i+1}</span>
+                  <RemBtn onClick={()=>remHelpPmt(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Payee Name"><TI value={p.payee} onChange={v=>updHelpPmt(i,"payee",v)} placeholder="Full name or firm"/></F>
+                  <F label="Payee Type"><SEL value={p.payeeType} onChange={v=>updHelpPmt(i,"payeeType",v)} options={["Attorney","Bankruptcy Petition Preparer","Credit Counseling Agency","Other"]}/></F>
+                  <F label="Amount Paid"><TI type="number" value={p.amount} onChange={v=>updHelpPmt(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={p.date} onChange={v=>updHelpPmt(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Payee Address"><TI value={p.address} onChange={v=>updHelpPmt(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addHelpPmt} label="Add Payment"/>
+          </>
+        )}
       </Card>
     </div>
   );
