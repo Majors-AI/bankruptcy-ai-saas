@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,6 +20,9 @@ interface MessagePayload {
   channel: "sms" | "email" | "voice" | "google_meet" | "in_app";
   meetLink?: string;
   relatedDocument?: string;
+  firm_id?: string;
+  template_key?: string;
+  variables?: Record<string, string>;
 }
 
 Deno.serve(async (req: Request) => {
@@ -40,6 +44,9 @@ Deno.serve(async (req: Request) => {
       body,
       channel,
       meetLink,
+      firm_id,
+      template_key,
+      variables,
     } = payload;
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -51,6 +58,75 @@ Deno.serve(async (req: Request) => {
       "Content-Type": "application/json",
       Prefer: "return=minimal",
     };
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@bankruptcy.ai";
+
+    // ── MAJ-96 + MAJ-97: firm template + sender resolution ────────────────────
+    const BAI_DEFAULT_FROM_NAME = "Bankruptcy.AI";
+    const BAI_DEFAULT_FROM_ADDR = "notifications@bankruptcy.ai";
+    const BAI_DEFAULT_REPLY_TO  = "noreply@bankruptcy.ai";
+
+    let resolvedSubject: string | undefined;
+    let resolvedBodyHtml: string | undefined;
+    let resolvedBodyText: string | undefined;
+    let resolvedFromName = `${senderName} — bankruptcy.ai`;
+    let resolvedFromAddr = SENDGRID_FROM;
+    let resolvedReplyTo: string | undefined;
+    let resolvedSmsFrom: string | undefined;
+    let templateSource: string | undefined;
+    let senderIdentity: string | undefined;
+
+    if (firm_id && template_key) {
+      // ---- 1. WHICH WORDING? (MAJ-97) ----
+      templateSource = "firm_custom";
+      const { data: tpl } = await supabase
+        .from("firm_email_templates")
+        .select("subject, body_html, body_text")
+        .eq("firm_id", firm_id)
+        .eq("template_key", template_key)
+        .eq("is_active", true)
+        .maybeSingle();
+
+      if (tpl) {
+        const fill = (s: string | null) =>
+          (s ?? "").replace(/\{\{(\w+)\}\}/g, (_, k) => variables?.[k] ?? "");
+        resolvedSubject  = fill(tpl.subject);
+        resolvedBodyHtml = fill(tpl.body_html);
+        resolvedBodyText = fill(tpl.body_text ?? tpl.body_html);
+      } else {
+        // Every firm's templates are seeded directly; no script_library fallback.
+        // Leave resolved body/subject undefined so the existing default rendering runs.
+        templateSource = "system_default";
+      }
+
+      // ---- 2. WHICH SENDER? (MAJ-96) — runs regardless of template outcome ----
+      const { data: cfg } = await supabase
+        .from("firm_communications_config")
+        .select("*")
+        .eq("firm_id", firm_id)
+        .maybeSingle();
+
+      senderIdentity   = "bai_default";
+      resolvedFromName = BAI_DEFAULT_FROM_NAME;
+      resolvedFromAddr = BAI_DEFAULT_FROM_ADDR;
+      resolvedReplyTo  = BAI_DEFAULT_REPLY_TO;
+
+      if (cfg) {
+        if (cfg.email_domain && cfg.email_domain_verified_at) {
+          resolvedFromName = cfg.email_from_name ?? resolvedFromName;
+          resolvedFromAddr = cfg.email_from_address ?? `notifications@${cfg.email_domain}`;
+          resolvedReplyTo  = cfg.email_reply_to ?? resolvedFromAddr;
+          senderIdentity   = "firm_domain";
+        } else if (cfg.email_reply_to) {
+          resolvedFromName = cfg.email_from_name ?? resolvedFromName;
+          resolvedReplyTo  = cfg.email_reply_to;
+          senderIdentity   = "firm_reply_to";
+        }
+        resolvedSmsFrom = cfg.sms_from_number ?? undefined;
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     let deliveryStatus = "sent";
     let externalId: string | null = null;
@@ -64,9 +140,9 @@ Deno.serve(async (req: Request) => {
       const TWILIO_PHONE_NUMBER = Deno.env.get("TWILIO_PHONE_NUMBER");
 
       if (TWILIO_ACCOUNT_SID && TWILIO_AUTH_TOKEN && TWILIO_PHONE_NUMBER) {
-        const smsBody = `[bankruptcy.ai] ${senderName}: ${body}`;
+        const smsBody = resolvedBodyText ?? `[bankruptcy.ai] ${senderName}: ${body}`;
         const params = new URLSearchParams({
-          From: TWILIO_PHONE_NUMBER,
+          From: resolvedSmsFrom ?? TWILIO_PHONE_NUMBER,
           To: clientPhone,
           Body: smsBody,
         });
@@ -97,17 +173,18 @@ Deno.serve(async (req: Request) => {
     // ── Email via SendGrid ────────────────────────────────────────────────────
     if (channel === "email" && clientEmail) {
       const SENDGRID_API_KEY = Deno.env.get("SENDGRID_API_KEY");
-      const SENDGRID_FROM = Deno.env.get("SENDGRID_FROM_EMAIL") ?? "noreply@bankruptcy.ai";
+      // SENDGRID_FROM hoisted above; resolvedFromAddr already incorporates it.
 
       if (SENDGRID_API_KEY) {
         const emailPayload = {
           personalizations: [{ to: [{ email: clientEmail, name: clientName }] }],
-          from: { email: SENDGRID_FROM, name: `${senderName} — bankruptcy.ai` },
-          subject: subject ?? `Message from your attorney — ${senderName}`,
+          from: { email: resolvedFromAddr, name: resolvedFromName },
+          ...(resolvedReplyTo ? { reply_to: { email: resolvedReplyTo } } : {}),
+          subject: resolvedSubject ?? subject ?? `Message from your attorney — ${senderName}`,
           content: [
             {
               type: "text/html",
-              value: `
+              value: resolvedBodyHtml ?? `
                 <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background: #f8fafc; border-radius: 12px;">
                   <div style="background: #1e293b; border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;">
                     <h2 style="color: #f8fafc; margin: 0; font-size: 18px;">Message from bankruptcy.ai</h2>
@@ -231,6 +308,23 @@ Deno.serve(async (req: Request) => {
           sent_at: new Date().toISOString(),
         }),
       });
+    }
+
+    // ── MAJ-96/97 audit log ───────────────────────────────────────────────────
+    if (firm_id && template_key && templateSource) {
+      try {
+        await supabase.from("communication_audit_log").insert({
+          firm_id,
+          recipient: clientEmail ?? clientPhone,
+          template_key,
+          channel,
+          template_source: templateSource,
+          sender_identity: senderIdentity,
+          sent_at: new Date().toISOString(),
+        });
+      } catch (auditErr) {
+        console.warn("[send-client-message] audit log insert failed:", auditErr);
+      }
     }
 
     // ── Log to case_time_log ──────────────────────────────────────────────────
