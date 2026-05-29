@@ -32,24 +32,31 @@ const normalizeState = (s) => { if (!s) return ""; const up = s.trim().toUpperCa
 
 const COMMUNITY_PROPERTY_STATES = new Set(["Arizona","California","Idaho","Louisiana","Nevada","New Mexico","Texas","Washington","Wisconsin"]);
 
+// Section order matches the BestCase petition order so paralegals don't have to re-sequence
+// when importing. Splitting schedAB into separate Real Property / Vehicles / Household /
+// Financial top-level sections is planned for a follow-up PR — for now schedAB keeps its
+// internal tabbed sub-flow which already runs in that order.
 const SECTIONS = [
-  { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
-  { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
-  { id:"schedC",       label:"Schedule C – Exemptions",   icon:"⚖️", group:"Schedules" },
-  { id:"creditReport",  label:"Credit Report Upload",            icon:"📄", group:"Schedules" },
-  { id:"schedD",       label:"Schedule D – Secured Creditors", icon:"🔒", group:"Schedules" },
-  { id:"schedEF_pri",  label:"Schedule E – Priority Creditors", icon:"⚡", group:"Schedules" },
-  { id:"schedEF_np",   label:"Schedule F – Non-Priority Creditors", icon:"💳", group:"Schedules" },
-  { id:"schedG",       label:"Schedule G – Contracts & Leases", icon:"📝", group:"Schedules" },
-  { id:"schedH",       label:"Schedule H – Co-Debtors",   icon:"👥", group:"Schedules" },
-  { id:"schedI",       label:"Schedule I – Income",        icon:"💼", group:"Schedules" },
-  { id:"schedJ",       label:"Schedule J – Expenses",      icon:"🧾", group:"Schedules" },
-  { id:"sofa1",        label:"SOFA – Income & Business",   icon:"📊", group:"SOFA" },
-  { id:"sofa2",        label:"SOFA – Transfers & Payments",icon:"🔄", group:"SOFA" },
-  { id:"sofa3",        label:"SOFA – Legal & Prior Cases", icon:"⚖️", group:"SOFA" },
-  { id:"sofa4",        label:"SOFA – Accounts & Property", icon:"🏦", group:"SOFA" },
-  { id:"docs",         label:"Document Upload",            icon:"📎", group:"Documents" },
-  { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
+  { id:"personalInfo",   label:"Debtor Identity",                       icon:"📋", group:"Petition" },
+  { id:"priorBankruptcy",label:"Prior Bankruptcies",                    icon:"📜", group:"Petition" },
+  { id:"schedC",         label:"Residency & Exemptions",                icon:"⚖️", group:"Petition" },
+  { id:"creditReport",   label:"Credit Pull",                           icon:"📄", group:"Petition" },
+  { id:"schedAB",        label:"Schedule A/B – All Assets",             icon:"🏠", group:"Schedules" },
+  { id:"schedD",         label:"Schedule D – Secured Creditors",        icon:"🔒", group:"Schedules" },
+  { id:"schedEF_pri",    label:"Schedule E – Priority Creditors",       icon:"⚡", group:"Schedules" },
+  { id:"schedEF_np",     label:"Schedule F – Non-Priority Creditors",   icon:"💳", group:"Schedules" },
+  { id:"schedG",         label:"Schedule G – Contracts & Leases",       icon:"📝", group:"Schedules" },
+  { id:"schedH",         label:"Schedule H – Co-Debtors",               icon:"👥", group:"Schedules" },
+  { id:"schedI",         label:"Schedule I – Income",                   icon:"💼", group:"Schedules" },
+  { id:"schedJ",         label:"Schedule J – Expenses",                 icon:"🧾", group:"Schedules" },
+  { id:"meansTest",      label:"Means Test (Six-Month Income)",         icon:"📐", group:"Schedules" },
+  { id:"sofa1",          label:"SOFA – Income & Business",              icon:"📊", group:"SOFA" },
+  { id:"sofa2",          label:"SOFA – Transfers & Payments",           icon:"🔄", group:"SOFA" },
+  { id:"sofa3",          label:"SOFA – Legal & Prior Cases",            icon:"⚖️", group:"SOFA" },
+  { id:"sofa4",          label:"SOFA – Accounts & Property",            icon:"🏦", group:"SOFA" },
+  { id:"form108",        label:"Statement of Intent (Form 108)",        icon:"📑", group:"SOFA" },
+  { id:"docs",           label:"Document Upload",                       icon:"📎", group:"Documents" },
+  { id:"review",         label:"Review & Submit",                       icon:"✅", group:"Export" },
 ];
 
 const REQUIRED_DOCS = [
@@ -2087,17 +2094,35 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
   );
 }
 
-const ConfirmCheck = ({ id, label, checked, onChange, children }) => (
-  <label htmlFor={id} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-all ${checked ? "border-green-500/40 bg-green-400/5" : "border-slate-700 hover:border-slate-600"}`}>
+const ConfirmCheck = ({ id, label, checked, onChange, children }) => {
+  // Click anywhere on the row toggles the box. The small visual indicator is presentational;
+  // before this fix the onClick lived only on the indicator, so clicking the label text was a no-op.
+  const toggle = (e) => {
+    const t = e?.target;
+    const tag = t?.tagName?.toLowerCase?.();
+    if (tag === "a" || tag === "button" || tag === "input" || tag === "textarea" || tag === "select") return;
+    onChange(!checked);
+  };
+  return (
     <div
-      className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${checked ? "bg-amber-400 border-amber-400" : "border-slate-600"}`}
-      onClick={() => onChange(!checked)}
+      id={id}
+      role="checkbox"
+      aria-checked={!!checked}
+      tabIndex={0}
+      onClick={toggle}
+      onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); onChange(!checked); } }}
+      className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer select-none transition-all ${checked ? "border-green-500/40 bg-green-400/5" : "border-slate-700 hover:border-slate-600"}`}
     >
-      {checked && <svg className="w-3 h-3 text-slate-950" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
+      <div
+        className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${checked ? "bg-amber-400 border-amber-400" : "border-slate-600"}`}
+        aria-hidden="true"
+      >
+        {checked && <svg className="w-3 h-3 text-slate-950" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
+      </div>
+      <div className="text-sm text-slate-300 leading-relaxed">{children}</div>
     </div>
-    <div className="text-sm text-slate-300 leading-relaxed">{children}</div>
-  </label>
-);
+  );
+};
 
 // ─── BCI EXPORT ──────────────────────────────────────────────────────────────
 function generateBCI(d) {
@@ -4218,7 +4243,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           <svg className={`w-4 h-4 shrink-0 mt-0.5 ${tabStale.location ? "text-orange-400" : "text-red-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                           <div>
                             {tabStale.location
-                              ? <><strong className={`${tabStale.location ? "text-orange-300" : "text-red-300"}`}>Property value is outdated</strong> — the confirmed value is more than 30 days old. Please re-verify the current value from Zillow, your county assessor, or another approved source before proceeding.</>
+                              ? <><strong className={`${tabStale.location ? "text-orange-300" : "text-red-300"}`}>Property value is outdated</strong> — the confirmed value is more than 30 days old. Please re-verify the current value from Zillow or another approved source before proceeding.</>
                               : <><strong className="text-red-300">Required — property value not confirmed.</strong> You must confirm the current market value of this property before this section can be marked complete.</>
                             }
                           </div>
@@ -4383,74 +4408,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           );
                         })()}
 
-                        {/* Option C — County Tax Assessment */}
-                        {(() => {
-                          const pend = otherValPending[i];
-                          const isThisOption = pend?.optionKey === "tax";
-                          const county = p.county?.trim() || "";
-                          const state = p.state?.trim() || "";
-                          const taxSearchUrl = `https://www.google.com/search?q=${encodeURIComponent([county ? `${county} County` : "", state, "property tax assessor assessed value"].filter(Boolean).join(" "))}`;
-                          return (
-                            <div className="border border-slate-600 hover:border-teal-500/40 rounded-xl p-4 transition-colors bg-slate-900/30">
-                              <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-xs font-bold text-teal-300 flex-shrink-0 mt-0.5">C</div>
-                                <div>
-                                  <p className="text-xs font-semibold text-white mb-0.5">County Tax Assessed Value</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">Look up the most recent assessed value from your county tax assessor's office and enter it below.</p>
-                                </div>
-                              </div>
-                              {isThisOption ? (
-                                <div className="mt-2 space-y-2.5">
-                                  <div className="bg-teal-500/8 border border-teal-500/20 rounded-lg px-3 py-2.5 text-xs text-teal-200 leading-relaxed">
-                                    <p className="font-semibold text-teal-300 mb-1">Find your county assessor:</p>
-                                    <a href={taxSearchUrl} target="_blank" rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 text-teal-400 hover:text-teal-300 underline transition-colors">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                      Search for {[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}
-                                    </a>
-                                    <p className="mt-1.5 text-teal-200/70">Visit the assessor's website, look up this property, and enter the most recent <strong className="text-white">assessed value</strong> below. Note: assessed value may differ from market value.</p>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Tax assessed value <span className="text-red-400">*</span></label>
-                                    <div className="flex gap-2 items-center">
-                                      <span className="text-slate-400 text-sm font-semibold">$</span>
-                                      <input type="number" className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-teal-400"
-                                        placeholder="e.g. 275000" value={pend.value||""}
-                                        onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],value:e.target.value}}))}/>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button type="button"
-                                      disabled={!pend.value}
-                                      onClick={() => {
-                                        const val = pend.value;
-                                        const today = new Date();
-                                        const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
-                                        const formatted = `$${Number(val).toLocaleString()}`;
-                                        updProp(i,"value",val); updProp(i,"otherValSource","County Tax Assessed Value");
-                                        updProp(i,"_valConfirmedAt", new Date().toISOString());
-                                        updProp(i,"otherInfo",`Tax assessed value of ${formatted} provided by Debtor on ${dateStr}. Source: ${[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}. Note: Trustee may reference Zillow independently.`);
-                                        setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                                      }}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/20 border border-teal-500/40 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                                      Confirm this value
-                                    </button>
-                                    <button type="button" onClick={() => setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; })} className="text-slate-500 hover:text-slate-300 text-xs transition-colors px-2">cancel</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => setOtherValPending(prev => ({...prev,[i]:{value:"",source:"",optionKey:"tax"}}))}
-                                  className="mt-1 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30 hover:bg-teal-500/20 text-teal-300 text-xs font-semibold transition-all">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                  Use county tax assessed value
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Option D — Request help */}
+                        {/* Option C — Request help (county tax assessor option removed — FMV via Zillow or appraisal only) */}
                         {(() => {
                           const pend = otherValPending[i];
                           const isThisOption = pend?.optionKey === "help";
@@ -4458,10 +4416,10 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           return (
                             <div className={`border rounded-xl p-4 transition-colors ${helpSent ? "border-green-500/30 bg-green-500/5" : "border-slate-600 hover:border-slate-500 bg-slate-900/30"}`}>
                               <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">D</div>
+                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">C</div>
                                 <div>
                                   <p className="text-xs font-semibold text-white mb-0.5">I can't provide any of the above</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">If you're unable to access Zillow, obtain an appraisal, or look up your tax assessed value, send us a message explaining why and we will assist you.</p>
+                                  <p className="text-xs text-slate-400 leading-relaxed">If you're unable to access Zillow or obtain an appraisal, send us a message explaining why and we will assist you.</p>
                                 </div>
                               </div>
                               {helpSent ? (
@@ -16554,8 +16512,179 @@ function Ch13DebtLimitBanner({ debtCheck, compact = false }) {
   );
 }
 
+// ─── PRIOR BANKRUPTCIES ─────────────────────────────────────────────────────
+// Lightweight eligibility gate — separated from SOFA so it runs early in the flow,
+// where it can short-circuit ineligibility before we collect a full questionnaire.
+// Detailed prior-case fields (case number, district, disposition) remain in sofa3
+// for now; the Loom plan is to migrate them here in a follow-up PR.
+function SectionPriorBankruptcy({d, u}) {
+  const sec = d.priorBankruptcy || {};
+  const upd = (k, v) => u("priorBankruptcy", { ...sec, [k]: v });
+  const hasPrior = sec.hasPrior;
+  const within8 = sec.within8Years;
+  // 11 U.S.C. § 727(a)(8): Ch.7 discharge barred if a prior Ch.7 discharge was granted
+  // in a case filed within 8 years. We surface that as an attorney-review flag, not a hard block.
+  const flag = hasPrior === "yes" && within8 === "yes";
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5">
+        <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Prior Bankruptcies (8-Year Lookback)</h3>
+        <p className="text-xs text-slate-400 mb-4 leading-relaxed">11 U.S.C. § 727(a)(8) bars a Chapter 7 discharge if you received one in a case filed within the past 8 years. Your attorney needs this answer to confirm you are eligible for the chapter you intend to file.</p>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">Have you ever filed bankruptcy before?</label>
+            <div className="flex gap-2">
+              {["yes","no"].map(v => (
+                <button key={v} type="button" onClick={() => upd("hasPrior", v)}
+                  className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${hasPrior === v ? "bg-amber-400 text-slate-950" : "bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-500"}`}>
+                  {v === "yes" ? "Yes" : "No"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {hasPrior === "yes" && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">Was any prior case filed within the last 8 years?</label>
+              <div className="flex gap-2">
+                {["yes","no","not_sure"].map(v => (
+                  <button key={v} type="button" onClick={() => upd("within8Years", v)}
+                    className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all ${within8 === v ? "bg-amber-400 text-slate-950" : "bg-slate-800 border border-slate-700 text-slate-300 hover:border-slate-500"}`}>
+                    {v === "yes" ? "Yes" : v === "no" ? "No" : "I'm not sure"}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {flag && (
+            <div className="flex items-start gap-2 bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3 text-xs text-amber-200 leading-relaxed">
+              <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              <span><strong className="text-amber-300">Attorney review:</strong> a prior case within 8 years may affect your eligibility for a Chapter 7 discharge. Your attorney will confirm whether you qualify and may recommend Chapter 13 instead. Continue providing case detail in the SOFA – Legal & Prior Cases section.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MEANS TEST (SIX-MONTH INCOME) ──────────────────────────────────────────
+// References the intake portal's means-test computation rather than recalculating
+// here. If the intake hasn't been completed, the section shows a "complete the
+// intake first" notice. Otherwise it surfaces the intake result read-only and
+// captures the additional six-month detail (gifts, family support, under-the-table
+// income) that the intake doesn't ask for.
+function SectionMeansTest({d, u}) {
+  const sec = d.meansTest || {};
+  const upd = (k, v) => u("meansTest", { ...sec, [k]: v });
+  // INTAKE_SAMPLE stands in for the real intake_submissions row in dev. In production
+  // this should come from the case record so a missing intake is detectable.
+  const intake = INTAKE_SAMPLE;
+  const intakeComplete = !!(intake && intake.avgMonthly6);
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5">
+        <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Means Test — Six-Month Income</h3>
+        <p className="text-xs text-slate-400 mb-3 leading-relaxed">The means test compares your average income over the six months before filing against the median income for your household size and state. The calculation is performed in the intake portal — this section captures the additional detail required for the official Form 122 series (gifts, family support, under-the-table income) that intake doesn't ask for.</p>
+        {!intakeComplete && (
+          <div className="flex items-start gap-2 bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3 text-xs text-amber-200 leading-relaxed mb-3">
+            <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <span>Means test will be calculated from your intake data. Please complete the intake portal first — your attorney will share the link if you haven't received it.</span>
+          </div>
+        )}
+        {intakeComplete && (
+          <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-3 mb-3 text-xs text-slate-300 leading-relaxed">
+            <p className="font-semibold text-white mb-1">From intake — read-only</p>
+            <ul className="space-y-0.5 text-slate-400">
+              <li>Average monthly income (6-month lookback): <span className="text-white font-mono">${intake.avgMonthly6 || "—"}</span></li>
+              <li>Household size: <span className="text-white">{(parseInt(intake.numDependents||"0") + 1 + (intake.filingType?.includes("spouse") ? 1 : 0))}</span></li>
+              <li>State: <span className="text-white">{intake.state || "—"}</span></li>
+              <li>County: <span className="text-white">{intake.county || "—"}</span></li>
+            </ul>
+            <p className="text-slate-500 mt-2">To edit any of the above, return to the intake portal.</p>
+          </div>
+        )}
+        <p className="text-xs font-semibold text-slate-300 uppercase tracking-widest mt-4 mb-2">Additional six-month detail</p>
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Did you receive any gifts (cash or in-kind) of $200 or more in the past 6 months?</label>
+            <textarea rows={2} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 resize-none"
+              placeholder="Describe each gift, who gave it, when, and approximate value. Leave blank if none."
+              value={sec.giftsDesc || ""} onChange={e => upd("giftsDesc", e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Did anyone help pay your living expenses in the past 6 months (family, roommate, etc.)?</label>
+            <textarea rows={2} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 resize-none"
+              placeholder="Describe who helped, what they paid, and the approximate monthly amount. Leave blank if no one helped."
+              value={sec.familySupportDesc || ""} onChange={e => upd("familySupportDesc", e.target.value)} />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1">Did you receive any cash income that doesn't appear on a tax return or pay stub (side jobs, tips, sale of personal items, etc.)?</label>
+            <textarea rows={2} className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400 resize-none"
+              placeholder="We need ALL income, even cash income that wasn't reported. Describe each source and approximate monthly amount. Leave blank if none."
+              value={sec.unreportedIncomeDesc || ""} onChange={e => upd("unreportedIncomeDesc", e.target.value)} />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STATEMENT OF INTENT (FORM 108) ─────────────────────────────────────────
+// Chapter 7 only. Surfaces the retain/surrender/redeem/reaffirm choices already
+// collected per-creditor in Schedule D so the client can review them as a whole
+// before signing. No new data entry happens here — it's a confirmation surface.
+function SectionForm108({d}) {
+  const chapter = d.petition?.chapter || "7";
+  if (chapter !== "7") {
+    return (
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5">
+        <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Statement of Intent (Form 108)</h3>
+        <p className="text-xs text-slate-400 leading-relaxed">Form 108 is required for Chapter 7 cases only. Because you are filing under Chapter {chapter}, this section does not apply — click Next to continue.</p>
+      </div>
+    );
+  }
+  const secured = (d.schedD?.creditors || []).filter(c => c.collateral);
+  return (
+    <div className="space-y-4">
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5">
+        <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Statement of Intent (Form 108)</h3>
+        <p className="text-xs text-slate-400 mb-4 leading-relaxed">For each secured debt below, your election from Schedule D is shown. Review the list — your attorney will use these elections to prepare Form 108. If anything is wrong, return to Schedule D to update it.</p>
+        {secured.length === 0 ? (
+          <p className="text-xs text-slate-500 italic">No secured debts on file — Form 108 will be blank.</p>
+        ) : (
+          <div className="space-y-2">
+            {secured.map((c, i) => (
+              <div key={i} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-3 text-xs">
+                <div className="min-w-0">
+                  <p className="font-semibold text-white truncate">{c.name || "Unnamed creditor"}</p>
+                  <p className="text-slate-400 truncate">{c.collateral || "—"}</p>
+                </div>
+                <span className={`flex-shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold ${
+                  c.intent === "retain" ? "bg-blue-500/20 text-blue-300 border border-blue-500/30" :
+                  c.intent === "reaffirm" ? "bg-purple-500/20 text-purple-300 border border-purple-500/30" :
+                  c.intent === "redeem" ? "bg-teal-500/20 text-teal-300 border border-teal-500/30" :
+                  c.intent === "surrender" ? "bg-rose-500/20 text-rose-300 border border-rose-500/30" :
+                  "bg-slate-700 text-slate-400 border border-slate-600"
+                }`}>
+                  {c.intent ? c.intent.charAt(0).toUpperCase() + c.intent.slice(1) : "Not selected"}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOverallConfirm, overallConfirmed}) {
   const [exported, setExported] = useState(false);
+  // Local "attested" state — toggled by the declaration checkbox. The actual submission
+  // (which fires the confirmation email and flips overallConfirmed in parent state) only
+  // happens when the client clicks Submit. This makes attestation + submission two distinct,
+  // explicit actions instead of conflating them into a single checkbox toggle.
+  const [attested, setAttested] = useState(!!overallConfirmed);
+  const [submitting, setSubmitting] = useState(false);
   const bciXML = generateBCI(d);
   const activeDocs = getActiveDocs(INTAKE_SAMPLE, d.petition);
   const handleExport = () => {
@@ -16733,16 +16862,45 @@ function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOver
               </div>
             )}
 
-            <div className="border-t border-slate-800 pt-4">
+            <div className="border-t border-slate-800 pt-4 space-y-3">
               <ConfirmCheck
                 id="overallDeclaration"
-                checked={!!overallConfirmed}
-                onChange={onOverallConfirm}
+                checked={attested}
+                onChange={(v) => setAttested(v)}
               >
                 <span className="text-sm leading-relaxed">
                   <strong className="text-white">Final Declaration:</strong> I declare under penalty of perjury that I have reviewed all of the information provided in this questionnaire covering the Voluntary Petition and Schedules A through J and the Statement of Financial Affairs. To the best of my knowledge, information, and belief, the information is <strong className="text-white">true, accurate, and complete</strong>. I understand this information will be used to prepare official bankruptcy documents filed with the United States Bankruptcy Court.
                 </span>
               </ConfirmCheck>
+
+              {/* Explicit Submit action — only enabled once the declaration is attested. */}
+              {!overallConfirmed && (
+                <button
+                  type="button"
+                  disabled={!attested || submitting || Object.values(summaryConfirmedMap || {}).some(v => !v)}
+                  onClick={async () => {
+                    setSubmitting(true);
+                    try { await onOverallConfirm(true); } finally { setSubmitting(false); }
+                  }}
+                  className={`w-full flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-bold text-sm uppercase tracking-widest transition-all ${
+                    attested && !submitting && !Object.values(summaryConfirmedMap || {}).some(v => !v)
+                      ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                      : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+                  }`}
+                >
+                  {submitting ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin"/>
+                      Submitting…
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                      Submit Questionnaire
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Post-submission confirmation */}
@@ -16808,9 +16966,85 @@ function diffFormData(prev, next) {
   return { changedSections, summary };
 }
 
+// ─── UPFRONT LEGAL ACKNOWLEDGEMENT ──────────────────────────────────────────
+// Consolidated upfront ack that replaces the 11+ scattered "penalty of perjury /
+// full disclosure / community property" warnings previously sprinkled through
+// individual sections. Client checks a single box and proceeds. Per Loom B:
+// keep section-level reminders only at Schedule A/B (zero-value items), Schedule D
+// (creditor took your property), SOFA 90-day, and Means Test all-income.
+function UpfrontAcknowledgement({ clientName, state, onConfirm }) {
+  const [checked, setChecked] = useState(false);
+  const firstName = (clientName || "").split(" ")[0] || "Client";
+  const isCommunityState = COMMUNITY_PROPERTY_STATES.has(state || "");
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-start justify-center px-4 pt-10 pb-16" style={{fontFamily:"'Trebuchet MS', sans-serif"}}>
+      <div className="w-full max-w-2xl">
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 bg-amber-400/15 border border-amber-400/30 text-amber-300 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-4">
+            Before You Begin
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2 leading-tight" style={{fontFamily:"'Georgia',serif"}}>
+            {firstName}, please read this once.
+          </h1>
+          <p className="text-slate-400 text-sm leading-relaxed">
+            These rules apply to every answer you give in this questionnaire. You only have to agree once.
+          </p>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden mb-5">
+          {[
+            {
+              title: "Penalty of perjury",
+              body: "Every answer you give in this questionnaire is submitted to the U.S. Bankruptcy Court under penalty of perjury. False or incomplete answers can result in dismissal of your case, denial of discharge, criminal charges for bankruptcy fraud (18 U.S.C. § 152), and up to 5 years in federal prison plus $250,000 in fines."
+            },
+            {
+              title: "Full disclosure",
+              body: "You must list every asset, every debt, every source of income, and every transaction the questionnaire asks about — even if you think it's small, unimportant, or worthless. If you are not sure whether something belongs, include it. Your attorney will decide what stays and what comes off."
+            },
+            {
+              title: "Ongoing duty to amend",
+              body: "If anything changes between today and the day your case is filed — a new debt, a new asset, a new job, a tax refund, an inheritance, even a small one — you must tell your attorney. The duty to disclose continues until your case is filed and the trustee has finished review."
+            },
+            {
+              title: isCommunityState
+                ? `${state || "Your state"} is a community property state`
+                : "Community property may apply if you've recently moved",
+              body: isCommunityState
+                ? "Under 11 U.S.C. § 541(a)(2), community property is part of the bankruptcy estate even if your spouse is not filing. You must disclose your spouse's income, assets, and debts that are community property — your attorney will identify which is which."
+                : "If you have lived in a community property state (Arizona, California, Idaho, Louisiana, Nevada, New Mexico, Texas, Washington, or Wisconsin) within the last 8 years, some of your spouse's income, assets, or debts may be part of your bankruptcy estate. Your attorney will confirm whether this applies to you."
+            },
+          ].map((item, i) => (
+            <div key={i} className="px-5 py-4 border-b border-slate-800 last:border-b-0">
+              <p className="text-sm font-bold text-white mb-1.5" style={{fontFamily:"'Georgia',serif"}}>{item.title}</p>
+              <p className="text-xs text-slate-400 leading-relaxed">{item.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mb-5">
+          <ConfirmCheck id="upfrontAck" checked={checked} onChange={setChecked}>
+            <span className="text-sm leading-relaxed">
+              <strong className="text-white">I understand.</strong> I have read the four points above. I will answer every question in this questionnaire truthfully and completely, and I will tell my attorney about any change between today and the day my case is filed.
+            </span>
+          </ConfirmCheck>
+        </div>
+
+        <button
+          disabled={!checked}
+          onClick={onConfirm}
+          className={`w-full font-bold py-4 rounded-2xl transition-all text-sm flex items-center justify-center gap-2 ${checked ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-slate-800 text-slate-500 cursor-not-allowed"}`}
+        >
+          {checked ? "Continue" : "Check the box above to continue"}
+          {checked && <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── DATA ASSISTANCE GATE ────────────────────────────────────────────────────
-// Shown at the very beginning of the questionnaire. Client must choose how
-// they want to provide creditor & document information before advancing.
+// Shown after the upfront legal acknowledgement. Client must choose how they
+// want to provide creditor & document information before advancing.
 function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existingRequest, welcomeBack, staleConfirmed, onStaleConfirm, onSkipWelcome }) {
   const PRICE_INDIVIDUAL = 60;
   const PRICE_JOINT = 120;
@@ -17237,29 +17471,8 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
             </div>
           </div>
 
-          {/* ── ACCURACY & LEGAL NOTICE ── */}
-          <div className="bg-red-500/8 border border-red-500/25 rounded-2xl px-5 py-4 mb-5 text-xs leading-relaxed">
-            <p className="font-bold text-red-200 text-sm mb-2">All Information Must Be True, Accurate, and Complete</p>
-            <p className="text-slate-300 leading-relaxed mb-2">
-              Bankruptcy is a <strong className="text-white">federal legal procedure</strong>. Every answer you provide is submitted under penalty of perjury. <strong className="text-white">Do not omit anything.</strong> Intentionally providing false information, concealing assets, or failing to disclose required details can result in:
-            </p>
-            <div className="space-y-1.5 mb-3">
-              {[
-                "Your bankruptcy case being dismissed",
-                "A denial of your discharge — meaning your debts are NOT eliminated",
-                "Federal criminal charges for bankruptcy fraud",
-                "Up to 5 years in federal prison and fines up to $250,000",
-              ].map((item, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <svg className="w-3 h-3 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-                  <span className="text-slate-300">{item}</span>
-                </div>
-              ))}
-            </div>
-            <p className="text-slate-400 leading-relaxed">
-              If you are unsure whether something needs to be disclosed, <strong className="text-white">include it</strong> and let your attorney decide. It is always better to over-disclose than to leave something out.
-            </p>
-          </div>
+          {/* Accuracy & legal-notice block removed — now lives in the upfront UpfrontAcknowledgement gate
+              that runs before this welcome screen. See Step 3 (CYA consolidation). */}
 
           {/* ── ENCOURAGING CLOSE ── */}
           <div className="bg-slate-900 border border-slate-700 rounded-2xl px-5 py-4 mb-6 text-center">
@@ -17581,6 +17794,18 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
   // null = not yet determined; object = completed election
   const [dataAssistance, setDataAssistance] = useState(null);
   const [existingPullRequest, setExistingPullRequest] = useState(undefined); // undefined = loading
+
+  // ── Upfront legal acknowledgement (consolidated CYA) ──
+  // TODO: Persistence pending architectural decision on questionnaire client
+  // authentication — i.e. whether questionnaire clients should be real Supabase
+  // auth.users accounts or stay anonymous behind a localStorage `client_id`.
+  // That decision affects signing review, document uploads, multi-device support,
+  // and the disclosure audit trail. Once decided, move this ack from localStorage
+  // to a real Supabase table. See Linear ticket [TBD].
+  const LEGAL_ACK_KEY_PREFIX = "bk_legal_ack_v1_";
+  const [legalAckConfirmed, setLegalAckConfirmed] = useState(() => {
+    try { return localStorage.getItem(LEGAL_ACK_KEY_PREFIX + getClientId()) === "1"; } catch { return false; }
+  });
 
   // ── Session persistence ──
   const clientId = useRef(getClientId()).current;
@@ -17941,10 +18166,13 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     };
 
     switch(sectionId) {
-      case "personalInfo": return withAll(<SectionVoluntaryPetition d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
+      case "personalInfo":   return withAll(<SectionVoluntaryPetition d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
+      case "priorBankruptcy":return withAll(<SectionPriorBankruptcy d={data} u={updateSection}/>);
       case "schedAB":     return withAll(<SectionSchedAB d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedC":      return withAll(<SectionSchedC d={data} u={updateSection}/>);
       case "creditReport": return withAll(<SectionCreditReport d={data} u={updateSection} clientId={clientId} onNext={() => setStep(s => s + 1)}/>);
+      case "meansTest":   return withAll(<SectionMeansTest d={data} u={updateSection}/>);
+      case "form108":     return withAll(<SectionForm108 d={data}/>);
       case "schedD":      return withAll(<SectionSchedD d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId} summaryConfirmed={summaryConfirmed} onSummaryConfirm={onSummaryConfirm} updateMode={updateMode} hasUnreviewedChanges={hasUnreviewedChanges}/>);
       case "schedEF_pri": return withAll(<SectionSchedE d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedEF_np":  return withAll(<SectionSchedF d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
@@ -18000,7 +18228,21 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     }
   };
 
-  // ── Data Assistance Gate — shown before questionnaire if not yet elected ──
+  // ── Upfront ack gate — single consolidated legal acknowledgement ──
+  if (!legalAckConfirmed) {
+    return (
+      <UpfrontAcknowledgement
+        clientName={clientName}
+        state={INTAKE_SAMPLE.state}
+        onConfirm={() => {
+          try { localStorage.setItem(LEGAL_ACK_KEY_PREFIX + clientId, "1"); } catch {}
+          setLegalAckConfirmed(true);
+        }}
+      />
+    );
+  }
+
+  // ── Data Assistance Gate — shown after legal ack, before main questionnaire ──
   const isJointFiling = INTAKE_SAMPLE.filingType === "Joint" || INTAKE_SAMPLE.maritalStatus === "Married";
   if (existingPullRequest === undefined) {
     // Still loading existing request — show minimal spinner
