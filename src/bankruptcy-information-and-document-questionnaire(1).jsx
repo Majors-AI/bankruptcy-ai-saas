@@ -14005,11 +14005,32 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                   <div className="mt-4 space-y-3">
                     <Grid2>
                       <F label="Recipient Name or Agency" required><TI value={sd.dsoRecipient||""} onChange={v=>u(schedKey,{...sd,dsoRecipient:v})} placeholder="e.g. State of Arizona Support Enforcement"/></F>
-                      <F label="Monthly Obligation"><DI value={sd.dsoMonthly||""} onChange={v=>u(schedKey,{...sd,dsoMonthly:v})}/></F>
+                      <F label="Type of Support"><SEL value={sd.dsoType||""} onChange={v=>u(schedKey,{...sd,dsoType:v})} options={["Child Support","Alimony / Spousal Maintenance","Both"]}/></F>
                     </Grid2>
                     <Grid2>
+                      <F label="Monthly Obligation"><DI value={sd.dsoMonthly||""} onChange={v=>u(schedKey,{...sd,dsoMonthly:v})}/></F>
                       <F label="Total Arrears Owed"><DI value={sd.dsoArrears||""} onChange={v=>u(schedKey,{...sd,dsoArrears:v})}/></F>
-                      <F label="Court Case Number (if known)"><TI value={sd.dsoCaseNumber||""} onChange={v=>u(schedKey,{...sd,dsoCaseNumber:v})} placeholder="Family court case #"/></F>
+                    </Grid2>
+                    <F label="Recipient Street Address"><TI value={sd.dsoRecipientAddr1||""} onChange={v=>u(schedKey,{...sd,dsoRecipientAddr1:v})} placeholder="Street address"/></F>
+                    <Grid3>
+                      <F label="City"><TI value={sd.dsoRecipientCity||""} onChange={v=>u(schedKey,{...sd,dsoRecipientCity:v})} placeholder="City"/></F>
+                      <F label="State"><SEL value={sd.dsoRecipientState||""} onChange={v=>u(schedKey,{...sd,dsoRecipientState:v})} options={US_STATES} placeholder="State"/></F>
+                      <F label="ZIP"><TI value={sd.dsoRecipientZip||""} onChange={v=>u(schedKey,{...sd,dsoRecipientZip:v})} placeholder="ZIP"/></F>
+                    </Grid3>
+                    <Grid2>
+                      <F label="Court / Family Case Number (if known)"><TI value={sd.dsoCaseNumber||""} onChange={v=>u(schedKey,{...sd,dsoCaseNumber:v})} placeholder="Family court case #"/></F>
+                      {d.petition?.divorceDate ? (
+                        <F label="Divorce / Separation Decree Date">
+                          <p className="text-xs text-slate-400 mb-1">You indicated a divorce on <strong className="text-white">{d.petition.divorceDate}</strong>.</p>
+                          <TI type="date" value={sd.dsoDecreeDate||(sd.dsoDecreeDate===undefined?d.petition.divorceDate:"")} onChange={v=>u(schedKey,{...sd,dsoDecreeDate:v})}/>
+                          <p className="text-xs text-slate-500 mt-1">Decrees within the last 8 years are relevant to your case.</p>
+                        </F>
+                      ) : (
+                        <F label="Date of divorce/separation decree (if applicable)">
+                          <TI type="date" value={sd.dsoDecreeDate||""} onChange={v=>u(schedKey,{...sd,dsoDecreeDate:v})}/>
+                          <p className="text-xs text-slate-500 mt-1">Decrees within the last 8 years are relevant to your case.</p>
+                        </F>
+                      )}
                     </Grid2>
                   </div>
                 )}
