@@ -4038,7 +4038,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
     mortgageBalance:"", mortgageCurrent:"", mortgageCurrentConfirmed:false,
     mortgageArrears:"", monthlyPayment:"",
     mortgageStatementDate:"", mortgageIncludesTaxInsurance:"",
-    lenderName:"", lenderAcct:"", lenderPhone:"",
+    lenderName:"", lenderAddr:"", lenderAcct:"", lenderPhone:"",
     otherInfo:"", zillowVerifiedDate:"", otherValSource:"",
     hasHOA:"", hoaName:"", hoaMonthlyDues:"", hoaArrears:"", hoaBalanceConfirmed:false, hoaStatementUploaded:"",
     hasSecondLien:"", secondLiens:[],
@@ -4071,7 +4071,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
 
   // Second lien helpers
   const addLien = (i) => {
-    const lien = { lenderName:"", balance:"", monthlyPayment:"", arrears:"", loanType:"HELOC / Second Mortgage", acct:"" };
+    const lien = { lenderName:"", addr:"", balance:"", monthlyPayment:"", arrears:"", loanType:"HELOC / Second Mortgage", acct:"" };
     updProp(i, "secondLiens", [...(props[i].secondLiens||[]), lien]);
   };
   const updLien = (pi, li, f, v) => {
@@ -4399,7 +4399,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           return (
                             <div className={`border rounded-xl p-4 transition-colors ${helpSent ? "border-green-500/30 bg-green-500/5" : "border-slate-600 hover:border-slate-500 bg-slate-900/30"}`}>
                               <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">D</div>
+                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">C</div>
                                 <div>
                                   <p className="text-xs font-semibold text-white mb-0.5">I can't provide any of the above</p>
                                   <p className="text-xs text-slate-400 leading-relaxed">If you're unable to access Zillow, obtain an appraisal, or look up your tax assessed value, send us a message explaining why and we will assist you.</p>
@@ -4893,15 +4893,18 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                         Enter the following from your most recent mortgage statement, then upload a copy above.
                       </p>
                     )}
-                    <Grid2>
+                    <Grid3>
                       <F label="Lender / Servicer Name" imported={imp&&i===0&&!!p.lenderName}>
                         <TI value={p.lenderName} onChange={v=>updProp(i,"lenderName",v)} placeholder="e.g. Wells Fargo Home Mortgage"/>
                         {p.lenderName && <LenderPortalLink lenderName={p.lenderName} className="text-blue-400 mt-1"/>}
                       </F>
+                      <F label="Lender / Creditor Address">
+                        <TI value={p.lenderAddr||""} onChange={v=>updProp(i,"lenderAddr",v)} placeholder="e.g. P.O. Box 10335, Des Moines, IA 50306"/>
+                      </F>
                       <F label="Loan / Account Number (last 4)">
                         <TI value={p.lenderAcct} onChange={v=>updProp(i,"lenderAcct",v)} placeholder="XXXX"/>
                       </F>
-                    </Grid2>
+                    </Grid3>
                     <Grid2>
                       <F label="Statement Date" hint="Date printed on your most recent mortgage statement">
                         <TI value={p.mortgageStatementDate||""} onChange={v=>updProp(i,"mortgageStatementDate",v)} placeholder="MM/DD/YYYY"/>
@@ -5201,10 +5204,11 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                               {/* Step 2: Creditor info — shown once type is selected */}
                               {lien.loanType && (
                                 <>
-                                  <Grid2>
+                                  <Grid3>
                                     <F label="Creditor / Lender Name" required><TI value={lien.lenderName} onChange={v=>updLien(i,li,"lenderName",v)} placeholder="e.g. Bank of America, IRS"/></F>
+                                    <F label="Creditor / Lender Address"><TI value={lien.addr||""} onChange={v=>updLien(i,li,"addr",v)} placeholder="e.g. P.O. Box 1234, Atlanta, GA 30301"/></F>
                                     <F label="Account # (last 4)"><TI value={lien.acct} onChange={v=>updLien(i,li,"acct",v)} placeholder="XXXX"/></F>
-                                  </Grid2>
+                                  </Grid3>
                                   <Grid3>
                                     <F label="Balance Owed" required><DI value={lien.balance} onChange={v=>updLien(i,li,"balance",v)}/></F>
                                     <F label="Monthly Payment"><DI value={lien.monthlyPayment} onChange={v=>updLien(i,li,"monthlyPayment",v)}/></F>
