@@ -14127,18 +14127,34 @@ function SectionSchedH({d,u}) {
   // Build lease list from Schedule G
   const schedGLeases  = (d.schedG?.contracts||[]).map((l,i) => ({id:`G-${i}`, label:`[G] ${l.name||l.description||`Lease ${i+1}`}`}));
 
-  // Collect auto-carried co-signers from D/F entries
+  // Collect auto-carried co-signers from D/F entries (with creditorId for pre-linking)
   const autoCoSignors = [];
-  [...(d.schedD?.creditors||[]), ...(d.schedEF_np?.creditors||[])].forEach(c => {
+  (d.schedD?.creditors||[]).forEach((c, i) => {
     if (c.hasCoSigner === "Yes" && c.coSignerName) {
       autoCoSignors.push({
         name: c.coSignerName,
         relationship: c.coSignerRelationship || "",
         addr: [c.coSignerAddr, c.coSignerCity, c.coSignerState, c.coSignerZip].filter(Boolean).join(", "),
         creditorName: c.name || "",
+        creditorId: `D-${i}`,
       });
     }
   });
+  (d.schedEF_np?.creditors||[]).forEach((c, i) => {
+    if (c.hasCoSigner === "Yes" && c.coSignerName) {
+      autoCoSignors.push({
+        name: c.coSignerName,
+        relationship: c.coSignerRelationship || "",
+        addr: [c.coSignerAddr, c.coSignerCity, c.coSignerState, c.coSignerZip].filter(Boolean).join(", "),
+        creditorName: c.name || "",
+        creditorId: `F-${i}`,
+      });
+    }
+  });
+  const normCoName = (n) => (n||"").toLowerCase().trim();
+  const addAutoCoSigner = (cs) => {
+    u("schedH", {...sd, hasCD: "Yes", codebtors: [...items, {name: cs.name, addr: cs.addr, relationship: cs.relationship, scheduleRef: "", creditorIds: [cs.creditorId], leaseIds: []}]});
+  };
 
   // Community property states list
   const CP_STATES = ["Arizona","California","Idaho","Louisiana","Nevada","New Mexico","Texas","Washington","Wisconsin"];
@@ -14161,9 +14177,11 @@ function SectionSchedH({d,u}) {
         {autoCoSignors.length > 0 && (
           <div className="mb-4 border border-amber-400/30 bg-amber-400/5 rounded-xl p-4">
             <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">Co-Signers Carried Over from Your Creditor Schedules</p>
-            <p className="text-xs text-slate-400 mb-3 leading-relaxed">The following co-signers were entered on Schedule D or Schedule F. They are automatically listed here and flagged for attorney review.</p>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">The following co-signers were entered on Schedule D or Schedule F. Click <strong className="text-white">+ Add to co-debtors</strong> to include them in your filing — they must be in the co-debtors list to appear in your bankruptcy paperwork.</p>
             <div className="space-y-2">
-              {autoCoSignors.map((cs, i) => (
+              {autoCoSignors.map((cs, i) => {
+                const alreadyAdded = items.some(it => normCoName(it.name) === normCoName(cs.name));
+                return (
                 <div key={i} className="flex items-start gap-3 bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2.5">
                   <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                   <div className="flex-1 min-w-0">
@@ -14172,9 +14190,20 @@ function SectionSchedH({d,u}) {
                     {cs.addr && <p className="text-xs text-slate-500">{cs.addr}</p>}
                     <p className="text-xs text-amber-400/80 mt-0.5">Creditor: {cs.creditorName}</p>
                   </div>
-                  <span className="text-xs bg-amber-400/15 text-amber-300 border border-amber-400/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap">Auto-listed</span>
+                  {alreadyAdded ? (
+                    <span className="text-xs bg-green-500/15 text-green-300 border border-green-500/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                      Added
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => addAutoCoSigner(cs)}
+                      className="text-xs bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap transition-colors">
+                      + Add to co-debtors
+                    </button>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
