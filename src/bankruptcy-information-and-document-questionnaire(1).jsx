@@ -14516,6 +14516,7 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
             <TI type="number" value={id_.avgMonthly6} onChange={v=>up("avgMonthly6",v)} placeholder="$0"/>
           </F>
           <F label="Monthly Bonuses / Overtime"><TI type="number" value={id_.bonuses} onChange={v=>up("bonuses",v)} placeholder="$0"/></F>
+          <F label="Self-Employment / Business Income (monthly net)"><TI type="number" value={id_.dSelfEmployment||""} onChange={v=>up("dSelfEmployment",v)} placeholder="$0"/></F>
           <F label="Social Security Retirement" imported={!!(id_.dSsRetirement)}>
             <TI type="number" value={id_.dSsRetirement} onChange={v=>up("dSsRetirement",v)} placeholder="$0"/>
           </F>
@@ -14540,10 +14541,12 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
           <F label="Child Support Received" imported={!!(id_.dChildSupport)}>
             <TI type="number" value={id_.dChildSupport} onChange={v=>up("dChildSupport",v)} placeholder="$0"/>
           </F>
+          <F label="Regular Contributions from Family / Friends / Roommates (monthly)"><TI type="number" value={id_.dFamilyContribution||""} onChange={v=>up("dFamilyContribution",v)} placeholder="$0"/></F>
           <F label="Other Monthly Income" imported={!!(id_.dOtherIncome)}>
             <TI type="number" value={id_.dOtherIncome} onChange={v=>up("dOtherIncome",v)} placeholder="$0"/>
           </F>
         </Grid2>
+        {id_.dSelfEmployment && <F label="Describe the Business"><TI value={id_.dSelfEmploymentDesc||""} onChange={v=>up("dSelfEmploymentDesc",v)} placeholder="e.g. Freelance web design, sole proprietor"/></F>}
         {id_.dOtherIncome && <F label="Describe Other Income"><TI value={id_.dOtherIncomeDesc} onChange={v=>up("dOtherIncomeDesc",v)} placeholder="Source description"/></F>}
 
         {/* Adult dependent household contributions */}
