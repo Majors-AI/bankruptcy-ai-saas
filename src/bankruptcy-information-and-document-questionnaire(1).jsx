@@ -15649,7 +15649,7 @@ function SectionSOFA4({d,u}) {
 function getActiveDocs(intake, petition, formData = {}) {
   const fin = formData?.schedAB_fin || {};
   const schedI = formData?.schedI || {};
-  const vehData = formData?.schedAB_veh || {};
+  const phy = formData?.schedAB_phy || {};
 
   // Detect which account types the client actually has
   const hasInvestments = (fin.investments || []).length > 0;
@@ -15661,6 +15661,8 @@ function getActiveDocs(intake, petition, formData = {}) {
   const hasPension = parseFloat(schedI.dPension) > 0;
   const hasLifeIns = (fin.lifeInsurance || []).length > 0;
   const hasFsaHsa = fin.hasFsaHsa === "Yes" && (fin.fsaHsaAccounts || []).length > 0;
+  const isSelfEmployed = (schedI.selfEmploySources || []).length > 0 || parseFloat(schedI.dSelfEmployment) > 0;
+  const allVehicles = [...(phy.vehicles || []), ...(phy.otherVehicles || [])];
 
   const base = REQUIRED_DOCS
     // Filter out generic financial/award/life ins/fsa placeholders replaced by dynamic per-account entries below
@@ -15674,6 +15676,9 @@ function getActiveDocs(intake, petition, formData = {}) {
       if (d.id === "pension_award") return hasPension;
       if (d.id === "life_ins")    return false; // replaced by per-policy entries
       if (d.id === "fsa_hsa_stmt") return false; // replaced by per-account entries
+      if (d.id === "vehicle_reg") return false; // replaced by per-vehicle entries
+      if (d.id === "vehicle_ins") return false; // replaced by per-vehicle entries
+      if (d.id === "bank_balance") return false; // replaced by per-account signing-day entries
       return true;
     })
     .map(d => {
@@ -15756,6 +15761,46 @@ function getActiveDocs(intake, petition, formData = {}) {
     extras.push({ id:"pension_award_entry", label:"Pension Award / Benefit Letter", required:true, category:"Benefit Award Letters", gate:"always", signingRequired:false,
       note:"Most recent letter from your pension administrator confirming your monthly benefit amount" });
   }
+
+  // Per-vehicle registration + insurance
+  allVehicles.forEach((v, i) => {
+    const vLabel = [v.year, v.make, v.model || v.type].filter(Boolean).join(" ") || `Vehicle ${i + 1}`;
+    extras.push({ id:`vehicle_reg_${i}`, label:`Registration — ${vLabel}`, required:true, category:"Vehicles", gate:"always", signingRequired:false,
+      note:`Current registration card for this vehicle` });
+    extras.push({ id:`vehicle_ins_${i}`, label:`Insurance — ${vLabel}`, required:true, category:"Vehicles", gate:"always", signingRequired:false,
+      note:`Insurance declarations page showing current coverage` });
+  });
+
+  // Self-employment income records
+  if (isSelfEmployed) {
+    const bizDesc = (schedI.selfEmploySources || []).map(s => s.businessName).filter(Boolean).join(", ");
+    extras.push({ id:"selfemploy_records", label:"Self-Employment Income Records — Last 6 Months", required:true, category:"Income", gate:"60days", signingRequired:false,
+      note:`P&L statement, business bank statements, or 1099s${bizDesc ? ` (${bizDesc})` : ""} — last 6 months` });
+  }
+
+  // Closed-account closing statements
+  (formData?.sofa4?.financialAccounts || []).forEach((acct, i) => {
+    if (acct.closed !== "Yes") return;
+    const acctLabel = [acct.institution, acct.type].filter(Boolean).join(" ");
+    extras.push({ id:`closed_acct_stmt_${i}`, label:`Closing Statement — ${acctLabel || `Account ${i + 1}`}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+      note:`Final/closing statement for ${acctLabel || "this account"}${acct.lastFour ? ` (ending ${acct.lastFour})` : ""}${acct.dateClosed ? ` — closed ${acct.dateClosed}` : ""}` });
+  });
+
+  // Signing-day balances — one per non-exempt account (checking/savings/money market/CD/crypto/investments)
+  (fin.bankAccounts || []).forEach((acct, i) => {
+    const acctLabel = [acct.bankName, acct.accountType].filter(Boolean).join(" ");
+    extras.push({ id:`balance_bank_${i}`, label:`Signing-Day Balance — ${acctLabel || `Bank Account ${i + 1}`}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:`Required day-of signing — log in and screenshot current balance${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""}` });
+  });
+  if (hasCrypto) {
+    extras.push({ id:"balance_crypto", label:`Signing-Day Balance — Cryptocurrency${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:"Required day-of signing — screenshot from exchange showing current holdings and value" });
+  }
+  (fin.investments || []).forEach((acct, i) => {
+    const acctLabel = acct.institution ? `${acct.institution} Investment` : `Investment Account ${i + 1}`;
+    extras.push({ id:`balance_invest_${i}`, label:`Signing-Day Balance — ${acctLabel}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:`Required day-of signing — screenshot showing current holdings and value${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""}` });
+  });
 
   if (!intake) return [...base, ...extras];
 
