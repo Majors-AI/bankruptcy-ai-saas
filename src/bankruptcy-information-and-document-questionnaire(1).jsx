@@ -52,16 +52,31 @@ const SECTIONS = [
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
 
+// ─── Date reference & document-label helpers ──────────────────────────────────
+// TODAY_RET / CUR_MONTH drive all time-sensitive document labels.
+// In production these are injected from the case record.
+const TODAY_RET  = new Date("2026-04-23");
+const CUR_MONTH  = "2026-04";
+
+const _DOC_MO_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const [_docY, _docM] = CUR_MONTH.split("-").map(Number);
+const DOC_TAX_YEAR_1 = _docY - 1;  // most-recent completed tax year
+const DOC_TAX_YEAR_2 = _docY - 2;  // prior year
+const _docMo = (n) => { let m = _docM - 1 - n, y = _docY; while (m < 0) { m += 12; y--; } return `${_DOC_MO_NAMES[m]} ${y}`; };
+const DOC_BANK_MO  = Array.from({length: 6}, (_, i) => _docMo(i)); // [current month … 5 months ago]
+const DOC_STMT_MO  = DOC_BANK_MO[0]; // label for "most recent" account statements
+
 const REQUIRED_DOCS = [
   // ── Identity — always available ──────────────────────────────────────────
   { id:"id_front",     label:"Government-Issued Photo ID (front)",         required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"Must be valid at time of filing" },
   { id:"id_back",      label:"Government-Issued Photo ID (back)",          required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"" },
   { id:"sscard",       label:"Social Security Card",                       required:true,  category:"Identity",            gate:"always",  signingRequired:false, note:"Original or certified copy" },
+  { id:"sscard_back",  label:"Social Security Card — Back",                required:false, category:"Identity",            gate:"always",  signingRequired:false, note:"Back is usually blank — upload only if there is text or a photo on the back" },
   // ── Tax returns — always available (not time-sensitive) ──────────────────
-  { id:"taxreturn_1",  label:"Federal Tax Return – Most Recent Year",      required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"taxreturn_2",  label:"Federal Tax Return – Prior Year",            required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"w2_1",         label:"W-2(s) – Most Recent Year",                  required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
-  { id:"w2_2",         label:"W-2(s) – Prior Year",                       required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"taxreturn_1",  label:`Federal Tax Return — ${DOC_TAX_YEAR_1}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"taxreturn_2",  label:`Federal Tax Return — ${DOC_TAX_YEAR_2}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"w2_1",         label:`W-2(s) — ${DOC_TAX_YEAR_1}`,               required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"w2_2",         label:`W-2(s) — ${DOC_TAX_YEAR_2}`,               required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   { id:"1099s",        label:"All 1099s (both years)",                     required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   // ── Vehicles — always available ───────────────────────────────────────────
   { id:"vehicle_reg",  label:"Vehicle Registration(s)",                    required:true,  category:"Vehicles",            gate:"always",  signingRequired:false, note:"For each owned vehicle" },
@@ -90,15 +105,19 @@ const REQUIRED_DOCS = [
   // ── Credit Counseling — always available, special ────────────────────────
   { id:"cc_cert",      label:"Pre-Filing Credit Counseling Certificate",   required:true,  category:"Required Courses",    gate:"always",  signingRequired:false, note:"Course 1 of 2 — must be from EOUST-approved provider within 180 days of filing — 11 U.S.C. § 109(h)", special:"credit_counseling" },
   // ── TIME-SENSITIVE — 60-day gate ─────────────────────────────────────────
-  { id:"bank_1",       label:"Bank Statement – Month 1 (most recent)",    required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
-  { id:"bank_2",       label:"Bank Statement – Month 2",                  required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_3",       label:"Bank Statement – Month 3",                  required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_4",       label:"Bank Statement – Month 4",                  required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_5",       label:"Bank Statement – Month 5",                  required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_6",       label:"Bank Statement – Month 6",                  required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
-  { id:"paystub_1",    label:"Most Recent Pay Stub",                       required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Within 60 days of filing" },
-  { id:"paystub_2",    label:"Pay Stub (60 days prior)",                   required:false, category:"Income",              gate:"60days",  signingRequired:false, note:"" },
-  { id:"mortgage_stmt",label:"Mortgage Statement(s) – Most Recent",       required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
+  { id:"bank_1",       label:`Bank Statement — ${DOC_BANK_MO[0]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
+  { id:"bank_2",       label:`Bank Statement — ${DOC_BANK_MO[1]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_3",       label:`Bank Statement — ${DOC_BANK_MO[2]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_4",       label:`Bank Statement — ${DOC_BANK_MO[3]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_5",       label:`Bank Statement — ${DOC_BANK_MO[4]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_6",       label:`Bank Statement — ${DOC_BANK_MO[5]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
+  { id:"paystub_1",    label:`Pay Stubs — ${DOC_BANK_MO[0]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_2",    label:`Pay Stubs — ${DOC_BANK_MO[1]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_3",    label:`Pay Stubs — ${DOC_BANK_MO[2]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_4",    label:`Pay Stubs — ${DOC_BANK_MO[3]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_5",    label:`Pay Stubs — ${DOC_BANK_MO[4]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_6",    label:`Pay Stubs — ${DOC_BANK_MO[5]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"mortgage_stmt",label:`Mortgage Statement(s) — ${DOC_BANK_MO[0]}`,required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
   { id:"hoa_stmt",     label:"HOA Statement / Dues Letter",                required:false, category:"Real Property",       gate:"60days",  signingRequired:false, note:"Current month — if applicable" },
   // ── Signing-day only ─────────────────────────────────────────────────────
   { id:"bank_balance", label:"Current Bank Balance Screenshot",           required:true,  category:"Bank Statements",     gate:"signing", signingRequired:true,  note:"Required day-of — log into your bank and screenshot current balance" },
@@ -118,9 +137,6 @@ const CASE_PAYMENT = {
   feeAgreementType:  "bifurcated",
   bifurcatedMinimum: 500,    // minimum payment required to fully unlock the portal for bifurcated cases
 };
-
-const TODAY_RET  = new Date("2026-04-23");
-const CUR_MONTH  = "2026-04";
 
 const daysToPayoff = Math.ceil((new Date(CASE_PAYMENT.payoffDate) - TODAY_RET) / (1000*60*60*24));
 const WITHIN_60   = daysToPayoff <= 60;
@@ -791,8 +807,9 @@ function mapIntakeToRetention(intake) {
   mapped.sofa3 = {
     priorBkFiled: intake.priorBankruptcy,
     priorBankruptcies: intake.priorBankruptcy === "yes" ? (intake.priorBankruptcies || []).map(b => ({
-      chapter: b.chapter, yearFiled: b.yearFiled, disposition: b.disposition,
-      caseNumber: b.caseNumber, district: b.district,
+      chapter: b.chapter, disposition: b.disposition, district: b.district,
+      caseNo: b.caseNumber,
+      dateFiled: b.yearFiled ? `${b.yearFiled}-01-01` : "",
     })) : [],
     hasLawsuits: intake.pendingLawsuits, lawsuitDetails: intake.lawsuitDetails,
     dsoObligation: intake.dsoObligation, dsoAmount: intake.dsoAmount,
@@ -1924,7 +1941,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <SBlock title="Unexpired Contracts & Leases">
             {leases.length === 0
               ? <SRow label="Contracts / Leases" value="None listed"/>
-              : leases.map((l,i) => <SRow key={i} label={`Contract ${i+1}`} value={`${l.counterparty||"Unknown"} — ${l.description||""}`} missing={!l.counterparty}/>)
+              : leases.map((l,i) => <SRow key={i} label={`Contract ${i+1}`} value={`${l.name||"Unknown"} — ${l.description||""}`} missing={!l.name}/>)
             }
           </SBlock>
         );
@@ -1978,7 +1995,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
         return (
           <SBlock title="Income (Prior 2 Years)">
             <SRow label="Gross — Prior Year 1" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
-            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossPrior2) || "Not provided"}/>
+            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
             <SRow label="Owned a Business?" value={sd.ownedBusiness === "yes" ? "Yes" : "No"}/>
           </SBlock>
         );
@@ -1989,7 +2006,7 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <>
             <SBlock title="Transfers (Last 2 Years)">
               <SRow label="Any Transfers?" value={sd.hasTransfers === "yes" ? "Yes" : "No"}/>
-              {(sd.transfers||[]).map((t,i) => <SRow key={i} label={`Transfer ${i+1}`} value={`${t.transferee||"Unknown"} — ${fmtMoney(t.value)||"?"}`}/>)}
+              {(sd.transfers||[]).map((t,i) => <SRow key={i} label={`Transfer ${i+1}`} value={`${t.recipient||"Unknown"} — ${fmtMoney(t.amount)||"?"}`}/>)}
             </SBlock>
             <SBlock title="Preferential Payments (90 days)">
               <SRow label="Any Preferential Payments?" value={sd.hasPreferential === "yes" ? "Yes" : "No"}/>
@@ -2823,6 +2840,10 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
           <F label="Social Security Number" required hint="Filed under seal — never visible to the public or creditors" imported={imp && imp("petition.ssn")}>
             <TI value={pd.ssn} onChange={v=>up("ssn",v)} placeholder="XXX-XX-XXXX"/>
           </F>
+          <Grid2>
+            <F label="Driver's License Number"><TI value={pd.driversLicense} onChange={v=>up("driversLicense",v)} placeholder="DL number"/></F>
+            <F label="DL State"><SEL value={pd.driversLicenseState} onChange={v=>up("driversLicenseState",v)} options={US_STATES} placeholder="State"/></F>
+          </Grid2>
 
           {/* ── Identity Document Capture ── */}
           {clientId && (
@@ -3024,6 +3045,10 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
               <F label="Middle Name"><TI value={pd.spouseMiddle} onChange={v=>up("spouseMiddle",v)} placeholder="Middle"/></F>
               <F label="Last Name" required imported={imp && imp("petition.spouseLast")}><TI value={pd.spouseLast} onChange={v=>up("spouseLast",v)} placeholder="Last"/></F>
             </Grid3>
+            <Grid2>
+              <F label="Driver's License Number"><TI value={pd.driversLicenseSpouse} onChange={v=>up("driversLicenseSpouse",v)} placeholder="DL number"/></F>
+              <F label="DL State"><SEL value={pd.driversLicenseStateSpouse} onChange={v=>up("driversLicenseStateSpouse",v)} options={US_STATES} placeholder="State"/></F>
+            </Grid2>
             {isJoint && (
               <>
                 <Grid2>
@@ -4030,7 +4055,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
     mortgageBalance:"", mortgageCurrent:"", mortgageCurrentConfirmed:false,
     mortgageArrears:"", monthlyPayment:"",
     mortgageStatementDate:"", mortgageIncludesTaxInsurance:"",
-    lenderName:"", lenderAcct:"", lenderPhone:"",
+    lenderName:"", lenderAddr:"", lenderAcct:"", lenderPhone:"",
     otherInfo:"", zillowVerifiedDate:"", otherValSource:"",
     hasHOA:"", hoaName:"", hoaMonthlyDues:"", hoaArrears:"", hoaBalanceConfirmed:false, hoaStatementUploaded:"",
     hasSecondLien:"", secondLiens:[],
@@ -4063,7 +4088,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
 
   // Second lien helpers
   const addLien = (i) => {
-    const lien = { lenderName:"", balance:"", monthlyPayment:"", arrears:"", loanType:"HELOC / Second Mortgage", acct:"" };
+    const lien = { lenderName:"", addr:"", balance:"", monthlyPayment:"", arrears:"", loanType:"HELOC / Second Mortgage", acct:"" };
     updProp(i, "secondLiens", [...(props[i].secondLiens||[]), lien]);
   };
   const updLien = (pi, li, f, v) => {
@@ -4383,74 +4408,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           );
                         })()}
 
-                        {/* Option C — County Tax Assessment */}
-                        {(() => {
-                          const pend = otherValPending[i];
-                          const isThisOption = pend?.optionKey === "tax";
-                          const county = p.county?.trim() || "";
-                          const state = p.state?.trim() || "";
-                          const taxSearchUrl = `https://www.google.com/search?q=${encodeURIComponent([county ? `${county} County` : "", state, "property tax assessor assessed value"].filter(Boolean).join(" "))}`;
-                          return (
-                            <div className="border border-slate-600 hover:border-teal-500/40 rounded-xl p-4 transition-colors bg-slate-900/30">
-                              <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/30 flex items-center justify-center text-xs font-bold text-teal-300 flex-shrink-0 mt-0.5">C</div>
-                                <div>
-                                  <p className="text-xs font-semibold text-white mb-0.5">County Tax Assessed Value</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">Look up the most recent assessed value from your county tax assessor's office and enter it below.</p>
-                                </div>
-                              </div>
-                              {isThisOption ? (
-                                <div className="mt-2 space-y-2.5">
-                                  <div className="bg-teal-500/8 border border-teal-500/20 rounded-lg px-3 py-2.5 text-xs text-teal-200 leading-relaxed">
-                                    <p className="font-semibold text-teal-300 mb-1">Find your county assessor:</p>
-                                    <a href={taxSearchUrl} target="_blank" rel="noreferrer"
-                                      className="inline-flex items-center gap-1.5 text-teal-400 hover:text-teal-300 underline transition-colors">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                                      Search for {[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}
-                                    </a>
-                                    <p className="mt-1.5 text-teal-200/70">Visit the assessor's website, look up this property, and enter the most recent <strong className="text-white">assessed value</strong> below. Note: assessed value may differ from market value.</p>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Tax assessed value <span className="text-red-400">*</span></label>
-                                    <div className="flex gap-2 items-center">
-                                      <span className="text-slate-400 text-sm font-semibold">$</span>
-                                      <input type="number" className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-teal-400"
-                                        placeholder="e.g. 275000" value={pend.value||""}
-                                        onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],value:e.target.value}}))}/>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button type="button"
-                                      disabled={!pend.value}
-                                      onClick={() => {
-                                        const val = pend.value;
-                                        const today = new Date();
-                                        const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
-                                        const formatted = `$${Number(val).toLocaleString()}`;
-                                        updProp(i,"value",val); updProp(i,"otherValSource","County Tax Assessed Value");
-                                        updProp(i,"_valConfirmedAt", new Date().toISOString());
-                                        updProp(i,"otherInfo",`Tax assessed value of ${formatted} provided by Debtor on ${dateStr}. Source: ${[county ? `${county} County` : state, "Tax Assessor"].filter(Boolean).join(" ")}. Note: Trustee may reference Zillow independently.`);
-                                        setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                                      }}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-teal-500/20 border border-teal-500/40 hover:bg-teal-500/30 text-teal-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                                      Confirm this value
-                                    </button>
-                                    <button type="button" onClick={() => setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; })} className="text-slate-500 hover:text-slate-300 text-xs transition-colors px-2">cancel</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => setOtherValPending(prev => ({...prev,[i]:{value:"",source:"",optionKey:"tax"}}))}
-                                  className="mt-1 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-teal-500/10 border border-teal-500/30 hover:bg-teal-500/20 text-teal-300 text-xs font-semibold transition-all">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                                  Use county tax assessed value
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Option D — Request help */}
+                        {/* Option C — Request help */}
                         {(() => {
                           const pend = otherValPending[i];
                           const isThisOption = pend?.optionKey === "help";
@@ -4458,7 +4416,7 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                           return (
                             <div className={`border rounded-xl p-4 transition-colors ${helpSent ? "border-green-500/30 bg-green-500/5" : "border-slate-600 hover:border-slate-500 bg-slate-900/30"}`}>
                               <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">D</div>
+                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">C</div>
                                 <div>
                                   <p className="text-xs font-semibold text-white mb-0.5">I can't provide any of the above</p>
                                   <p className="text-xs text-slate-400 leading-relaxed">If you're unable to access Zillow, obtain an appraisal, or look up your tax assessed value, send us a message explaining why and we will assist you.</p>
@@ -4952,15 +4910,18 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                         Enter the following from your most recent mortgage statement, then upload a copy above.
                       </p>
                     )}
-                    <Grid2>
+                    <Grid3>
                       <F label="Lender / Servicer Name" imported={imp&&i===0&&!!p.lenderName}>
                         <TI value={p.lenderName} onChange={v=>updProp(i,"lenderName",v)} placeholder="e.g. Wells Fargo Home Mortgage"/>
                         {p.lenderName && <LenderPortalLink lenderName={p.lenderName} className="text-blue-400 mt-1"/>}
                       </F>
+                      <F label="Lender / Creditor Address">
+                        <TI value={p.lenderAddr||""} onChange={v=>updProp(i,"lenderAddr",v)} placeholder="e.g. P.O. Box 10335, Des Moines, IA 50306"/>
+                      </F>
                       <F label="Loan / Account Number (last 4)">
                         <TI value={p.lenderAcct} onChange={v=>updProp(i,"lenderAcct",v)} placeholder="XXXX"/>
                       </F>
-                    </Grid2>
+                    </Grid3>
                     <Grid2>
                       <F label="Statement Date" hint="Date printed on your most recent mortgage statement">
                         <TI value={p.mortgageStatementDate||""} onChange={v=>updProp(i,"mortgageStatementDate",v)} placeholder="MM/DD/YYYY"/>
@@ -5260,10 +5221,11 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
                               {/* Step 2: Creditor info — shown once type is selected */}
                               {lien.loanType && (
                                 <>
-                                  <Grid2>
+                                  <Grid3>
                                     <F label="Creditor / Lender Name" required><TI value={lien.lenderName} onChange={v=>updLien(i,li,"lenderName",v)} placeholder="e.g. Bank of America, IRS"/></F>
+                                    <F label="Creditor / Lender Address"><TI value={lien.addr||""} onChange={v=>updLien(i,li,"addr",v)} placeholder="e.g. P.O. Box 1234, Atlanta, GA 30301"/></F>
                                     <F label="Account # (last 4)"><TI value={lien.acct} onChange={v=>updLien(i,li,"acct",v)} placeholder="XXXX"/></F>
-                                  </Grid2>
+                                  </Grid3>
                                   <Grid3>
                                     <F label="Balance Owed" required><DI value={lien.balance} onChange={v=>updLien(i,li,"balance",v)}/></F>
                                     <F label="Monthly Payment"><DI value={lien.monthlyPayment} onChange={v=>updLien(i,li,"monthlyPayment",v)}/></F>
@@ -5603,6 +5565,11 @@ function SectionSchedAB_Fin({d,u,imp,ImportBanner}) {
   const updInv = (i,f,v) => { const a=[...investments]; a[i]={...a[i],[f]:v}; up("investments",a); };
   const addInv = () => up("investments",[...investments,{institution:"",description:"",value:"",accountNumberLast4:""}]);
   const remInv = (i) => { const a=[...investments]; a.splice(i,1); up("investments",a); };
+
+  const paymentApps = fd.paymentApps || [];
+  const updPA = (i,f,v) => { const a=[...paymentApps]; a[i]={...a[i],[f]:v}; up("paymentApps",a); };
+  const addPA = () => up("paymentApps",[...paymentApps,{provider:"",balance:""}]);
+  const remPA = (i) => { const a=[...paymentApps]; a.splice(i,1); up("paymentApps",a); };
 
   const bankLabel = (a) => {
     const parts = [a.bankName, a.accountType].filter(Boolean).join(" ");
@@ -6019,6 +5986,29 @@ function SectionSchedAB_Fin({d,u,imp,ImportBanner}) {
         <AddBtn onClick={addInv} label="Add Investment Account"/>
         <Divider label="Other"/>
         <F label="Interest in LLC / Partnership / Corporation"><TI type="number" value={fd.interestInCorp} onChange={v=>up("interestInCorp",v)} placeholder="$0"/></F>
+      </Card>
+
+      {/* ── Payment Apps & Digital Wallets ── */}
+      <Card>
+        <CardTitle icon="📱" title="Payment Apps & Digital Wallets" sub="Do you have a balance in Venmo, Cash App, Zelle, PayPal, Chime, or Apple Pay? Any stored balance counts as an asset."/>
+        {paymentApps.length === 0 && <p className="text-slate-500 text-xs mb-3">No payment app balances on file. Add each account below if you have one.</p>}
+        {paymentApps.map((pa,i) => (
+          <div key={i} className="border border-slate-600 rounded-xl p-4 mb-3">
+            <div className="flex justify-between items-center mb-3">
+              <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">{pa.provider || `Account ${i+1}`}</span>
+              <RemBtn onClick={()=>remPA(i)}/>
+            </div>
+            <Grid2>
+              <F label="Provider" required>
+                <SEL value={pa.provider} onChange={v=>updPA(i,"provider",v)} options={["Zelle","Venmo","Cash App","Apple Pay","Chime","PayPal","Other"]} placeholder="Select app..."/>
+              </F>
+              <F label="Current Balance" hint="Amount currently held in the app — not a linked bank account">
+                <TI type="number" value={pa.balance} onChange={v=>updPA(i,"balance",v)} placeholder="$0"/>
+              </F>
+            </Grid2>
+          </div>
+        ))}
+        <AddBtn onClick={addPA} label="Add Payment App / Digital Wallet"/>
       </Card>
 
       {/* ── Life Insurance & Annuities ── */}
@@ -9253,6 +9243,57 @@ function SectionSchedC({d,u}) {
         </p>
       </div>
 
+      {/* Residency & Jurisdiction Confirmation */}
+      <div className="border border-slate-600 rounded-2xl overflow-hidden mb-5">
+        <div className="bg-slate-800 px-5 py-3 border-b border-slate-700 flex items-center gap-2">
+          <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <div>
+            <p className="text-sm font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>Residency &amp; Filing Jurisdiction</p>
+            <p className="text-xs text-slate-400 mt-0.5">Confirm the domicile information your attorney will use to determine which exemption laws apply to your case.</p>
+          </div>
+        </div>
+        <div className="p-5 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Filing State</p>
+              <p className="text-sm text-white font-medium">{d.petition?.state || <span className="text-slate-500 italic">Not set</span>}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Exemption System</p>
+              <p className="text-sm text-white font-medium">{exemptSystem}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Time at Current Address</p>
+              <p className="text-sm text-white font-medium">{d.petition?.addressYears || <span className="text-slate-500 italic">Not answered</span>}</p>
+            </div>
+            <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">In This State 2+ Years?</p>
+              <p className="text-sm text-white font-medium">
+                {d.petition?.inStateTwo === "yes" ? "Yes" : d.petition?.inStateTwo === "no" ? "No" : d.petition?.addressYears === "2+ years" ? "Yes (2+ years at address)" : <span className="text-slate-500 italic">Not answered</span>}
+              </p>
+            </div>
+            {d.petition?.domicileState180 && (
+              <div className="bg-amber-400/10 border border-amber-400/25 rounded-xl px-3 py-2.5 col-span-2">
+                <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider mb-1">Prior Domicile State (180-Day Lookback)</p>
+                <p className="text-sm text-white font-medium">{d.petition.domicileState180}</p>
+                <p className="text-xs text-slate-400 mt-1">Your attorney will apply <strong className="text-white">{d.petition.domicileState180}</strong> exemption laws based on your prior domicile.</p>
+              </div>
+            )}
+          </div>
+          <div className="bg-slate-900/40 border-t border-slate-800 -mx-5 px-5 pt-4 mt-4">
+            <ConfirmCheck
+              id="schedC_residency_confirm"
+              checked={!!d.schedC?.residencyConfirmed}
+              onChange={v => u("schedC", {...(d.schedC||{}), residencyConfirmed: v})}
+            >
+              <span className="text-sm text-slate-200 leading-relaxed">
+                I confirm the residency and filing-jurisdiction information above is correct. I understand my attorney will use this to determine which state's exemption laws apply to my case.
+              </span>
+            </ConfirmCheck>
+          </div>
+        </div>
+      </div>
+
       {/* Net Equity Summary Table */}
       {(() => {
         const fin = d.schedAB_fin || {};
@@ -12428,6 +12469,13 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
     }
   };
 
+  // Cross-schedule duplicate detection — Schedule F only, excludes taxDebts
+  const normName = (n) => (n||"").toLowerCase().replace(/[^a-z0-9]/g,"");
+  const xSchedNames = (!isD && !isPri) ? new Set(
+    [...(d.schedD?.creditors||[]), ...(d.schedEF_pri?.creditors||[])]
+      .map(c => normName(c.name)).filter(Boolean)
+  ) : null;
+
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={importKeys[schedKey]||[]}/>}
@@ -12561,6 +12609,7 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
             const collapsed = isD && started && isCredCollapsed(gi);
             const allDone = tabDone.info && tabDone.creditor && tabDone.other;
             const verifyState = aiVerify[gi];
+            const isDupAdvisory = !isD && !isPri && xSchedNames && c.name && xSchedNames.has(normName(c.name));
 
             return (
             <div key={gi} className="border border-slate-600 rounded-2xl mb-5 overflow-hidden">
@@ -12615,6 +12664,14 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                   <RemBtn onClick={()=>remC(gi)}/>
                 </div>
               </div>
+
+              {/* Cross-schedule duplicate advisory — Schedule F only, non-blocking */}
+              {isDupAdvisory && (
+                <div className="px-5 py-3 border-t border-amber-400/25 bg-amber-400/8 flex items-start gap-2">
+                  <svg className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                  <p className="text-xs text-amber-300 leading-relaxed"><strong className="text-white">"{c.name}"</strong> may already be listed in Schedule D or E. If it&apos;s the same debt, remove it here to avoid a duplicate — if it&apos;s a separate account with the same creditor, you can ignore this.</p>
+                </div>
+              )}
 
               {/* Collapsed: AI verification summary strip */}
               {collapsed && verifyState && verifyState !== "loading" && (
@@ -13072,6 +13129,54 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                           )}
 
                           {/* ── QUESTION 6: What do you want to do with this? (Chapter 7 only) ── */}
+                          {/* ── QUESTION 6 (Ch13): What do you want to do with this? ── */}
+                          {!isChapter7 && chapter === "13" && collateralAnswered && balanceAnswered && paymentStatusAnswered && arrearsAnswered && (
+                            <div className={`rounded-2xl border px-5 py-4 transition-all ${c.intent ? "border-green-500/30 bg-green-500/5" : "border-amber-400/40 bg-amber-400/5"}`}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${c.intent ? "bg-green-500/20 text-green-400" : "bg-amber-400/20 text-amber-400"}`}>
+                                  {c.intent ? "✓" : isRE ? "4" : isVeh ? (c.isCurrent === "No" ? "5" : "4") : "4"}
+                                </span>
+                                <p className="text-sm font-bold text-white">
+                                  {isRE ? "What would you like to do with this property?" : isVeh ? "What would you like to do with this vehicle?" : "What would you like to do with this secured debt?"}
+                                </p>
+                              </div>
+                              <p className="text-xs text-slate-400 mb-4 leading-relaxed ml-8">
+                                In Chapter 13, your plan will address this debt. Let us know your intent — your attorney will confirm the approach and structure it in your repayment plan.
+                              </p>
+                              <div className="ml-8 space-y-2.5">
+                                {[
+                                  { value:"keep",      emoji:"✅", label:"Keep it and pay through the plan",      tagline:"You keep the property — payments are included in your Chapter 13 plan.",        plain:"Your monthly plan payment will cover any arrears and ongoing obligations on this debt. You keep the property as long as you complete your plan." },
+                                  { value:"surrender", emoji:"🔄", label:"Give it back to the lender (Surrender)", tagline:"Hand it over — the remaining balance is addressed in the plan.",                   plain:"You return the property to the lender. Any remaining balance after surrender is treated as an unsecured claim in your plan, which is often paid pennies on the dollar." },
+                                  { value:"other",     emoji:"📋", label:"Something else",                        tagline:"Describe your situation.",                                                         plain:"If neither option fits, choose this and explain. Your attorney will review it and determine the best approach for your plan." },
+                                ].map(opt => (
+                                  <label key={opt.value}
+                                    className={`flex items-start gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-all ${
+                                      c.intent===opt.value ? "border-amber-400/60 bg-amber-400/10" : "border-slate-700 hover:border-slate-600 bg-slate-800/30"
+                                    }`}>
+                                    <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 mt-1 flex items-center justify-center transition-all ${
+                                      c.intent===opt.value ? "border-amber-400 bg-amber-400" : "border-slate-600"
+                                    }`}>
+                                      {c.intent===opt.value && <span className="w-1.5 h-1.5 rounded-full bg-slate-950 block"/>}
+                                    </div>
+                                    <input type="radio" className="sr-only" name={`intent-${schedKey}-${i}`} value={opt.value} checked={c.intent===opt.value} onChange={()=>updC(i,"intent",opt.value)}/>
+                                    <div className="flex-1">
+                                      <p className={`text-sm font-bold ${c.intent===opt.value?"text-amber-300":"text-slate-200"}`}>{opt.emoji} {opt.label}</p>
+                                      <p className={`text-xs mt-0.5 mb-1 font-medium ${c.intent===opt.value?"text-amber-400/80":"text-slate-500"}`}>{opt.tagline}</p>
+                                      <p className="text-xs text-slate-400 leading-relaxed">{opt.plain}</p>
+                                    </div>
+                                  </label>
+                                ))}
+                              </div>
+                              {c.intent==="other" && (
+                                <div className="mt-3 ml-8">
+                                  <F label="Describe what you'd like to do">
+                                    <TI value={c.intentOther||""} onChange={v=>updC(i,"intentOther",v)} placeholder="Tell us what you have in mind — your attorney will review it"/>
+                                  </F>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
                           {isChapter7 && collateralAnswered && balanceAnswered && paymentStatusAnswered && arrearsAnswered && (
                             <div className={`rounded-2xl border px-5 py-4 transition-all ${intentAnswered ? "border-green-500/30 bg-green-500/5" : "border-amber-400/40 bg-amber-400/5"}`}>
                               <div className="flex items-center gap-2 mb-2">
@@ -13933,11 +14038,32 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
                   <div className="mt-4 space-y-3">
                     <Grid2>
                       <F label="Recipient Name or Agency" required><TI value={sd.dsoRecipient||""} onChange={v=>u(schedKey,{...sd,dsoRecipient:v})} placeholder="e.g. State of Arizona Support Enforcement"/></F>
-                      <F label="Monthly Obligation"><DI value={sd.dsoMonthly||""} onChange={v=>u(schedKey,{...sd,dsoMonthly:v})}/></F>
+                      <F label="Type of Support"><SEL value={sd.dsoType||""} onChange={v=>u(schedKey,{...sd,dsoType:v})} options={["Child Support","Alimony / Spousal Maintenance","Both"]}/></F>
                     </Grid2>
                     <Grid2>
+                      <F label="Monthly Obligation"><DI value={sd.dsoMonthly||""} onChange={v=>u(schedKey,{...sd,dsoMonthly:v})}/></F>
                       <F label="Total Arrears Owed"><DI value={sd.dsoArrears||""} onChange={v=>u(schedKey,{...sd,dsoArrears:v})}/></F>
-                      <F label="Court Case Number (if known)"><TI value={sd.dsoCaseNumber||""} onChange={v=>u(schedKey,{...sd,dsoCaseNumber:v})} placeholder="Family court case #"/></F>
+                    </Grid2>
+                    <F label="Recipient Street Address"><TI value={sd.dsoRecipientAddr1||""} onChange={v=>u(schedKey,{...sd,dsoRecipientAddr1:v})} placeholder="Street address"/></F>
+                    <Grid3>
+                      <F label="City"><TI value={sd.dsoRecipientCity||""} onChange={v=>u(schedKey,{...sd,dsoRecipientCity:v})} placeholder="City"/></F>
+                      <F label="State"><SEL value={sd.dsoRecipientState||""} onChange={v=>u(schedKey,{...sd,dsoRecipientState:v})} options={US_STATES} placeholder="State"/></F>
+                      <F label="ZIP"><TI value={sd.dsoRecipientZip||""} onChange={v=>u(schedKey,{...sd,dsoRecipientZip:v})} placeholder="ZIP"/></F>
+                    </Grid3>
+                    <Grid2>
+                      <F label="Court / Family Case Number (if known)"><TI value={sd.dsoCaseNumber||""} onChange={v=>u(schedKey,{...sd,dsoCaseNumber:v})} placeholder="Family court case #"/></F>
+                      {d.petition?.divorceDate ? (
+                        <F label="Divorce / Separation Decree Date">
+                          <p className="text-xs text-slate-400 mb-1">You indicated a divorce on <strong className="text-white">{d.petition.divorceDate}</strong>.</p>
+                          <TI type="date" value={sd.dsoDecreeDate||(sd.dsoDecreeDate===undefined?d.petition.divorceDate:"")} onChange={v=>u(schedKey,{...sd,dsoDecreeDate:v})}/>
+                          <p className="text-xs text-slate-500 mt-1">Decrees within the last 8 years are relevant to your case.</p>
+                        </F>
+                      ) : (
+                        <F label="Date of divorce/separation decree (if applicable)">
+                          <TI type="date" value={sd.dsoDecreeDate||""} onChange={v=>u(schedKey,{...sd,dsoDecreeDate:v})}/>
+                          <p className="text-xs text-slate-500 mt-1">Decrees within the last 8 years are relevant to your case.</p>
+                        </F>
+                      )}
                     </Grid2>
                   </div>
                 )}
@@ -13955,7 +14081,7 @@ function CreditorList({title, sub, schedKey, d, u, imp, ImportBanner, clientId, 
 function SectionSchedG({d,u}) {
   const sd = d.schedG||{contracts:[]};
   const items = sd.contracts||[];
-  const add = () => u("schedG",{...sd,contracts:[...items,{name:"",addr:"",description:"",payment:""}]});
+  const add = () => u("schedG",{...sd,contracts:[...items,{name:"",addr:"",city:"",state:"",zip:"",description:"",payment:"",contractType:"",startDate:"",endDate:"",intent:""}]});
   const upd = (i,f,v) => { const a=[...items]; a[i]={...a[i],[f]:v}; u("schedG",{...sd,contracts:a}); };
   const rem = (i) => { const a=[...items]; a.splice(i,1); u("schedG",{...sd,contracts:a}); };
   return (
@@ -13969,17 +14095,30 @@ function SectionSchedG({d,u}) {
       {sd.hasContracts==="Yes" && (
         <>
           {items.map((c,i)=>(
-            <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
-              <div className="flex justify-between items-center mb-2">
+            <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2 space-y-3">
+              <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Contract / Lease {i+1}</span>
                 <RemBtn onClick={()=>rem(i)}/>
               </div>
               <Grid2>
-                <F label="Other Party Name"><TI value={c.name} onChange={v=>upd(i,"name",v)} placeholder="Landlord / lessor name"/></F>
-                <F label="Monthly Payment"><TI type="number" value={c.payment} onChange={v=>upd(i,"payment",v)} placeholder="$0"/></F>
+                <F label="Other Party Name"><TI value={c.name||""} onChange={v=>upd(i,"name",v)} placeholder="Landlord / lessor name"/></F>
+                <F label="Contract / Lease Type"><SEL value={c.contractType||""} onChange={v=>upd(i,"contractType",v)} options={["Residential Lease","Vehicle Lease","Lease-to-Own / Rent-to-Own","Equipment / Furniture Lease","Service Contract","Timeshare","Other"]}/></F>
               </Grid2>
-              <F label="Other Party Address"><TI value={c.addr} onChange={v=>upd(i,"addr",v)} placeholder="Address"/></F>
-              <F label="Description of Contract / Lease"><TI value={c.description} onChange={v=>upd(i,"description",v)} placeholder="e.g. Residential lease at 123 Main St, expires Dec 2026"/></F>
+              <F label="Other Party Street Address"><TI value={c.addr||""} onChange={v=>upd(i,"addr",v)} placeholder="Street address or PO Box"/></F>
+              <Grid3>
+                <F label="City"><TI value={c.city||""} onChange={v=>upd(i,"city",v)} placeholder="City"/></F>
+                <F label="State"><SEL value={c.state||""} onChange={v=>upd(i,"state",v)} options={US_STATES} placeholder="State"/></F>
+                <F label="ZIP"><TI value={c.zip||""} onChange={v=>upd(i,"zip",v)} placeholder="ZIP"/></F>
+              </Grid3>
+              <F label="Description of Contract / Lease"><TI value={c.description||""} onChange={v=>upd(i,"description",v)} placeholder="e.g. Residential lease at 123 Main St, expires Dec 2026"/></F>
+              <Grid2>
+                <F label="Start Date"><TI type="date" value={c.startDate||""} onChange={v=>upd(i,"startDate",v)}/></F>
+                <F label="End / Expiration Date"><TI type="date" value={c.endDate||""} onChange={v=>upd(i,"endDate",v)}/></F>
+              </Grid2>
+              <Grid2>
+                <F label="Monthly Payment"><TI type="number" value={c.payment||""} onChange={v=>upd(i,"payment",v)} placeholder="$0"/></F>
+                <F label="Intent"><SEL value={c.intent||""} onChange={v=>upd(i,"intent",v)} options={["Assume / keep it","Reject / surrender it","Undecided — attorney to advise"]}/></F>
+              </Grid2>
             </div>
           ))}
           <AddBtn onClick={add} label="Add Contract / Lease"/>
@@ -14005,18 +14144,34 @@ function SectionSchedH({d,u}) {
   // Build lease list from Schedule G
   const schedGLeases  = (d.schedG?.contracts||[]).map((l,i) => ({id:`G-${i}`, label:`[G] ${l.name||l.description||`Lease ${i+1}`}`}));
 
-  // Collect auto-carried co-signers from D/F entries
+  // Collect auto-carried co-signers from D/F entries (with creditorId for pre-linking)
   const autoCoSignors = [];
-  [...(d.schedD?.creditors||[]), ...(d.schedEF_np?.creditors||[])].forEach(c => {
+  (d.schedD?.creditors||[]).forEach((c, i) => {
     if (c.hasCoSigner === "Yes" && c.coSignerName) {
       autoCoSignors.push({
         name: c.coSignerName,
         relationship: c.coSignerRelationship || "",
         addr: [c.coSignerAddr, c.coSignerCity, c.coSignerState, c.coSignerZip].filter(Boolean).join(", "),
         creditorName: c.name || "",
+        creditorId: `D-${i}`,
       });
     }
   });
+  (d.schedEF_np?.creditors||[]).forEach((c, i) => {
+    if (c.hasCoSigner === "Yes" && c.coSignerName) {
+      autoCoSignors.push({
+        name: c.coSignerName,
+        relationship: c.coSignerRelationship || "",
+        addr: [c.coSignerAddr, c.coSignerCity, c.coSignerState, c.coSignerZip].filter(Boolean).join(", "),
+        creditorName: c.name || "",
+        creditorId: `F-${i}`,
+      });
+    }
+  });
+  const normCoName = (n) => (n||"").toLowerCase().trim();
+  const addAutoCoSigner = (cs) => {
+    u("schedH", {...sd, hasCD: "Yes", codebtors: [...items, {name: cs.name, addr: cs.addr, relationship: cs.relationship, scheduleRef: "", creditorIds: [cs.creditorId], leaseIds: []}]});
+  };
 
   // Community property states list
   const CP_STATES = ["Arizona","California","Idaho","Louisiana","Nevada","New Mexico","Texas","Washington","Wisconsin"];
@@ -14039,9 +14194,11 @@ function SectionSchedH({d,u}) {
         {autoCoSignors.length > 0 && (
           <div className="mb-4 border border-amber-400/30 bg-amber-400/5 rounded-xl p-4">
             <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">Co-Signers Carried Over from Your Creditor Schedules</p>
-            <p className="text-xs text-slate-400 mb-3 leading-relaxed">The following co-signers were entered on Schedule D or Schedule F. They are automatically listed here and flagged for attorney review.</p>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">The following co-signers were entered on Schedule D or Schedule F. Click <strong className="text-white">+ Add to co-debtors</strong> to include them in your filing — they must be in the co-debtors list to appear in your bankruptcy paperwork.</p>
             <div className="space-y-2">
-              {autoCoSignors.map((cs, i) => (
+              {autoCoSignors.map((cs, i) => {
+                const alreadyAdded = items.some(it => normCoName(it.name) === normCoName(cs.name));
+                return (
                 <div key={i} className="flex items-start gap-3 bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2.5">
                   <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
                   <div className="flex-1 min-w-0">
@@ -14050,9 +14207,20 @@ function SectionSchedH({d,u}) {
                     {cs.addr && <p className="text-xs text-slate-500">{cs.addr}</p>}
                     <p className="text-xs text-amber-400/80 mt-0.5">Creditor: {cs.creditorName}</p>
                   </div>
-                  <span className="text-xs bg-amber-400/15 text-amber-300 border border-amber-400/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap">Auto-listed</span>
+                  {alreadyAdded ? (
+                    <span className="text-xs bg-green-500/15 text-green-300 border border-green-500/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap flex items-center gap-1">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                      Added
+                    </span>
+                  ) : (
+                    <button type="button" onClick={() => addAutoCoSigner(cs)}
+                      className="text-xs bg-amber-400/15 hover:bg-amber-400/25 text-amber-300 border border-amber-400/30 rounded-full px-2 py-0.5 font-semibold whitespace-nowrap transition-colors">
+                      + Add to co-debtors
+                    </button>
+                  )}
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -14365,6 +14533,7 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
             <TI type="number" value={id_.avgMonthly6} onChange={v=>up("avgMonthly6",v)} placeholder="$0"/>
           </F>
           <F label="Monthly Bonuses / Overtime"><TI type="number" value={id_.bonuses} onChange={v=>up("bonuses",v)} placeholder="$0"/></F>
+          <F label="Self-Employment / Business Income (monthly net)"><TI type="number" value={id_.dSelfEmployment||""} onChange={v=>up("dSelfEmployment",v)} placeholder="$0"/></F>
           <F label="Social Security Retirement" imported={!!(id_.dSsRetirement)}>
             <TI type="number" value={id_.dSsRetirement} onChange={v=>up("dSsRetirement",v)} placeholder="$0"/>
           </F>
@@ -14389,10 +14558,12 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
           <F label="Child Support Received" imported={!!(id_.dChildSupport)}>
             <TI type="number" value={id_.dChildSupport} onChange={v=>up("dChildSupport",v)} placeholder="$0"/>
           </F>
+          <F label="Regular Contributions from Family / Friends / Roommates (monthly)"><TI type="number" value={id_.dFamilyContribution||""} onChange={v=>up("dFamilyContribution",v)} placeholder="$0"/></F>
           <F label="Other Monthly Income" imported={!!(id_.dOtherIncome)}>
             <TI type="number" value={id_.dOtherIncome} onChange={v=>up("dOtherIncome",v)} placeholder="$0"/>
           </F>
         </Grid2>
+        {id_.dSelfEmployment && <F label="Describe the Business"><TI value={id_.dSelfEmploymentDesc||""} onChange={v=>up("dSelfEmploymentDesc",v)} placeholder="e.g. Freelance web design, sole proprietor"/></F>}
         {id_.dOtherIncome && <F label="Describe Other Income"><TI value={id_.dOtherIncomeDesc} onChange={v=>up("dOtherIncomeDesc",v)} placeholder="Source description"/></F>}
 
         {/* Adult dependent household contributions */}
@@ -14461,6 +14632,9 @@ function SectionSchedI({d,u,imp,ImportBanner}) {
       {/* Payroll deductions */}
       <Card>
         <CardTitle icon="📉" title="Monthly Payroll Deductions" sub="From current pay stub — not collected during intake"/>
+        <div className="mb-4 px-4 py-3 bg-blue-500/8 border border-blue-500/25 rounded-xl text-xs text-blue-200 leading-relaxed">
+          <strong className="text-white">Optional</strong> — if you have uploaded recent pay stubs, you can skip this section. Your attorney will complete these figures directly from your pay stubs before filing.
+        </div>
         <Grid2>
           <F label="Federal Income Tax Withheld"><TI type="number" value={id_.fedTaxWH} onChange={v=>up("fedTaxWH",v)} placeholder="$0"/></F>
           <F label="State Income Tax Withheld"><TI type="number" value={id_.stateTaxWH} onChange={v=>up("stateTaxWH",v)} placeholder="$0"/></F>
@@ -14574,8 +14748,26 @@ function SectionSchedJ({d,u,imp,ImportBanner}) {
       </Card>
       <Card>
         <CardTitle icon="🏥" title="Health & Insurance"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>If an expense like health insurance or retirement is already deducted from your paycheck, don't enter it again here — it's already counted in your payroll deductions on the Income page.</span>
+        </div>
         <Grid2>
-          <F label="Health Insurance Premium" imported={imp&&imp("schedJ.healthInsurance")}><TI type="number" value={jd.healthInsurance} onChange={v=>up("healthInsurance",v)} placeholder="$0"/></F>
+          <div>
+            <F label="Health Insurance Premium" imported={imp&&imp("schedJ.healthInsurance")}><TI type="number" value={jd.healthInsurance} onChange={v=>up("healthInsurance",v)} placeholder="$0"/></F>
+            <label className="flex items-center gap-2 mt-1.5 cursor-pointer group">
+              <div
+                className={`w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${jd.healthInsInPaycheck ? "bg-amber-400 border-amber-400" : "border-slate-600 group-hover:border-slate-400"}`}
+                onClick={() => up("healthInsInPaycheck", !jd.healthInsInPaycheck)}
+              >
+                {jd.healthInsInPaycheck && <svg className="w-2.5 h-2.5 text-slate-950" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
+              </div>
+              <span className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">Already withheld from my paycheck</span>
+            </label>
+            {jd.healthInsInPaycheck && (
+              <p className="text-xs text-amber-300/80 mt-1 leading-relaxed">If checked, leave the amount blank above to avoid double-counting with your payroll deductions.</p>
+            )}
+          </div>
           <F label="Life Insurance Premium"><TI type="number" value={jd.lifePremium} onChange={v=>up("lifePremium",v)} placeholder="$0"/></F>
           <F label="Out-of-Pocket Medical Expenses" imported={imp&&imp("schedJ.medical")}><TI type="number" value={jd.medical} onChange={v=>up("medical",v)} placeholder="$0"/></F>
           <F label="Dental Expenses"><TI type="number" value={jd.dental} onChange={v=>up("dental",v)} placeholder="$0"/></F>
@@ -14676,9 +14868,13 @@ function SectionSOFA1({d,u,imp,ImportBanner}) {
   const sd = d.sofa1||{businesses:[]};
   const up = (f,v) => u("sofa1",{...sd,[f]:v});
   const bizs = sd.businesses||[];
-  const addBiz = () => u("sofa1",{...sd,businesses:[...bizs,{name:"",ein:"",type:"",from:"",to:"",role:""}]});
+  const addBiz = () => u("sofa1",{...sd,businesses:[...bizs,{name:"",ein:"",type:"",from:"",to:"",role:"",address:""}]});
   const updBiz = (i,f,v) => { const a=[...bizs]; a[i]={...a[i],[f]:v}; u("sofa1",{...sd,businesses:a}); };
   const remBiz = (i) => { const a=[...bizs]; a.splice(i,1); u("sofa1",{...sd,businesses:a}); };
+  const stmts = sd.finStmtRecipients||[];
+  const addStmt = () => u("sofa1",{...sd,finStmtRecipients:[...stmts,{name:"",address:"",date:""}]});
+  const updStmt = (i,f,v) => { const a=[...stmts]; a[i]={...a[i],[f]:v}; u("sofa1",{...sd,finStmtRecipients:a}); };
+  const remStmt = (i) => { const a=[...stmts]; a.splice(i,1); u("sofa1",{...sd,finStmtRecipients:a}); };
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={["sofa1.grossPrior"]}/>}
@@ -14714,9 +14910,36 @@ function SectionSOFA1({d,u,imp,ImportBanner}) {
                   <F label="From (date)"><TI type="month" value={b.from} onChange={v=>updBiz(i,"from",v)}/></F>
                   <F label="To (or 'Present')"><TI value={b.to} onChange={v=>updBiz(i,"to",v)} placeholder="Present or MM/YYYY"/></F>
                 </Grid2>
+                <F label="Business Address"><TI value={b.address} onChange={v=>updBiz(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
               </div>
             ))}
             <AddBtn onClick={addBiz} label="Add Business"/>
+          </>
+        )}
+      </Card>
+      <Card>
+        <CardTitle icon="📄" title="SOFA Part 7 — Financial Statements" sub="Did you provide financial statements to any creditor, bank, or other party in the last 2 years? (SOFA Q28)"/>
+        <F label="Did you provide financial statements to any creditor, bank, or other party in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="gaveFinancialStmt" value={v} current={sd.gaveFinancialStmt} onChange={val=>up("gaveFinancialStmt",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.gaveFinancialStmt==="Yes" && (
+          <>
+            {stmts.map((s,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Recipient {i+1}</span>
+                  <RemBtn onClick={()=>remStmt(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Recipient Name"><TI value={s.name} onChange={v=>updStmt(i,"name",v)} placeholder="Full name or entity"/></F>
+                  <F label="Date Provided"><TI type="date" value={s.date} onChange={v=>updStmt(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Recipient Address"><TI value={s.address} onChange={v=>updStmt(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addStmt} label="Add Recipient"/>
           </>
         )}
       </Card>
@@ -14737,6 +14960,10 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
   const prefer = mkList("preferentialEntries",{creditor:"",amount:"",date:"",relationship:"",type:""});
   const p90 = mkList("payments90",{creditor:"",addr:"",dates:"",amount:"",balance:""});
   const insider = mkList("insiderPayments",{name:"",relationship:"",reason:"",amount:"",date:""});
+  const setoffs = mkList("setoffs",{creditor:"",accountDescription:"",amount:"",date:""});
+  const assignments = mkList("assignments",{assignee:"",address:"",description:"",date:""});
+  const gifts = mkList("gifts",{recipient:"",relationship:"",description:"",value:"",date:""});
+  const charitable = mkList("charitable",{organization:"",address:"",value:"",date:""});
 
   return (
     <div>
@@ -14779,10 +15006,10 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
         )}
       </Card>
 
-      {/* Preferential payments — pre-populated from intake */}
+      {/* Preferential payments — ordinary creditors, 90 days */}
       <Card>
-        <CardTitle icon="💳" title="SOFA Part 3 — Preferential Payments" sub="Payments to insiders in last 12 months, or any creditor in last 90 days totaling more than $7,575"/>
-        <F label="Did you make any large payments to creditors or family?" imported={imp&&imp("sofa2.hasPreferential")}>
+        <CardTitle icon="💳" title="SOFA Part 3 — Payments to Creditors (Last 90 Days)" sub="Payments totaling $7,575 or more to any single creditor in the 90 days before filing — banks, lenders, credit cards, medical providers"/>
+        <F label="Did you make payments of $7,575 or more to any single creditor in the last 90 days?" imported={imp&&imp("sofa2.hasPreferential")}>
           <div className="flex gap-3 mb-3">
             {["yes","no"].map(v=><RAD key={v} name="hasPrefer" value={v} current={sd.hasPreferential} onChange={val=>up("hasPreferential",val)} label={v==="yes"?"Yes":"No"}/>)}
           </div>
@@ -14806,12 +15033,46 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
                 <Grid2>
                   <F label="Amount Paid" imported={!!(p.amount)}><TI type="number" value={p.amount} onChange={v=>prefer.upd(i,"amount",v)} placeholder="$0"/></F>
                   <F label="Date" imported={!!(p.date)}><TI type="date" value={p.date} onChange={v=>prefer.upd(i,"date",v)}/></F>
-                  <F label="Relationship" imported={!!(p.relationship)}><TI value={p.relationship} onChange={v=>prefer.upd(i,"relationship",v)} placeholder="Insider / arm's length"/></F>
+                  <F label="Relationship" imported={!!(p.relationship)}><TI value={p.relationship} onChange={v=>prefer.upd(i,"relationship",v)} placeholder="e.g. Credit card issuer, bank, medical provider"/></F>
                 </Grid2>
                 <F label="Creditor Full Address" hint="Required for petition"><TI value={p.creditorAddr} onChange={v=>prefer.upd(i,"creditorAddr",v)} placeholder="Street, City, State, ZIP"/></F>
               </div>
             ))}
             <AddBtn onClick={prefer.add} label="Add Payment"/>
+          </>
+        )}
+      </Card>
+
+      {/* Insider payments — Q7/Q8 */}
+      <Card>
+        <CardTitle icon="👥" title="SOFA Part 3 — Payments to Insiders / Family / Friends (Last 1 Year)" sub="Relatives, business partners, or close associates paid for any reason in the 12 months before filing (SOFA Q7/Q8)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>This means relatives, business partners, or close associates — <strong className="text-white">not</strong> regular credit-card or loan payments to banks and lenders (those belong in the card above).</span>
+        </div>
+        <F label="Did you pay any relative, business partner, or close associate within the last 1 year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasInsiderPayments" value={v} current={sd.hasInsiderPayments} onChange={val=>up("hasInsiderPayments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasInsiderPayments==="Yes" && (
+          <>
+            {insider.items.map((p,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Payment {i+1}</span>
+                  <RemBtn onClick={()=>insider.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Name"><TI value={p.name} onChange={v=>insider.upd(i,"name",v)} placeholder="Full name"/></F>
+                  <F label="Relationship"><TI value={p.relationship} onChange={v=>insider.upd(i,"relationship",v)} placeholder="e.g. Spouse, parent, business partner"/></F>
+                  <F label="Amount Paid"><TI type="number" value={p.amount} onChange={v=>insider.upd(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={p.date} onChange={v=>insider.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Reason for Payment"><TI value={p.reason} onChange={v=>insider.upd(i,"reason",v)} placeholder="e.g. Loan repayment, gift, services rendered"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={insider.add} label="Add Payment"/>
           </>
         )}
       </Card>
@@ -14850,6 +15111,123 @@ function SectionSOFA2({d,u,imp,ImportBanner}) {
         )}
       </Card>
 
+      {/* Setoffs — Q11 */}
+      <Card>
+        <CardTitle icon="🔒" title="SOFA Part 3 — Setoffs (Last 90 Days)" sub="Did any creditor take money from your account to apply against a debt you owed them? (SOFA Q11)"/>
+        <F label="In the last 90 days, did any creditor set off (take) money from an account to apply against a debt you owed them?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasSetoffs" value={v} current={sd.hasSetoffs} onChange={val=>up("hasSetoffs",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasSetoffs==="Yes" && (
+          <>
+            {setoffs.items.map((s,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Setoff {i+1}</span>
+                  <RemBtn onClick={()=>setoffs.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Creditor"><TI value={s.creditor} onChange={v=>setoffs.upd(i,"creditor",v)} placeholder="Creditor name"/></F>
+                  <F label="Amount"><TI type="number" value={s.amount} onChange={v=>setoffs.upd(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={s.date} onChange={v=>setoffs.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Account Description"><TI value={s.accountDescription} onChange={v=>setoffs.upd(i,"accountDescription",v)} placeholder="e.g. Checking account ending in 1234"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={setoffs.add} label="Add Setoff"/>
+          </>
+        )}
+      </Card>
+
+      {/* Assignments for benefit of creditors — Q12 */}
+      <Card>
+        <CardTitle icon="📋" title="SOFA Part 3 — Assignment for Benefit of Creditors" sub="Did you assign property for the benefit of creditors? (SOFA Q12)"/>
+        <F label="Did you make any assignment of property for the benefit of creditors?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasAssignments" value={v} current={sd.hasAssignments} onChange={val=>up("hasAssignments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasAssignments==="Yes" && (
+          <>
+            {assignments.items.map((a,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Assignment {i+1}</span>
+                  <RemBtn onClick={()=>assignments.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Assignee Name"><TI value={a.assignee} onChange={v=>assignments.upd(i,"assignee",v)} placeholder="Full name or entity"/></F>
+                  <F label="Date"><TI type="date" value={a.date} onChange={v=>assignments.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Assignee Address"><TI value={a.address} onChange={v=>assignments.upd(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+                <F label="Property Description"><TI value={a.description} onChange={v=>assignments.upd(i,"description",v)} placeholder="Describe the property assigned"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={assignments.add} label="Add Assignment"/>
+          </>
+        )}
+      </Card>
+
+      {/* Gifts — Q13 */}
+      <Card>
+        <CardTitle icon="🎁" title="SOFA Part 6 — Gifts (Last 2 Years)" sub="Gifts totaling more than $600 to any one person in the last 2 years (SOFA Q13)"/>
+        <F label="Did you give gifts totaling more than $600 to any one person in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasGifts" value={v} current={sd.hasGifts} onChange={val=>up("hasGifts",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasGifts==="Yes" && (
+          <>
+            {gifts.items.map((g,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Gift {i+1}</span>
+                  <RemBtn onClick={()=>gifts.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Recipient Name"><TI value={g.recipient} onChange={v=>gifts.upd(i,"recipient",v)} placeholder="Full name"/></F>
+                  <F label="Relationship"><TI value={g.relationship} onChange={v=>gifts.upd(i,"relationship",v)} placeholder="e.g. Son, friend, none"/></F>
+                  <F label="Value"><TI type="number" value={g.value} onChange={v=>gifts.upd(i,"value",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={g.date} onChange={v=>gifts.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Description"><TI value={g.description} onChange={v=>gifts.upd(i,"description",v)} placeholder="What was given?"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={gifts.add} label="Add Gift"/>
+          </>
+        )}
+      </Card>
+
+      {/* Charitable contributions — Q14 */}
+      <Card>
+        <CardTitle icon="🤝" title="SOFA Part 6 — Charitable Contributions (Last 2 Years)" sub="Contributions totaling more than $600 to any one organization in the last 2 years (SOFA Q14)"/>
+        <F label="Did you make charitable contributions totaling more than $600 to any one organization in the last 2 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasCharitable" value={v} current={sd.hasCharitable} onChange={val=>up("hasCharitable",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasCharitable==="Yes" && (
+          <>
+            {charitable.items.map((c,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Contribution {i+1}</span>
+                  <RemBtn onClick={()=>charitable.rem(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Organization Name"><TI value={c.organization} onChange={v=>charitable.upd(i,"organization",v)} placeholder="Charity or organization name"/></F>
+                  <F label="Value"><TI type="number" value={c.value} onChange={v=>charitable.upd(i,"value",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={c.date} onChange={v=>charitable.upd(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Organization Address"><TI value={c.address} onChange={v=>charitable.upd(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={charitable.add} label="Add Contribution"/>
+          </>
+        )}
+      </Card>
+
       {/* Recent luxury / garnishment — from intake */}
       <Card>
         <CardTitle icon="⚠️" title="SOFA — Additional Disclosures" sub="Flags imported from intake questionnaire"/>
@@ -14877,13 +15255,25 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
   const sd = d.sofa3||{lawsuits:[],priorBankruptcies:[]};
   const up = (f,v) => u("sofa3",{...sd,[f]:v});
   const suits = sd.lawsuits||[];
-  const addSuit = () => u("sofa3",{...sd,lawsuits:[...suits,{title:"",caseNo:"",court:"",status:"",nature:""}]});
+  const addSuit = () => u("sofa3",{...sd,lawsuits:[...suits,{title:"",caseNo:"",court:"",status:"",nature:"",opposingParty:"",dateFiled:"",amount:"",propertyDescription:""}]});
   const updSuit = (i,f,v) => { const a=[...suits]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,lawsuits:a}); };
   const remSuit = (i) => { const a=[...suits]; a.splice(i,1); u("sofa3",{...sd,lawsuits:a}); };
   const bks = sd.priorBankruptcies||[];
   const addBk = () => u("sofa3",{...sd,priorBankruptcies:[...bks,{caseNo:"",district:"",dateFiled:"",chapter:"",disposition:""}]});
   const updBk = (i,f,v) => { const a=[...bks]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorBankruptcies:a}); };
   const remBk = (i) => { const a=[...bks]; a.splice(i,1); u("sofa3",{...sd,priorBankruptcies:a}); };
+  const repos = sd.repos||[];
+  const addRepo = () => u("sofa3",{...sd,repos:[...repos,{actionType:"",creditor:"",propertyDescription:"",date:"",value:""}]});
+  const updRepo = (i,f,v) => { const a=[...repos]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,repos:a}); };
+  const remRepo = (i) => { const a=[...repos]; a.splice(i,1); u("sofa3",{...sd,repos:a}); };
+  const addrs = sd.priorAddresses||[];
+  const addAddr = () => u("sofa3",{...sd,priorAddresses:[...addrs,{address:"",city:"",state:"",zip:"",fromDate:"",toDate:""}]});
+  const updAddr = (i,f,v) => { const a=[...addrs]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,priorAddresses:a}); };
+  const remAddr = (i) => { const a=[...addrs]; a.splice(i,1); u("sofa3",{...sd,priorAddresses:a}); };
+  const helpPmts = sd.creditorHelpPayments||[];
+  const addHelpPmt = () => u("sofa3",{...sd,creditorHelpPayments:[...helpPmts,{payee:"",payeeType:"",address:"",amount:"",date:""}]});
+  const updHelpPmt = (i,f,v) => { const a=[...helpPmts]; a[i]={...a[i],[f]:v}; u("sofa3",{...sd,creditorHelpPayments:a}); };
+  const remHelpPmt = (i) => { const a=[...helpPmts]; a.splice(i,1); u("sofa3",{...sd,creditorHelpPayments:a}); };
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={["sofa3.priorBkFiled","sofa3.priorBankruptcies","sofa3.hasLawsuits","sofa3.dsoObligation","sofa3.expectedRefund"]}/>}
@@ -14909,6 +15299,12 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
                   <F label="Status"><SEL value={s.status} onChange={v=>updSuit(i,"status",v)} options={["Pending","Judgment against me","Judgment in my favor","Settled","Default judgment"]}/></F>
                 </Grid2>
                 <F label="Nature of Case"><TI value={s.nature} onChange={v=>updSuit(i,"nature",v)} placeholder="e.g. Debt collection, personal injury, foreclosure"/></F>
+                <Grid2>
+                  <F label="Opposing Party (Creditor / Plaintiff)"><TI value={s.opposingParty} onChange={v=>updSuit(i,"opposingParty",v)} placeholder="Full name of creditor or plaintiff"/></F>
+                  <F label="Date Filed"><TI type="date" value={s.dateFiled} onChange={v=>updSuit(i,"dateFiled",v)}/></F>
+                  <F label="Amount at Issue / Judgment"><TI type="number" value={s.amount} onChange={v=>updSuit(i,"amount",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Involved (if any)"><TI value={s.propertyDescription} onChange={v=>updSuit(i,"propertyDescription",v)} placeholder="e.g. Home at 123 Main St — leave blank if none"/></F>
               </div>
             ))}
             <AddBtn onClick={addSuit} label="Add Lawsuit"/>
@@ -14980,7 +15376,94 @@ function SectionSOFA3({d,u,imp,ImportBanner}) {
             {["Yes","No"].map(v=><RAD key={v} name="hasRepo" value={v} current={sd.hasRepo} onChange={val=>up("hasRepo",val)} label={v}/>)}
           </div>
         </F>
-        {sd.hasRepo==="Yes" && <F label="Describe the property and circumstances"><TI value={sd.repoDetails} onChange={v=>up("repoDetails",v)} placeholder="What was repossessed, by whom, and when?"/></F>}
+        {sd.hasRepo==="Yes" && (
+          <>
+            {repos.map((r,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Action {i+1}</span>
+                  <RemBtn onClick={()=>remRepo(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Action Type"><SEL value={r.actionType} onChange={v=>updRepo(i,"actionType",v)} options={["Repossession","Foreclosure","Garnishment","Seizure","Other"]}/></F>
+                  <F label="Creditor / Party"><TI value={r.creditor} onChange={v=>updRepo(i,"creditor",v)} placeholder="Creditor or party name"/></F>
+                  <F label="Date"><TI type="date" value={r.date} onChange={v=>updRepo(i,"date",v)}/></F>
+                  <F label="Value"><TI type="number" value={r.value} onChange={v=>updRepo(i,"value",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Description"><TI value={r.propertyDescription} onChange={v=>updRepo(i,"propertyDescription",v)} placeholder="Describe the property"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addRepo} label="Add Action"/>
+            <F label="Additional Notes"><TI value={sd.repoDetails} onChange={v=>up("repoDetails",v)} placeholder="Any additional context (optional)"/></F>
+          </>
+        )}
+      </Card>
+
+      {/* Prior addresses — SOFA Q20 */}
+      <Card>
+        <CardTitle icon="📍" title="SOFA Part 9 — Prior Addresses (Last 3 Years)" sub="All addresses where you lived in the 3 years before filing (SOFA Q20)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>List addresses <strong className="text-white">other than your current one</strong> — your current address is already captured in the Petition.</span>
+        </div>
+        <F label="Did you live at any other address in the last 3 years?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasPriorAddresses" value={v} current={sd.hasPriorAddresses} onChange={val=>up("hasPriorAddresses",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasPriorAddresses==="Yes" && (
+          <>
+            {addrs.map((a,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Address {i+1}</span>
+                  <RemBtn onClick={()=>remAddr(i)}/>
+                </div>
+                <F label="Street Address"><TI value={a.address} onChange={v=>updAddr(i,"address",v)} placeholder="Street address"/></F>
+                <Grid2>
+                  <F label="City"><TI value={a.city} onChange={v=>updAddr(i,"city",v)} placeholder="City"/></F>
+                  <F label="State"><SEL value={a.state} onChange={v=>updAddr(i,"state",v)} options={US_STATES}/></F>
+                  <F label="ZIP"><TI value={a.zip} onChange={v=>updAddr(i,"zip",v)} placeholder="ZIP code"/></F>
+                </Grid2>
+                <Grid2>
+                  <F label="From"><TI type="month" value={a.fromDate} onChange={v=>updAddr(i,"fromDate",v)}/></F>
+                  <F label="To"><TI type="month" value={a.toDate} onChange={v=>updAddr(i,"toDate",v)}/></F>
+                </Grid2>
+              </div>
+            ))}
+            <AddBtn onClick={addAddr} label="Add Address"/>
+          </>
+        )}
+      </Card>
+
+      {/* Payments for help with creditors — Q16/Q17 */}
+      <Card>
+        <CardTitle icon="🤝" title="SOFA Part 4 — Payments for Help with Creditors (Last 1 Year)" sub="Any payments to an attorney, bankruptcy petition preparer, or credit counseling agency in the last year (SOFA Q16/Q17)"/>
+        <F label="Did you pay anyone to help you deal with your creditors or file for bankruptcy in the last year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasCreditorHelpPayments" value={v} current={sd.hasCreditorHelpPayments} onChange={val=>up("hasCreditorHelpPayments",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasCreditorHelpPayments==="Yes" && (
+          <>
+            {helpPmts.map((p,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Payment {i+1}</span>
+                  <RemBtn onClick={()=>remHelpPmt(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Payee Name"><TI value={p.payee} onChange={v=>updHelpPmt(i,"payee",v)} placeholder="Full name or firm"/></F>
+                  <F label="Payee Type"><SEL value={p.payeeType} onChange={v=>updHelpPmt(i,"payeeType",v)} options={["Attorney","Bankruptcy Petition Preparer","Credit Counseling Agency","Other"]}/></F>
+                  <F label="Amount Paid"><TI type="number" value={p.amount} onChange={v=>updHelpPmt(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Date"><TI type="date" value={p.date} onChange={v=>updHelpPmt(i,"date",v)}/></F>
+                </Grid2>
+                <F label="Payee Address"><TI value={p.address} onChange={v=>updHelpPmt(i,"address",v)} placeholder="Street, City, State, ZIP"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addHelpPmt} label="Add Payment"/>
+          </>
+        )}
       </Card>
     </div>
   );
@@ -14993,6 +15476,18 @@ function SectionSOFA4({d,u}) {
   const addAcct = () => u("sofa4",{...sd,financialAccounts:[...accts,{institution:"",type:"",lastFour:"",closed:"No",dateClosed:"",balance:""}]});
   const updAcct = (i,f,v) => { const a=[...accts]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,financialAccounts:a}); };
   const remAcct = (i) => { const a=[...accts]; a.splice(i,1); u("sofa4",{...sd,financialAccounts:a}); };
+  const trusts = sd.trusts||[];
+  const addTrust = () => u("sofa4",{...sd,trusts:[...trusts,{trustName:"",dateEstablished:"",description:"",currentValue:""}]});
+  const updTrust = (i,f,v) => { const a=[...trusts]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,trusts:a}); };
+  const remTrust = (i) => { const a=[...trusts]; a.splice(i,1); u("sofa4",{...sd,trusts:a}); };
+  const losses = sd.losses||[];
+  const addLoss = () => u("sofa4",{...sd,losses:[...losses,{lossType:"",description:"",date:"",amount:"",insuranceRecovery:""}]});
+  const updLoss = (i,f,v) => { const a=[...losses]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,losses:a}); };
+  const remLoss = (i) => { const a=[...losses]; a.splice(i,1); u("sofa4",{...sd,losses:a}); };
+  const heldProps = sd.heldProperty||[];
+  const addHeldProp = () => u("sofa4",{...sd,heldProperty:[...heldProps,{ownerName:"",ownerAddress:"",propertyDescription:"",value:"",location:""}]});
+  const updHeldProp = (i,f,v) => { const a=[...heldProps]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,heldProperty:a}); };
+  const remHeldProp = (i) => { const a=[...heldProps]; a.splice(i,1); u("sofa4",{...sd,heldProperty:a}); };
   return (
     <div>
       <Card>
@@ -15031,17 +15526,92 @@ function SectionSOFA4({d,u}) {
           <>
             {(sd.safeDeposit||[]).map((s,i)=>(
               <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Box {i+1}</span>
+                  <RemBtn onClick={()=>{const a=[...(sd.safeDeposit||[])];a.splice(i,1);u("sofa4",{...sd,safeDeposit:a});}}/>
+                </div>
                 <Grid2>
                   <F label="Institution"><TI value={s.institution} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],institution:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Bank name"/></F>
                   <F label="Box Number"><TI value={s.boxNo} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],boxNo:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Box #"/></F>
                 </Grid2>
+                <F label="Institution Address"><TI value={s.institutionAddress} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],institutionAddress:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Street, City, State, ZIP"/></F>
                 <F label="Contents Description"><TI value={s.contents} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],contents:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="What is stored in the box?"/></F>
+                <F label="Who Else Has Access?"><TI value={s.whoHasAccess} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],whoHasAccess:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Names of any other people with access, or 'None'"/></F>
+                <div className="mt-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked={s.outsideHome==="Yes"} onChange={e=>{const a=[...sd.safeDeposit];a[i]={...a[i],outsideHome:e.target.checked?"Yes":"No"};u("sofa4",{...sd,safeDeposit:a});}} className="accent-amber-400"/>
+                    Box or contents are kept somewhere other than my home
+                  </label>
+                </div>
               </div>
             ))}
-            <AddBtn onClick={()=>u("sofa4",{...sd,safeDeposit:[...(sd.safeDeposit||[]),{institution:"",boxNo:"",contents:""}]})} label="Add Safe Deposit Box"/>
+            <AddBtn onClick={()=>u("sofa4",{...sd,safeDeposit:[...(sd.safeDeposit||[]),{institution:"",boxNo:"",contents:"",institutionAddress:"",whoHasAccess:"",outsideHome:"No"}]})} label="Add Safe Deposit Box"/>
           </>
         )}
       </Card>
+      {/* Self-settled trusts — Q19 */}
+      <Card>
+        <CardTitle icon="📜" title="SOFA Part 5 — Self-Settled Trusts" sub="Any trust you created and are a beneficiary of (SOFA Q19)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>A self-settled trust is one you created and named yourself as a beneficiary — it must be disclosed even if the assets are held by a trustee.</span>
+        </div>
+        <F label="Are you a beneficiary of any self-settled trust?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasTrusts" value={v} current={sd.hasTrusts} onChange={val=>up("hasTrusts",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasTrusts==="Yes" && (
+          <>
+            {trusts.map((t,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Trust {i+1}</span>
+                  <RemBtn onClick={()=>remTrust(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Trust Name"><TI value={t.trustName} onChange={v=>updTrust(i,"trustName",v)} placeholder="Name of the trust"/></F>
+                  <F label="Date Established"><TI type="date" value={t.dateEstablished} onChange={v=>updTrust(i,"dateEstablished",v)}/></F>
+                  <F label="Current Value"><TI type="number" value={t.currentValue} onChange={v=>updTrust(i,"currentValue",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Description"><TI value={t.description} onChange={v=>updTrust(i,"description",v)} placeholder="Nature of trust assets and your interest"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addTrust} label="Add Trust"/>
+          </>
+        )}
+      </Card>
+
+      {/* Casualty / theft losses — Q15 */}
+      <Card>
+        <CardTitle icon="🔥" title="SOFA Part 4 — Losses from Fire, Theft, or Disaster" sub="Losses within the last year from fire, theft, flood, or other casualty (SOFA Q15)"/>
+        <F label="Did you suffer any loss from fire, theft, flood, or other disaster in the last year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasLosses" value={v} current={sd.hasLosses} onChange={val=>up("hasLosses",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasLosses==="Yes" && (
+          <>
+            {losses.map((l,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Loss {i+1}</span>
+                  <RemBtn onClick={()=>remLoss(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Loss Type"><SEL value={l.lossType} onChange={v=>updLoss(i,"lossType",v)} options={["Fire","Theft","Other disaster"]}/></F>
+                  <F label="Date"><TI type="date" value={l.date} onChange={v=>updLoss(i,"date",v)}/></F>
+                  <F label="Value of Loss"><TI type="number" value={l.amount} onChange={v=>updLoss(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Insurance Recovery"><TI type="number" value={l.insuranceRecovery} onChange={v=>updLoss(i,"insuranceRecovery",v)} placeholder="$0 if none"/></F>
+                </Grid2>
+                <F label="Description"><TI value={l.description} onChange={v=>updLoss(i,"description",v)} placeholder="What was lost and how?"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addLoss} label="Add Loss"/>
+          </>
+        )}
+      </Card>
+
       <Card>
         <CardTitle icon="🌿" title="SOFA — Additional Disclosures"/>
         <F label="Do you have any environmental issues with any property you own or owned?">
@@ -15063,7 +15633,29 @@ function SectionSOFA4({d,u}) {
             {["Yes","No"].map(v=><RAD key={v} name="held" value={v} current={sd.holdingProp} onChange={val=>up("holdingProp",val)} label={v}/>)}
           </div>
         </F>
-        {sd.holdingProp==="Yes" && <F label="Describe property and owner"><TI value={sd.holdingDetails} onChange={v=>up("holdingDetails",v)} placeholder="What are you holding and for whom?"/></F>}
+        {sd.holdingProp==="Yes" && (
+          <>
+            {heldProps.map((h,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Item {i+1}</span>
+                  <RemBtn onClick={()=>remHeldProp(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Owner Name"><TI value={h.ownerName} onChange={v=>updHeldProp(i,"ownerName",v)} placeholder="Full name of owner"/></F>
+                  <F label="Value"><TI type="number" value={h.value} onChange={v=>updHeldProp(i,"value",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Description"><TI value={h.propertyDescription} onChange={v=>updHeldProp(i,"propertyDescription",v)} placeholder="What are you holding?"/></F>
+                <Grid2>
+                  <F label="Owner Address"><TI value={h.ownerAddress} onChange={v=>updHeldProp(i,"ownerAddress",v)} placeholder="Street, City, State, ZIP"/></F>
+                  <F label="Where Is It Located?"><TI value={h.location} onChange={v=>updHeldProp(i,"location",v)} placeholder="Where you are storing the property"/></F>
+                </Grid2>
+              </div>
+            ))}
+            <AddBtn onClick={addHeldProp} label="Add Item"/>
+            <F label="Additional Notes"><TI value={sd.holdingDetails} onChange={v=>up("holdingDetails",v)} placeholder="Any additional context (optional)"/></F>
+          </>
+        )}
       </Card>
     </div>
   );
@@ -15073,7 +15665,7 @@ function SectionSOFA4({d,u}) {
 function getActiveDocs(intake, petition, formData = {}) {
   const fin = formData?.schedAB_fin || {};
   const schedI = formData?.schedI || {};
-  const vehData = formData?.schedAB_veh || {};
+  const phy = formData?.schedAB_phy || {};
 
   // Detect which account types the client actually has
   const hasInvestments = (fin.investments || []).length > 0;
@@ -15085,6 +15677,8 @@ function getActiveDocs(intake, petition, formData = {}) {
   const hasPension = parseFloat(schedI.dPension) > 0;
   const hasLifeIns = (fin.lifeInsurance || []).length > 0;
   const hasFsaHsa = fin.hasFsaHsa === "Yes" && (fin.fsaHsaAccounts || []).length > 0;
+  const isSelfEmployed = (schedI.selfEmploySources || []).length > 0 || parseFloat(schedI.dSelfEmployment) > 0;
+  const allVehicles = [...(phy.vehicles || []), ...(phy.otherVehicles || [])];
 
   const base = REQUIRED_DOCS
     // Filter out generic financial/award/life ins/fsa placeholders replaced by dynamic per-account entries below
@@ -15098,6 +15692,9 @@ function getActiveDocs(intake, petition, formData = {}) {
       if (d.id === "pension_award") return hasPension;
       if (d.id === "life_ins")    return false; // replaced by per-policy entries
       if (d.id === "fsa_hsa_stmt") return false; // replaced by per-account entries
+      if (d.id === "vehicle_reg") return false; // replaced by per-vehicle entries
+      if (d.id === "vehicle_ins") return false; // replaced by per-vehicle entries
+      if (d.id === "bank_balance") return false; // replaced by per-account signing-day entries
       return true;
     })
     .map(d => {
@@ -15118,28 +15715,28 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Investment / brokerage — one entry per account
   (fin.investments || []).forEach((acct, i) => {
-    const label = acct.institution ? `${acct.institution} — Most Recent Statement` : `Investment Account ${i + 1} — Most Recent Statement`;
+    const label = acct.institution ? `${acct.institution} — Statement — ${DOC_STMT_MO}` : `Investment Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
     extras.push({ id:`invest_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.description || "Investment/brokerage account"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — must show current holdings and value` });
   });
 
   // Stocks / bonds — single object
   if (hasStocks) {
-    extras.push({ id:"stocks_stmt_entry", label:"Stocks / Bonds — Most Recent Statement", required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"stocks_stmt_entry", label:`Stocks / Bonds — Statement — ${DOC_STMT_MO}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.stocksDesc || "Stocks/bonds holdings"} — statement must show current value of all positions` });
   }
 
   // Cryptocurrency — single object
   if (hasCrypto) {
-    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Most Recent Statement${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Statement — ${DOC_STMT_MO}${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.cryptoDesc || "Cryptocurrency holdings"}${fin.cryptoExchange ? ` held at ${fin.cryptoExchange}` : ""} — screenshot or PDF export showing current balance and value` });
   }
 
   // Retirement accounts — one entry per account
   (fin.retirement || []).forEach((acct, i) => {
-    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Most Recent Statement`
-      : acct.institution ? `${acct.institution} Retirement — Most Recent Statement`
-      : `Retirement Account ${i + 1} — Most Recent Statement`;
+    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Statement — ${DOC_STMT_MO}`
+      : acct.institution ? `${acct.institution} Retirement — Statement — ${DOC_STMT_MO}`
+      : `Retirement Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
     extras.push({ id:`retire_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.accountType || "Retirement account"} at ${acct.institution || "provider"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — most recent statement showing current balance` });
   });
@@ -15156,8 +15753,8 @@ function getActiveDocs(intake, petition, formData = {}) {
   (fin.fsaHsaAccounts || []).forEach((acct, i) => {
     if (!hasFsaHsa) return;
     const label = acct.institution
-      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Most Recent Statement`
-      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Most Recent Statement`;
+      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Statement — ${DOC_STMT_MO}`
+      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Statement — ${DOC_STMT_MO}`;
     extras.push({ id:`fsa_hsa_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`Most recent statement showing current balance${acct.accountNumber ? ` (acct #${acct.accountNumber})` : ""}` });
   });
@@ -15181,6 +15778,46 @@ function getActiveDocs(intake, petition, formData = {}) {
       note:"Most recent letter from your pension administrator confirming your monthly benefit amount" });
   }
 
+  // Per-vehicle registration + insurance
+  allVehicles.forEach((v, i) => {
+    const vLabel = [v.year, v.make, v.model || v.type].filter(Boolean).join(" ") || `Vehicle ${i + 1}`;
+    extras.push({ id:`vehicle_reg_${i}`, label:`Registration — ${vLabel}`, required:true, category:"Vehicles", gate:"always", signingRequired:false,
+      note:`Current registration card for this vehicle` });
+    extras.push({ id:`vehicle_ins_${i}`, label:`Insurance — ${vLabel}`, required:true, category:"Vehicles", gate:"always", signingRequired:false,
+      note:`Insurance declarations page showing current coverage` });
+  });
+
+  // Self-employment income records
+  if (isSelfEmployed) {
+    const bizDesc = (schedI.selfEmploySources || []).map(s => s.businessName).filter(Boolean).join(", ");
+    extras.push({ id:"selfemploy_records", label:"Self-Employment Income Records — Last 6 Months", required:true, category:"Income", gate:"60days", signingRequired:false,
+      note:`P&L statement, business bank statements, or 1099s${bizDesc ? ` (${bizDesc})` : ""} — last 6 months` });
+  }
+
+  // Closed-account closing statements
+  (formData?.sofa4?.financialAccounts || []).forEach((acct, i) => {
+    if (acct.closed !== "Yes") return;
+    const acctLabel = [acct.institution, acct.type].filter(Boolean).join(" ");
+    extras.push({ id:`closed_acct_stmt_${i}`, label:`Closing Statement — ${acctLabel || `Account ${i + 1}`}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+      note:`Final/closing statement for ${acctLabel || "this account"}${acct.lastFour ? ` (ending ${acct.lastFour})` : ""}${acct.dateClosed ? ` — closed ${acct.dateClosed}` : ""}` });
+  });
+
+  // Signing-day balances — one per non-exempt account (checking/savings/money market/CD/crypto/investments)
+  (fin.bankAccounts || []).forEach((acct, i) => {
+    const acctLabel = [acct.bankName, acct.accountType].filter(Boolean).join(" ");
+    extras.push({ id:`balance_bank_${i}`, label:`Signing-Day Balance — ${acctLabel || `Bank Account ${i + 1}`}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:`Required day-of signing — log in and screenshot current balance${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""}` });
+  });
+  if (hasCrypto) {
+    extras.push({ id:"balance_crypto", label:`Signing-Day Balance — Cryptocurrency${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:"Required day-of signing — screenshot from exchange showing current holdings and value" });
+  }
+  (fin.investments || []).forEach((acct, i) => {
+    const acctLabel = acct.institution ? `${acct.institution} Investment` : `Investment Account ${i + 1}`;
+    extras.push({ id:`balance_invest_${i}`, label:`Signing-Day Balance — ${acctLabel}`, required:true, category:"Bank Statements", gate:"signing", signingRequired:true,
+      note:`Required day-of signing — screenshot showing current holdings and value${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""}` });
+  });
+
   if (!intake) return [...base, ...extras];
 
   // Prior bankruptcy → discharge order
@@ -15189,8 +15826,8 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Business → business tax returns
   if (intake.ownedBusiness === "yes")
-    extras.push({ id:"biz_tax_1", label:"Business Tax Return — Most Recent Year", required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
-                { id:"biz_tax_2", label:"Business Tax Return — Prior Year", required:true, category:"Tax Returns", gate:"always", note:"" });
+    extras.push({ id:"biz_tax_1", label:`Business Tax Return — ${DOC_TAX_YEAR_1}`, required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
+                { id:"biz_tax_2", label:`Business Tax Return — ${DOC_TAX_YEAR_2}`, required:true, category:"Tax Returns", gate:"always", note:"" });
 
   // Joint filing → spouse identity docs
   if (intake.filingType === "joint") {
@@ -15957,7 +16594,7 @@ function computeMonthRolloverReminders(today, paystubMeta, docStatus) {
   const prevMonthStr = prevMonth.toISOString().slice(0, 7);
 
   // Check if uploaded paystubs are from a prior month — need refresh
-  const paystubIds = ["paystub_1", "paystub_2"];
+  const paystubIds = ["paystub_1","paystub_2","paystub_3","paystub_4","paystub_5","paystub_6"];
   paystubIds.forEach(id => {
     const uploadedDate = docStatus[id + ":date"];
     if (uploadedDate && !uploadedDate.startsWith(curMonthStr)) {
@@ -16156,7 +16793,7 @@ Respond ONLY with valid JSON, no markdown fences:
         ).catch(() => { /* storage errors are non-fatal — doc still marked uploaded locally */ });
 
         // For paystubs, extract pay period metadata so we can compute next-available reminders
-        if ((docId === "paystub_1" || docId === "paystub_2") && isImage) {
+        if (docId.startsWith("paystub_") && isImage) {
           readPaystubPeriod(file, dataUrl).then(meta => {
             if (meta?.period_end_date) setPaystubMeta(meta);
           });
