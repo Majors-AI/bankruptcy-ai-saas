@@ -15510,14 +15510,26 @@ function SectionSOFA4({d,u}) {
           <>
             {(sd.safeDeposit||[]).map((s,i)=>(
               <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Box {i+1}</span>
+                  <RemBtn onClick={()=>{const a=[...(sd.safeDeposit||[])];a.splice(i,1);u("sofa4",{...sd,safeDeposit:a});}}/>
+                </div>
                 <Grid2>
                   <F label="Institution"><TI value={s.institution} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],institution:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Bank name"/></F>
                   <F label="Box Number"><TI value={s.boxNo} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],boxNo:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Box #"/></F>
                 </Grid2>
+                <F label="Institution Address"><TI value={s.institutionAddress} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],institutionAddress:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Street, City, State, ZIP"/></F>
                 <F label="Contents Description"><TI value={s.contents} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],contents:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="What is stored in the box?"/></F>
+                <F label="Who Else Has Access?"><TI value={s.whoHasAccess} onChange={v=>{const a=[...sd.safeDeposit];a[i]={...a[i],whoHasAccess:v};u("sofa4",{...sd,safeDeposit:a});}} placeholder="Names of any other people with access, or 'None'"/></F>
+                <div className="mt-1">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input type="checkbox" checked={s.outsideHome==="Yes"} onChange={e=>{const a=[...sd.safeDeposit];a[i]={...a[i],outsideHome:e.target.checked?"Yes":"No"};u("sofa4",{...sd,safeDeposit:a});}} className="accent-amber-400"/>
+                    Box or contents are kept somewhere other than my home
+                  </label>
+                </div>
               </div>
             ))}
-            <AddBtn onClick={()=>u("sofa4",{...sd,safeDeposit:[...(sd.safeDeposit||[]),{institution:"",boxNo:"",contents:""}]})} label="Add Safe Deposit Box"/>
+            <AddBtn onClick={()=>u("sofa4",{...sd,safeDeposit:[...(sd.safeDeposit||[]),{institution:"",boxNo:"",contents:"",institutionAddress:"",whoHasAccess:"",outsideHome:"No"}]})} label="Add Safe Deposit Box"/>
           </>
         )}
       </Card>
