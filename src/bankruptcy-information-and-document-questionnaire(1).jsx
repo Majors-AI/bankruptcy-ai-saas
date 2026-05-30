@@ -15460,6 +15460,18 @@ function SectionSOFA4({d,u}) {
   const addAcct = () => u("sofa4",{...sd,financialAccounts:[...accts,{institution:"",type:"",lastFour:"",closed:"No",dateClosed:"",balance:""}]});
   const updAcct = (i,f,v) => { const a=[...accts]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,financialAccounts:a}); };
   const remAcct = (i) => { const a=[...accts]; a.splice(i,1); u("sofa4",{...sd,financialAccounts:a}); };
+  const trusts = sd.trusts||[];
+  const addTrust = () => u("sofa4",{...sd,trusts:[...trusts,{trustName:"",dateEstablished:"",description:"",currentValue:""}]});
+  const updTrust = (i,f,v) => { const a=[...trusts]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,trusts:a}); };
+  const remTrust = (i) => { const a=[...trusts]; a.splice(i,1); u("sofa4",{...sd,trusts:a}); };
+  const losses = sd.losses||[];
+  const addLoss = () => u("sofa4",{...sd,losses:[...losses,{lossType:"",description:"",date:"",amount:"",insuranceRecovery:""}]});
+  const updLoss = (i,f,v) => { const a=[...losses]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,losses:a}); };
+  const remLoss = (i) => { const a=[...losses]; a.splice(i,1); u("sofa4",{...sd,losses:a}); };
+  const heldProps = sd.heldProperty||[];
+  const addHeldProp = () => u("sofa4",{...sd,heldProperty:[...heldProps,{ownerName:"",ownerAddress:"",propertyDescription:"",value:"",location:""}]});
+  const updHeldProp = (i,f,v) => { const a=[...heldProps]; a[i]={...a[i],[f]:v}; u("sofa4",{...sd,heldProperty:a}); };
+  const remHeldProp = (i) => { const a=[...heldProps]; a.splice(i,1); u("sofa4",{...sd,heldProperty:a}); };
   return (
     <div>
       <Card>
@@ -15509,6 +15521,69 @@ function SectionSOFA4({d,u}) {
           </>
         )}
       </Card>
+      {/* Self-settled trusts — Q19 */}
+      <Card>
+        <CardTitle icon="📜" title="SOFA Part 5 — Self-Settled Trusts" sub="Any trust you created and are a beneficiary of (SOFA Q19)"/>
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/25 rounded-xl px-3 py-2.5 mb-4 text-xs text-blue-200 leading-relaxed">
+          <svg className="w-3.5 h-3.5 shrink-0 mt-0.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span>A self-settled trust is one you created and named yourself as a beneficiary — it must be disclosed even if the assets are held by a trustee.</span>
+        </div>
+        <F label="Are you a beneficiary of any self-settled trust?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasTrusts" value={v} current={sd.hasTrusts} onChange={val=>up("hasTrusts",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasTrusts==="Yes" && (
+          <>
+            {trusts.map((t,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Trust {i+1}</span>
+                  <RemBtn onClick={()=>remTrust(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Trust Name"><TI value={t.trustName} onChange={v=>updTrust(i,"trustName",v)} placeholder="Name of the trust"/></F>
+                  <F label="Date Established"><TI type="date" value={t.dateEstablished} onChange={v=>updTrust(i,"dateEstablished",v)}/></F>
+                  <F label="Current Value"><TI type="number" value={t.currentValue} onChange={v=>updTrust(i,"currentValue",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Description"><TI value={t.description} onChange={v=>updTrust(i,"description",v)} placeholder="Nature of trust assets and your interest"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addTrust} label="Add Trust"/>
+          </>
+        )}
+      </Card>
+
+      {/* Casualty / theft losses — Q15 */}
+      <Card>
+        <CardTitle icon="🔥" title="SOFA Part 4 — Losses from Fire, Theft, or Disaster" sub="Losses within the last year from fire, theft, flood, or other casualty (SOFA Q15)"/>
+        <F label="Did you suffer any loss from fire, theft, flood, or other disaster in the last year?">
+          <div className="flex gap-3 mb-3">
+            {["Yes","No"].map(v=><RAD key={v} name="hasLosses" value={v} current={sd.hasLosses} onChange={val=>up("hasLosses",val)} label={v}/>)}
+          </div>
+        </F>
+        {sd.hasLosses==="Yes" && (
+          <>
+            {losses.map((l,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Loss {i+1}</span>
+                  <RemBtn onClick={()=>remLoss(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Loss Type"><SEL value={l.lossType} onChange={v=>updLoss(i,"lossType",v)} options={["Fire","Theft","Other disaster"]}/></F>
+                  <F label="Date"><TI type="date" value={l.date} onChange={v=>updLoss(i,"date",v)}/></F>
+                  <F label="Value of Loss"><TI type="number" value={l.amount} onChange={v=>updLoss(i,"amount",v)} placeholder="$0"/></F>
+                  <F label="Insurance Recovery"><TI type="number" value={l.insuranceRecovery} onChange={v=>updLoss(i,"insuranceRecovery",v)} placeholder="$0 if none"/></F>
+                </Grid2>
+                <F label="Description"><TI value={l.description} onChange={v=>updLoss(i,"description",v)} placeholder="What was lost and how?"/></F>
+              </div>
+            ))}
+            <AddBtn onClick={addLoss} label="Add Loss"/>
+          </>
+        )}
+      </Card>
+
       <Card>
         <CardTitle icon="🌿" title="SOFA — Additional Disclosures"/>
         <F label="Do you have any environmental issues with any property you own or owned?">
@@ -15530,7 +15605,29 @@ function SectionSOFA4({d,u}) {
             {["Yes","No"].map(v=><RAD key={v} name="held" value={v} current={sd.holdingProp} onChange={val=>up("holdingProp",val)} label={v}/>)}
           </div>
         </F>
-        {sd.holdingProp==="Yes" && <F label="Describe property and owner"><TI value={sd.holdingDetails} onChange={v=>up("holdingDetails",v)} placeholder="What are you holding and for whom?"/></F>}
+        {sd.holdingProp==="Yes" && (
+          <>
+            {heldProps.map((h,i)=>(
+              <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Item {i+1}</span>
+                  <RemBtn onClick={()=>remHeldProp(i)}/>
+                </div>
+                <Grid2>
+                  <F label="Owner Name"><TI value={h.ownerName} onChange={v=>updHeldProp(i,"ownerName",v)} placeholder="Full name of owner"/></F>
+                  <F label="Value"><TI type="number" value={h.value} onChange={v=>updHeldProp(i,"value",v)} placeholder="$0"/></F>
+                </Grid2>
+                <F label="Property Description"><TI value={h.propertyDescription} onChange={v=>updHeldProp(i,"propertyDescription",v)} placeholder="What are you holding?"/></F>
+                <Grid2>
+                  <F label="Owner Address"><TI value={h.ownerAddress} onChange={v=>updHeldProp(i,"ownerAddress",v)} placeholder="Street, City, State, ZIP"/></F>
+                  <F label="Where Is It Located?"><TI value={h.location} onChange={v=>updHeldProp(i,"location",v)} placeholder="Where you are storing the property"/></F>
+                </Grid2>
+              </div>
+            ))}
+            <AddBtn onClick={addHeldProp} label="Add Item"/>
+            <F label="Additional Notes"><TI value={sd.holdingDetails} onChange={v=>up("holdingDetails",v)} placeholder="Any additional context (optional)"/></F>
+          </>
+        )}
       </Card>
     </div>
   );
