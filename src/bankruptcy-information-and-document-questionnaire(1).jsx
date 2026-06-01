@@ -36,7 +36,6 @@ const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
   { id:"schedC",       label:"Schedule C – Exemptions",   icon:"⚖️", group:"Schedules" },
-  { id:"creditReport",  label:"Credit Report Upload",            icon:"📄", group:"Schedules" },
   { id:"schedD",       label:"Schedule D – Secured Creditors", icon:"🔒", group:"Schedules" },
   { id:"schedEF_pri",  label:"Schedule E – Priority Creditors", icon:"⚡", group:"Schedules" },
   { id:"schedEF_np",   label:"Schedule F – Non-Priority Creditors", icon:"💳", group:"Schedules" },
@@ -18596,7 +18595,6 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "personalInfo": return withAll(<SectionVoluntaryPetition d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedAB":     return withAll(<SectionSchedAB d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedC":      return withAll(<SectionSchedC d={data} u={updateSection}/>);
-      case "creditReport": return withAll(<SectionCreditReport d={data} u={updateSection} clientId={clientId} onNext={() => setStep(s => s + 1)}/>);
       case "schedD":      return withAll(<SectionSchedD d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId} summaryConfirmed={summaryConfirmed} onSummaryConfirm={onSummaryConfirm} updateMode={updateMode} hasUnreviewedChanges={hasUnreviewedChanges}/>);
       case "schedEF_pri": return withAll(<SectionSchedE d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedEF_np":  return withAll(<SectionSchedF d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
