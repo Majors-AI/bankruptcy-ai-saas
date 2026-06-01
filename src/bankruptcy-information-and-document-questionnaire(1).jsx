@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
 import { normalizeIntake } from "./lib/intakeNormalize";
@@ -36,7 +36,6 @@ const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
   { id:"schedC",       label:"Schedule C – Exemptions",   icon:"⚖️", group:"Schedules" },
-  { id:"creditReport",  label:"Credit Report Upload",            icon:"📄", group:"Schedules" },
   { id:"schedD",       label:"Schedule D – Secured Creditors", icon:"🔒", group:"Schedules" },
   { id:"schedEF_pri",  label:"Schedule E – Priority Creditors", icon:"⚡", group:"Schedules" },
   { id:"schedEF_np",   label:"Schedule F – Non-Priority Creditors", icon:"💳", group:"Schedules" },
@@ -52,31 +51,22 @@ const SECTIONS = [
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
 
-// ─── Date reference & document-label helpers ──────────────────────────────────
-// TODAY_RET / CUR_MONTH drive all time-sensitive document labels.
-// In production these are injected from the case record.
-const TODAY_RET  = new Date("2026-04-23");
-const CUR_MONTH  = "2026-04";
-
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 const _DOC_MO_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const [_docY, _docM] = CUR_MONTH.split("-").map(Number);
-const DOC_TAX_YEAR_1 = _docY - 1;  // most-recent completed tax year
-const DOC_TAX_YEAR_2 = _docY - 2;  // prior year
-const _docMo = (n) => { let m = _docM - 1 - n, y = _docY; while (m < 0) { m += 12; y--; } return `${_DOC_MO_NAMES[m]} ${y}`; };
-const DOC_BANK_MO  = Array.from({length: 6}, (_, i) => _docMo(i)); // [current month … 5 months ago]
-const DOC_STMT_MO  = DOC_BANK_MO[0]; // label for "most recent" account statements
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
-const REQUIRED_DOCS = [
+function buildRequiredDocs(taxYear1, taxYear2, bankMo) {
+  return [
   // ── Identity — always available ──────────────────────────────────────────
   { id:"id_front",     label:"Government-Issued Photo ID (front)",         required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"Must be valid at time of filing" },
   { id:"id_back",      label:"Government-Issued Photo ID (back)",          required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"" },
   { id:"sscard",       label:"Social Security Card",                       required:true,  category:"Identity",            gate:"always",  signingRequired:false, note:"Original or certified copy" },
   { id:"sscard_back",  label:"Social Security Card — Back",                required:false, category:"Identity",            gate:"always",  signingRequired:false, note:"Back is usually blank — upload only if there is text or a photo on the back" },
   // ── Tax returns — always available (not time-sensitive) ──────────────────
-  { id:"taxreturn_1",  label:`Federal Tax Return — ${DOC_TAX_YEAR_1}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"taxreturn_2",  label:`Federal Tax Return — ${DOC_TAX_YEAR_2}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"w2_1",         label:`W-2(s) — ${DOC_TAX_YEAR_1}`,               required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
-  { id:"w2_2",         label:`W-2(s) — ${DOC_TAX_YEAR_2}`,               required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"taxreturn_1",  label:`Federal Tax Return — ${taxYear1}`,           required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"taxreturn_2",  label:`Federal Tax Return — ${taxYear2}`,           required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"w2_1",         label:`W-2(s) — ${taxYear1}`,                      required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"w2_2",         label:`W-2(s) — ${taxYear2}`,                      required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   { id:"1099s",        label:"All 1099s (both years)",                     required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   // ── Vehicles — always available ───────────────────────────────────────────
   { id:"vehicle_reg",  label:"Vehicle Registration(s)",                    required:true,  category:"Vehicles",            gate:"always",  signingRequired:false, note:"For each owned vehicle" },
@@ -105,23 +95,24 @@ const REQUIRED_DOCS = [
   // ── Credit Counseling — always available, special ────────────────────────
   { id:"cc_cert",      label:"Pre-Filing Credit Counseling Certificate",   required:true,  category:"Required Courses",    gate:"always",  signingRequired:false, note:"Course 1 of 2 — must be from EOUST-approved provider within 180 days of filing — 11 U.S.C. § 109(h)", special:"credit_counseling" },
   // ── TIME-SENSITIVE — 60-day gate ─────────────────────────────────────────
-  { id:"bank_1",       label:`Bank Statement — ${DOC_BANK_MO[0]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
-  { id:"bank_2",       label:`Bank Statement — ${DOC_BANK_MO[1]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_3",       label:`Bank Statement — ${DOC_BANK_MO[2]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_4",       label:`Bank Statement — ${DOC_BANK_MO[3]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_5",       label:`Bank Statement — ${DOC_BANK_MO[4]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_6",       label:`Bank Statement — ${DOC_BANK_MO[5]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
-  { id:"paystub_1",    label:`Pay Stubs — ${DOC_BANK_MO[0]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_2",    label:`Pay Stubs — ${DOC_BANK_MO[1]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_3",    label:`Pay Stubs — ${DOC_BANK_MO[2]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_4",    label:`Pay Stubs — ${DOC_BANK_MO[3]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_5",    label:`Pay Stubs — ${DOC_BANK_MO[4]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_6",    label:`Pay Stubs — ${DOC_BANK_MO[5]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"mortgage_stmt",label:`Mortgage Statement(s) — ${DOC_BANK_MO[0]}`,required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
+  { id:"bank_1",       label:`Bank Statement — ${bankMo[0]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
+  { id:"bank_2",       label:`Bank Statement — ${bankMo[1]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_3",       label:`Bank Statement — ${bankMo[2]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_4",       label:`Bank Statement — ${bankMo[3]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_5",       label:`Bank Statement — ${bankMo[4]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_6",       label:`Bank Statement — ${bankMo[5]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
+  { id:"paystub_1",    label:`Pay Stubs — ${bankMo[0]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_2",    label:`Pay Stubs — ${bankMo[1]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_3",    label:`Pay Stubs — ${bankMo[2]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_4",    label:`Pay Stubs — ${bankMo[3]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_5",    label:`Pay Stubs — ${bankMo[4]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_6",    label:`Pay Stubs — ${bankMo[5]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"mortgage_stmt",label:`Mortgage Statement(s) — ${bankMo[0]}`,      required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
   { id:"hoa_stmt",     label:"HOA Statement / Dues Letter",                required:false, category:"Real Property",       gate:"60days",  signingRequired:false, note:"Current month — if applicable" },
   // ── Signing-day only ─────────────────────────────────────────────────────
   { id:"bank_balance", label:"Current Bank Balance Screenshot",           required:true,  category:"Bank Statements",     gate:"signing", signingRequired:true,  note:"Required day-of — log into your bank and screenshot current balance" },
-];
+  ];
+}
 
 // ─── CASE PAYMENT STATE ──────────────────────────────────────────────────────
 // In production these come from the case record / accounting module.
@@ -138,18 +129,11 @@ const CASE_PAYMENT = {
   bifurcatedMinimum: 500,    // minimum payment required to fully unlock the portal for bifurcated cases
 };
 
-const daysToPayoff = Math.ceil((new Date(CASE_PAYMENT.payoffDate) - TODAY_RET) / (1000*60*60*24));
-const WITHIN_60   = daysToPayoff <= 60;
 const PAID_FULL   = CASE_PAYMENT.paidToDate >= CASE_PAYMENT.totalFee;
 const IS_BIFURCATED = CASE_PAYMENT.feeAgreementType === "bifurcated";
 // Sections unlock when either fully paid OR bifurcated minimum has been met
 const SECTIONS_UNLOCKED = PAID_FULL || (IS_BIFURCATED && CASE_PAYMENT.paidToDate >= CASE_PAYMENT.bifurcatedMinimum);
 
-// A document is "stale" if it's a monthly doc from a prior month and the case isn't filed
-const isMonthStale = (uploadedDate) => {
-  if (!uploadedDate || CASE_PAYMENT.filedDate) return false;
-  return !uploadedDate.startsWith(CUR_MONTH);
-};
 
 // Returns true if the given date string (MM/DD/YYYY or ISO) is older than `days` days
 const isStaleDate = (dateStr, days = 30) => {
@@ -1993,11 +1977,32 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
       case "sofa1": {
         const sd = d.sofa1 || {};
         return (
-          <SBlock title="Income (Prior 2 Years)">
-            <SRow label="Gross — Prior Year 1" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
-            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
-            <SRow label="Owned a Business?" value={sd.ownedBusiness === "yes" ? "Yes" : "No"}/>
-          </SBlock>
+          <>
+            <SBlock title="Gross Income">
+              <SRow label="Gross — This Year (YTD)" value={fmtMoney(sd.grossYTD) || "Not provided"}/>
+              <SRow label="Gross — Prior Year" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
+              <SRow label="Gross — Two Years Ago" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
+              {sd.incomeSource && <SRow label="Income Source" value={sd.incomeSource}/>}
+            </SBlock>
+            <SBlock title="Business Interests (Last 4 Years)">
+              {sd.hasBiz !== "Yes"
+                ? <SRow label="Business Ownership" value="None"/>
+                : (sd.businesses||[]).length === 0
+                  ? <SRow label="Business Ownership" value="Yes — no details entered"/>
+                  : (sd.businesses||[]).map((b,i) => (
+                      <SRow key={i} label={b.name || `Business ${i+1}`}
+                        value={[b.type, b.role, b.from && b.to ? `${b.from} – ${b.to}` : (b.from||b.to||"")].filter(Boolean).join(" — ")}/>
+                    ))
+              }
+            </SBlock>
+            {sd.gaveFinancialStmt === "Yes" && (
+              <SBlock title="Financial Statements Provided (Q28)">
+                {(sd.finStmtRecipients||[]).map((s,i) => (
+                  <SRow key={i} label={s.name || `Recipient ${i+1}`} value={s.date ? `Provided ${s.date}` : "Date not recorded"}/>
+                ))}
+              </SBlock>
+            )}
+          </>
         );
       }
       case "sofa2": {
@@ -2021,21 +2026,84 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <>
             <SBlock title="Prior Bankruptcies">
               <SRow label="Filed Before?" value={sd.priorBkFiled === "yes" ? "Yes" : "No"}/>
-              {(sd.priorBankruptcies||[]).filter(b=>b.caseNo||b.chapter).map((b,i) => <SRow key={i} label={`Case ${i+1}`} value={`Ch. ${b.chapter||"?"} — ${b.district||"?"} — Filed ${b.dateFiled||"?"}`}/>)}
+              {(sd.priorBankruptcies||[]).filter(b=>b.caseNo||b.chapter).map((b,i) => (
+                <SRow key={i} label={`Case ${i+1}`} value={`Ch. ${b.chapter||"?"} — ${b.district||"?"} — Filed ${b.dateFiled||"?"}`}/>
+              ))}
             </SBlock>
             <SBlock title="Legal Proceedings">
               <SRow label="Lawsuits?" value={sd.hasLawsuits === "yes" ? "Yes" : "No"}/>
-              <SRow label="DSO Obligation?" value={sd.dsoObligation === "yes" ? "Yes" : "No"}/>
-              <SRow label="Expected Tax Refund?" value={sd.expectedRefund === "yes" ? "Yes" : "No"}/>
+              {(sd.hasLawsuits === "yes") && (sd.lawsuits||[]).map((s,i) => (
+                <SRow key={i} label={s.title || `Lawsuit ${i+1}`}
+                  value={[s.opposingParty, s.status, s.amount ? fmtMoney(s.amount) : null].filter(Boolean).join(" — ")}/>
+              ))}
+              <SRow label="DSO Obligation (Support / Alimony)?"
+                value={sd.dsoObligation === "yes"
+                  ? `Yes — ${sd.dsoAmount ? (fmtMoney(sd.dsoAmount)||"?") + "/mo" : "amount not entered"}${sd.dsoRecipient ? ` (${sd.dsoRecipient})` : ""}`
+                  : "No"}/>
+              <SRow label="Expected Tax Refund?"
+                value={sd.expectedRefund === "yes"
+                  ? `Yes — ${sd.refundAmount ? (fmtMoney(sd.refundAmount)||"?") : "amount not entered"}`
+                  : "No"}/>
             </SBlock>
+            {sd.hasCreditorHelpPayments === "Yes" && (
+              <SBlock title="Payments for Help with Creditors (SOFA Q16/Q17)">
+                {(sd.creditorHelpPayments||[]).map((p,i) => (
+                  <SRow key={i} label={p.payee || `Payment ${i+1}`}
+                    value={[p.payeeType, p.amount ? fmtMoney(p.amount) : null, p.date].filter(Boolean).join(" — ")}/>
+                ))}
+              </SBlock>
+            )}
           </>
         );
       }
       case "sofa4": {
+        const sd = d.sofa4 || {};
+        const accts = sd.financialAccounts || [];
+        const heldProps = sd.heldProperty || [];
+        const trusts = sd.trusts || [];
+        const losses = sd.losses || [];
         return (
-          <SBlock title="Accounts & Property">
-            <SRow label="Note" value="Accounts closed in last year and property held for others — review with your attorney."/>
-          </SBlock>
+          <>
+            <SBlock title="Financial Accounts (SOFA Part 10)">
+              {accts.length === 0
+                ? <SRow label="Accounts" value="None listed"/>
+                : accts.map((a,i) => (
+                    <SRow key={i}
+                      label={[a.institution || `Account ${i+1}`, a.type, a.lastFour ? `****${a.lastFour}` : null].filter(Boolean).join(" — ")}
+                      value={`${fmtMoney(a.balance)||"$0"}${a.closed==="Yes" ? ` — Closed ${a.dateClosed||"(date n/e)"}` : ""}`}/>
+                  ))
+              }
+            </SBlock>
+            <SBlock title="Safe Deposit Box">
+              <SRow label="Has Safe Deposit Box?"
+                value={sd.hasSafeDeposit === "Yes"
+                  ? `Yes — ${(sd.safeDeposit||[]).length} box${(sd.safeDeposit||[]).length !== 1 ? "es" : ""}`
+                  : "No"}/>
+            </SBlock>
+            <SBlock title="Property Held for Others">
+              <SRow label="Holding Property?" value={sd.holdingProp === "Yes" ? "Yes" : "No"}/>
+              {sd.holdingProp === "Yes" && heldProps.map((h,i) => (
+                <SRow key={i} label={h.ownerName || `Owner ${i+1}`}
+                  value={`${h.propertyDescription||"—"} — ${fmtMoney(h.value)||"$0"}`}/>
+              ))}
+            </SBlock>
+            {sd.hasTrusts === "Yes" && (
+              <SBlock title="Self-Settled Trusts (SOFA Q19)">
+                {trusts.map((t,i) => (
+                  <SRow key={i} label={t.trustName || `Trust ${i+1}`}
+                    value={`Est. ${t.dateEstablished||"?"} — ${fmtMoney(t.currentValue)||"$0"}`}/>
+                ))}
+              </SBlock>
+            )}
+            {sd.hasLosses === "Yes" && (
+              <SBlock title="Losses from Fire / Theft / Disaster (SOFA Q15)">
+                {losses.map((l,i) => (
+                  <SRow key={i} label={l.lossType || `Loss ${i+1}`}
+                    value={`${l.date||"?"} — ${fmtMoney(l.amount)||"$0"} loss, ${fmtMoney(l.insuranceRecovery)||"$0"} recovered`}/>
+                ))}
+              </SBlock>
+            )}
+          </>
         );
       }
       default:
@@ -15662,7 +15730,14 @@ function SectionSOFA4({d,u}) {
 }
 
 // ─── Dynamic doc requirements based on intake answers ────────────────────────
-function getActiveDocs(intake, petition, formData = {}) {
+function getActiveDocs(intake, petition, formData = {}, today = new Date()) {
+  const _y = today.getFullYear(), _m = today.getMonth() + 1;
+  const _mo = (n) => { let mm = _m - 1 - n, yy = _y; while (mm < 0) { mm += 12; yy--; } return `${_DOC_MO_NAMES[mm]} ${yy}`; };
+  const _bankMo = Array.from({length: 6}, (_, i) => _mo(i));
+  const stmtMo   = _bankMo[0];
+  const taxYear1 = _y - 1;
+  const taxYear2 = _y - 2;
+  const requiredDocs = buildRequiredDocs(taxYear1, taxYear2, _bankMo);
   const fin = formData?.schedAB_fin || {};
   const schedI = formData?.schedI || {};
   const phy = formData?.schedAB_phy || {};
@@ -15680,7 +15755,7 @@ function getActiveDocs(intake, petition, formData = {}) {
   const isSelfEmployed = (schedI.selfEmploySources || []).length > 0 || parseFloat(schedI.dSelfEmployment) > 0;
   const allVehicles = [...(phy.vehicles || []), ...(phy.otherVehicles || [])];
 
-  const base = REQUIRED_DOCS
+  const base = requiredDocs
     // Filter out generic financial/award/life ins/fsa placeholders replaced by dynamic per-account entries below
     .filter(d => {
       if (d.id === "invest_stmt") return hasInvestments;
@@ -15715,28 +15790,28 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Investment / brokerage — one entry per account
   (fin.investments || []).forEach((acct, i) => {
-    const label = acct.institution ? `${acct.institution} — Statement — ${DOC_STMT_MO}` : `Investment Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
+    const label = acct.institution ? `${acct.institution} — Statement — ${stmtMo}` : `Investment Account ${i + 1} — Statement — ${stmtMo}`;
     extras.push({ id:`invest_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.description || "Investment/brokerage account"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — must show current holdings and value` });
   });
 
   // Stocks / bonds — single object
   if (hasStocks) {
-    extras.push({ id:"stocks_stmt_entry", label:`Stocks / Bonds — Statement — ${DOC_STMT_MO}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"stocks_stmt_entry", label:`Stocks / Bonds — Statement — ${stmtMo}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.stocksDesc || "Stocks/bonds holdings"} — statement must show current value of all positions` });
   }
 
   // Cryptocurrency — single object
   if (hasCrypto) {
-    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Statement — ${DOC_STMT_MO}${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Statement — ${stmtMo}${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.cryptoDesc || "Cryptocurrency holdings"}${fin.cryptoExchange ? ` held at ${fin.cryptoExchange}` : ""} — screenshot or PDF export showing current balance and value` });
   }
 
   // Retirement accounts — one entry per account
   (fin.retirement || []).forEach((acct, i) => {
-    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Statement — ${DOC_STMT_MO}`
-      : acct.institution ? `${acct.institution} Retirement — Statement — ${DOC_STMT_MO}`
-      : `Retirement Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
+    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Statement — ${stmtMo}`
+      : acct.institution ? `${acct.institution} Retirement — Statement — ${stmtMo}`
+      : `Retirement Account ${i + 1} — Statement — ${stmtMo}`;
     extras.push({ id:`retire_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.accountType || "Retirement account"} at ${acct.institution || "provider"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — most recent statement showing current balance` });
   });
@@ -15753,8 +15828,8 @@ function getActiveDocs(intake, petition, formData = {}) {
   (fin.fsaHsaAccounts || []).forEach((acct, i) => {
     if (!hasFsaHsa) return;
     const label = acct.institution
-      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Statement — ${DOC_STMT_MO}`
-      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Statement — ${DOC_STMT_MO}`;
+      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Statement — ${stmtMo}`
+      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Statement — ${stmtMo}`;
     extras.push({ id:`fsa_hsa_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`Most recent statement showing current balance${acct.accountNumber ? ` (acct #${acct.accountNumber})` : ""}` });
   });
@@ -15826,8 +15901,8 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Business → business tax returns
   if (intake.ownedBusiness === "yes")
-    extras.push({ id:"biz_tax_1", label:`Business Tax Return — ${DOC_TAX_YEAR_1}`, required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
-                { id:"biz_tax_2", label:`Business Tax Return — ${DOC_TAX_YEAR_2}`, required:true, category:"Tax Returns", gate:"always", note:"" });
+    extras.push({ id:"biz_tax_1", label:`Business Tax Return — ${taxYear1}`, required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
+                { id:"biz_tax_2", label:`Business Tax Return — ${taxYear2}`, required:true, category:"Tax Returns", gate:"always", note:"" });
 
   // Joint filing → spouse identity docs
   if (intake.filingType === "joint") {
@@ -16589,9 +16664,9 @@ function nextPaystubAvailableDate(periodEndStr, frequency) {
 // Returns reminders the client should see based on today vs the new-month boundary
 function computeMonthRolloverReminders(today, paystubMeta, docStatus) {
   const reminders = [];
-  const curMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+  const curMonthStr = monthKey(today);
   const prevMonth   = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevMonthStr = prevMonth.toISOString().slice(0, 7);
+  const prevMonthStr = monthKey(prevMonth);
 
   // Check if uploaded paystubs are from a prior month — need refresh
   const paystubIds = ["paystub_1","paystub_2","paystub_3","paystub_4","paystub_5","paystub_6"];
@@ -16627,12 +16702,36 @@ function computeMonthRolloverReminders(today, paystubMeta, docStatus) {
   return reminders;
 }
 
-function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formData = {}}) {
+function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formData = {}, asOfDate}) {
   const [docFiles, setDocFiles]   = useState({}); // rich per-doc state
   const [verifying, setVerifying] = useState(null);
   const [paystubMeta, setPaystubMeta] = useState(null); // {period_end_date, pay_frequency, employer_name}
   const [pendingRequests, setPendingRequests] = useState([]);
   const clientId = getClientId();
+
+  const today = useMemo(
+    () => asOfDate ? new Date(asOfDate) : new Date(),
+    [asOfDate]
+  );
+
+  const { curMonth, requiredDocs } = useMemo(() => {
+    const y = today.getFullYear(), m = today.getMonth() + 1;
+    const mo = (n) => { let mm = m - 1 - n, yy = y; while (mm < 0) { mm += 12; yy--; } return `${_DOC_MO_NAMES[mm]} ${yy}`; };
+    const bankMo = Array.from({length: 6}, (_, i) => mo(i));
+    const ty1 = y - 1, ty2 = y - 2;
+    return {
+      curMonth:     monthKey(today),
+      requiredDocs: buildRequiredDocs(ty1, ty2, bankMo),
+    };
+  }, [today]);
+
+  const daysToPayoff = Math.ceil((new Date(CASE_PAYMENT.payoffDate) - today) / (1000*60*60*24));
+  const WITHIN_60   = daysToPayoff <= 60;
+
+  const isMonthStale = (uploadedDate) => {
+    if (!uploadedDate || CASE_PAYMENT.filedDate) return false;
+    return !uploadedDate.startsWith(curMonth);
+  };
 
   useEffect(() => {
     supabase.from("pending_doc_requests")
@@ -16642,7 +16741,7 @@ function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formDa
       .then(({ data }) => { if (data) setPendingRequests(data); });
   }, [clientId]);
 
-  const activeDocs   = getActiveDocs(intakeData, petition, formData);
+  const activeDocs   = getActiveDocs(intakeData, petition, formData, today);
   const ccDoc        = activeDocs.filter(d => d.special === "credit_counseling");
   const alwaysDocs   = activeDocs.filter(d => d.gate === "always" && !d.special);
   const sixtyDocs    = activeDocs.filter(d => d.gate === "60days");
@@ -16657,11 +16756,10 @@ function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formDa
   const catIcons = {"Identity":"🪪","Tax Returns":"📋","Vehicles":"🚗","Financial Accounts":"📈","Benefit Award Letters":"📬","Insurance & Annuities":"🛡️","Real Property":"🏠","Legal":"⚖️","Bank Statements":"🏦","Income":"💼","Required Courses":"🎓"};
 
   // Compute intake-driven dynamic flags for the banner
-  const dynamicDocs = activeDocs.filter(d => !REQUIRED_DOCS.find(r => r.id === d.id));
+  const dynamicDocs = activeDocs.filter(d => !requiredDocs.find(r => r.id === d.id));
 
   // Month-rollover reminders computed from today + paystub metadata
-  const today = new Date(TODAY_RET);
-  const monthReminders = computeMonthRolloverReminders(today, paystubMeta, docStatus);
+  const monthReminders = computeMonthRolloverReminders(new Date(today.getTime()), paystubMeta, docStatus);
 
   const handleFileSelect = async (docId, file) => {
     if (!file) return;
@@ -16811,7 +16909,7 @@ Respond ONLY with valid JSON, no markdown fences:
 
   const fulfillPendingRequest = async (req, file) => {
     if (!file) return;
-    const doc = REQUIRED_DOCS.find(d => d.id === req.document_type);
+    const doc = requiredDocs.find(d => d.id === req.document_type);
     if (doc) {
       await handleFileSelect(req.document_type, file);
     } else {
@@ -17191,7 +17289,7 @@ function Ch13DebtLimitBanner({ debtCheck, compact = false }) {
   );
 }
 
-function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOverallConfirm, overallConfirmed}) {
+function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOverallConfirm, overallConfirmed, onDeclarationChange}) {
   const [exported, setExported] = useState(false);
   const bciXML = generateBCI(d);
   const activeDocs = getActiveDocs(INTAKE_SAMPLE, d.petition);
@@ -17267,6 +17365,193 @@ function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOver
           ))}
         </div>
       </div>
+
+      {/* ── Schedule A/B Asset Summary ── */}
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+        <h3 className="font-bold text-white mb-4" style={{fontFamily:"'Georgia',serif"}}>Schedule A/B — Asset Summary</h3>
+        {(() => {
+          const fmt$ = (v) => `$${(parseFloat(v)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0})}`;
+          const reProps = d.schedAB_re?.properties || [];
+          const reTotalValue = reProps.reduce((s,p)=>s+(parseFloat(p.value)||0),0);
+          const reTotalLiens = reProps.reduce((s,p)=>
+            s+(parseFloat(p.mortgageBalance)||0)+(parseFloat(p.hoaArrears)||0)
+            +(p.secondLiens||[]).reduce((ss,l)=>ss+(parseFloat(l.balance)||0),0)
+          ,0);
+          const reEquity = reTotalValue - reTotalLiens;
+          const fin = d.schedAB_fin || {};
+          const finBank = (fin.bankAccounts||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finRet  = (fin.retirement||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finInv  = (fin.investments||[]).reduce((s,a)=>s+(parseFloat(a.value)||0),0);
+          const finLife = (fin.lifeInsurance||[]).reduce((s,p)=>s+(parseFloat(p.cashValue)||0),0);
+          const finAnn  = (fin.annuities||[]).reduce((s,a)=>s+(parseFloat(a.currentValue)||0),0);
+          const finFsa  = (fin.fsaHsaAccounts||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finTotal = finBank+finRet+finInv+finLife+finAnn+finFsa
+            +(parseFloat(fin.cashOnHand)||0)+(parseFloat(fin.stocksValue)||0)
+            +(parseFloat(fin.cryptoValue)||0)
+            +(fin.securityDeposits2||[]).reduce((s,dep)=>s+(parseFloat(dep.amount)||0),0);
+          const phy = d.schedAB_phy || {};
+          const phyVehs = [...(phy.vehicles||[]),...(phy.otherVehicles||[])].reduce((s,v)=>s+(parseFloat(v.value)||0),0);
+          const phyGoods = (parseFloat(phy.householdGoodsValue)||0)+(parseFloat(phy.clothing)||0)+(parseFloat(phy.electronicsValue)||0);
+          const phyJewelry = (phy.jewelryItems||[]).reduce((s,j)=>s+(parseFloat(j.totalValue)||0),0)||(parseFloat(phy.jewelryValue)||0);
+          const phyFirearms = (phy.firearms||[]).reduce((s,f)=>s+(parseFloat(f.value)||0),0);
+          const phyCollect = (phy.collectibles||[]).reduce((s,c)=>s+(parseFloat(c.value)||0),0);
+          const phyOther   = (phy.otherItems||[]).reduce((s,o)=>s+(parseFloat(o.value)||0),0);
+          const phyTotal = phyVehs+phyGoods+phyJewelry+phyFirearms+phyCollect+phyOther;
+          const grandTotal = reTotalValue+finTotal+phyTotal;
+          const AssetRow = ({label, value, sub}) => (
+            <div className={`flex items-center justify-between py-1.5 text-xs ${sub?"pl-4 text-slate-400":"text-slate-300"}`}>
+              <span>{label}</span><span className="font-mono font-semibold">{value}</span>
+            </div>
+          );
+          return (
+            <div className="space-y-2">
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Real Property (Sched. A — lines 1–7)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {reProps.length === 0
+                    ? <p className="text-xs text-slate-500 py-1">No real property declared</p>
+                    : reProps.map((p,i)=>(<AssetRow key={i} label={p.addr||`Property ${i+1}`} value={fmt$(p.value)} sub={i>0}/>))
+                  }
+                  {reProps.length > 0 && (
+                    <div className="border-t border-slate-700 mt-1 pt-1">
+                      <AssetRow label="Total Value" value={fmt$(reTotalValue)}/>
+                      <AssetRow label="Total Liens" value={`– ${fmt$(reTotalLiens)}`}/>
+                      <div className="flex items-center justify-between py-1.5 text-xs text-slate-300">
+                        <span>Net Equity</span>
+                        <span className={`font-mono font-semibold ${reEquity>=0?"text-green-400":"text-red-400"}`}>
+                          {reEquity<0?"– ":""}{fmt$(Math.abs(reEquity))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Financial Assets (Sched. B — lines 17–33)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {finBank>0 && <AssetRow label="Bank Accounts" value={fmt$(finBank)} sub/>}
+                  {finRet>0  && <AssetRow label="Retirement Accounts" value={fmt$(finRet)} sub/>}
+                  {finInv>0  && <AssetRow label="Investment Accounts" value={fmt$(finInv)} sub/>}
+                  {(parseFloat(fin.stocksValue)||0)>0 && <AssetRow label="Stocks / Bonds" value={fmt$(fin.stocksValue)} sub/>}
+                  {(parseFloat(fin.cryptoValue)||0)>0 && <AssetRow label="Cryptocurrency" value={fmt$(fin.cryptoValue)} sub/>}
+                  {finLife>0 && <AssetRow label="Life Insurance (Cash Value)" value={fmt$(finLife)} sub/>}
+                  {finAnn>0  && <AssetRow label="Annuities" value={fmt$(finAnn)} sub/>}
+                  {finFsa>0  && <AssetRow label="FSA / HSA" value={fmt$(finFsa)} sub/>}
+                  {(parseFloat(fin.cashOnHand)||0)>0 && <AssetRow label="Cash on Hand" value={fmt$(fin.cashOnHand)} sub/>}
+                  <div className="border-t border-slate-700 mt-1 pt-1">
+                    <AssetRow label="Total Financial Assets" value={fmt$(finTotal)}/>
+                  </div>
+                </div>
+              </div>
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Personal Property (Sched. B — lines 1–16)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {phyVehs>0    && <AssetRow label="Vehicles" value={fmt$(phyVehs)} sub/>}
+                  {phyGoods>0   && <AssetRow label="Household Goods / Electronics / Clothing" value={fmt$(phyGoods)} sub/>}
+                  {phyJewelry>0 && <AssetRow label="Jewelry" value={fmt$(phyJewelry)} sub/>}
+                  {phyFirearms>0 && <AssetRow label="Firearms" value={fmt$(phyFirearms)} sub/>}
+                  {phyCollect>0 && <AssetRow label="Collectibles" value={fmt$(phyCollect)} sub/>}
+                  {phyOther>0   && <AssetRow label="Other Personal Property" value={fmt$(phyOther)} sub/>}
+                  {phyTotal===0 && <p className="text-xs text-slate-500 py-1">No personal property entered</p>}
+                  <div className="border-t border-slate-700 mt-1 pt-1">
+                    <AssetRow label="Total Personal Property" value={fmt$(phyTotal)}/>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-amber-300">Total Scheduled Assets</span>
+                  <span className="text-sm font-bold font-mono text-amber-300">{fmt$(grandTotal)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ── Pre-Filing Requirements: Credit Counseling + Attorney Fee ── */}
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+        <h3 className="font-bold text-white mb-4" style={{fontFamily:"'Georgia',serif"}}>Pre-Filing Requirements</h3>
+        <div className="space-y-3">
+          <div className={`flex items-start gap-3 p-3 rounded-xl border ${docStatus["cc_cert"]==="uploaded"?"bg-green-400/10 border-green-500/30":"bg-amber-400/8 border-amber-400/30"}`}>
+            <span className="text-lg shrink-0">{docStatus["cc_cert"]==="uploaded"?"✅":"⏳"}</span>
+            <div>
+              <p className="text-sm font-semibold text-white">Pre-Filing Credit Counseling Certificate</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {docStatus["cc_cert"]==="uploaded"
+                  ? "Certificate uploaded — 11 U.S.C. § 109(h) requirement satisfied."
+                  : "Certificate not yet uploaded. Must be from a USCOURTS-approved provider completed within 180 days of filing."}
+              </p>
+            </div>
+          </div>
+          <div className="border border-slate-700 rounded-xl px-4 py-3 space-y-2">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Attorney Fee Disclosure</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Total Agreed Fee</span>
+              <span className="text-white font-semibold font-mono">${CASE_PAYMENT.totalFee.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Paid to Date</span>
+              <span className="text-white font-semibold font-mono">${CASE_PAYMENT.paidToDate.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Balance Remaining</span>
+              <span className={`font-semibold font-mono ${CASE_PAYMENT.paidToDate>=CASE_PAYMENT.totalFee?"text-green-400":"text-amber-400"}`}>
+                ${Math.max(0,CASE_PAYMENT.totalFee-CASE_PAYMENT.paidToDate).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs border-t border-slate-700 pt-2">
+              <span className="text-slate-400">Fee Agreement</span>
+              <span className="text-slate-300">{CASE_PAYMENT.feeAgreementType==="bifurcated"?"Bifurcated (pre/post-petition split)":"Standard (paid in full before filing)"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Statement of Intention (Form 108) ── */}
+      {(() => {
+        const creditors = d.schedD?.creditors || [];
+        if (creditors.length === 0) return null;
+        const INTENT_LABELS = {
+          retain:    "Retain — continue payments",
+          reaffirm:  "Reaffirm — sign new agreement",
+          redeem:    "Redeem — pay at current value",
+          surrender: "Surrender — return to lender",
+          other:     "Other (see notes)",
+        };
+        const intentCreds = creditors.filter(c=>c.intent);
+        return (
+          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+            <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Statement of Intention (Form 108)</h3>
+            <p className="text-xs text-slate-500 mb-4">Your declared intent for each secured debt — 11 U.S.C. § 521(a)(2).</p>
+            <div className="space-y-2">
+              {creditors.map((c,i) => (
+                <div key={i} className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-lg border text-xs ${c.intent?"border-slate-600 bg-slate-900/40":"border-amber-400/30 bg-amber-400/5"}`}>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-200 truncate">{c.name||c.creditorName||`Creditor ${i+1}`}</p>
+                    <p className="text-slate-500 mt-0.5 truncate">{c.collateral||"—"}</p>
+                  </div>
+                  <span className={`shrink-0 px-2 py-1 rounded-full font-semibold whitespace-nowrap ${c.intent?"bg-slate-700 text-slate-200":"bg-amber-400/15 text-amber-400"}`}>
+                    {c.intent?(INTENT_LABELS[c.intent]||c.intent):"Not yet answered"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {intentCreds.length < creditors.length && (
+              <p className="text-xs text-amber-300 mt-3 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                {creditors.length-intentCreds.length} secured debt{creditors.length-intentCreds.length!==1?"s":""} still need an intent selection — go back to Schedule D to complete.
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
       <Card className="border-amber-400/40 bg-amber-400/5">
         <CardTitle icon="📦" title="Export Best Case .BCI File" sub="Downloads a formatted XML import file compatible with Best Case bankruptcy software"/>
@@ -17371,15 +17656,63 @@ function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOver
             )}
 
             <div className="border-t border-slate-800 pt-4">
-              <ConfirmCheck
-                id="overallDeclaration"
-                checked={!!overallConfirmed}
-                onChange={onOverallConfirm}
-              >
-                <span className="text-sm leading-relaxed">
-                  <strong className="text-white">Final Declaration:</strong> I declare under penalty of perjury that I have reviewed all of the information provided in this questionnaire covering the Voluntary Petition and Schedules A through J and the Statement of Financial Affairs. To the best of my knowledge, information, and belief, the information is <strong className="text-white">true, accurate, and complete</strong>. I understand this information will be used to prepare official bankruptcy documents filed with the United States Bankruptcy Court.
-                </span>
-              </ConfirmCheck>
+              {/* TODO: Dom (attorney) to confirm exact Form 106Dec language */}
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">Client Declaration (Form 106Dec)</p>
+              <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 mb-4">
+                <p className="text-xs font-semibold text-amber-300 mb-1">[PLACEHOLDER — attorney review required before use]</p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  I, the undersigned debtor, declare under penalty of perjury that I have read the answers contained in the foregoing questionnaire and that they are true and correct to the best of my knowledge, information, and belief.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Your Full Legal Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={d.petition?.declarationName||""}
+                    onChange={e => onDeclarationChange && onDeclarationChange("declarationName", e.target.value)}
+                    placeholder="Type your full legal name"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-400/60 placeholder-slate-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Date <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={d.petition?.declarationDate||""}
+                    onChange={e => onDeclarationChange && onDeclarationChange("declarationDate", e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-400/60 transition-colors"
+                  />
+                </div>
+              </div>
+              {(() => {
+                const declarationReady = !!(d.petition?.declarationName?.trim() && d.petition?.declarationDate);
+                return (
+                  <>
+                    {!declarationReady && (
+                      <p className="text-xs text-amber-400 mb-3 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        Enter your full name and date above to unlock the declaration.
+                      </p>
+                    )}
+                    <div className={!declarationReady ? "opacity-40 pointer-events-none select-none" : ""}>
+                      <ConfirmCheck
+                        id="overallDeclaration"
+                        checked={!!overallConfirmed}
+                        onChange={declarationReady ? onOverallConfirm : ()=>{}}
+                      >
+                        <span className="text-sm leading-relaxed">
+                          <strong className="text-white">I declare</strong> that I have read and reviewed all information in this questionnaire and that it is true and correct to the best of my knowledge. I understand that submitting this questionnaire does not file my bankruptcy case — my attorney must review, complete, and electronically file the petition with the court.
+                        </span>
+                      </ConfirmCheck>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Post-submission confirmation */}
@@ -18581,7 +18914,6 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "personalInfo": return withAll(<SectionVoluntaryPetition d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedAB":     return withAll(<SectionSchedAB d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedC":      return withAll(<SectionSchedC d={data} u={updateSection}/>);
-      case "creditReport": return withAll(<SectionCreditReport d={data} u={updateSection} clientId={clientId} onNext={() => setStep(s => s + 1)}/>);
       case "schedD":      return withAll(<SectionSchedD d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId} summaryConfirmed={summaryConfirmed} onSummaryConfirm={onSummaryConfirm} updateMode={updateMode} hasUnreviewedChanges={hasUnreviewedChanges}/>);
       case "schedEF_pri": return withAll(<SectionSchedE d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedEF_np":  return withAll(<SectionSchedF d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
@@ -18630,6 +18962,9 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
               }
             }}
             overallConfirmed={!!(data.petition?.overallConfirmed)}
+            onDeclarationChange={(field, val) =>
+              updateSection("petition", {...(data.petition||{}), [field]: val})
+            }
           />
         </div>
       );
