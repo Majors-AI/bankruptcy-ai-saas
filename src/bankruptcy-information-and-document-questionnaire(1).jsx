@@ -1977,11 +1977,32 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
       case "sofa1": {
         const sd = d.sofa1 || {};
         return (
-          <SBlock title="Income (Prior 2 Years)">
-            <SRow label="Gross — Prior Year 1" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
-            <SRow label="Gross — Prior Year 2" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
-            <SRow label="Owned a Business?" value={sd.ownedBusiness === "yes" ? "Yes" : "No"}/>
-          </SBlock>
+          <>
+            <SBlock title="Gross Income">
+              <SRow label="Gross — This Year (YTD)" value={fmtMoney(sd.grossYTD) || "Not provided"}/>
+              <SRow label="Gross — Prior Year" value={fmtMoney(sd.grossPrior)} missing={!sd.grossPrior}/>
+              <SRow label="Gross — Two Years Ago" value={fmtMoney(sd.grossTwoYears) || "Not provided"}/>
+              {sd.incomeSource && <SRow label="Income Source" value={sd.incomeSource}/>}
+            </SBlock>
+            <SBlock title="Business Interests (Last 4 Years)">
+              {sd.hasBiz !== "Yes"
+                ? <SRow label="Business Ownership" value="None"/>
+                : (sd.businesses||[]).length === 0
+                  ? <SRow label="Business Ownership" value="Yes — no details entered"/>
+                  : (sd.businesses||[]).map((b,i) => (
+                      <SRow key={i} label={b.name || `Business ${i+1}`}
+                        value={[b.type, b.role, b.from && b.to ? `${b.from} – ${b.to}` : (b.from||b.to||"")].filter(Boolean).join(" — ")}/>
+                    ))
+              }
+            </SBlock>
+            {sd.gaveFinancialStmt === "Yes" && (
+              <SBlock title="Financial Statements Provided (Q28)">
+                {(sd.finStmtRecipients||[]).map((s,i) => (
+                  <SRow key={i} label={s.name || `Recipient ${i+1}`} value={s.date ? `Provided ${s.date}` : "Date not recorded"}/>
+                ))}
+              </SBlock>
+            )}
+          </>
         );
       }
       case "sofa2": {
@@ -2005,21 +2026,84 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
           <>
             <SBlock title="Prior Bankruptcies">
               <SRow label="Filed Before?" value={sd.priorBkFiled === "yes" ? "Yes" : "No"}/>
-              {(sd.priorBankruptcies||[]).filter(b=>b.caseNo||b.chapter).map((b,i) => <SRow key={i} label={`Case ${i+1}`} value={`Ch. ${b.chapter||"?"} — ${b.district||"?"} — Filed ${b.dateFiled||"?"}`}/>)}
+              {(sd.priorBankruptcies||[]).filter(b=>b.caseNo||b.chapter).map((b,i) => (
+                <SRow key={i} label={`Case ${i+1}`} value={`Ch. ${b.chapter||"?"} — ${b.district||"?"} — Filed ${b.dateFiled||"?"}`}/>
+              ))}
             </SBlock>
             <SBlock title="Legal Proceedings">
               <SRow label="Lawsuits?" value={sd.hasLawsuits === "yes" ? "Yes" : "No"}/>
-              <SRow label="DSO Obligation?" value={sd.dsoObligation === "yes" ? "Yes" : "No"}/>
-              <SRow label="Expected Tax Refund?" value={sd.expectedRefund === "yes" ? "Yes" : "No"}/>
+              {(sd.hasLawsuits === "yes") && (sd.lawsuits||[]).map((s,i) => (
+                <SRow key={i} label={s.title || `Lawsuit ${i+1}`}
+                  value={[s.opposingParty, s.status, s.amount ? fmtMoney(s.amount) : null].filter(Boolean).join(" — ")}/>
+              ))}
+              <SRow label="DSO Obligation (Support / Alimony)?"
+                value={sd.dsoObligation === "yes"
+                  ? `Yes — ${sd.dsoAmount ? (fmtMoney(sd.dsoAmount)||"?") + "/mo" : "amount not entered"}${sd.dsoRecipient ? ` (${sd.dsoRecipient})` : ""}`
+                  : "No"}/>
+              <SRow label="Expected Tax Refund?"
+                value={sd.expectedRefund === "yes"
+                  ? `Yes — ${sd.refundAmount ? (fmtMoney(sd.refundAmount)||"?") : "amount not entered"}`
+                  : "No"}/>
             </SBlock>
+            {sd.hasCreditorHelpPayments === "Yes" && (
+              <SBlock title="Payments for Help with Creditors (SOFA Q16/Q17)">
+                {(sd.creditorHelpPayments||[]).map((p,i) => (
+                  <SRow key={i} label={p.payee || `Payment ${i+1}`}
+                    value={[p.payeeType, p.amount ? fmtMoney(p.amount) : null, p.date].filter(Boolean).join(" — ")}/>
+                ))}
+              </SBlock>
+            )}
           </>
         );
       }
       case "sofa4": {
+        const sd = d.sofa4 || {};
+        const accts = sd.financialAccounts || [];
+        const heldProps = sd.heldProperty || [];
+        const trusts = sd.trusts || [];
+        const losses = sd.losses || [];
         return (
-          <SBlock title="Accounts & Property">
-            <SRow label="Note" value="Accounts closed in last year and property held for others — review with your attorney."/>
-          </SBlock>
+          <>
+            <SBlock title="Financial Accounts (SOFA Part 10)">
+              {accts.length === 0
+                ? <SRow label="Accounts" value="None listed"/>
+                : accts.map((a,i) => (
+                    <SRow key={i}
+                      label={[a.institution || `Account ${i+1}`, a.type, a.lastFour ? `****${a.lastFour}` : null].filter(Boolean).join(" — ")}
+                      value={`${fmtMoney(a.balance)||"$0"}${a.closed==="Yes" ? ` — Closed ${a.dateClosed||"(date n/e)"}` : ""}`}/>
+                  ))
+              }
+            </SBlock>
+            <SBlock title="Safe Deposit Box">
+              <SRow label="Has Safe Deposit Box?"
+                value={sd.hasSafeDeposit === "Yes"
+                  ? `Yes — ${(sd.safeDeposit||[]).length} box${(sd.safeDeposit||[]).length !== 1 ? "es" : ""}`
+                  : "No"}/>
+            </SBlock>
+            <SBlock title="Property Held for Others">
+              <SRow label="Holding Property?" value={sd.holdingProp === "Yes" ? "Yes" : "No"}/>
+              {sd.holdingProp === "Yes" && heldProps.map((h,i) => (
+                <SRow key={i} label={h.ownerName || `Owner ${i+1}`}
+                  value={`${h.propertyDescription||"—"} — ${fmtMoney(h.value)||"$0"}`}/>
+              ))}
+            </SBlock>
+            {sd.hasTrusts === "Yes" && (
+              <SBlock title="Self-Settled Trusts (SOFA Q19)">
+                {trusts.map((t,i) => (
+                  <SRow key={i} label={t.trustName || `Trust ${i+1}`}
+                    value={`Est. ${t.dateEstablished||"?"} — ${fmtMoney(t.currentValue)||"$0"}`}/>
+                ))}
+              </SBlock>
+            )}
+            {sd.hasLosses === "Yes" && (
+              <SBlock title="Losses from Fire / Theft / Disaster (SOFA Q15)">
+                {losses.map((l,i) => (
+                  <SRow key={i} label={l.lossType || `Loss ${i+1}`}
+                    value={`${l.date||"?"} — ${fmtMoney(l.amount)||"$0"} loss, ${fmtMoney(l.insuranceRecovery)||"$0"} recovered`}/>
+                ))}
+              </SBlock>
+            )}
+          </>
         );
       }
       default:
