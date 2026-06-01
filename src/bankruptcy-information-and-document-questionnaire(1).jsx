@@ -17366,6 +17366,193 @@ function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOver
         </div>
       </div>
 
+      {/* ── Schedule A/B Asset Summary ── */}
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+        <h3 className="font-bold text-white mb-4" style={{fontFamily:"'Georgia',serif"}}>Schedule A/B — Asset Summary</h3>
+        {(() => {
+          const fmt$ = (v) => `$${(parseFloat(v)||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0})}`;
+          const reProps = d.schedAB_re?.properties || [];
+          const reTotalValue = reProps.reduce((s,p)=>s+(parseFloat(p.value)||0),0);
+          const reTotalLiens = reProps.reduce((s,p)=>
+            s+(parseFloat(p.mortgageBalance)||0)+(parseFloat(p.hoaArrears)||0)
+            +(p.secondLiens||[]).reduce((ss,l)=>ss+(parseFloat(l.balance)||0),0)
+          ,0);
+          const reEquity = reTotalValue - reTotalLiens;
+          const fin = d.schedAB_fin || {};
+          const finBank = (fin.bankAccounts||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finRet  = (fin.retirement||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finInv  = (fin.investments||[]).reduce((s,a)=>s+(parseFloat(a.value)||0),0);
+          const finLife = (fin.lifeInsurance||[]).reduce((s,p)=>s+(parseFloat(p.cashValue)||0),0);
+          const finAnn  = (fin.annuities||[]).reduce((s,a)=>s+(parseFloat(a.currentValue)||0),0);
+          const finFsa  = (fin.fsaHsaAccounts||[]).reduce((s,a)=>s+(parseFloat(a.balance)||0),0);
+          const finTotal = finBank+finRet+finInv+finLife+finAnn+finFsa
+            +(parseFloat(fin.cashOnHand)||0)+(parseFloat(fin.stocksValue)||0)
+            +(parseFloat(fin.cryptoValue)||0)
+            +(fin.securityDeposits2||[]).reduce((s,dep)=>s+(parseFloat(dep.amount)||0),0);
+          const phy = d.schedAB_phy || {};
+          const phyVehs = [...(phy.vehicles||[]),...(phy.otherVehicles||[])].reduce((s,v)=>s+(parseFloat(v.value)||0),0);
+          const phyGoods = (parseFloat(phy.householdGoodsValue)||0)+(parseFloat(phy.clothing)||0)+(parseFloat(phy.electronicsValue)||0);
+          const phyJewelry = (phy.jewelryItems||[]).reduce((s,j)=>s+(parseFloat(j.totalValue)||0),0)||(parseFloat(phy.jewelryValue)||0);
+          const phyFirearms = (phy.firearms||[]).reduce((s,f)=>s+(parseFloat(f.value)||0),0);
+          const phyCollect = (phy.collectibles||[]).reduce((s,c)=>s+(parseFloat(c.value)||0),0);
+          const phyOther   = (phy.otherItems||[]).reduce((s,o)=>s+(parseFloat(o.value)||0),0);
+          const phyTotal = phyVehs+phyGoods+phyJewelry+phyFirearms+phyCollect+phyOther;
+          const grandTotal = reTotalValue+finTotal+phyTotal;
+          const AssetRow = ({label, value, sub}) => (
+            <div className={`flex items-center justify-between py-1.5 text-xs ${sub?"pl-4 text-slate-400":"text-slate-300"}`}>
+              <span>{label}</span><span className="font-mono font-semibold">{value}</span>
+            </div>
+          );
+          return (
+            <div className="space-y-2">
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Real Property (Sched. A — lines 1–7)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {reProps.length === 0
+                    ? <p className="text-xs text-slate-500 py-1">No real property declared</p>
+                    : reProps.map((p,i)=>(<AssetRow key={i} label={p.addr||`Property ${i+1}`} value={fmt$(p.value)} sub={i>0}/>))
+                  }
+                  {reProps.length > 0 && (
+                    <div className="border-t border-slate-700 mt-1 pt-1">
+                      <AssetRow label="Total Value" value={fmt$(reTotalValue)}/>
+                      <AssetRow label="Total Liens" value={`– ${fmt$(reTotalLiens)}`}/>
+                      <div className="flex items-center justify-between py-1.5 text-xs text-slate-300">
+                        <span>Net Equity</span>
+                        <span className={`font-mono font-semibold ${reEquity>=0?"text-green-400":"text-red-400"}`}>
+                          {reEquity<0?"– ":""}{fmt$(Math.abs(reEquity))}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Financial Assets (Sched. B — lines 17–33)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {finBank>0 && <AssetRow label="Bank Accounts" value={fmt$(finBank)} sub/>}
+                  {finRet>0  && <AssetRow label="Retirement Accounts" value={fmt$(finRet)} sub/>}
+                  {finInv>0  && <AssetRow label="Investment Accounts" value={fmt$(finInv)} sub/>}
+                  {(parseFloat(fin.stocksValue)||0)>0 && <AssetRow label="Stocks / Bonds" value={fmt$(fin.stocksValue)} sub/>}
+                  {(parseFloat(fin.cryptoValue)||0)>0 && <AssetRow label="Cryptocurrency" value={fmt$(fin.cryptoValue)} sub/>}
+                  {finLife>0 && <AssetRow label="Life Insurance (Cash Value)" value={fmt$(finLife)} sub/>}
+                  {finAnn>0  && <AssetRow label="Annuities" value={fmt$(finAnn)} sub/>}
+                  {finFsa>0  && <AssetRow label="FSA / HSA" value={fmt$(finFsa)} sub/>}
+                  {(parseFloat(fin.cashOnHand)||0)>0 && <AssetRow label="Cash on Hand" value={fmt$(fin.cashOnHand)} sub/>}
+                  <div className="border-t border-slate-700 mt-1 pt-1">
+                    <AssetRow label="Total Financial Assets" value={fmt$(finTotal)}/>
+                  </div>
+                </div>
+              </div>
+              <div className="border border-slate-700 rounded-xl overflow-hidden">
+                <div className="bg-slate-900/60 px-4 py-2 border-b border-slate-700">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Personal Property (Sched. B — lines 1–16)</p>
+                </div>
+                <div className="px-4 py-2">
+                  {phyVehs>0    && <AssetRow label="Vehicles" value={fmt$(phyVehs)} sub/>}
+                  {phyGoods>0   && <AssetRow label="Household Goods / Electronics / Clothing" value={fmt$(phyGoods)} sub/>}
+                  {phyJewelry>0 && <AssetRow label="Jewelry" value={fmt$(phyJewelry)} sub/>}
+                  {phyFirearms>0 && <AssetRow label="Firearms" value={fmt$(phyFirearms)} sub/>}
+                  {phyCollect>0 && <AssetRow label="Collectibles" value={fmt$(phyCollect)} sub/>}
+                  {phyOther>0   && <AssetRow label="Other Personal Property" value={fmt$(phyOther)} sub/>}
+                  {phyTotal===0 && <p className="text-xs text-slate-500 py-1">No personal property entered</p>}
+                  <div className="border-t border-slate-700 mt-1 pt-1">
+                    <AssetRow label="Total Personal Property" value={fmt$(phyTotal)}/>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-amber-400/10 border border-amber-400/30 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-bold text-amber-300">Total Scheduled Assets</span>
+                  <span className="text-sm font-bold font-mono text-amber-300">{fmt$(grandTotal)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </div>
+
+      {/* ── Pre-Filing Requirements: Credit Counseling + Attorney Fee ── */}
+      <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+        <h3 className="font-bold text-white mb-4" style={{fontFamily:"'Georgia',serif"}}>Pre-Filing Requirements</h3>
+        <div className="space-y-3">
+          <div className={`flex items-start gap-3 p-3 rounded-xl border ${docStatus["cc_cert"]==="uploaded"?"bg-green-400/10 border-green-500/30":"bg-amber-400/8 border-amber-400/30"}`}>
+            <span className="text-lg shrink-0">{docStatus["cc_cert"]==="uploaded"?"✅":"⏳"}</span>
+            <div>
+              <p className="text-sm font-semibold text-white">Pre-Filing Credit Counseling Certificate</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {docStatus["cc_cert"]==="uploaded"
+                  ? "Certificate uploaded — 11 U.S.C. § 109(h) requirement satisfied."
+                  : "Certificate not yet uploaded. Must be from a USCOURTS-approved provider completed within 180 days of filing."}
+              </p>
+            </div>
+          </div>
+          <div className="border border-slate-700 rounded-xl px-4 py-3 space-y-2">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Attorney Fee Disclosure</p>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Total Agreed Fee</span>
+              <span className="text-white font-semibold font-mono">${CASE_PAYMENT.totalFee.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Paid to Date</span>
+              <span className="text-white font-semibold font-mono">${CASE_PAYMENT.paidToDate.toLocaleString()}</span>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-slate-400">Balance Remaining</span>
+              <span className={`font-semibold font-mono ${CASE_PAYMENT.paidToDate>=CASE_PAYMENT.totalFee?"text-green-400":"text-amber-400"}`}>
+                ${Math.max(0,CASE_PAYMENT.totalFee-CASE_PAYMENT.paidToDate).toLocaleString()}
+              </span>
+            </div>
+            <div className="flex items-center justify-between text-xs border-t border-slate-700 pt-2">
+              <span className="text-slate-400">Fee Agreement</span>
+              <span className="text-slate-300">{CASE_PAYMENT.feeAgreementType==="bifurcated"?"Bifurcated (pre/post-petition split)":"Standard (paid in full before filing)"}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Statement of Intention (Form 108) ── */}
+      {(() => {
+        const creditors = d.schedD?.creditors || [];
+        if (creditors.length === 0) return null;
+        const INTENT_LABELS = {
+          retain:    "Retain — continue payments",
+          reaffirm:  "Reaffirm — sign new agreement",
+          redeem:    "Redeem — pay at current value",
+          surrender: "Surrender — return to lender",
+          other:     "Other (see notes)",
+        };
+        const intentCreds = creditors.filter(c=>c.intent);
+        return (
+          <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-5 mb-4">
+            <h3 className="font-bold text-white mb-1" style={{fontFamily:"'Georgia',serif"}}>Statement of Intention (Form 108)</h3>
+            <p className="text-xs text-slate-500 mb-4">Your declared intent for each secured debt — 11 U.S.C. § 521(a)(2).</p>
+            <div className="space-y-2">
+              {creditors.map((c,i) => (
+                <div key={i} className={`flex items-start justify-between gap-3 px-3 py-2.5 rounded-lg border text-xs ${c.intent?"border-slate-600 bg-slate-900/40":"border-amber-400/30 bg-amber-400/5"}`}>
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-200 truncate">{c.name||c.creditorName||`Creditor ${i+1}`}</p>
+                    <p className="text-slate-500 mt-0.5 truncate">{c.collateral||"—"}</p>
+                  </div>
+                  <span className={`shrink-0 px-2 py-1 rounded-full font-semibold whitespace-nowrap ${c.intent?"bg-slate-700 text-slate-200":"bg-amber-400/15 text-amber-400"}`}>
+                    {c.intent?(INTENT_LABELS[c.intent]||c.intent):"Not yet answered"}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {intentCreds.length < creditors.length && (
+              <p className="text-xs text-amber-300 mt-3 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                {creditors.length-intentCreds.length} secured debt{creditors.length-intentCreds.length!==1?"s":""} still need an intent selection — go back to Schedule D to complete.
+              </p>
+            )}
+          </div>
+        );
+      })()}
+
       <Card className="border-amber-400/40 bg-amber-400/5">
         <CardTitle icon="📦" title="Export Best Case .BCI File" sub="Downloads a formatted XML import file compatible with Best Case bankruptcy software"/>
         <div className="text-xs text-slate-400 mb-4 space-y-1">
