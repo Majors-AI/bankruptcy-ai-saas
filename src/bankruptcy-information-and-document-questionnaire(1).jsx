@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import * as pdfjsLib from "pdfjs-dist";
 import { normalizeIntake } from "./lib/intakeNormalize";
@@ -52,31 +52,22 @@ const SECTIONS = [
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
 
-// ─── Date reference & document-label helpers ──────────────────────────────────
-// TODAY_RET / CUR_MONTH drive all time-sensitive document labels.
-// In production these are injected from the case record.
-const TODAY_RET  = new Date("2026-04-23");
-const CUR_MONTH  = "2026-04";
-
+// ─── Date helpers ─────────────────────────────────────────────────────────────
 const _DOC_MO_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-const [_docY, _docM] = CUR_MONTH.split("-").map(Number);
-const DOC_TAX_YEAR_1 = _docY - 1;  // most-recent completed tax year
-const DOC_TAX_YEAR_2 = _docY - 2;  // prior year
-const _docMo = (n) => { let m = _docM - 1 - n, y = _docY; while (m < 0) { m += 12; y--; } return `${_DOC_MO_NAMES[m]} ${y}`; };
-const DOC_BANK_MO  = Array.from({length: 6}, (_, i) => _docMo(i)); // [current month … 5 months ago]
-const DOC_STMT_MO  = DOC_BANK_MO[0]; // label for "most recent" account statements
+const monthKey = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
-const REQUIRED_DOCS = [
+function buildRequiredDocs(taxYear1, taxYear2, bankMo) {
+  return [
   // ── Identity — always available ──────────────────────────────────────────
   { id:"id_front",     label:"Government-Issued Photo ID (front)",         required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"Must be valid at time of filing" },
   { id:"id_back",      label:"Government-Issued Photo ID (back)",          required:true,  category:"Identity",            gate:"always",  signingRequired:true,  note:"" },
   { id:"sscard",       label:"Social Security Card",                       required:true,  category:"Identity",            gate:"always",  signingRequired:false, note:"Original or certified copy" },
   { id:"sscard_back",  label:"Social Security Card — Back",                required:false, category:"Identity",            gate:"always",  signingRequired:false, note:"Back is usually blank — upload only if there is text or a photo on the back" },
   // ── Tax returns — always available (not time-sensitive) ──────────────────
-  { id:"taxreturn_1",  label:`Federal Tax Return — ${DOC_TAX_YEAR_1}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"taxreturn_2",  label:`Federal Tax Return — ${DOC_TAX_YEAR_2}`,    required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
-  { id:"w2_1",         label:`W-2(s) — ${DOC_TAX_YEAR_1}`,               required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
-  { id:"w2_2",         label:`W-2(s) — ${DOC_TAX_YEAR_2}`,               required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"taxreturn_1",  label:`Federal Tax Return — ${taxYear1}`,           required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"taxreturn_2",  label:`Federal Tax Return — ${taxYear2}`,           required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"All pages including W-2s and 1099s" },
+  { id:"w2_1",         label:`W-2(s) — ${taxYear1}`,                      required:true,  category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
+  { id:"w2_2",         label:`W-2(s) — ${taxYear2}`,                      required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   { id:"1099s",        label:"All 1099s (both years)",                     required:false, category:"Tax Returns",         gate:"always",  signingRequired:false, note:"" },
   // ── Vehicles — always available ───────────────────────────────────────────
   { id:"vehicle_reg",  label:"Vehicle Registration(s)",                    required:true,  category:"Vehicles",            gate:"always",  signingRequired:false, note:"For each owned vehicle" },
@@ -105,23 +96,24 @@ const REQUIRED_DOCS = [
   // ── Credit Counseling — always available, special ────────────────────────
   { id:"cc_cert",      label:"Pre-Filing Credit Counseling Certificate",   required:true,  category:"Required Courses",    gate:"always",  signingRequired:false, note:"Course 1 of 2 — must be from EOUST-approved provider within 180 days of filing — 11 U.S.C. § 109(h)", special:"credit_counseling" },
   // ── TIME-SENSITIVE — 60-day gate ─────────────────────────────────────────
-  { id:"bank_1",       label:`Bank Statement — ${DOC_BANK_MO[0]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
-  { id:"bank_2",       label:`Bank Statement — ${DOC_BANK_MO[1]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_3",       label:`Bank Statement — ${DOC_BANK_MO[2]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_4",       label:`Bank Statement — ${DOC_BANK_MO[3]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_5",       label:`Bank Statement — ${DOC_BANK_MO[4]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
-  { id:"bank_6",       label:`Bank Statement — ${DOC_BANK_MO[5]}`,       required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
-  { id:"paystub_1",    label:`Pay Stubs — ${DOC_BANK_MO[0]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_2",    label:`Pay Stubs — ${DOC_BANK_MO[1]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_3",    label:`Pay Stubs — ${DOC_BANK_MO[2]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_4",    label:`Pay Stubs — ${DOC_BANK_MO[3]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_5",    label:`Pay Stubs — ${DOC_BANK_MO[4]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"paystub_6",    label:`Pay Stubs — ${DOC_BANK_MO[5]}`,            required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
-  { id:"mortgage_stmt",label:`Mortgage Statement(s) — ${DOC_BANK_MO[0]}`,required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
+  { id:"bank_1",       label:`Bank Statement — ${bankMo[0]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:true,  note:"All checking & savings accounts — complete statement" },
+  { id:"bank_2",       label:`Bank Statement — ${bankMo[1]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_3",       label:`Bank Statement — ${bankMo[2]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_4",       label:`Bank Statement — ${bankMo[3]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_5",       label:`Bank Statement — ${bankMo[4]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement" },
+  { id:"bank_6",       label:`Bank Statement — ${bankMo[5]}`,             required:true,  category:"Bank Statements",     gate:"60days",  signingRequired:false, note:"All accounts — complete statement — 6 months total required" },
+  { id:"paystub_1",    label:`Pay Stubs — ${bankMo[0]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_2",    label:`Pay Stubs — ${bankMo[1]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_3",    label:`Pay Stubs — ${bankMo[2]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_4",    label:`Pay Stubs — ${bankMo[3]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_5",    label:`Pay Stubs — ${bankMo[4]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"paystub_6",    label:`Pay Stubs — ${bankMo[5]}`,                  required:true,  category:"Income",              gate:"60days",  signingRequired:false, note:"Upload all pay stubs received during this month" },
+  { id:"mortgage_stmt",label:`Mortgage Statement(s) — ${bankMo[0]}`,      required:false, category:"Real Property",       gate:"60days",  signingRequired:true,  note:"Must show current balance" },
   { id:"hoa_stmt",     label:"HOA Statement / Dues Letter",                required:false, category:"Real Property",       gate:"60days",  signingRequired:false, note:"Current month — if applicable" },
   // ── Signing-day only ─────────────────────────────────────────────────────
   { id:"bank_balance", label:"Current Bank Balance Screenshot",           required:true,  category:"Bank Statements",     gate:"signing", signingRequired:true,  note:"Required day-of — log into your bank and screenshot current balance" },
-];
+  ];
+}
 
 // ─── CASE PAYMENT STATE ──────────────────────────────────────────────────────
 // In production these come from the case record / accounting module.
@@ -138,18 +130,11 @@ const CASE_PAYMENT = {
   bifurcatedMinimum: 500,    // minimum payment required to fully unlock the portal for bifurcated cases
 };
 
-const daysToPayoff = Math.ceil((new Date(CASE_PAYMENT.payoffDate) - TODAY_RET) / (1000*60*60*24));
-const WITHIN_60   = daysToPayoff <= 60;
 const PAID_FULL   = CASE_PAYMENT.paidToDate >= CASE_PAYMENT.totalFee;
 const IS_BIFURCATED = CASE_PAYMENT.feeAgreementType === "bifurcated";
 // Sections unlock when either fully paid OR bifurcated minimum has been met
 const SECTIONS_UNLOCKED = PAID_FULL || (IS_BIFURCATED && CASE_PAYMENT.paidToDate >= CASE_PAYMENT.bifurcatedMinimum);
 
-// A document is "stale" if it's a monthly doc from a prior month and the case isn't filed
-const isMonthStale = (uploadedDate) => {
-  if (!uploadedDate || CASE_PAYMENT.filedDate) return false;
-  return !uploadedDate.startsWith(CUR_MONTH);
-};
 
 // Returns true if the given date string (MM/DD/YYYY or ISO) is older than `days` days
 const isStaleDate = (dateStr, days = 30) => {
@@ -15662,7 +15647,14 @@ function SectionSOFA4({d,u}) {
 }
 
 // ─── Dynamic doc requirements based on intake answers ────────────────────────
-function getActiveDocs(intake, petition, formData = {}) {
+function getActiveDocs(intake, petition, formData = {}, today = new Date()) {
+  const _y = today.getFullYear(), _m = today.getMonth() + 1;
+  const _mo = (n) => { let mm = _m - 1 - n, yy = _y; while (mm < 0) { mm += 12; yy--; } return `${_DOC_MO_NAMES[mm]} ${yy}`; };
+  const _bankMo = Array.from({length: 6}, (_, i) => _mo(i));
+  const stmtMo   = _bankMo[0];
+  const taxYear1 = _y - 1;
+  const taxYear2 = _y - 2;
+  const requiredDocs = buildRequiredDocs(taxYear1, taxYear2, _bankMo);
   const fin = formData?.schedAB_fin || {};
   const schedI = formData?.schedI || {};
   const phy = formData?.schedAB_phy || {};
@@ -15680,7 +15672,7 @@ function getActiveDocs(intake, petition, formData = {}) {
   const isSelfEmployed = (schedI.selfEmploySources || []).length > 0 || parseFloat(schedI.dSelfEmployment) > 0;
   const allVehicles = [...(phy.vehicles || []), ...(phy.otherVehicles || [])];
 
-  const base = REQUIRED_DOCS
+  const base = requiredDocs
     // Filter out generic financial/award/life ins/fsa placeholders replaced by dynamic per-account entries below
     .filter(d => {
       if (d.id === "invest_stmt") return hasInvestments;
@@ -15715,28 +15707,28 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Investment / brokerage — one entry per account
   (fin.investments || []).forEach((acct, i) => {
-    const label = acct.institution ? `${acct.institution} — Statement — ${DOC_STMT_MO}` : `Investment Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
+    const label = acct.institution ? `${acct.institution} — Statement — ${stmtMo}` : `Investment Account ${i + 1} — Statement — ${stmtMo}`;
     extras.push({ id:`invest_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.description || "Investment/brokerage account"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — must show current holdings and value` });
   });
 
   // Stocks / bonds — single object
   if (hasStocks) {
-    extras.push({ id:"stocks_stmt_entry", label:`Stocks / Bonds — Statement — ${DOC_STMT_MO}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"stocks_stmt_entry", label:`Stocks / Bonds — Statement — ${stmtMo}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.stocksDesc || "Stocks/bonds holdings"} — statement must show current value of all positions` });
   }
 
   // Cryptocurrency — single object
   if (hasCrypto) {
-    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Statement — ${DOC_STMT_MO}${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
+    extras.push({ id:"crypto_stmt_entry", label:`Cryptocurrency — Statement — ${stmtMo}${fin.cryptoExchange ? ` (${fin.cryptoExchange})` : ""}`, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${fin.cryptoDesc || "Cryptocurrency holdings"}${fin.cryptoExchange ? ` held at ${fin.cryptoExchange}` : ""} — screenshot or PDF export showing current balance and value` });
   }
 
   // Retirement accounts — one entry per account
   (fin.retirement || []).forEach((acct, i) => {
-    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Statement — ${DOC_STMT_MO}`
-      : acct.institution ? `${acct.institution} Retirement — Statement — ${DOC_STMT_MO}`
-      : `Retirement Account ${i + 1} — Statement — ${DOC_STMT_MO}`;
+    const label = (acct.institution && acct.accountType) ? `${acct.accountType} – ${acct.institution} — Statement — ${stmtMo}`
+      : acct.institution ? `${acct.institution} Retirement — Statement — ${stmtMo}`
+      : `Retirement Account ${i + 1} — Statement — ${stmtMo}`;
     extras.push({ id:`retire_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`${acct.accountType || "Retirement account"} at ${acct.institution || "provider"}${acct.accountNumberLast4 ? ` (acct ending ${acct.accountNumberLast4})` : ""} — most recent statement showing current balance` });
   });
@@ -15753,8 +15745,8 @@ function getActiveDocs(intake, petition, formData = {}) {
   (fin.fsaHsaAccounts || []).forEach((acct, i) => {
     if (!hasFsaHsa) return;
     const label = acct.institution
-      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Statement — ${DOC_STMT_MO}`
-      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Statement — ${DOC_STMT_MO}`;
+      ? `${acct.accountType || "FSA/HSA"} — ${acct.institution} — Statement — ${stmtMo}`
+      : `${acct.accountType || "FSA/HSA"} Account ${i+1} — Statement — ${stmtMo}`;
     extras.push({ id:`fsa_hsa_stmt_${i}`, label, required:true, category:"Financial Accounts", gate:"always", signingRequired:false,
       note:`Most recent statement showing current balance${acct.accountNumber ? ` (acct #${acct.accountNumber})` : ""}` });
   });
@@ -15826,8 +15818,8 @@ function getActiveDocs(intake, petition, formData = {}) {
 
   // Business → business tax returns
   if (intake.ownedBusiness === "yes")
-    extras.push({ id:"biz_tax_1", label:`Business Tax Return — ${DOC_TAX_YEAR_1}`, required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
-                { id:"biz_tax_2", label:`Business Tax Return — ${DOC_TAX_YEAR_2}`, required:true, category:"Tax Returns", gate:"always", note:"" });
+    extras.push({ id:"biz_tax_1", label:`Business Tax Return — ${taxYear1}`, required:true, category:"Tax Returns", gate:"always", note:"All pages of the business return" },
+                { id:"biz_tax_2", label:`Business Tax Return — ${taxYear2}`, required:true, category:"Tax Returns", gate:"always", note:"" });
 
   // Joint filing → spouse identity docs
   if (intake.filingType === "joint") {
@@ -16589,9 +16581,9 @@ function nextPaystubAvailableDate(periodEndStr, frequency) {
 // Returns reminders the client should see based on today vs the new-month boundary
 function computeMonthRolloverReminders(today, paystubMeta, docStatus) {
   const reminders = [];
-  const curMonthStr = today.toISOString().slice(0, 7); // YYYY-MM
+  const curMonthStr = monthKey(today);
   const prevMonth   = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const prevMonthStr = prevMonth.toISOString().slice(0, 7);
+  const prevMonthStr = monthKey(prevMonth);
 
   // Check if uploaded paystubs are from a prior month — need refresh
   const paystubIds = ["paystub_1","paystub_2","paystub_3","paystub_4","paystub_5","paystub_6"];
@@ -16627,12 +16619,36 @@ function computeMonthRolloverReminders(today, paystubMeta, docStatus) {
   return reminders;
 }
 
-function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formData = {}}) {
+function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formData = {}, asOfDate}) {
   const [docFiles, setDocFiles]   = useState({}); // rich per-doc state
   const [verifying, setVerifying] = useState(null);
   const [paystubMeta, setPaystubMeta] = useState(null); // {period_end_date, pay_frequency, employer_name}
   const [pendingRequests, setPendingRequests] = useState([]);
   const clientId = getClientId();
+
+  const today = useMemo(
+    () => asOfDate ? new Date(asOfDate) : new Date(),
+    [asOfDate]
+  );
+
+  const { curMonth, requiredDocs } = useMemo(() => {
+    const y = today.getFullYear(), m = today.getMonth() + 1;
+    const mo = (n) => { let mm = m - 1 - n, yy = y; while (mm < 0) { mm += 12; yy--; } return `${_DOC_MO_NAMES[mm]} ${yy}`; };
+    const bankMo = Array.from({length: 6}, (_, i) => mo(i));
+    const ty1 = y - 1, ty2 = y - 2;
+    return {
+      curMonth:     monthKey(today),
+      requiredDocs: buildRequiredDocs(ty1, ty2, bankMo),
+    };
+  }, [today]);
+
+  const daysToPayoff = Math.ceil((new Date(CASE_PAYMENT.payoffDate) - today) / (1000*60*60*24));
+  const WITHIN_60   = daysToPayoff <= 60;
+
+  const isMonthStale = (uploadedDate) => {
+    if (!uploadedDate || CASE_PAYMENT.filedDate) return false;
+    return !uploadedDate.startsWith(curMonth);
+  };
 
   useEffect(() => {
     supabase.from("pending_doc_requests")
@@ -16642,7 +16658,7 @@ function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formDa
       .then(({ data }) => { if (data) setPendingRequests(data); });
   }, [clientId]);
 
-  const activeDocs   = getActiveDocs(intakeData, petition, formData);
+  const activeDocs   = getActiveDocs(intakeData, petition, formData, today);
   const ccDoc        = activeDocs.filter(d => d.special === "credit_counseling");
   const alwaysDocs   = activeDocs.filter(d => d.gate === "always" && !d.special);
   const sixtyDocs    = activeDocs.filter(d => d.gate === "60days");
@@ -16657,11 +16673,10 @@ function SectionDocs({docStatus, setDocStatus, intakeData, petition = {}, formDa
   const catIcons = {"Identity":"🪪","Tax Returns":"📋","Vehicles":"🚗","Financial Accounts":"📈","Benefit Award Letters":"📬","Insurance & Annuities":"🛡️","Real Property":"🏠","Legal":"⚖️","Bank Statements":"🏦","Income":"💼","Required Courses":"🎓"};
 
   // Compute intake-driven dynamic flags for the banner
-  const dynamicDocs = activeDocs.filter(d => !REQUIRED_DOCS.find(r => r.id === d.id));
+  const dynamicDocs = activeDocs.filter(d => !requiredDocs.find(r => r.id === d.id));
 
   // Month-rollover reminders computed from today + paystub metadata
-  const today = new Date(TODAY_RET);
-  const monthReminders = computeMonthRolloverReminders(today, paystubMeta, docStatus);
+  const monthReminders = computeMonthRolloverReminders(new Date(today.getTime()), paystubMeta, docStatus);
 
   const handleFileSelect = async (docId, file) => {
     if (!file) return;
@@ -16811,7 +16826,7 @@ Respond ONLY with valid JSON, no markdown fences:
 
   const fulfillPendingRequest = async (req, file) => {
     if (!file) return;
-    const doc = REQUIRED_DOCS.find(d => d.id === req.document_type);
+    const doc = requiredDocs.find(d => d.id === req.document_type);
     if (doc) {
       await handleFileSelect(req.document_type, file);
     } else {
