@@ -32,6 +32,8 @@ const normalizeState = (s) => { if (!s) return ""; const up = s.trim().toUpperCa
 
 const COMMUNITY_PROPERTY_STATES = new Set(["Arizona","California","Idaho","Louisiana","Nevada","New Mexico","Texas","Washington","Wisconsin"]);
 
+const fmtMoney = (v) => v ? `$${parseFloat(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : null;
+
 const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
