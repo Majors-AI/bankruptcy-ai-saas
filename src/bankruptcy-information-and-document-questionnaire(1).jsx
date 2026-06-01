@@ -43,6 +43,7 @@ const SECTIONS = [
   { id:"schedH",       label:"Schedule H – Co-Debtors",   icon:"👥", group:"Schedules" },
   { id:"schedI",       label:"Schedule I – Income",        icon:"💼", group:"Schedules" },
   { id:"schedJ",       label:"Schedule J – Expenses",      icon:"🧾", group:"Schedules" },
+  { id:"meansTest",    label:"Means Test (Six-Month Income)", icon:"📊", group:"Schedules" },
   { id:"sofa1",        label:"SOFA – Income & Business",   icon:"📊", group:"SOFA" },
   { id:"sofa2",        label:"SOFA – Transfers & Payments",icon:"🔄", group:"SOFA" },
   { id:"sofa3",        label:"SOFA – Legal & Prior Cases", icon:"⚖️", group:"SOFA" },
@@ -2103,6 +2104,28 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
                 ))}
               </SBlock>
             )}
+          </>
+        );
+      }
+      case "meansTest": {
+        const sd = d.schedI || {};
+        const mt = d.meansTest || {};
+        const filingType = d.petition?.filingType || "";
+        const hasSpouse = filingType === "joint" || filingType === "individual-nonfiling-spouse";
+        const householdSize = 1 + (hasSpouse ? 1 : 0) + (parseInt(d.petition?.numDependents || 0) || 0);
+        return (
+          <>
+            <SBlock title="Intake Values (Read-Only)">
+              <SRow label="Avg Monthly Income (6-mo)" value={fmtMoney(sd.avgMonthly6)} missing={!sd.avgMonthly6}/>
+              <SRow label="Household Size" value={String(householdSize)}/>
+              <SRow label="State" value={d.petition?.state || "—"} missing={!d.petition?.state}/>
+              <SRow label="County" value={d.petition?.county || "—"} missing={!d.petition?.county}/>
+            </SBlock>
+            <SBlock title="Supplemental Detail">
+              <SRow label="Gifts ≥ $200" value={mt.gifts || "None reported"}/>
+              <SRow label="Family / Roommate Help" value={mt.familyHelp || "None reported"}/>
+              <SRow label="Unreported / Cash Income" value={mt.unreportedIncome || "None reported"}/>
+            </SBlock>
           </>
         );
       }
@@ -14932,6 +14955,97 @@ function SectionSchedJ({d,u,imp,ImportBanner}) {
   );
 }
 
+function SectionMeansTest({d, u, imp, ImportBanner}) {
+  const mt = d.meansTest || {};
+  const up = (f, v) => u("meansTest", {...mt, [f]: v});
+
+  const filingType = d.petition?.filingType || "";
+  const hasSpouse = filingType === "joint" || filingType === "individual-nonfiling-spouse";
+  // TODO: confirm means-test household-size definition with Dom; intake exposes no direct householdSize field
+  const householdSize = 1 + (hasSpouse ? 1 : 0) + (parseInt(d.petition?.numDependents || 0) || 0);
+
+  const avgMonthly = d.schedI?.avgMonthly6;
+  const state = d.petition?.state;
+  const county = d.petition?.county;
+
+  return (
+    <div>
+      {ImportBanner && <ImportBanner sectionKeys={["schedI.avgMonthly6","petition.state","petition.county","petition.numDependents"]}/>}
+
+      <Card>
+        <CardTitle icon="📊" title="Means Test — Six-Month Income" sub="Form 122A-1 / 122C-1 detail — income and household context"/>
+        <p className="text-sm text-slate-300 leading-relaxed mb-4">
+          The means test compares your average income over the six months before filing against the median income for your household size and state. The calculation is performed in the intake portal — this section captures the additional detail required for the official Form 122 series (gifts, family support, under-the-table income) that intake doesn't ask for.
+        </p>
+
+        {/* Read-only intake panel */}
+        <div className="mb-5 rounded-xl border border-sky-700/40 bg-sky-900/20 overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-sky-700/30 flex items-center gap-2">
+            <svg className="w-3.5 h-3.5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+            <span className="text-xs font-bold text-sky-400 uppercase tracking-widest">From intake — read-only</span>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-sky-700/20">
+            <div className="bg-slate-900/60 px-4 py-3">
+              <p className="text-xs text-slate-500 mb-0.5">Average Monthly Income (6-month lookback)</p>
+              <p className="text-sm font-semibold text-white">{avgMonthly ? fmtMoney(avgMonthly) : "—"}</p>
+            </div>
+            <div className="bg-slate-900/60 px-4 py-3">
+              <p className="text-xs text-slate-500 mb-0.5">
+                Household Size{" "}
+                <span className="text-slate-600">(computed from filing status + dependents)</span>
+              </p>
+              <p className="text-sm font-semibold text-white">{householdSize}</p>
+            </div>
+            <div className="bg-slate-900/60 px-4 py-3">
+              <p className="text-xs text-slate-500 mb-0.5">State</p>
+              <p className="text-sm font-semibold text-white">{state || "—"}</p>
+            </div>
+            <div className="bg-slate-900/60 px-4 py-3">
+              <p className="text-xs text-slate-500 mb-0.5">County</p>
+              <p className="text-sm font-semibold text-white">{county || "—"}</p>
+            </div>
+          </div>
+          <div className="px-4 py-2.5 border-t border-sky-700/30">
+            <p className="text-xs text-slate-500 italic">To edit any of the above, return to the intake portal.</p>
+          </div>
+        </div>
+
+        <Divider label="ADDITIONAL SIX-MONTH DETAIL"/>
+
+        <F label="Did you receive any gifts (cash or in-kind) of $200 or more in the past 6 months?">
+          <textarea
+            value={mt.gifts || ""}
+            onChange={e => up("gifts", e.target.value)}
+            placeholder="Describe each gift, who gave it, when, and approximate value. Leave blank if none."
+            rows={3}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-y"
+          />
+        </F>
+
+        <F label="Did anyone help pay your living expenses in the past 6 months (family, roommate, etc.)?">
+          <textarea
+            value={mt.familyHelp || ""}
+            onChange={e => up("familyHelp", e.target.value)}
+            placeholder="Describe who helped, what they paid, and the approximate monthly amount. Leave blank if no one helped."
+            rows={3}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-y"
+          />
+        </F>
+
+        <F label="Did you receive any cash income that doesn't appear on a tax return or pay stub (side jobs, tips, sale of personal items, etc.)?">
+          <textarea
+            value={mt.unreportedIncome || ""}
+            onChange={e => up("unreportedIncome", e.target.value)}
+            placeholder="We need ALL income, even cash income that wasn't reported. Describe each source and approximate monthly amount. Leave blank if none."
+            rows={3}
+            className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500 resize-y"
+          />
+        </F>
+      </Card>
+    </div>
+  );
+}
+
 function SectionSOFA1({d,u,imp,ImportBanner}) {
   const sd = d.sofa1||{businesses:[]};
   const up = (f,v) => u("sofa1",{...sd,[f]:v});
@@ -18744,6 +18858,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     schedEF_np:  ["schedEF_np"],
     schedI:      ["schedI.debtorWorkStatus","schedI.employmentSources","schedI.debtorMonthlyGross","schedI.dSsRetirement","schedI.dPension","schedI.dRental","schedI.avgMonthly6"],
     schedJ:      ["schedJ.expRentMortgage","schedJ.expElectricGas","schedJ.expFood","schedJ.expGasFuel","schedJ.expMedical","schedJ.expInsHealth","schedJ.expChildcare","schedJ.expOther"],
+    meansTest:   ["schedI.avgMonthly6","petition.state","petition.county","petition.numDependents"],
     sofa1:       ["sofa1.grossPrior"],
     sofa2:       ["sofa2.hasTransfers","sofa2.transfers","sofa2.hasPreferential","sofa2.preferentialEntries","sofa2.recentLuxury","sofa2.garnishment"],
     sofa3:       ["sofa3.priorBkFiled","sofa3.priorBankruptcies","sofa3.hasLawsuits","sofa3.dsoObligation","sofa3.expectedRefund"],
@@ -18759,7 +18874,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     const onSectionImportConfirm = (v) => updateSection(sectionDataKey, {...sectionData, importedConfirmed: v});
 
     // Sections that get a SectionSummary
-    const SUMMARY_SECTIONS = new Set(["personalInfo","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","sofa1","sofa2","sofa3","sofa4"]);
+    const SUMMARY_SECTIONS = new Set(["personalInfo","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","meansTest","sofa1","sofa2","sofa3","sofa4"]);
     // Summary confirmation stored per section
     const summaryKey = sectionId === "personalInfo" ? "petition" : sectionDataKey;
     const summaryData = data[summaryKey] || {};
@@ -18921,6 +19036,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "schedH":      return withAll(<SectionSchedH d={data} u={updateSection}/>);
       case "schedI":      return withAll(<SectionSchedI d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "schedJ":      return withAll(<SectionSchedJ d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
+      case "meansTest":   return withAll(<SectionMeansTest d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa1":       return withAll(<SectionSOFA1 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa2":       return withAll(<SectionSOFA2 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
