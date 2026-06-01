@@ -17289,7 +17289,7 @@ function Ch13DebtLimitBanner({ debtCheck, compact = false }) {
   );
 }
 
-function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOverallConfirm, overallConfirmed}) {
+function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOverallConfirm, overallConfirmed, onDeclarationChange}) {
   const [exported, setExported] = useState(false);
   const bciXML = generateBCI(d);
   const activeDocs = getActiveDocs(INTAKE_SAMPLE, d.petition);
@@ -17656,15 +17656,63 @@ function SectionReview({d, docStatus, importedCount, summaryConfirmedMap, onOver
             )}
 
             <div className="border-t border-slate-800 pt-4">
-              <ConfirmCheck
-                id="overallDeclaration"
-                checked={!!overallConfirmed}
-                onChange={onOverallConfirm}
-              >
-                <span className="text-sm leading-relaxed">
-                  <strong className="text-white">Final Declaration:</strong> I declare under penalty of perjury that I have reviewed all of the information provided in this questionnaire covering the Voluntary Petition and Schedules A through J and the Statement of Financial Affairs. To the best of my knowledge, information, and belief, the information is <strong className="text-white">true, accurate, and complete</strong>. I understand this information will be used to prepare official bankruptcy documents filed with the United States Bankruptcy Court.
-                </span>
-              </ConfirmCheck>
+              {/* TODO: Dom (attorney) to confirm exact Form 106Dec language */}
+              <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">Client Declaration (Form 106Dec)</p>
+              <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 mb-4">
+                <p className="text-xs font-semibold text-amber-300 mb-1">[PLACEHOLDER — attorney review required before use]</p>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  I, the undersigned debtor, declare under penalty of perjury that I have read the answers contained in the foregoing questionnaire and that they are true and correct to the best of my knowledge, information, and belief.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Your Full Legal Name <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={d.petition?.declarationName||""}
+                    onChange={e => onDeclarationChange && onDeclarationChange("declarationName", e.target.value)}
+                    placeholder="Type your full legal name"
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-400/60 placeholder-slate-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                    Date <span className="text-red-400">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={d.petition?.declarationDate||""}
+                    onChange={e => onDeclarationChange && onDeclarationChange("declarationDate", e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-4 py-2.5 text-white text-sm focus:outline-none focus:border-amber-400/60 transition-colors"
+                  />
+                </div>
+              </div>
+              {(() => {
+                const declarationReady = !!(d.petition?.declarationName?.trim() && d.petition?.declarationDate);
+                return (
+                  <>
+                    {!declarationReady && (
+                      <p className="text-xs text-amber-400 mb-3 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+                        Enter your full name and date above to unlock the declaration.
+                      </p>
+                    )}
+                    <div className={!declarationReady ? "opacity-40 pointer-events-none select-none" : ""}>
+                      <ConfirmCheck
+                        id="overallDeclaration"
+                        checked={!!overallConfirmed}
+                        onChange={declarationReady ? onOverallConfirm : ()=>{}}
+                      >
+                        <span className="text-sm leading-relaxed">
+                          <strong className="text-white">I declare</strong> that I have read and reviewed all information in this questionnaire and that it is true and correct to the best of my knowledge. I understand that submitting this questionnaire does not file my bankruptcy case — my attorney must review, complete, and electronically file the petition with the court.
+                        </span>
+                      </ConfirmCheck>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
 
             {/* Post-submission confirmation */}
@@ -18914,6 +18962,9 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
               }
             }}
             overallConfirmed={!!(data.petition?.overallConfirmed)}
+            onDeclarationChange={(field, val) =>
+              updateSection("petition", {...(data.petition||{}), [field]: val})
+            }
           />
         </div>
       );
