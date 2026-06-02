@@ -71,9 +71,9 @@ function DisclosureSection({ num, title, children, needsReview }: {
   );
 }
 
-function DisclosureBody({ children }: { children: React.ReactNode }) {
+function DisclosureBody({ children, uncapped }: { children: React.ReactNode; uncapped?: boolean }) {
   return (
-    <div style={{ fontSize: 12, color: '#6B6B66', lineHeight: 1.7, maxHeight: 140, overflowY: 'auto', paddingRight: 4 }}>
+    <div style={{ fontSize: 12, color: '#6B6B66', lineHeight: 1.7, paddingRight: 4, ...(uncapped ? {} : { maxHeight: 140, overflowY: 'auto' as const }) }}>
       {children}
     </div>
   );
@@ -522,7 +522,7 @@ export default function ClientRegistration({ onComplete }: Props) {
 
             {/* 2 — Credit Report Authorization — iSoftpull [NEW — Dom's Section 2] */}
             <DisclosureSection num={2} title="Authorization to Obtain Your Credit Report (Soft Inquiry)" needsReview>
-              <DisclosureBody>
+              <DisclosureBody uncapped>
                 <p>You authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its approved service providers to obtain your TransUnion consumer credit report through <strong style={{ color: '#FAFAF7' }}>iSoftpull, Inc.</strong> This report is used solely to assist in assessing your bankruptcy filing options and preparing your case.</p>
                 <p style={{ marginTop: 8 }}>This is a <strong style={{ color: '#FAFAF7' }}>soft inquiry</strong> — it will not affect your credit score and will not appear on your credit report as viewed by lenders or other creditors.</p>
                 <p style={{ marginTop: 8 }}>The credit report is obtained by <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> under a permissible purpose as defined by the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681 et seq. Your authorization here constitutes the written instruction required by the FCRA. The report is accessed by bankruptcy.ai solely to provide platform services to {firmName}.</p>
