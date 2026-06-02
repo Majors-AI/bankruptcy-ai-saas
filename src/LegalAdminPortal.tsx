@@ -4533,7 +4533,7 @@ function FollowUpQueue({ leads, onSelect }: {
 
       {/* Retention-priority sections */}
       {STAGE_ORDER.map(stage => {
-        const rows = stage.filter(active);
+        const rows = active.filter(stage.filter);
         if (rows.length === 0) return null;
         return (
           <div key={stage.key} className={`bg-[#0d1221] border rounded-2xl p-5 space-y-3 ${stage.border} ${stage.bg}`}>
@@ -5780,6 +5780,20 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
     }
   }, [leads]);
 
+  // V1: load manual clients (onboarding_source='manual') for the current
+  // pilot firm. Refreshes whenever a new client is created via NewClientModal.
+  const loadManualClients = useCallback(async () => {
+    const r = await fetch(
+      `${SUPABASE_URL}/rest/v1/clients?onboarding_source=eq.manual&firm_id=eq.${V1_DEFAULT_FIRM_ID}&order=created_at.desc&limit=200&select=id,name,email,phone,status,case_status,created_at`,
+      { headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` } },
+    );
+    if (r.ok) {
+      const rows = await r.json();
+      setManualClients(rows.map((c: { id: string; name: string; email: string | null; phone: string | null; status: string | null; case_status: string | null; created_at: string }) => ({ ...c })));
+    }
+  }, []);
+  useEffect(() => { loadManualClients(); }, [loadManualClients]);
+
   const filtered = leads.filter(l => {
     if (statusFilter !== "all" && l.status !== statusFilter) return false;
     if (urgencyFilter !== "all" && (l.urgency ?? "normal") !== urgencyFilter) return false;
@@ -5915,20 +5929,6 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
     ...( canManageLeads || isSuperAdmin ? [{ id: "timeoff" as const, label: "Time Off", icon: <CheckCircle2 className="w-3.5 h-3.5" />, badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null }] : []),
     ...(isSuperAdmin ? [{ id: "sick_admin" as const, label: "Out-of-Office", icon: <span className="text-sm leading-none">🤒</span>, badge: null }] : []),
   ];
-
-  // V1: load manual clients (onboarding_source='manual') for the current
-  // pilot firm. Refreshes whenever a new client is created via NewClientModal.
-  const loadManualClients = useCallback(async () => {
-    const r = await fetch(
-      `${SUPABASE_URL}/rest/v1/clients?onboarding_source=eq.manual&firm_id=eq.${V1_DEFAULT_FIRM_ID}&order=created_at.desc&limit=200&select=id,name,email,phone,status,case_status,created_at`,
-      { headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}` } },
-    );
-    if (r.ok) {
-      const rows = await r.json();
-      setManualClients(rows.map((c: { id: string; name: string; email: string | null; phone: string | null; status: string | null; case_status: string | null; created_at: string }) => ({ ...c })));
-    }
-  }, []);
-  useEffect(() => { loadManualClients(); }, [loadManualClients]);
 
   return (
     <div className="min-h-screen text-white" style={{ background: '#0F0F0E' }}>
