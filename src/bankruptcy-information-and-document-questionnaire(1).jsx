@@ -17935,6 +17935,33 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
     setSaved(true);
   }, [existingRequest]);
 
+  // Persist the manual election to credit_pull_requests so the gate is skipped on future loads.
+  // Fire-and-forget — onComplete is called immediately without waiting.
+  async function persistManualElection() {
+    const svcElected = { manualOnly: true, creditPull: false, docRetrieval: false, pdfUpload: false };
+    try {
+      if (existingRequest?.id) {
+        await supabase.from('credit_pull_requests').update({
+          service_elected: svcElected,
+          status: 'manual',
+          invoice_amount: null,
+          updated_at: new Date().toISOString(),
+        }).eq('id', existingRequest.id);
+      } else {
+        await supabase.from('credit_pull_requests').insert({
+          client_id: clientId,
+          client_name: clientName,
+          filing_type: isJoint ? 'joint' : 'individual',
+          service_elected: svcElected,
+          status: 'manual',
+          invoice_amount: null,
+        });
+      }
+    } catch (e) {
+      console.error('Failed to persist manual election', e);
+    }
+  }
+
   const OPTIONS = [
     {
       id: 'manual',
@@ -18370,23 +18397,23 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
           {isStale ? (
             <button
               disabled={!staleConfirmed}
-              onClick={() => setGateStep(1)}
+              onClick={() => { persistManualElection(); onComplete({ choice: 'manual', status: 'manual' }); }}
               className={`w-full font-bold py-4 rounded-2xl transition-all text-sm ${staleConfirmed ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-slate-800 text-slate-500 cursor-not-allowed"}`}>
               {staleConfirmed ? "I Understand — Let's Get Started" : "Check the box above to continue"}
             </button>
           ) : isNew ? (
-            <button onClick={() => setGateStep(1)}
+            <button onClick={() => { persistManualElection(); onComplete({ choice: 'manual', status: 'manual' }); }}
               className="w-full bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold py-4 rounded-2xl transition-all text-sm flex items-center justify-center gap-2">
               I'm Ready — Let's Begin Stage 2
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
             </button>
           ) : (
             <div className="flex gap-3">
-              <button onClick={() => { onSkipWelcome(welcomeBack.savedStep); setGateStep(1); }}
+              <button onClick={() => { onSkipWelcome(welcomeBack.savedStep); persistManualElection(); onComplete({ choice: 'manual', status: 'manual' }); }}
                 className="flex-1 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold py-4 rounded-2xl transition-all text-sm">
                 Resume Where I Left Off
               </button>
-              <button onClick={() => setGateStep(1)}
+              <button onClick={() => { persistManualElection(); onComplete({ choice: 'manual', status: 'manual' }); }}
                 className="flex-1 border border-slate-700 text-slate-400 hover:text-white hover:border-slate-500 font-semibold py-4 rounded-2xl transition-all text-sm">
                 Start from Beginning
               </button>
@@ -18398,248 +18425,7 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
     );
   }
 
-  // ── Step 1: Creditor Information Choice ───────────────────────────────────
-
-  return (
-    <div className="min-h-screen bg-slate-950 flex items-start justify-center px-4 pt-8 pb-16" style={{fontFamily:"'Trebuchet MS', sans-serif"}}>
-      <div className="w-full max-w-3xl">
-
-        {/* Header */}
-        <div className="text-center mb-7">
-          {hasWelcome && (
-            <button onClick={() => setGateStep(0)} className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-4">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
-              Back to Overview
-            </button>
-          )}
-          <div className="inline-flex items-center gap-2 bg-amber-400/10 border border-amber-400/25 text-amber-400 text-xs font-bold uppercase tracking-widest px-4 py-1.5 rounded-full mb-4">
-            {hasWelcome ? "Step 2 of 2 — Before You Begin" : "Before You Begin"}
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-3" style={{fontFamily:"'Georgia',serif"}}>
-            How Would You Like to Provide Your Creditor Information?
-          </h1>
-          <p className="text-slate-400 text-sm sm:text-base max-w-xl mx-auto leading-relaxed">
-            Your bankruptcy petition requires a complete and accurate list of every creditor you owe money to. Choose how you would like to provide this information before continuing.
-          </p>
-        </div>
-
-        {/* Every creditor notice */}
-        <div className="bg-red-500/8 border border-red-500/20 rounded-2xl px-5 py-4 mb-6 flex items-start gap-3">
-          <svg className="w-4 h-4 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-          <div>
-            <p className="text-xs font-bold text-red-300 uppercase tracking-widest mb-1">Important — Every Creditor Must Be Listed</p>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Federal bankruptcy law requires you to list <strong className="text-white">every creditor you owe money to</strong> — even debts you plan to keep paying and debts you believe may be forgiven. Omitting a creditor can result in that debt not being discharged and may constitute fraud.
-            </p>
-          </div>
-        </div>
-
-        {/* Options */}
-        <div className="space-y-3 mb-6">
-          {OPTIONS.map(opt => {
-            const isSelected = choice === opt.id;
-            return (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => { setChoice(opt.id); setConfirmed(false); setSaved(false); }}
-                className={`w-full text-left rounded-2xl border p-5 transition-all duration-200 ${
-                  isSelected
-                    ? 'border-amber-400/60 bg-amber-400/8 ring-1 ring-amber-400/30'
-                    : 'border-slate-700 bg-slate-900/60 hover:border-slate-500 hover:bg-slate-800/60'
-                }`}
-              >
-                <div className="flex items-start gap-4">
-                  <div className={`flex-shrink-0 w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center transition-all ${isSelected ? 'border-amber-400 bg-amber-400' : 'border-slate-600'}`}>
-                    {isSelected && <span className="w-2 h-2 rounded-full bg-slate-950 block"/>}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3 flex-wrap mb-1">
-                      <div className="flex items-center gap-2">
-                        <span className={isSelected ? 'text-amber-400' : 'text-slate-400'}>{opt.icon}</span>
-                        <p className={`text-sm font-bold leading-snug ${isSelected ? 'text-white' : 'text-slate-200'}`}>{opt.label}</p>
-                      </div>
-                      <span className={`text-xs font-bold ${opt.priceColor} flex-shrink-0`}>{opt.price}</span>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed mb-3">{opt.desc}</p>
-                    <div className="space-y-1">
-                      {opt.includes.map((inc, i) => (
-                        <div key={i} className="flex items-start gap-1.5">
-                          <svg className={`w-3 h-3 shrink-0 mt-0.5 ${isSelected ? 'text-amber-400' : 'text-slate-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-                          <span className="text-xs text-slate-400">{inc}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {opt.note && <p className={`text-xs mt-3 italic ${isSelected ? 'text-amber-400/80' : 'text-slate-600'}`}>{opt.note}</p>}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Selection detail + confirmation */}
-        {choice && (
-          <div className="bg-slate-900 border border-slate-700 rounded-2xl overflow-hidden mb-5">
-
-            {/* Invoice flow */}
-            {needsInvoice && (
-              <div className="px-5 py-4 border-b border-slate-800">
-                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-2">How Payment Works</p>
-                {!saved ? (
-                  <p className="text-xs text-slate-300 leading-relaxed">
-                    After confirming below, our office will send a separate invoice for <strong className="text-white">${price}.00</strong> to your email on file. Once payment is received, our system will immediately proceed with your credit pull{choice === 'full' ? ' and document retrieval' : ''}. You can continue completing other sections while this processes.
-                  </p>
-                ) : isAwaitingPayment ? (
-                  <div className="flex items-start gap-3 bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3">
-                    <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
-                    <div>
-                      <p className="text-xs font-bold text-amber-300 mb-1">Invoice Pending — ${price}.00</p>
-                      <p className="text-xs text-slate-300 leading-relaxed">Your request is saved. An invoice will be sent to your email. Once paid, the system proceeds automatically. You may fill out other sections in the meantime.</p>
-                    </div>
-                  </div>
-                ) : isPaid ? (
-                  <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/25 rounded-xl px-4 py-3">
-                    <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <p className="text-xs text-green-300 font-semibold">Payment received — processing your {choice === 'full' ? 'credit pull and document retrieval' : 'credit pull'}.</p>
-                  </div>
-                ) : null}
-              </div>
-            )}
-
-            {/* PDF upload flow */}
-            {isPdfFlow && saved && (
-              <div className="px-5 py-4 border-b border-slate-800">
-                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">Upload Your Credit Report PDF</p>
-                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 mb-4">
-                  <p className="text-xs font-bold text-blue-300 mb-1.5">How to Get Your Free Credit Report</p>
-                  <ol className="space-y-1.5 text-xs text-slate-300 leading-relaxed list-decimal list-inside">
-                    <li>Go to <strong className="text-white">annualcreditreport.com</strong> (the only official free report site)</li>
-                    <li>Select all 3 bureaus: Equifax, Experian, and TransUnion</li>
-                    <li>Download each report as a PDF</li>
-                    <li>PDF must include: creditor name, address, account number, and balance</li>
-                    <li>Combine into a single PDF if needed, then upload below</li>
-                  </ol>
-                </div>
-                {!pdfUploaded ? (
-                  <div>
-                    <div onClick={() => pdfInputRef.current?.click()}
-                      className="border-2 border-dashed border-slate-600 hover:border-amber-400/50 rounded-xl p-6 text-center cursor-pointer transition-colors group">
-                      <svg className="w-8 h-8 text-slate-600 group-hover:text-amber-400 mx-auto mb-2 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                      <p className="text-sm font-semibold text-slate-300 group-hover:text-white transition-colors mb-1">{pdfFile ? pdfFile.name : 'Click to upload your credit report PDF'}</p>
-                      <p className="text-xs text-slate-500">PDF only · Max 20 MB</p>
-                    </div>
-                    <input ref={pdfInputRef} type="file" accept=".pdf" className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) handlePdfUpload(f); }} />
-                    {pdfError && <p className="text-xs text-red-400 mt-2">{pdfError}</p>}
-                    {pdfUploading && (
-                      <div className="flex items-center gap-2 mt-3">
-                        <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"/>
-                        <p className="text-xs text-amber-400">Uploading...</p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-3 bg-green-500/10 border border-green-500/25 rounded-xl px-4 py-3">
-                    <svg className="w-4 h-4 text-green-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                    <div>
-                      <p className="text-xs font-bold text-green-300 mb-0.5">PDF Uploaded Successfully</p>
-                      <p className="text-xs text-slate-400">Your credit report is being parsed. Creditors will be pre-populated in Schedule D and E/F. You may continue the questionnaire.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Confirmation checkbox */}
-            {!saved && (
-              <div className="px-5 py-4">
-                <label className="flex items-start gap-3 cursor-pointer mb-4">
-                  <div className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${confirmed ? 'bg-amber-400 border-amber-400' : 'border-slate-600 hover:border-amber-400/60'}`}
-                    onClick={() => setConfirmed(v => !v)}>
-                    {confirmed && <svg className="w-3 h-3 text-slate-950" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
-                  </div>
-                  <span className="text-slate-300 text-sm leading-relaxed">
-                    {choice === 'manual'
-                      ? "I understand I am responsible for entering every creditor and uploading all required documents accurately. My questionnaire cannot be submitted until all information is complete and verified."
-                      : choice === 'pdf'
-                      ? "I understand I must upload a valid credit report PDF containing creditor name, address, account number, and balance. My questionnaire cannot advance until the PDF is uploaded and processed."
-                      : `I understand a separate invoice for $${price}.00 will be sent to my email. I authorize this charge and understand the system will not proceed until payment is received.`
-                    }
-                  </span>
-                </label>
-                <button type="button" onClick={handleSaveChoice} disabled={!confirmed || saving}
-                  className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold text-sm transition-all ${confirmed && !saving ? 'bg-amber-400 hover:bg-amber-300 text-slate-950' : 'bg-slate-800 text-slate-600 cursor-not-allowed'}`}>
-                  {saving
-                    ? <><div className="w-4 h-4 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"/> Saving...</>
-                    : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Confirm My Selection</>
-                  }
-                </button>
-              </div>
-            )}
-
-            {/* Saved + can advance */}
-            {saved && canAdvance && (
-              <div className="px-5 py-4">
-                <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/25 rounded-xl px-4 py-3 mb-4">
-                  <svg className="w-4 h-4 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                  <p className="text-xs text-green-300 font-semibold">
-                    {isManual ? 'Manual entry selected — you may now proceed.'
-                      : isPdfDone ? 'PDF uploaded — creditors are being imported. You may continue.'
-                      : 'Payment confirmed — data is being processed. You may continue.'}
-                  </p>
-                </div>
-                <button type="button" onClick={() => onComplete({ choice, status: reqStatus || 'manual' })}
-                  className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold py-3 rounded-xl text-sm transition-colors">
-                  Continue to Questionnaire
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
-                </button>
-              </div>
-            )}
-
-            {/* Awaiting invoice */}
-            {saved && needsInvoice && isAwaitingPayment && (
-              <div className="px-5 py-4">
-                <div className="flex items-start gap-3 bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 mb-3">
-                  <svg className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                  <div>
-                    <p className="text-xs font-bold text-slate-300 mb-0.5">Waiting for Invoice Payment</p>
-                    <p className="text-xs text-slate-400 leading-relaxed">Once payment of <strong className="text-white">${price}.00</strong> is received, this page will unlock. Check your email for the invoice.</p>
-                  </div>
-                </div>
-                <button type="button"
-                  onClick={async () => { const { data: r } = await supabase.from('credit_pull_requests').select('status').eq('id', requestId).maybeSingle(); if (r) setReqStatus(r.status); }}
-                  className="w-full flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 font-semibold py-2.5 rounded-xl text-xs transition-colors">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-                  Check Payment Status
-                </button>
-              </div>
-            )}
-
-            {/* Awaiting PDF upload */}
-            {saved && isPdfFlow && !pdfUploaded && (
-              <div className="px-5 pb-4">
-                <div className="flex items-center gap-2 bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3">
-                  <svg className="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                  <p className="text-xs text-amber-300 font-semibold">Upload your credit report PDF above to continue.</p>
-                </div>
-              </div>
-            )}
-
-          </div>
-        )}
-
-        {/* No selection yet */}
-        {!choice && (
-          <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-xs text-slate-500">
-            <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-            Select one of the options above to continue.
-          </div>
-        )}
-
-      </div>
-    </div>
-  );
+  return null;
 }
 
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
@@ -19092,15 +18878,15 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
 
   // ── Data Assistance Gate — shown before questionnaire if not yet elected ──
   const isJointFiling = INTAKE_SAMPLE.filingType === "Joint" || INTAKE_SAMPLE.maritalStatus === "Married";
-  if (existingPullRequest === undefined) {
-    // Still loading existing request — show minimal spinner
+  if (existingPullRequest === undefined || !sessionLoaded) {
+    // Still loading existing request or session — show minimal spinner
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin"/>
       </div>
     );
   }
-  if (!dataAssistance) {
+  if (!dataAssistance && !updateMode) {
     return (
       <DataAssistanceGate
         clientId={clientId}
