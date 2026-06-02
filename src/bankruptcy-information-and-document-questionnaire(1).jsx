@@ -4090,7 +4090,7 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
                 </div>
               </div>
 
-              <ConfirmCheck id="c_final" checked={!!confirms.chapterCourt && !!confirms.venue && !!confirms.accessAndChanges && !!confirms.exemptionsTab} onChange={v=>{setConfirm("chapterCourt",v);setConfirm("venue",v);setConfirm("accessAndChanges",v);setConfirm("exemptionsTab",v);}}>
+              <ConfirmCheck id="c_final" checked={!!confirms.chapterCourt && !!confirms.venue && !!confirms.accessAndChanges && !!confirms.exemptionsTab} onChange={v=>u("petition", {...pd, confirms: {...confirms, chapterCourt: v, venue: v, accessAndChanges: v, exemptionsTab: v}})}>
                 <span className="text-sm text-slate-200 leading-relaxed">
                   I have reviewed the information on this page and confirm that I understand the following:
                   <ul className="mt-3 space-y-2 text-sm text-slate-300">
