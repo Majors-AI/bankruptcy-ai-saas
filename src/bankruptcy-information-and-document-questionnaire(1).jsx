@@ -2148,20 +2148,22 @@ function SectionSummary({ sectionId, data, confirmed, onConfirm, communityConfir
       <div className="bg-slate-950 px-5 py-4">
         {renderContent()}
         <div className="mt-4 border-t border-slate-800 pt-4">
-          {/* Section-specific confirm message */}
-          <ConfirmCheck
-            id={`sectionSummaryConfirm_${sectionId}`}
-            checked={!!confirmed}
-            onChange={onConfirm}
-          >
-            <span className="text-sm leading-relaxed">
-              {sectionId === "schedAB_re" && <>I confirm that the real estate listed above represents <strong className="text-white">everything I own or have an interest in</strong> — all real property, land, and homes — and that nothing has been omitted.</>}
-              {sectionId === "schedAB_fin" && <>I confirm that the financial assets listed above represent <strong className="text-white">all bank accounts, retirement accounts, investments, life insurance, annuities, FSA/HSA accounts, and all other financial assets I own</strong>. Nothing has been omitted.</>}
-              {sectionId === "schedAB_phy" && <>I confirm that the personal property listed above represents <strong className="text-white">everything I own</strong> — all vehicles, household goods, jewelry, electronics, clothing, firearms, collectibles, and other personal property. Nothing has been omitted.</>}
-              {sectionId === "schedC" && <>I have reviewed the exemption list above and confirm that I understand how my attorney will seek to protect my assets. I understand that <strong className="text-white">final exemption amounts will be determined by my attorney</strong> before filing.</>}
-              {!["schedAB_re","schedAB_fin","schedAB_phy","schedC"].includes(sectionId) && <>I have reviewed the summary above and confirm that all information is <strong className="text-white">true, accurate, and complete</strong> to the best of my knowledge. I understand that the information provided will be used to prepare my official bankruptcy documents filed with the federal court.</>}
-            </span>
-          </ConfirmCheck>
+          {/* Section-specific confirm message — omitted for petition (c_final covers it) */}
+          {onConfirm && (
+            <ConfirmCheck
+              id={`sectionSummaryConfirm_${sectionId}`}
+              checked={!!confirmed}
+              onChange={onConfirm}
+            >
+              <span className="text-sm leading-relaxed">
+                {sectionId === "schedAB_re" && <>I confirm that the real estate listed above represents <strong className="text-white">everything I own or have an interest in</strong> — all real property, land, and homes — and that nothing has been omitted.</>}
+                {sectionId === "schedAB_fin" && <>I confirm that the financial assets listed above represent <strong className="text-white">all bank accounts, retirement accounts, investments, life insurance, annuities, FSA/HSA accounts, and all other financial assets I own</strong>. Nothing has been omitted.</>}
+                {sectionId === "schedAB_phy" && <>I confirm that the personal property listed above represents <strong className="text-white">everything I own</strong> — all vehicles, household goods, jewelry, electronics, clothing, firearms, collectibles, and other personal property. Nothing has been omitted.</>}
+                {sectionId === "schedC" && <>I have reviewed the exemption list above and confirm that I understand how my attorney will seek to protect my assets. I understand that <strong className="text-white">final exemption amounts will be determined by my attorney</strong> before filing.</>}
+                {!["schedAB_re","schedAB_fin","schedAB_phy","schedC"].includes(sectionId) && <>I have reviewed the summary above and confirm that all information is <strong className="text-white">true, accurate, and complete</strong> to the best of my knowledge. I understand that the information provided will be used to prepare my official bankruptcy documents filed with the federal court.</>}
+              </span>
+            </ConfirmCheck>
+          )}
 
           {showCommunity && (
             <div className="mt-3">
@@ -2590,7 +2592,17 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
       if (pd.addressYears !== "2+ years" && !pd.inStateTwo) return false;
       return true;
     })());
-    if (tabIndex === 0) return !!confirms.tab0Review;
+    if (tabIndex === 0) {
+      if (!confirms.tab0Review) return false;
+      const s3 = d.sofa3 || {};
+      if (!s3.priorBkFiled) return false;
+      if (s3.priorBkFiled === "yes") {
+        const bks = s3.priorBankruptcies || [];
+        if (bks.length === 0) return false;
+        if (!bks.every(b => b.district?.trim() && b.dateFiled && b.caseNo?.trim())) return false;
+      }
+      return true;
+    }
     if (tabIndex === 1) return !exemptionsVisible || !!confirms.exemptionsTab;
     if (tabIndex === 2) return !!(pd.importedConfirmed||{}).court || !pd.district;
     if (tabIndex === 3) return !!confirms.chapterCourt && !!confirms.venue && !!confirms.accessAndChanges && !!confirms.exemptionsTab;
@@ -3373,6 +3385,11 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
                 <RAD name="priorBkFiled" value="yes" current={sofa3.priorBkFiled} onChange={v => u("sofa3", {...sofa3, priorBkFiled: v})} label="Yes"/>
                 <RAD name="priorBkFiled" value="no"  current={sofa3.priorBkFiled} onChange={v => u("sofa3", {...sofa3, priorBkFiled: v})} label="No"/>
               </div>
+              {/* Attorney note — NON-blocking. Credit pull flagged dark (MAJ-59); no report data yet. */}
+              <div className="mt-3 flex items-start gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2.5 text-xs text-blue-300">
+                <svg className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span><strong className="text-blue-200">Attorney Note:</strong> Prior bankruptcies should be cross-checked against the client's credit report — they typically appear there. Credit report not yet available (MAJ-59).</span>
+              </div>
             </div>
 
             {sofa3.priorBkFiled === "yes" && (
@@ -3472,23 +3489,38 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
       })()}
 
       {/* Tab 0 navigation */}
-      {petTab === 0 && (
-        <div className="flex justify-end mt-4">
-          <button
-            type="button"
-            disabled={!tab0Ready}
-            onClick={() => tab0Ready && setPetTab(1)}
-            className={`flex items-center gap-2 px-5 py-2.5 font-bold text-sm rounded-xl transition-colors ${
-              tab0Ready
-                ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
-                : "bg-slate-700 text-slate-500 cursor-not-allowed"
-            }`}
-          >
-            Next: Address &amp; Exemptions
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
-          </button>
-        </div>
-      )}
+      {petTab === 0 && (() => {
+        const s3 = d.sofa3 || {};
+        const priorBkAnswered = !!s3.priorBkFiled;
+        const bks = s3.priorBankruptcies || [];
+        const priorBkDetailsMissing = s3.priorBkFiled === "yes" && (bks.length === 0 || !bks.every(b => b.district?.trim() && b.dateFiled && b.caseNo?.trim()));
+        const lockIcon = <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>;
+        const hint = !priorBkAnswered
+          ? <p className="text-xs text-amber-400 flex items-center gap-1.5">{lockIcon} Answer the prior bankruptcy question to continue</p>
+          : priorBkDetailsMissing
+            ? <p className="text-xs text-amber-400 flex items-center gap-1.5">{lockIcon} Enter district, date filed, and case number for each prior case to continue</p>
+            : !(pd.confirms || {}).tab0Review
+              ? <p className="text-xs text-amber-400 flex items-center gap-1.5">{lockIcon} Check the acknowledgment box to continue</p>
+              : null;
+        return (
+          <div className="flex flex-col items-end gap-1.5 mt-4">
+            {hint}
+            <button
+              type="button"
+              disabled={!tab0Ready}
+              onClick={() => tab0Ready && setPetTab(1)}
+              className={`flex items-center gap-2 px-5 py-2.5 font-bold text-sm rounded-xl transition-colors ${
+                tab0Ready
+                  ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                  : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+              }`}
+            >
+              Next: Address &amp; Exemptions
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+        );
+      })()}
 
       {/* ══ TAB 1: Debtor Address & Property Exemptions ══ */}
       {petTab === 1 && <Card>
@@ -18817,7 +18849,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       const schedFIntakeDone = sectionId !== "schedEF_np"  || !!data.schedEF_np?._intakeDone;
       // For personalInfo, summary only matters on the last tab (Tab 3)
       const summaryApplies = hasSectionSummary && sectionId !== "schedD" && schedEIntakeDone && schedFIntakeDone && (!isPetition || (data.petition?._petTab ?? 0) === 3);
-      const sectionConfirmed = summaryApplies ? !!summaryConfirmed : true;
+      const sectionConfirmed = (summaryApplies && !isPetition) ? !!summaryConfirmed : true;
       const communityApplies = summaryApplies && communityRequired;
       const canAdvance = petitionReady && sectionConfirmed && (!communityApplies || !!communityConfirmed);
 
@@ -18861,22 +18893,10 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
               sectionId={sectionId}
               data={data}
               confirmed={summaryConfirmed}
-              onConfirm={onSummaryConfirm}
+              onConfirm={isPetition ? undefined : onSummaryConfirm}
               communityConfirmed={communityConfirmed}
               onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
             />
-          )}
-          {isPetition && (data.petition?._petTab ?? 0) === 0 && (
-            <div className="flex justify-end mt-4">
-              <button
-                type="button"
-                onClick={() => updateSection("petition", {...(data.petition || {}), _petTab: 1})}
-                className="flex items-center gap-2 px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm rounded-xl transition-colors"
-              >
-                Next: Address &amp; Contact
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
-              </button>
-            </div>
           )}
           {/* Section navigation */}
           <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-700">
@@ -18898,13 +18918,13 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                     Complete all disclosures on tab 4 to continue
                   </p>
                 )}
-                {summaryApplies && !summaryConfirmed && (
+                {summaryApplies && !isPetition && !summaryConfirmed && (
                   <p className="text-xs text-amber-400 flex items-center gap-1.5">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     Please review and confirm the section summary to continue
                   </p>
                 )}
-                {communityApplies && summaryConfirmed && !communityConfirmed && (
+                {communityApplies && (isPetition ? petitionReady : !!summaryConfirmed) && !communityConfirmed && (
                   <p className="text-xs text-amber-400 flex items-center gap-1.5">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
                     Confirm all community property is listed to continue
