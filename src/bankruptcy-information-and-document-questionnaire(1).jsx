@@ -3343,6 +3343,119 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
         </div>
       </Card>}
 
+      {/* ── Tab 0: Prior Bankruptcy Cases ── */}
+      {petTab === 0 && (() => {
+        const sofa3 = d.sofa3 || {};
+        const bks = sofa3.priorBankruptcies || [];
+        const updBk = (i, f, v) => { const a = [...bks]; a[i] = {...a[i], [f]: v}; u("sofa3", {...sofa3, priorBankruptcies: a}); };
+        const addBk = () => u("sofa3", {...sofa3, priorBankruptcies: [...bks, {caseNo:"",district:"",dateFiled:"",chapter:"",disposition:""}]});
+        const remBk = (i) => { const a = [...bks]; a.splice(i, 1); u("sofa3", {...sofa3, priorBankruptcies: a}); };
+        const pendingCases = sofa3.pendingSpouseCases || [];
+        const updPC = (i, f, v) => { const a = [...pendingCases]; a[i] = {...a[i], [f]: v}; u("sofa3", {...sofa3, pendingSpouseCases: a}); };
+        const addPC = () => u("sofa3", {...sofa3, pendingSpouseCases: [...pendingCases, {debtorName:"",relationship:"",dateFiled:"",caseNo:"",district:""}]});
+        const remPC = (i) => { const a = [...pendingCases]; a.splice(i, 1); u("sofa3", {...sofa3, pendingSpouseCases: a}); };
+        const yearsAgo = (dateStr) => {
+          if (!dateStr) return null;
+          const yrs = (Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+          return `(${yrs.toFixed(1)} yrs ago)`;
+        };
+        return (
+          <Card>
+            <CardTitle icon="📋" title="Prior Bankruptcy Cases" sub="Required disclosure — 8-year lookback under 11 U.S.C. § 727(a)(8) and § 1328(f)"/>
+
+            {/* ── Part A: Debtor's prior filings ── */}
+            <div className="p-4 bg-slate-800/60 border border-slate-700 rounded-xl mb-4">
+              <div className="flex items-start gap-2 mb-3">
+                <p className="text-sm font-semibold text-white">Have you filed for bankruptcy within the last 8 years?</p>
+                <HelpTip>Federal law limits how often you can receive a bankruptcy discharge. If you received a Chapter 7 discharge within the last 8 years you may not qualify for another Ch. 7 discharge (§ 727(a)(8)). Chapter 13 has its own lookback rules (§ 1328(f)). Your attorney will review your eligibility.</HelpTip>
+              </div>
+              <div className="flex gap-3">
+                <RAD name="priorBkFiled" value="yes" current={sofa3.priorBkFiled} onChange={v => u("sofa3", {...sofa3, priorBkFiled: v})} label="Yes"/>
+                <RAD name="priorBkFiled" value="no"  current={sofa3.priorBkFiled} onChange={v => u("sofa3", {...sofa3, priorBkFiled: v})} label="No"/>
+              </div>
+            </div>
+
+            {sofa3.priorBkFiled === "yes" && (
+              <div className="mb-4">
+                {bks.length === 0 && (
+                  <p className="text-xs text-slate-500 italic mb-2">No prior cases added yet — use the button below.</p>
+                )}
+                {bks.map((b, i) => (
+                  <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2 bg-slate-800/40">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Prior Case {i + 1}</span>
+                      <RemBtn onClick={() => remBk(i)}/>
+                    </div>
+                    <Grid2>
+                      <F label="Date Filed">
+                        <TI type="date" value={b.dateFiled} onChange={v => updBk(i, "dateFiled", v)}/>
+                        {b.dateFiled && <p className="text-xs text-slate-400 mt-1">{yearsAgo(b.dateFiled)}</p>}
+                      </F>
+                      <F label="Case Number" hint="Court-assigned bankruptcy case number">
+                        <TI value={b.caseNo} onChange={v => updBk(i, "caseNo", v)} placeholder="e.g. 23-01234"/>
+                      </F>
+                      <F label="District" hint="Federal judicial district where filed">
+                        <TI value={b.district} onChange={v => updBk(i, "district", v)} placeholder="e.g. D. Arizona"/>
+                      </F>
+                      <F label="Chapter Filed">
+                        <SEL value={b.chapter} onChange={v => updBk(i, "chapter", v)} options={["Chapter 7","Chapter 13","Chapter 11","Chapter 12"]}/>
+                      </F>
+                    </Grid2>
+                    <F label="Disposition">
+                      <SEL value={b.disposition} onChange={v => updBk(i, "disposition", v)} options={["Discharge granted","Dismissed","Converted","Pending","Discharge denied"]}/>
+                    </F>
+                  </div>
+                ))}
+                <AddBtn onClick={addBk} label="Add Prior Case"/>
+              </div>
+            )}
+
+            {/* ── Part B: Pending cases by spouse / partner / affiliate ── */}
+            <div className="border-t border-slate-700 pt-4">
+              <p className="text-sm font-semibold text-white mb-0.5">Pending Bankruptcy Case — Spouse, Partner, or Affiliate</p>
+              <p className="text-xs text-slate-400 mb-3 leading-relaxed">Has a bankruptcy case been filed by, or is one currently pending for, your spouse, a business partner, or a business affiliate?</p>
+              <div className="flex gap-3 mb-3">
+                <RAD name="hasPendingSpouseCase" value="yes" current={sofa3.hasPendingSpouseCase} onChange={v => u("sofa3", {...sofa3, hasPendingSpouseCase: v})} label="Yes"/>
+                <RAD name="hasPendingSpouseCase" value="no"  current={sofa3.hasPendingSpouseCase} onChange={v => u("sofa3", {...sofa3, hasPendingSpouseCase: v})} label="No"/>
+              </div>
+              {sofa3.hasPendingSpouseCase === "yes" && (
+                <div>
+                  {pendingCases.length === 0 && (
+                    <p className="text-xs text-slate-500 italic mb-2">No related cases added yet — use the button below.</p>
+                  )}
+                  {pendingCases.map((pc, i) => (
+                    <div key={i} className="border border-slate-600 rounded-xl p-3 mb-2 bg-slate-800/40">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Related Case {i + 1}</span>
+                        <RemBtn onClick={() => remPC(i)}/>
+                      </div>
+                      <Grid2>
+                        <F label="Debtor Name">
+                          <TI value={pc.debtorName} onChange={v => updPC(i, "debtorName", v)} placeholder="Full legal name"/>
+                        </F>
+                        <F label="Relationship to You">
+                          <TI value={pc.relationship} onChange={v => updPC(i, "relationship", v)} placeholder="e.g. Spouse, Business Partner"/>
+                        </F>
+                        <F label="Date Filed">
+                          <TI type="date" value={pc.dateFiled} onChange={v => updPC(i, "dateFiled", v)}/>
+                        </F>
+                        <F label="Case Number">
+                          <TI value={pc.caseNo} onChange={v => updPC(i, "caseNo", v)} placeholder="Case number if known"/>
+                        </F>
+                      </Grid2>
+                      <F label="District">
+                        <TI value={pc.district} onChange={v => updPC(i, "district", v)} placeholder="e.g. N.D. California"/>
+                      </F>
+                    </div>
+                  ))}
+                  <AddBtn onClick={addPC} label="Add Related Case"/>
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
+
       {/* ── Tab 0: Pre-filed Information Acknowledgment ── */}
       {petTab === 0 && (() => {
         const confirms = pd.confirms || {};
