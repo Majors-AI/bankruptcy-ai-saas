@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 
+// Config flag: set VITE_SHOW_AI_NO_TRAINING=false to hide this disclosure line (default: shown)
+const SHOW_AI_NO_TRAINING = import.meta.env.VITE_SHOW_AI_NO_TRAINING !== 'false';
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type Step = 'landing' | 'register' | 'login' | 'disclosures' | 'your_docs' | 'success';
@@ -49,35 +52,6 @@ function Checkbox({ checked, onChange, label }: { checked: boolean; onChange: (v
   );
 }
 
-function OptToggle({ optedIn, onToggle, label }: { optedIn: boolean; onToggle: () => void; label: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, padding: '10px 0', borderBottom: '1px solid #1a1a18' }}>
-      <span style={{ fontSize: 13, color: '#FAFAF7' }}>{label}</span>
-      <button
-        onClick={onToggle}
-        style={{
-          flexShrink: 0, width: 44, height: 24,
-          background: optedIn ? '#1E3A2F' : '#2A2A28',
-          border: `1px solid ${optedIn ? '#1E3A2F' : '#3A3A36'}`,
-          borderRadius: 12, position: 'relative', cursor: 'pointer',
-          transition: 'all 150ms ease-out', padding: 0,
-        }}
-        aria-label={`Toggle ${label}`}
-      >
-        <span style={{
-          position: 'absolute', top: 3, left: optedIn ? 22 : 3,
-          width: 16, height: 16, borderRadius: '50%',
-          background: optedIn ? '#FAFAF7' : '#6B6B66',
-          transition: 'left 150ms ease-out, background 150ms ease-out',
-        }} />
-      </button>
-      <span style={{ fontSize: 11, color: optedIn ? '#15803D' : '#B45309', minWidth: 40, textAlign: 'right' }}>
-        {optedIn ? 'Opt In' : 'Opt Out'}
-      </span>
-    </div>
-  );
-}
-
 function DisclosureSection({ num, title, children, needsReview }: {
   num: number; title: string; children: React.ReactNode; needsReview?: boolean;
 }) {
@@ -99,16 +73,8 @@ function DisclosureSection({ num, title, children, needsReview }: {
 
 function DisclosureBody({ children }: { children: React.ReactNode }) {
   return (
-    <div style={{ fontSize: 12, color: '#6B6B66', lineHeight: 1.7, maxHeight: 120, overflowY: 'auto', paddingRight: 4 }}>
+    <div style={{ fontSize: 12, color: '#6B6B66', lineHeight: 1.7, maxHeight: 140, overflowY: 'auto', paddingRight: 4 }}>
       {children}
-    </div>
-  );
-}
-
-function OptOutNote({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ marginTop: 10, border: '1px solid #B45309', borderRadius: 2, padding: '8px 12px', background: 'transparent' }}>
-      <p style={{ fontSize: 11, color: '#B45309', lineHeight: 1.6 }}><strong>If you opt out:</strong> {children}</p>
     </div>
   );
 }
@@ -127,7 +93,10 @@ export default function ClientRegistration({ onComplete }: Props) {
   // Load firm name from firms table via VITE_FIRM_ID
   useEffect(() => {
     const firmId = import.meta.env.VITE_FIRM_ID as string | undefined;
-    if (!firmId) return;
+    if (!firmId) {
+      console.warn('VITE_FIRM_ID is not set — firm name defaults to "Your Law Firm"');
+      return;
+    }
     supabase
       .from('firms')
       .select('name')
@@ -136,27 +105,40 @@ export default function ClientRegistration({ onComplete }: Props) {
       .then(({ data }) => { if (data?.name) setFirmName(data.name); });
   }, []);
 
-  // ── Required consents ────────────────────────────────────────────────────
-  const [consentGeneral, setConsentGeneral]         = useState(false);
-  const [consentSendGrid, setConsentSendGrid]       = useState(false);
-  const [consentTwilio, setConsentTwilio]           = useState(false);
-  const [consentElectronic, setConsentElectronic]   = useState(false);
+  // ── Required disclosure acknowledgements ──────────────────────────────────
+  const [consentGeneral, setConsentGeneral]             = useState(false);
+  const [consentCreditPull, setConsentCreditPull]       = useState(false); // FCRA — §2
+  const [consentSendGrid, setConsentSendGrid]           = useState(false);
+  const [consentTwilio, setConsentTwilio]               = useState(false);
+  const [consentPlaidBank, setConsentPlaidBank]         = useState(false); // affirmative, unchecked by default
+  const [consentPlaidPayroll, setConsentPlaidPayroll]   = useState(false); // affirmative, unchecked by default
   const [consentDataRetention, setConsentDataRetention] = useState(false);
   const [consentAiDisclosure, setConsentAiDisclosure]   = useState(false);
+  const [consentElectronic, setConsentElectronic]       = useState(false);
 
-  // ── Plaid — two separate opt-in consents ─────────────────────────────────
-  const [optInPlaidBank, setOptInPlaidBank]       = useState(true);
-  const [optInPlaidPayroll, setOptInPlaidPayroll] = useState(true);
-  const [ackPlaidBank, setAckPlaidBank]           = useState(false);
-  const [ackPlaidPayroll, setAckPlaidPayroll]     = useState(false);
+  // ── Signature — Debtor 1 (always shown) ──────────────────────────────────
+  const [signerFullName, setSignerFullName]         = useState('');
+  const [signerPrintedName, setSignerPrintedName]   = useState('');
+  const signatureDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  // ── Joint filing — Debtor 2 (conditional) ────────────────────────────────
+  const [isJointFiling, setIsJointFiling]           = useState(false);
+  const [debtor2FullName, setDebtor2FullName]       = useState('');
+  const [debtor2PrintedName, setDebtor2PrintedName] = useState('');
 
   const [consentTimestamp, setConsentTimestamp] = useState('');
   const [registeredEmail, setRegisteredEmail]   = useState('');
 
+  const signatureComplete =
+    signerFullName.trim().length > 0 &&
+    signerPrintedName.trim().length > 0 &&
+    (!isJointFiling || (debtor2FullName.trim().length > 0 && debtor2PrintedName.trim().length > 0));
+
   const allDisclosuresAccepted =
-    consentGeneral && consentSendGrid && consentTwilio && consentElectronic &&
-    ackPlaidBank && ackPlaidPayroll &&
-    consentDataRetention && consentAiDisclosure;
+    consentGeneral && consentCreditPull && consentSendGrid && consentTwilio &&
+    consentPlaidBank && consentPlaidPayroll &&
+    consentDataRetention && consentAiDisclosure && consentElectronic &&
+    signatureComplete;
 
   function setField(field: keyof FormData, value: string) {
     setForm(f => ({ ...f, [field]: value }));
@@ -220,6 +202,12 @@ export default function ClientRegistration({ onComplete }: Props) {
   async function handleDisclosuresAccepted() {
     setLoading(true);
     const ts = new Date().toISOString();
+    // TODO: assumes one deployment per firm; if firms ever share a deployment this is
+    //       wrong and needs a per-client firm association.
+    const firmId = import.meta.env.VITE_FIRM_ID as string | undefined;
+    if (!firmId) {
+      console.warn('VITE_FIRM_ID is not set — firm_id will be null on client registration record');
+    }
     try {
       const { data: { user } } = await supabase.auth.getUser();
       const emailAddr = form.email || user?.email || '';
@@ -227,20 +215,47 @@ export default function ClientRegistration({ onComplete }: Props) {
         await supabase.from('client_registrations').upsert({
           user_id: user.id,
           email: emailAddr,
+          firm_id: firmId ?? null,
           consented_general: true,
           consented_sendgrid: true,
           consented_twilio: true,
           consented_electronic: true,
-          opt_in_plaid_bank: optInPlaidBank,
-          opt_in_plaid_payroll: optInPlaidPayroll,
-          consented_plaid_bank: ackPlaidBank,
-          consented_plaid_payroll: ackPlaidPayroll,
+          // Credit pull — FCRA ghost columns (consent captured here; live pull is MAJ-59)
+          consented_isoftpull: consentCreditPull,
+          consented_isoftpull_fcra: consentCreditPull,
+          opt_in_isoftpull: consentCreditPull,
+          isoftpull_consent_timestamp: consentCreditPull ? ts : null,
+          // Plaid per-product affirmative consents
+          opt_in_plaid_bank: consentPlaidBank,
+          opt_in_plaid_payroll: consentPlaidPayroll,
+          consented_plaid_bank: consentPlaidBank,
+          consented_plaid_payroll: consentPlaidPayroll,
           consented_data_retention: consentDataRetention,
           consented_ai_disclosure: consentAiDisclosure,
           skipped_registration: skippedRegistration,
           consent_timestamp: ts,
+          // Signature — Debtor 1
+          signer_full_name: signerFullName,
+          signer_printed_name: signerPrintedName,
+          signature_timestamp: ts,
+          // Joint filing — Debtor 2
+          is_joint_filing: isJointFiling,
+          debtor2_full_name: isJointFiling ? debtor2FullName : null,
+          debtor2_printed_name: isJointFiling ? debtor2PrintedName : null,
+          debtor2_signature_timestamp: isJointFiling ? ts : null,
+          disclosure_version: 'v1.0',
+          // ip_address is written by the get-client-ip edge function below
         });
         setRegisteredEmail(emailAddr);
+
+        // Capture client IP at the HTTP edge — do NOT use inet_client_addr() which returns
+        // the Supabase infrastructure IP, not the client's real address.
+        try {
+          await supabase.functions.invoke('get-client-ip', { body: { user_id: user.id } });
+        } catch {
+          // non-blocking — IP capture failure does not prevent registration completion
+          // ip_address remains null on this record
+        }
       }
     } catch {
       // non-blocking
@@ -254,7 +269,6 @@ export default function ClientRegistration({ onComplete }: Props) {
   // ── Shared styles ─────────────────────────────────────────────────────────
 
   const bg = '#0F0F0E';
-  const surf = '#111111';
 
   const inputStyle = (hasError?: boolean): React.CSSProperties => ({
     width: '100%', height: 36, background: '#0a0a0a',
@@ -483,70 +497,85 @@ export default function ClientRegistration({ onComplete }: Props) {
           <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 28, letterSpacing: '-0.02em', color: '#FAFAF7', marginBottom: 6 }}>
             Disclosures & Authorizations
           </h2>
-          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 32, maxWidth: 520 }}>
-            Review each section below. For Plaid bank and payroll access you may opt in or opt out.
-            Opting out means you will provide that information manually.
-            All other disclosures are required to access the portal.
+          <p style={{ fontSize: 13, color: '#6B6B66', marginBottom: 32, maxWidth: 540 }}>
+            Read each section carefully and check each box to confirm your understanding.
+            All disclosures and consents below are required to access the portal.
+            Your typed signature at the bottom constitutes your electronic signature under the E-SIGN Act.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* 1 — General */}
+            {/* 1 — General Legal Disclosures [REPLACED — Dom's Sections 1 + 4 + 9] */}
             <DisclosureSection num={1} title="General Legal Disclosures" needsReview>
               <DisclosureBody>
-                <p>By registering for and using this client portal, you authorize <strong style={{ color: '#FAFAF7' }}>bankruptcy.ai</strong> and <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> to obtain and share your information for the purpose of preparing your bankruptcy case. bankruptcy.ai is the software platform; {firmName} is your legal representative and is responsible for all legal advice and decisions in your case.</p>
-                <p style={{ marginTop: 8 }}>This portal does not constitute legal advice. All information submitted is subject to attorney-client privilege where applicable. Your case information, documents, and communications may be accessed by authorized firm staff, paralegals, and attorneys assigned to your case at {firmName}. All data is stored securely under applicable privacy laws.</p>
-                <p style={{ marginTop: 8 }}>Bankruptcy filings are public record. Certain financial information will be disclosed to the U.S. Bankruptcy Court, trustees, and creditors as required by 11 U.S.C. § 521 and applicable Federal Rules of Bankruptcy Procedure.</p>
+                <p><strong style={{ color: '#FAFAF7' }}>{firmName}</strong> is your attorney and legal representative for your bankruptcy matter. All legal advice, decisions, counsel, and filings are the exclusive responsibility of {firmName} and its licensed attorneys.</p>
+                <p style={{ marginTop: 8 }}><strong style={{ color: '#FAFAF7' }}>bankruptcy.ai</strong> is the software platform that {firmName} uses to manage your case. bankruptcy.ai is not a law firm and is not your attorney. bankruptcy.ai does not provide legal advice of any kind. Your attorney-client relationship is with <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> — not with bankruptcy.ai.</p>
+                <p style={{ marginTop: 8 }}>All information you provide through this portal is obtained by and belongs to <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> as part of its legal representation of you. bankruptcy.ai accesses your information solely to provide platform services to {firmName} on your behalf and has no independent right to use, access, or retain your information beyond what is necessary to deliver those services.</p>
+                <p style={{ marginTop: 8 }}>Bankruptcy filings are public record. Certain financial information will be disclosed to the U.S. Bankruptcy Court, trustees, and creditors as required by 11 U.S.C. § 521 and applicable Federal Rules of Bankruptcy Procedure. Your attorney at {firmName} will advise you on all required disclosures.</p>
               </DisclosureBody>
-              <Checkbox checked={consentGeneral} onChange={setConsentGeneral} label="I have read, understand, and agree to the General Legal Disclosures above." />
+              <Checkbox
+                checked={consentGeneral}
+                onChange={setConsentGeneral}
+                label={<>I have read, understand, and agree to the General Legal Disclosures above. I understand that <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> is my attorney and that bankruptcy.ai is the platform — not my attorney.</>}
+              />
             </DisclosureSection>
 
-            {/* 2 — SendGrid */}
-            <DisclosureSection num={2} title="Email Communications — SendGrid">
+            {/* 2 — Credit Report Authorization — iSoftpull [NEW — Dom's Section 2] */}
+            <DisclosureSection num={2} title="Authorization to Obtain Your Credit Report (Soft Inquiry)" needsReview>
+              <DisclosureBody>
+                <p>You authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its approved service providers to obtain your TransUnion consumer credit report through <strong style={{ color: '#FAFAF7' }}>iSoftpull, Inc.</strong> This report is used solely to assist in assessing your bankruptcy filing options and preparing your case.</p>
+                <p style={{ marginTop: 8 }}>This is a <strong style={{ color: '#FAFAF7' }}>soft inquiry</strong> — it will not affect your credit score and will not appear on your credit report as viewed by lenders or other creditors.</p>
+                <p style={{ marginTop: 8 }}>The credit report is obtained by <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> under a permissible purpose as defined by the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681 et seq. Your authorization here constitutes the written instruction required by the FCRA. The report is accessed by bankruptcy.ai solely to provide platform services to {firmName}.</p>
+              </DisclosureBody>
+              <Checkbox
+                checked={consentCreditPull}
+                onChange={setConsentCreditPull}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its approved service providers to obtain my TransUnion consumer credit report via iSoftpull as a soft inquiry for the purpose of preparing my bankruptcy case. I understand this will not affect my credit score.</>}
+              />
+            </DisclosureSection>
+
+            {/* 3 — SendGrid [KEEP] */}
+            <DisclosureSection num={3} title="Email Communications — SendGrid">
               <DisclosureBody>
                 <p>You authorize bankruptcy.ai and {firmName} to send case-related email communications through <strong style={{ color: '#FAFAF7' }}>SendGrid</strong> (Twilio Inc.). These may include: case status updates, document requests, appointment confirmations, and deadline notifications. For V1, emails are sent from bankruptcy.ai's master SendGrid account. Future versions may use a dedicated {firmName} domain (V1.1). Transactional case emails cannot be disabled while your case is active.</p>
               </DisclosureBody>
               <Checkbox checked={consentSendGrid} onChange={setConsentSendGrid} label="I consent to receiving email communications via SendGrid as described above." />
             </DisclosureSection>
 
-            {/* 3 — Twilio */}
-            <DisclosureSection num={3} title="SMS / Voice Communications — Twilio">
+            {/* 4 — Twilio [KEEP] */}
+            <DisclosureSection num={4} title="SMS / Voice Communications — Twilio">
               <DisclosureBody>
                 <p>You authorize bankruptcy.ai and {firmName} to contact you via SMS and/or automated voice calls through <strong style={{ color: '#FAFAF7' }}>Twilio</strong>. These may include: appointment reminders, document upload notifications, urgent case alerts, and two-factor authentication codes. For V1, SMS is sent from bankruptcy.ai's master Twilio account. A dedicated {firmName} number may be used in future versions. Message and data rates may apply. Reply STOP to opt out of non-essential SMS. Reply HELP for help.</p>
               </DisclosureBody>
               <Checkbox checked={consentTwilio} onChange={setConsentTwilio} label="I consent to receiving SMS and/or voice communications via Twilio as described above." />
             </DisclosureSection>
 
-            {/* 4 — Plaid Bank */}
-            <DisclosureSection num={4} title="Bank Account Access — Plaid (90-Day Bank Statements)" needsReview>
+            {/* 5 — Plaid Bank [CHANGED — affirmative checkbox, unchecked by default] */}
+            <DisclosureSection num={5} title="Bank Account Access — Plaid (90-Day Bank Statements)" needsReview>
               <DisclosureBody>
-                <p>By opting in, you authorize bankruptcy.ai and {firmName} to access your bank account information through <strong style={{ color: '#FAFAF7' }}>Plaid Technologies, Inc.</strong> for the purpose of generating <strong style={{ color: '#FAFAF7' }}>90-day bank statements</strong>. This access includes: account balances and transaction history for up to 90 days. This information is used solely to prepare your bankruptcy petition and schedules as required by 11 U.S.C. § 521 and the Federal Rules of Bankruptcy Procedure. Plaid uses 256-bit encryption and does not store your banking credentials.</p>
+                <p>By checking the box below, you authorize bankruptcy.ai and {firmName} to access your bank account information through <strong style={{ color: '#FAFAF7' }}>Plaid Technologies, Inc.</strong> for the purpose of generating <strong style={{ color: '#FAFAF7' }}>90-day bank statements</strong>. This access includes: account balances and transaction history for up to 90 days. This information is used solely to prepare your bankruptcy petition and schedules as required by 11 U.S.C. § 521 and the Federal Rules of Bankruptcy Procedure. Plaid uses 256-bit encryption and does not store your banking credentials.</p>
               </DisclosureBody>
-              <OptOutNote>You will need to upload bank statements manually for each account covering the 90-day period. All statements must be uploaded to your document portal before your signing appointment.</OptOutNote>
-              <OptToggle optedIn={optInPlaidBank} onToggle={() => setOptInPlaidBank(v => !v)} label="Plaid bank account access (90-day statements)" />
               <Checkbox
-                checked={ackPlaidBank}
-                onChange={setAckPlaidBank}
-                label={<>I have read and understand the Plaid bank account disclosure above and acknowledge my choice to <strong style={{ color: '#FAFAF7' }}>{optInPlaidBank ? 'opt in to' : 'opt out of'}</strong> 90-day bank statement retrieval via Plaid. {!optInPlaidBank && 'I will upload all bank statements manually.'}</>}
+                checked={consentPlaidBank}
+                onChange={setConsentPlaidBank}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and <strong style={{ color: '#FAFAF7' }}>Plaid Technologies, Inc.</strong> to access my bank account information to retrieve 90-day bank statements for my bankruptcy filing. I have read and understand the disclosure above.</>}
               />
             </DisclosureSection>
 
-            {/* 5 — Plaid Payroll */}
-            <DisclosureSection num={5} title="Payroll & Income Records — Plaid Income" needsReview>
+            {/* 6 — Plaid Payroll [CHANGED — affirmative checkbox, unchecked by default] */}
+            <DisclosureSection num={6} title="Payroll & Income Records — Plaid Income" needsReview>
               <DisclosureBody>
-                <p>By opting in, you authorize bankruptcy.ai and {firmName} to access your payroll and income records through <strong style={{ color: '#FAFAF7' }}>Plaid Income</strong>. This access includes: digital paystubs and W-2 records retrieved directly from your payroll provider. This information is used solely to verify income for your bankruptcy means test (Official Form 122A-1) and Schedules I and J, as required by applicable bankruptcy rules. Plaid does not store your payroll provider credentials.</p>
+                <p>By checking the box below, you authorize bankruptcy.ai and {firmName} to access your payroll and income records through <strong style={{ color: '#FAFAF7' }}>Plaid Income</strong>. This access includes: digital paystubs and W-2 records retrieved directly from your payroll provider. This information is used solely to verify income for your bankruptcy means test (Official Form 122A-1) and Schedules I and J, as required by applicable bankruptcy rules. Plaid does not store your payroll provider credentials.</p>
               </DisclosureBody>
-              <OptOutNote>You will need to provide physical copies of your two most recent pay stubs and most recent W-2(s) by uploading them to your document portal.</OptOutNote>
-              <OptToggle optedIn={optInPlaidPayroll} onToggle={() => setOptInPlaidPayroll(v => !v)} label="Plaid payroll access (paystubs + W-2s)" />
               <Checkbox
-                checked={ackPlaidPayroll}
-                onChange={setAckPlaidPayroll}
-                label={<>I have read and understand the Plaid payroll disclosure above and acknowledge my choice to <strong style={{ color: '#FAFAF7' }}>{optInPlaidPayroll ? 'opt in to' : 'opt out of'}</strong> payroll and income record retrieval via Plaid Income. {!optInPlaidPayroll && 'I will provide pay stubs and W-2s manually.'}</>}
+                checked={consentPlaidPayroll}
+                onChange={setConsentPlaidPayroll}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and <strong style={{ color: '#FAFAF7' }}>Plaid Income</strong> to access my payroll and income records (paystubs and W-2s) for my bankruptcy filing. I have read and understand the disclosure above.</>}
               />
             </DisclosureSection>
 
-            {/* 6 — Data Retention */}
-            <DisclosureSection num={6} title="Data Retention & Copy-and-Purge Policy" needsReview>
+            {/* 7 — Data Retention [KEEP] */}
+            <DisclosureSection num={7} title="Data Retention & Copy-and-Purge Policy" needsReview>
               <DisclosureBody>
                 <p>bankruptcy.ai operates a <strong style={{ color: '#FAFAF7' }}>30-day post-closing copy-and-purge</strong> data retention model. Upon final closure of your bankruptcy case: (a) {firmName} retains a complete copy of your case file per applicable rules of professional conduct and applicable state law; (b) bankruptcy.ai's active platform storage is purged of your case data within 30 days of the closure date. Backup and audit log retention may apply for a longer period under applicable law. This policy aligns with the Master Services Agreement between bankruptcy.ai and {firmName}.</p>
                 <p style={{ marginTop: 8 }}>You may request a copy of your case file from {firmName} at any time during or after your case. Records required by law to be retained will be maintained for the period required by applicable statute.</p>
@@ -554,8 +583,8 @@ export default function ClientRegistration({ onComplete }: Props) {
               <Checkbox checked={consentDataRetention} onChange={setConsentDataRetention} label={`I understand and consent to the 30-day post-closing data retention and copy-and-purge policy described above.`} />
             </DisclosureSection>
 
-            {/* 7 — AI/Automation Disclosure */}
-            <DisclosureSection num={7} title="AI & Automation Disclosure" needsReview>
+            {/* 8 — AI & Automation [ENHANCED — integrated with Dom's Section 5 data-handling] */}
+            <DisclosureSection num={8} title="AI & Automation Disclosure" needsReview>
               <DisclosureBody>
                 <p>bankruptcy.ai uses <strong style={{ color: '#FAFAF7' }}>automated processing</strong> to assist with document organization, case data extraction, and workflow management. Automated tools do not replace the legal judgment of your attorney at {firmName}. Specifically:</p>
                 <ul style={{ marginTop: 8, paddingLeft: 16 }}>
@@ -564,28 +593,105 @@ export default function ClientRegistration({ onComplete }: Props) {
                   <li>No AI-generated content constitutes legal advice.</li>
                   <li>{firmName} is solely responsible for the accuracy and legal sufficiency of all filed documents.</li>
                 </ul>
+                <p style={{ marginTop: 10 }}><strong style={{ color: '#FAFAF7' }}>Data handling by bankruptcy.ai:</strong></p>
+                <ul style={{ marginTop: 6, paddingLeft: 16 }}>
+                  <li>bankruptcy.ai does not access your information for its own independent purposes.</li>
+                  <li>bankruptcy.ai does not use, sell, share, or monetize your information in any way except to deliver platform services to {firmName}.</li>
+                  {SHOW_AI_NO_TRAINING && <li>bankruptcy.ai does not use your information to train AI or machine learning models.</li>}
+                  <li>All bankruptcy.ai support-staff access to client data is limited to support purposes and is logged.</li>
+                  <li>Your case data is encrypted in transit and at rest.</li>
+                  <li>Your case data is logically segregated by firm — only authorized staff at {firmName} can access your records.</li>
+                </ul>
               </DisclosureBody>
-              <Checkbox checked={consentAiDisclosure} onChange={setConsentAiDisclosure} label="I understand that bankruptcy.ai uses automated processing tools and that my attorney at the law firm remains solely responsible for all legal decisions in my case." />
+              <Checkbox
+                checked={consentAiDisclosure}
+                onChange={setConsentAiDisclosure}
+                label={<>I understand that bankruptcy.ai uses automated processing tools, that my attorney at <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> remains solely responsible for all legal decisions in my case, and that bankruptcy.ai's data handling commitments are as described above.</>}
+              />
             </DisclosureSection>
 
-            {/* 8 — E-SIGN */}
-            <DisclosureSection num={8} title="E-SIGN Act — Electronic Communications Consent">
+            {/* 9 — E-SIGN [KEEP] */}
+            <DisclosureSection num={9} title="E-SIGN Act — Electronic Communications Consent">
               <DisclosureBody>
                 <p>You consent to receive all disclosures, notices, documents, and communications related to your account and case in electronic form, consistent with the Electronic Signatures in Global and National Commerce Act (E-SIGN Act, 15 U.S.C. § 7001 et seq.) and applicable state laws. You confirm you have the ability to access and retain electronic records and have a valid email address.</p>
               </DisclosureBody>
               <Checkbox checked={consentElectronic} onChange={setConsentElectronic} label="I consent to receive all disclosures and communications electronically under the E-SIGN Act." />
             </DisclosureSection>
 
-            {/* Opt-out summary */}
-            {(!optInPlaidBank || !optInPlaidPayroll) && (
-              <div style={{ border: '1px solid #B45309', borderRadius: 4, padding: '12px 16px', background: 'transparent' }}>
-                <p style={{ fontSize: 12, color: '#B45309', fontWeight: 500, marginBottom: 6 }}>Manual documents required for opted-out services:</p>
-                <ul style={{ fontSize: 12, color: '#B45309', paddingLeft: 16, lineHeight: 1.8 }}>
-                  {!optInPlaidBank && <li>Bank statements (90 days, all accounts) — must be uploaded manually</li>}
-                  {!optInPlaidPayroll && <li>Pay stubs (two most recent) and W-2(s) — must be uploaded manually</li>}
-                </ul>
+            {/* ── Signature Block ─────────────────────────────────────────── */}
+            <div style={{ border: '1px solid #2A2A28', borderRadius: 4, padding: 20, background: '#0a0a0a' }}>
+              <h3 style={{ fontSize: 13, fontWeight: 500, color: '#FAFAF7', marginBottom: 4 }}>Electronic Signature</h3>
+              <p style={{ fontSize: 12, color: '#6B6B66', marginBottom: 20, lineHeight: 1.6 }}>
+                By typing your name below you are signing this document electronically. Your typed signature has the same legal effect as a handwritten signature under the E-SIGN Act.
+              </p>
+
+              {/* Debtor 1 */}
+              <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6B66', marginBottom: 12 }}>Debtor 1</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div>
+                  <label style={labelStyle}>Signature — type your full legal name</label>
+                  <input
+                    style={{ ...inputStyle(), fontStyle: 'italic', fontFamily: "'Georgia', 'Times New Roman', serif", fontSize: 16, height: 42 }}
+                    value={signerFullName}
+                    onChange={e => setSignerFullName(e.target.value)}
+                    placeholder="Type your full legal name"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Printed name</label>
+                  <input
+                    style={inputStyle()}
+                    value={signerPrintedName}
+                    onChange={e => setSignerPrintedName(e.target.value)}
+                    placeholder="Print your full legal name"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>Date</label>
+                  <input style={{ ...inputStyle(), color: '#6B6B66', cursor: 'default' }} value={signatureDate} readOnly />
+                </div>
               </div>
-            )}
+
+              {/* Joint filing toggle */}
+              <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid #1a1a18' }}>
+                <Checkbox
+                  checked={isJointFiling}
+                  onChange={setIsJointFiling}
+                  label="I am filing jointly with a spouse or domestic partner — Debtor 2 signature required"
+                />
+              </div>
+
+              {/* Debtor 2 (conditional) */}
+              {isJointFiling && (
+                <div style={{ marginTop: 16, paddingTop: 16, borderTop: '1px solid #1a1a18' }}>
+                  <p style={{ fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6B6B66', marginBottom: 12 }}>Debtor 2</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                    <div>
+                      <label style={labelStyle}>Signature — type Debtor 2's full legal name</label>
+                      <input
+                        style={{ ...inputStyle(), fontStyle: 'italic', fontFamily: "'Georgia', 'Times New Roman', serif", fontSize: 16, height: 42 }}
+                        value={debtor2FullName}
+                        onChange={e => setDebtor2FullName(e.target.value)}
+                        placeholder="Debtor 2 — type full legal name"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Printed name</label>
+                      <input
+                        style={inputStyle()}
+                        value={debtor2PrintedName}
+                        onChange={e => setDebtor2PrintedName(e.target.value)}
+                        placeholder="Debtor 2 — print full legal name"
+                      />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Date</label>
+                      <input style={{ ...inputStyle(), color: '#6B6B66', cursor: 'default' }} value={signatureDate} readOnly />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div style={{ paddingTop: 8 }}>
               <button
@@ -595,7 +701,7 @@ export default function ClientRegistration({ onComplete }: Props) {
                 onMouseEnter={e => { if (allDisclosuresAccepted && !loading) (e.currentTarget as HTMLButtonElement).style.background = '#1E3A2F'; }}
                 onMouseLeave={e => { if (allDisclosuresAccepted && !loading) (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
               >
-                {loading ? 'Saving...' : !allDisclosuresAccepted ? 'Acknowledge all disclosures above to continue' : 'Accept disclosures & continue'}
+                {loading ? 'Saving...' : !allDisclosuresAccepted ? 'Acknowledge all disclosures and sign to continue' : 'Accept disclosures & continue'}
               </button>
             </div>
 
@@ -611,6 +717,21 @@ export default function ClientRegistration({ onComplete }: Props) {
     const fmtTs = consentTimestamp
       ? new Date(consentTimestamp).toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' })
       : new Date().toLocaleString('en-US', { dateStyle: 'long', timeStyle: 'short' });
+
+    const disclosureItems = [
+      'General legal disclosures — acknowledged',
+      'Credit report authorization (TransUnion soft inquiry via iSoftpull) — consented',
+      'SendGrid email communications — consent given',
+      'Twilio SMS/voice communications — consent given',
+      'Plaid bank account access (90-day statements) — consented',
+      'Plaid payroll & income records — consented',
+      'Data retention & copy-and-purge policy — acknowledged',
+      'AI/automation disclosure — acknowledged',
+      'E-SIGN Act electronic communications — consent given',
+      signerFullName ? `Signed by: ${signerFullName}` : null,
+      isJointFiling && debtor2FullName ? `Co-debtor signed by: ${debtor2FullName}` : null,
+      `Consent timestamp: ${fmtTs}`,
+    ].filter(Boolean) as string[];
 
     const docs = [
       {
@@ -630,17 +751,7 @@ export default function ClientRegistration({ onComplete }: Props) {
         label: 'Client Disclosure Acknowledgement',
         desc: 'Your signed acknowledgement of all required disclosures and authorization choices.',
         status: 'Signed & on file',
-        items: [
-          'General legal disclosures — acknowledged',
-          'SendGrid email communications — consent given',
-          'Twilio SMS/voice communications — consent given',
-          `Plaid bank account access (90-day statements) — ${optInPlaidBank ? 'opted in' : 'opted out'}`,
-          `Plaid payroll access (paystubs + W-2s) — ${optInPlaidPayroll ? 'opted in' : 'opted out'}`,
-          'Data retention & copy-and-purge policy — acknowledged',
-          'AI/automation disclosure — acknowledged',
-          'E-SIGN Act electronic communications — consent given',
-          `Consent timestamp: ${fmtTs}`,
-        ],
+        items: disclosureItems,
         accent: '#B45309',
       },
       {
