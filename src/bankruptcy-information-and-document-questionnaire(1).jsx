@@ -5,18 +5,24 @@ import { normalizeIntake } from "./lib/intakeNormalize";
 import { phaseFromDocType } from "./lib/casePhases";
 import CommCredUrl from "./data/CommCred_complete.csv?url";
 import VoluntaryPetitionReview from "./components/client-portal/section-summaries/01_VoluntaryPetition";
-import ScheduleEReview from "./components/client-portal/section-summaries/05_ScheduleE";
-import ScheduleFReview from "./components/client-portal/section-summaries/06_ScheduleF";
-import ScheduleGReview from "./components/client-portal/section-summaries/07_ScheduleG";
-import ScheduleHReview from "./components/client-portal/section-summaries/08_ScheduleH";
-import ScheduleIReview from "./components/client-portal/section-summaries/09_ScheduleI";
+import ScheduleABReview from "./components/client-portal/section-summaries/02_ScheduleAB";
+import ScheduleDReview  from "./components/client-portal/section-summaries/04_ScheduleD";
+import ScheduleEReview  from "./components/client-portal/section-summaries/05_ScheduleE";
+import ScheduleFReview  from "./components/client-portal/section-summaries/06_ScheduleF";
+import ScheduleGReview  from "./components/client-portal/section-summaries/07_ScheduleG";
+import ScheduleHReview  from "./components/client-portal/section-summaries/08_ScheduleH";
+import ScheduleIReview  from "./components/client-portal/section-summaries/09_ScheduleI";
+import ScheduleJReview  from "./components/client-portal/section-summaries/10_ScheduleJ";
 
 const SUMMARY_COMPONENTS = {
+  schedAB:     ScheduleABReview,
+  schedD:      ScheduleDReview,
   schedEF_pri: ScheduleEReview,
   schedEF_np:  ScheduleFReview,
   schedG:      ScheduleGReview,
   schedH:      ScheduleHReview,
   schedI:      ScheduleIReview,
+  schedJ:      ScheduleJReview,
 };
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
@@ -18821,7 +18827,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     const onSectionImportConfirm = (v) => updateSection(sectionDataKey, {...sectionData, importedConfirmed: v});
 
     // Sections that get a SectionSummary
-    const SUMMARY_SECTIONS = new Set(["personalInfo","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","meansTest","sofa1","sofa2","sofa3","sofa4"]);
+    const SUMMARY_SECTIONS = new Set(["personalInfo","schedAB","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","meansTest","sofa1","sofa2","sofa3","sofa4"]);
     // Summary confirmation stored per section
     const summaryKey = sectionId === "personalInfo" ? "petition" : sectionDataKey;
     const summaryData = data[summaryKey] || {};

@@ -1,51 +1,98 @@
 import React, { useMemo } from "react";
 import { Receipt, AlertCircle } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule J — Official Form 106J — expenses review.
-   Restyled to the bankruptcy.ai dark theme.
+   Raw-data pattern: pass the full questionnaire `data` object.
 
-   ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `household`, `monthlyIncome` (from Schedule I), and
-   `expenseLines` (amount === null => not yet captured). EXAMPLE_* are
-   SAMPLE ONLY and MUST NOT ship. Wire from the questionnaire/Supabase.
+   <ScheduleJReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   /> */
 
-   household: { size:number, dependents:string }
-   expenseLines: { label, amount:number|null }[]
-   <ScheduleJReview household={hh} monthlyIncome={4608} expenseLines={exp} debtor="Jane Sample" />
-   ─────────────────────────────────────────────────────────────────────── */
+const money = (n) =>
+  "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const money = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num = (v) => parseFloat(v) || 0;
 
-const EXAMPLE_HOUSEHOLD = { size: 1, dependents: "—" };
+/* `?? null`: undefined/null/empty-string → null ("not entered");
+   actual $0 ("0") → 0 and is shown, not flagged. */
+const toAmt = (v) => (v != null && v !== "") ? parseFloat(v) : null;
 
-/* EXAMPLE ONLY — do not ship. Form 106J expense lines (4–22). null = not captured. */
-const EXAMPLE_EXPENSES = [
-  { label: "Rent / home ownership (incl. mortgage)", amount: null },
-  { label: "Property / homeowner taxes & insurance", amount: null },
-  { label: "Home maintenance & upkeep", amount: null },
-  { label: "Utilities (electric, gas, water, phone, internet)", amount: null },
-  { label: "Food & housekeeping supplies", amount: null },
-  { label: "Childcare & children's education", amount: null },
-  { label: "Clothing & laundry", amount: null },
-  { label: "Personal care", amount: null },
-  { label: "Medical & dental", amount: null },
-  { label: "Transportation", amount: null },
-  { label: "Entertainment / recreation", amount: null },
-  { label: "Charitable contributions", amount: null },
-  { label: "Insurance (life / health / vehicle)", amount: null },
-  { label: "Taxes (not deducted from wages)", amount: null },
-  { label: "Installment / lease payments", amount: null },
-  { label: "Domestic support / alimony", amount: null },
-  { label: "Other expenses", amount: null },
-];
+export default function ScheduleJReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd = data?.petition || {};
+  const sd = data?.schedI   || {};
+  const jd = data?.schedJ   || {};
 
-export default function ScheduleJReview({ household = EXAMPLE_HOUSEHOLD, monthlyIncome = 0, expenseLines = EXAMPLE_EXPENSES, debtor = "Example Debtor" }) {
+  const debtor = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
+
+  const numDep = parseInt(pd.numDependents) || 0;
+  const isJoint = pd.filingType === "joint";
+  const householdSize = 1 + (isJoint ? 1 : 0) + numDep;
+  const deps = pd.dependents || [];
+  const dependentStr = deps.length > 0
+    ? deps.map((d) => [d.relationship, d.age ? `age ${d.age}` : ""].filter(Boolean).join(" ")).join("; ")
+    : numDep > 0 ? `${numDep} dependent${numDep !== 1 ? "s" : ""}` : "None";
+
+  const monthlyIncome = useMemo(() =>
+    num(sd.avgMonthly6) + num(sd.bonuses) + num(sd.dSelfEmployment) + num(sd.dRental) +
+    num(sd.dInterest) + num(sd.dSsRetirement) + num(sd.dSsDisability) + num(sd.dPension) +
+    num(sd.dUnemployment) + num(sd.dWorkersComp) + num(sd.dAlimony) + num(sd.dChildSupport) +
+    num(sd.dFamilyContribution) + num(sd.dOtherIncome),
+  [sd]);
+
+  const expenseLines = useMemo(() => [
+    { label: "Rent / Mortgage",                   amount: toAmt(jd.rent) },
+    { label: "Real Estate Taxes",                  amount: toAmt(jd.propTax) },
+    { label: "HOA / Condo Dues",                   amount: toAmt(jd.hoa) },
+    { label: "Homeowner's / Renter's Insurance",   amount: toAmt(jd.homeInsurance) },
+    { label: "Electricity",                         amount: toAmt(jd.electric) },
+    { label: "Gas",                                 amount: toAmt(jd.gas) },
+    { label: "Water / Sewer / Trash",              amount: toAmt(jd.water) },
+    { label: "Telephone / Cell",                   amount: toAmt(jd.phone) },
+    { label: "Internet",                            amount: toAmt(jd.internet) },
+    { label: "Cable / Streaming",                  amount: toAmt(jd.cable) },
+    { label: "Food & Groceries",                   amount: toAmt(jd.food) },
+    { label: "Clothing",                            amount: toAmt(jd.clothing) },
+    { label: "Laundry / Dry Cleaning",             amount: toAmt(jd.laundry) },
+    { label: "Personal Care Products",             amount: toAmt(jd.personalCare) },
+    { label: "Recreation / Entertainment",         amount: toAmt(jd.recreation) },
+    { label: "Pet Expenses",                       amount: toAmt(jd.pets) },
+    { label: "Car Payment #1",                     amount: toAmt(jd.carPayment1) },
+    { label: "Car Payment #2",                     amount: toAmt(jd.carPayment2) },
+    { label: "Gas / Fuel",                         amount: toAmt(jd.transport) },
+    { label: "Auto Insurance",                     amount: toAmt(jd.carInsurance) },
+    { label: "Car Maintenance / Repairs",          amount: toAmt(jd.carMaint) },
+    { label: "Public Transit / Rideshare",         amount: toAmt(jd.transit) },
+    { label: "Health Insurance Premium",           amount: toAmt(jd.healthInsurance) },
+    { label: "Life Insurance Premium",             amount: toAmt(jd.lifePremium) },
+    { label: "Out-of-Pocket Medical Expenses",     amount: toAmt(jd.medical) },
+    { label: "Dental Expenses",                    amount: toAmt(jd.dental) },
+    { label: "Child Care / Daycare",               amount: toAmt(jd.childCare) },
+    { label: "Tuition / School Fees",              amount: toAmt(jd.tuition) },
+    { label: "Child Support Paid",                 amount: toAmt(jd.childSupportPaid) },
+    { label: "Alimony Paid",                       amount: toAmt(jd.alimonyPaid) },
+    { label: "Charitable Contributions",           amount: toAmt(jd.charity) },
+    { label: "Other Monthly Expenses",             amount: toAmt(jd.otherExpenses) },
+  ], [jd]);
+
   const { total, missing } = useMemo(() => {
-    const t = expenseLines.reduce((a, l) => a + (l.amount || 0), 0);
+    const t = expenseLines.reduce((a, l) => a + (l.amount ?? 0), 0);
     const m = expenseLines.filter((l) => l.amount === null).length;
     return { total: t, missing: m };
   }, [expenseLines]);
+
   const net = monthlyIncome - total;
+
   return (
     <div className="sj">
       <Style />
@@ -53,8 +100,8 @@ export default function ScheduleJReview({ household = EXAMPLE_HOUSEHOLD, monthly
       <div className="form">Official Form 106J · {debtor}</div>
       <div className="card">
         <div className="ph">Part 1 · Household</div>
-        <Row k="Household size" v={household.size} />
-        <Row k="Dependents" v={household.dependents} />
+        <Row k="Household size" v={householdSize} />
+        <Row k="Dependents" v={dependentStr} />
 
         <div className="ph">Part 2 · Monthly expenses</div>
         {expenseLines.map((l, i) => (
@@ -65,13 +112,27 @@ export default function ScheduleJReview({ household = EXAMPLE_HOUSEHOLD, monthly
               : <span className="amt">{money(l.amount)}</span>}
           </div>
         ))}
-        <div className="grand"><span>Total monthly expenses <span className="calc">auto</span></span><span>{money(total)}</span></div>
+        <div className="grand">
+          <span>Total monthly expenses <span className="calc">auto</span></span>
+          <span>{money(total)}</span>
+        </div>
         <div className="net">
           <span>Monthly net income (Schedule I − J) <span className="calc">auto</span></span>
           <span className={net < 0 ? "neg" : ""}>{money(net)}</span>
         </div>
-        {missing > 0 && <div className="note">{missing} expense categories not yet entered — complete before the means test (Schedule J feeds disposable income).</div>}
+        {missing > 0 && (
+          <div className="note">
+            {missing} expense categor{missing === 1 ? "y" : "ies"} not yet entered — complete before the means test (Schedule J feeds disposable income).
+          </div>
+        )}
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="expenses"
+      />
     </div>
   );
 }
@@ -88,7 +149,7 @@ function Style() {
       --ink:#e2e8f0; --muted:#94a3b8; --warn:#fcd34d; --calc:#7dd3fc; --calc-bg:rgba(56,189,248,.12); --neg:#fb7185;
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .sj h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .sj .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .sj .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }
