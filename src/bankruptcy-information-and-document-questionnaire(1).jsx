@@ -6,6 +6,7 @@ import { phaseFromDocType } from "./lib/casePhases";
 import CommCredUrl from "./data/CommCred_complete.csv?url";
 import VoluntaryPetitionReview from "./components/client-portal/section-summaries/01_VoluntaryPetition";
 import ScheduleABReview from "./components/client-portal/section-summaries/02_ScheduleAB";
+import ScheduleCReview  from "./components/client-portal/section-summaries/03_ScheduleC";
 import ScheduleDReview  from "./components/client-portal/section-summaries/04_ScheduleD";
 import ScheduleEReview  from "./components/client-portal/section-summaries/05_ScheduleE";
 import ScheduleFReview  from "./components/client-portal/section-summaries/06_ScheduleF";
@@ -16,6 +17,7 @@ import ScheduleJReview  from "./components/client-portal/section-summaries/10_Sc
 
 const SUMMARY_COMPONENTS = {
   schedAB:     ScheduleABReview,
+  schedC:      ScheduleCReview,
   schedD:      ScheduleDReview,
   schedEF_pri: ScheduleEReview,
   schedEF_np:  ScheduleFReview,
@@ -11559,28 +11561,18 @@ function SectionSchedD({d, u, imp, ImportBanner, clientId, summaryConfirmed, onS
             </ul>
           </div>
 
-          {/* Continue to Schedule E */}
-          <div className={`rounded-2xl border px-5 py-5 ${summaryConfirmed ? "border-green-500/30 bg-green-500/5" : "border-amber-400/30 bg-amber-400/5"}`}>
-            <div className="flex items-start gap-3 mb-3">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 mt-0.5 ${summaryConfirmed ? "bg-green-500/20 text-green-400" : "bg-amber-400/20 text-amber-400"}`}>
-                {summaryConfirmed ? "✓" : "!"}
-              </span>
-              <div>
-                <p className="text-sm font-bold text-white mb-1">Ready to Continue to Schedule E — Priority Creditors?</p>
-                <p className="text-xs text-slate-400 leading-relaxed">Schedule E covers debts that receive special priority under bankruptcy law — such as taxes owed to the IRS or state, and child support or alimony. Once you confirm your secured creditors above are complete, you may continue.</p>
-              </div>
-            </div>
+          {/* Confirmation status — the actual confirm is in the ScheduleDReview footer below */}
+          <div className={`rounded-2xl border px-5 py-4 flex items-center gap-3 ${summaryConfirmed ? "border-green-500/30 bg-green-500/5" : "border-slate-600 bg-slate-800/40"}`}>
             {summaryConfirmed ? (
-              <p className="flex items-center gap-2 text-sm font-semibold text-green-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-                Schedule D confirmed — continue to Schedule E using the navigation above
-              </p>
+              <>
+                <svg className="w-5 h-5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                <p className="text-sm font-semibold text-green-400">Schedule D confirmed — use the navigation below to continue.</p>
+              </>
             ) : (
-              <button type="button" onClick={() => onSummaryConfirm && onSummaryConfirm(true)}
-                className="flex items-center gap-2.5 px-5 py-2.5 rounded-xl bg-amber-400/20 border border-amber-400/50 text-amber-300 font-bold text-sm transition-all hover:bg-amber-400/30">
-                Yes — my secured creditors are complete and correct, continue to Schedule E
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
-              </button>
+              <>
+                <svg className="w-5 h-5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7"/></svg>
+                <p className="text-sm text-slate-400">Everything looks right? Scroll down to the confirmation panel to confirm and continue.</p>
+              </>
             )}
           </div>
 
@@ -18868,7 +18860,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       const schedEIntakeDone = sectionId !== "schedEF_pri" || !!data.schedEF_pri?._intakeDone;
       const schedFIntakeDone = sectionId !== "schedEF_np"  || !!data.schedEF_np?._intakeDone;
       // For personalInfo, summary only matters on the last tab (Tab 3)
-      const summaryApplies = hasSectionSummary && sectionId !== "schedD" && schedEIntakeDone && schedFIntakeDone && (!isPetition || (data.petition?._petTab ?? 0) === 3);
+      const summaryApplies = hasSectionSummary && schedEIntakeDone && schedFIntakeDone && (!isPetition || (data.petition?._petTab ?? 0) === 3);
       const sectionConfirmed = (summaryApplies && !isPetition) ? !!summaryConfirmed : true;
       const communityApplies = summaryApplies && communityRequired;
       const canAdvance = petitionReady && sectionConfirmed && (!communityApplies || !!communityConfirmed);
@@ -18907,9 +18899,8 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
           )}
           {content}
           {/* Per-section summary + confirmation.
-              For personalInfo: only show on the last tab (Tab 3 — Disclosures).
-              schedD has its own embedded summary inside the "Review & Confirm" tab, so suppress it here. */}
-          {hasSectionSummary && sectionId !== "review" && sectionId !== "schedD" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
+              For personalInfo: only show on the last tab (Tab 3 — Disclosures). */}
+          {hasSectionSummary && sectionId !== "review" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
             isPetition
               ? <VoluntaryPetitionReview
                   chapter={pd2.chapter || "7"}
