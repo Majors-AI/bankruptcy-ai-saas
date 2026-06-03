@@ -4,6 +4,7 @@ import * as pdfjsLib from "pdfjs-dist";
 import { normalizeIntake } from "./lib/intakeNormalize";
 import { phaseFromDocType } from "./lib/casePhases";
 import CommCredUrl from "./data/CommCred_complete.csv?url";
+import VoluntaryPetitionReview from "./components/client-portal/section-summaries/01_VoluntaryPetition";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -18889,14 +18890,60 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
               For personalInfo: only show on the last tab (Tab 3 — Disclosures).
               schedD has its own embedded summary inside the "Review & Confirm" tab, so suppress it here. */}
           {hasSectionSummary && sectionId !== "review" && sectionId !== "schedD" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
-            <SectionSummary
-              sectionId={sectionId}
-              data={data}
-              confirmed={summaryConfirmed}
-              onConfirm={isPetition ? undefined : onSummaryConfirm}
-              communityConfirmed={communityConfirmed}
-              onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
-            />
+            isPetition
+              ? <VoluntaryPetitionReview
+                  chapter={pd2.chapter || "7"}
+                  data={{
+                    debtor1: `${pd2.firstName || ""} ${pd2.lastName || ""}`.trim() || "—",
+                    otherNames: (pd2.priorNames || []).map(n => `${n.firstName || ""} ${n.lastName || ""}`.trim()).filter(Boolean),
+                    ssnLast4: pd2.ssnLastFour
+                      ? `xxx-xx-${pd2.ssnLastFour}`
+                      : pd2.ssn ? `xxx-xx-${String(pd2.ssn).replace(/\D/g, "").slice(-4)}` : "xxx-xx-XXXX",
+                    ein: null,
+                    residence: [pd2.addr1, pd2.city, pd2.state, pd2.zip].filter(Boolean).join(", ") || "—",
+                    county: pd2.county || "—",
+                    mailingSame: pd2.mailingDifferent !== "yes",
+                    district: pd2.district || "—",
+                    venue180: pd2.addressYears === "2+ years",
+                    feeMethod: IS_BIFURCATED ? "Bifurcated fee agreement" : "Pay in full at filing",
+                    priorBankruptcy8yr: data.sofa3?.priorBkFiled === "yes" ? "Yes — see SOFA 3" : null,
+                    otherPendingCases: false,
+                    rentsResidence: pd2.housingStatus === "rent",
+                    soleProprietor: !!pd2.isBusinessCase,
+                    hazardousProperty: false,
+                    creditCounseling: docStatus?.cc_cert?.status === "uploaded" ? "Certificate uploaded" : null,
+                    natureOfDebts: pd2.debtNature === "business" ? "Business" : "Consumer",
+                    ch7FundsAvailable: null,
+                    creditorCount:
+                      (data.schedD?.creditors?.length || 0) +
+                      (data.schedEF_pri?.creditors?.length || 0) +
+                      (data.schedEF_np?.creditors?.length || 0),
+                    assetsTotal:
+                      (data.schedAB_re?.properties || []).reduce((s, p) => s + (parseFloat(p.value) || 0), 0) +
+                      (data.schedAB_phy?.vehicles || []).reduce((s, v) => s + (parseFloat(v.value) || 0), 0) +
+                      (parseFloat(data.schedAB_phy?.householdGoodsValue) || 0) +
+                      (parseFloat(data.schedAB_phy?.electronicsValue) || 0) +
+                      (parseFloat(data.schedAB_phy?.jewelryValue) || 0) +
+                      (parseFloat(data.schedAB_phy?.toolsValue) || 0) +
+                      (data.schedAB_fin?.bankAccounts || []).reduce((s, a) => s + (parseFloat(a.balance) || 0), 0) +
+                      (data.schedAB_fin?.retirement || []).reduce((s, a) => s + (parseFloat(a.balance) || 0), 0) +
+                      (data.schedAB_fin?.hasStocks === "yes" ? (parseFloat(data.schedAB_fin?.stocksValue) || 0) : 0) +
+                      (data.schedAB_fin?.hasCrypto === "yes" ? (parseFloat(data.schedAB_fin?.cryptoValue) || 0) : 0),
+                    liabilitiesTotal:
+                      (data.schedD?.creditors || []).reduce((s, c) => s + (parseFloat(c.amount) || 0), 0) +
+                      (data.schedEF_pri?.creditors || []).reduce((s, c) => s + (parseFloat(c.amount) || 0), 0) +
+                      (data.schedEF_np?.creditors || []).reduce((s, c) => s + (parseFloat(c.amount) || 0), 0),
+                    signed: false,
+                  }}
+                />
+              : <SectionSummary
+                  sectionId={sectionId}
+                  data={data}
+                  confirmed={summaryConfirmed}
+                  onConfirm={onSummaryConfirm}
+                  communityConfirmed={communityConfirmed}
+                  onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+                />
           )}
           {/* Section navigation */}
           <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-700">
