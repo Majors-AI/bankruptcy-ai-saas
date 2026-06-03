@@ -1,27 +1,52 @@
 import React, { useMemo } from "react";
 import { Landmark } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule E — Official Form 106E/F (Part 1) — priority unsecured creditors.
    Restyled to the bankruptcy.ai dark theme.
 
    ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `priority`. EXAMPLE_PRIORITY is SAMPLE ONLY and MUST
-   NOT ship. Wire from the questionnaire/Supabase during merge.
+   PROP-DRIVEN. Pass the full questionnaire `data` object.
 
-   priority: { name, basis, amount:number, type:"Tax"|"Support"|... }[]
-   <ScheduleEReview priority={priorityCreditors} debtor="Jane Sample" />
+   <ScheduleEReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   />
    ─────────────────────────────────────────────────────────────────────── */
 
 const money = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/* EXAMPLE ONLY — do not ship. */
-const EXAMPLE_PRIORITY = [
-  { name: "Example Tax Authority", basis: "Income taxes", amount: 0, type: "Tax" },
-];
+export default function ScheduleEReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd     = data?.petition || {};
+  const debtor = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
 
-export default function ScheduleEReview({ priority = EXAMPLE_PRIORITY, debtor = "Example Debtor" }) {
-  const total = useMemo(() => priority.reduce((a, c) => a + (c.amount || 0), 0), [priority]);
+  const priority = useMemo(() => [
+    ...(data?.schedEF_pri?.taxDebts || []).map((c) => ({
+      name:   c.authority || c.name || "Tax authority",
+      basis:  c.taxType   || c.consideration || "Income taxes",
+      amount: parseFloat(c.balance || c.amountOwed) || 0,
+      type:   "Tax",
+    })),
+    ...(data?.schedEF_pri?.creditors || []).map((c) => ({
+      name:   c.name || c.authority || "Unknown",
+      basis:  c.consideration || c._category || "Priority claim",
+      amount: parseFloat(c.balance || c.amountOwed) || 0,
+      type:   c._category === "support" ? "Support" : "Priority",
+    })),
+  ], [data]);
+
+  const total   = useMemo(() => priority.reduce((a, c) => a + c.amount, 0), [priority]);
   const hasZero = priority.some((c) => !c.amount);
+
   return (
     <div className="se">
       <Style />
@@ -41,6 +66,13 @@ export default function ScheduleEReview({ priority = EXAMPLE_PRIORITY, debtor = 
         <div className="grand"><span>Total priority claims (E) <span className="calc">auto</span></span><span>{money(total)}</span></div>
         {hasZero && <div className="note">Zero-balance support claims are listed for notice; confirm current arrears with the client / support agency.</div>}
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="priority debts"
+      />
     </div>
   );
 }
@@ -54,7 +86,7 @@ function Style() {
       --calc:#7dd3fc; --calc-bg:rgba(56,189,248,.12);
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .se h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .se .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .se .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }

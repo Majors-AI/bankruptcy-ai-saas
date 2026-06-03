@@ -1,36 +1,62 @@
 import React, { useMemo } from "react";
 import { Wallet } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule I — Official Form 106I — income review.
    Restyled to the bankruptcy.ai dark theme.
 
    ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `employment` and `incomeLines`. EXAMPLE_* are SAMPLE
-   ONLY and MUST NOT ship. Wire from the questionnaire/Supabase during merge.
+   PROP-DRIVEN. Pass the full questionnaire `data` object.
 
-   employment: { status, employer, occupation }
-   incomeLines: { label, amount:number }[]
-   <ScheduleIReview employment={emp} incomeLines={income} debtor="Jane Sample" />
+   <ScheduleIReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   />
    ─────────────────────────────────────────────────────────────────────── */
 
 const money = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const num   = (v) => parseFloat(v) || 0;
 
-const EXAMPLE_EMPLOYMENT = { status: "—", employer: "—", occupation: "—" };
+export default function ScheduleIReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd  = data?.petition || {};
+  const sd  = data?.schedI   || {};
+  const debtor = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
 
-/* EXAMPLE ONLY — do not ship. Form 106I monthly income lines (2–11). */
-const EXAMPLE_INCOME = [
-  { label: "Gross wages / salary / commissions", amount: 0 },
-  { label: "Net income from business / profession", amount: 0 },
-  { label: "Net income from rental / real property", amount: 0 },
-  { label: "Interest & dividends", amount: 0 },
-  { label: "Unemployment compensation", amount: 0 },
-  { label: "Social Security", amount: 0 },
-  { label: "Pension / retirement income", amount: 0 },
-  { label: "Other monthly income", amount: 0 },
-];
+  const sources = sd.employmentSources || [];
+  const employment = {
+    status:     sd.debtorWorkStatus || "—",
+    employer:   sources.map((s) => s.employerName).filter(Boolean).join("; ") || "—",
+    occupation: sources.map((s) => s.occupation).filter(Boolean).join("; ")   || "—",
+  };
 
-export default function ScheduleIReview({ employment = EXAMPLE_EMPLOYMENT, incomeLines = EXAMPLE_INCOME, debtor = "Example Debtor" }) {
-  const total = useMemo(() => incomeLines.reduce((a, l) => a + (l.amount || 0), 0), [incomeLines]);
+  const incomeLines = useMemo(() => [
+    { label: "Gross wages / salary / commissions",        amount: num(sd.avgMonthly6)          },
+    { label: "Bonuses / overtime",                         amount: num(sd.bonuses)               },
+    { label: "Net income from business / self-employment", amount: num(sd.dSelfEmployment)       },
+    { label: "Net rental / real property income",          amount: num(sd.dRental)               },
+    { label: "Interest & dividends",                       amount: num(sd.dInterest)             },
+    { label: "Social Security (Retirement)",               amount: num(sd.dSsRetirement)         },
+    { label: "Social Security (Disability / SSDI)",        amount: num(sd.dSsDisability)         },
+    { label: "Pension / retirement income",                amount: num(sd.dPension)              },
+    { label: "Unemployment compensation",                  amount: num(sd.dUnemployment)         },
+    { label: "Workers' compensation",                      amount: num(sd.dWorkersComp)          },
+    { label: "Alimony / spousal support received",         amount: num(sd.dAlimony)              },
+    { label: "Child support received",                     amount: num(sd.dChildSupport)         },
+    { label: "Regular contributions (family / friends)",   amount: num(sd.dFamilyContribution)  },
+    { label: "Other monthly income",                       amount: num(sd.dOtherIncome)          },
+  ], [sd]);
+
+  const total = useMemo(() => incomeLines.reduce((a, l) => a + l.amount, 0), [incomeLines]);
+
   return (
     <div className="si">
       <Style />
@@ -38,21 +64,34 @@ export default function ScheduleIReview({ employment = EXAMPLE_EMPLOYMENT, incom
       <div className="form">Official Form 106I · {debtor}</div>
       <div className="card">
         <div className="ph">Part 1 · Employment</div>
-        <Row k="Employment status" v={employment.status} />
-        <Row k="Employer" v={employment.employer} />
-        <Row k="Occupation" v={employment.occupation} />
+        <KV k="Employment status" v={employment.status} />
+        <KV k="Employer"          v={employment.employer} />
+        <KV k="Occupation"        v={employment.occupation} />
 
         <div className="ph">Part 2 · Monthly income</div>
         {incomeLines.map((l, i) => (
-          <div className="row" key={i}><span className={l.amount ? "" : "z"}>{l.label}</span><span className="amt">{money(l.amount)}</span></div>
+          <div className="row" key={i}>
+            <span className={l.amount ? "" : "z"}>{l.label}</span>
+            <span className="amt">{money(l.amount)}</span>
+          </div>
         ))}
-        <div className="grand"><span>Combined monthly income <span className="calc">auto</span></span><span>{money(total)}</span></div>
+        <div className="grand">
+          <span>Combined monthly income <span className="calc">auto</span></span>
+          <span>{money(total)}</span>
+        </div>
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="income"
+      />
     </div>
   );
 }
 
-function Row({ k, v }) {
+function KV({ k, v }) {
   return <div className="kv"><span className="k">{k}</span><span className="v">{v}</span></div>;
 }
 
@@ -64,7 +103,7 @@ function Style() {
       --ink:#e2e8f0; --muted:#94a3b8; --calc:#7dd3fc; --calc-bg:rgba(56,189,248,.12);
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .si h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .si .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .si .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }

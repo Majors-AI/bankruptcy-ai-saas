@@ -1,18 +1,37 @@
 import React from "react";
 import { FileSignature } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule G — Official Form 106G — executory contracts & unexpired leases.
    Restyled to the bankruptcy.ai dark theme.
 
    ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `contracts` ([] when none). Wire from the
-   questionnaire/Supabase during merge.
+   PROP-DRIVEN. Pass the full questionnaire `data` object.
 
-   contracts: { otherParty, address, nature }[]
-   <ScheduleGReview contracts={contracts} debtor="Jane Sample" />
+   <ScheduleGReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   />
    ─────────────────────────────────────────────────────────────────────── */
 
-export default function ScheduleGReview({ contracts = [], debtor = "Example Debtor" }) {
+export default function ScheduleGReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd        = data?.petition || {};
+  const debtor    = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
+  const contracts = (data?.schedG?.contracts || []).map((c) => ({
+    otherParty: c.name        || "Unknown party",
+    address:    c.address     || "—",
+    nature:     c.description || "Contract / lease",
+  }));
+
   return (
     <div className="sg">
       <Style />
@@ -30,6 +49,13 @@ export default function ScheduleGReview({ contracts = [], debtor = "Example Debt
           ))}
         <div className="note">Verify with the client: any apartment/home lease, vehicle lease, equipment lease, cell-phone/service contract, or timeshare belongs here.</div>
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="contracts and leases"
+      />
     </div>
   );
 }
@@ -42,7 +68,7 @@ function Style() {
       --ink:#e2e8f0; --muted:#94a3b8;
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .sg h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .sg .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .sg .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }

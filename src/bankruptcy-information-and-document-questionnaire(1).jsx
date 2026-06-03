@@ -5,7 +5,19 @@ import { normalizeIntake } from "./lib/intakeNormalize";
 import { phaseFromDocType } from "./lib/casePhases";
 import CommCredUrl from "./data/CommCred_complete.csv?url";
 import VoluntaryPetitionReview from "./components/client-portal/section-summaries/01_VoluntaryPetition";
+import ScheduleEReview from "./components/client-portal/section-summaries/05_ScheduleE";
 import ScheduleFReview from "./components/client-portal/section-summaries/06_ScheduleF";
+import ScheduleGReview from "./components/client-portal/section-summaries/07_ScheduleG";
+import ScheduleHReview from "./components/client-portal/section-summaries/08_ScheduleH";
+import ScheduleIReview from "./components/client-portal/section-summaries/09_ScheduleI";
+
+const SUMMARY_COMPONENTS = {
+  schedEF_pri: ScheduleEReview,
+  schedEF_np:  ScheduleFReview,
+  schedG:      ScheduleGReview,
+  schedH:      ScheduleHReview,
+  schedI:      ScheduleIReview,
+};
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -18854,6 +18866,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       const sectionConfirmed = (summaryApplies && !isPetition) ? !!summaryConfirmed : true;
       const communityApplies = summaryApplies && communityRequired;
       const canAdvance = petitionReady && sectionConfirmed && (!communityApplies || !!communityConfirmed);
+      const SummaryComp = SUMMARY_COMPONENTS[sectionId];
 
       // If this section has an intro and it hasn't been confirmed yet, show the intro gate
       if (hasIntro && !introConfirmed) {
@@ -18941,8 +18954,8 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                   communityConfirmed={communityConfirmed}
                   onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
                 />
-              : sectionId === "schedEF_np"
-                ? <ScheduleFReview
+              : SummaryComp
+                ? <SummaryComp
                     data={data}
                     confirmed={summaryConfirmed}
                     onConfirm={onSummaryConfirm}

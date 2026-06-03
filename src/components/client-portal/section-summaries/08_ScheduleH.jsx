@@ -1,18 +1,67 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Users } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule H — Official Form 106H — codebtors.
    Restyled to the bankruptcy.ai dark theme.
 
    ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `codebtors` ([] when none). Wire from the
-   questionnaire/Supabase during merge.
+   PROP-DRIVEN. Pass the full questionnaire `data` object.
+   creditorIds on each codebtor entry are resolved at render:
+     "D-{n}" → data.schedD.creditors[n]
+     "E-{n}" → data.schedEF_pri.creditors[n]
+     "F-{n}" → data.schedEF_np.creditors[n]
 
-   codebtors: { name, address, creditor, schedule:"D"|"E"|"F" }[]
-   <ScheduleHReview codebtors={codebtors} debtor="Jane Sample" />
+   <ScheduleHReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   />
    ─────────────────────────────────────────────────────────────────────── */
 
-export default function ScheduleHReview({ codebtors = [], debtor = "Example Debtor" }) {
+function resolveCreditorId(id, data) {
+  const [prefix, idxStr] = id.split("-");
+  const i = parseInt(idxStr, 10);
+  if (prefix === "D") {
+    const c = data?.schedD?.creditors?.[i];
+    return { name: c?.name || id, sched: "D" };
+  }
+  if (prefix === "E") {
+    const c = data?.schedEF_pri?.creditors?.[i];
+    return { name: c?.name || c?.authority || id, sched: "E/F-1" };
+  }
+  if (prefix === "F") {
+    const c = data?.schedEF_np?.creditors?.[i];
+    return { name: c?.name || id, sched: "E/F-2" };
+  }
+  return { name: id, sched: "?" };
+}
+
+export default function ScheduleHReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd     = data?.petition || {};
+  const debtor = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
+
+  const codebtors = useMemo(() =>
+    (data?.schedH?.codebtors || []).flatMap((c) => {
+      const ids = c.creditorIds || [];
+      if (ids.length === 0) {
+        return [{ name: c.name || "Unknown", address: c.addr || "—", creditor: "—", schedule: "—" }];
+      }
+      return ids.map((id) => {
+        const { name: credName, sched } = resolveCreditorId(id, data);
+        return { name: c.name || "Unknown", address: c.addr || "—", creditor: credName, schedule: sched };
+      });
+    }),
+  [data]);
+
   return (
     <div className="sh">
       <Style />
@@ -30,6 +79,13 @@ export default function ScheduleHReview({ codebtors = [], debtor = "Example Debt
           ))}
         <div className="note">Verify with the client: co-signers, guarantors, ex-spouses on joint debts, and — in community-property states (WA / AZ) — a non-filing spouse can be a codebtor.</div>
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="co-debtor information"
+      />
     </div>
   );
 }
@@ -42,7 +98,7 @@ function Style() {
       --ink:#e2e8f0; --muted:#94a3b8;
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .sh h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .sh .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .sh .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }
