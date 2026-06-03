@@ -14,6 +14,7 @@ import ScheduleGReview  from "./components/client-portal/section-summaries/07_Sc
 import ScheduleHReview  from "./components/client-portal/section-summaries/08_ScheduleH";
 import ScheduleIReview  from "./components/client-portal/section-summaries/09_ScheduleI";
 import ScheduleJReview  from "./components/client-portal/section-summaries/10_ScheduleJ";
+import MeansTestIncome  from "./components/client-portal/section-summaries/11_MeansTest";
 
 const SUMMARY_COMPONENTS = {
   schedAB:     ScheduleABReview,
@@ -18900,7 +18901,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
           {content}
           {/* Per-section summary + confirmation.
               For personalInfo: only show on the last tab (Tab 3 — Disclosures). */}
-          {hasSectionSummary && sectionId !== "review" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
+          {hasSectionSummary && sectionId !== "review" && sectionId !== "meansTest" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
             isPetition
               ? <VoluntaryPetitionReview
                   chapter={pd2.chapter || "7"}
@@ -19027,7 +19028,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "schedH":      return withAll(<SectionSchedH d={data} u={updateSection}/>);
       case "schedI":      return withAll(<SectionSchedI d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "schedJ":      return withAll(<SectionSchedJ d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
-      case "meansTest":   return withAll(<SectionMeansTest d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
+      case "meansTest":   return withAll(<MeansTestIncome data={data} onChange={(mt) => updateSection("meansTest", mt)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "sofa1":       return withAll(<SectionSOFA1 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa2":       return withAll(<SectionSOFA2 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
