@@ -218,7 +218,7 @@ function Style() {
       --calc-bg:rgba(56,189,248,.12);
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto;
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0;
     }
     .vp .head { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; }
     .vp h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
