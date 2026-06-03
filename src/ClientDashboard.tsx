@@ -2375,7 +2375,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
       {/* ── Stage 2 Detail Panel ── */}
       {showStage2Panel && (
-        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
           <div className="w-full sm:max-w-2xl bg-[#0d1221] border border-slate-700 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl">
 
             <div className="px-6 py-5 border-b border-slate-800 bg-amber-400/5 flex items-start justify-between gap-4 flex-shrink-0">
