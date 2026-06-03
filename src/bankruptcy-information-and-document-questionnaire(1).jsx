@@ -18,6 +18,7 @@ import MeansTestIncome  from "./components/client-portal/section-summaries/11_Me
 import SOFAReview            from "./components/client-portal/section-summaries/12_SOFA";
 import StatementOfIntention      from "./components/client-portal/section-summaries/18_StatementOfIntention";
 import DisclosureOfCompensation  from "./components/client-portal/section-summaries/19_DisclosureOfCompensation";
+import FinalReview               from "./components/client-portal/section-summaries/13_FinalReview";
 import CreditorMatrix            from "./components/client-portal/section-summaries/20_CreditorMatrix";
 
 const SUMMARY_COMPONENTS = {
@@ -19042,48 +19043,78 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
-      case "review":      return (
-        <div>
-          <SectionReview
-            d={data}
-            docStatus={docStatus}
-            importedCount={importedCount}
-            summaryConfirmedMap={Array.from(SUMMARY_SECTIONS).reduce((acc, sid) => {
-              const sKey = sid === "personalInfo" ? "petition" : sid;
-              acc[sid] = !!(data[sKey]?.sectionSummaryConfirmed);
-              return acc;
-            }, {})}
-            onOverallConfirm={async v => {
-              updateSection("petition", {...(data.petition||{}), overallConfirmed: v});
-              if (v && !data.petition?.overallConfirmed) {
-                try {
-                  await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-confirmation-email`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-                    },
-                    body: JSON.stringify({
-                      clientId,
-                      clientName,
-                      email: data.petition?.email || INTAKE_SAMPLE.email,
-                      firstName: data.petition?.firstName || INTAKE_SAMPLE.firstName || clientName.split(" ")[0],
-                      chapter: data.petition?.chapter || "7",
-                      submittedAt: new Date().toISOString(),
-                    }),
-                  });
-                } catch (_) {
-                  // Email send errors are non-fatal
+      case "review": {
+        // A/B grand total — mirrors SectionReview lines 17652-17678 exactly
+        const _re = data.schedAB_re || {}, _fin = data.schedAB_fin || {}, _phy = data.schedAB_phy || {};
+        const _reTotal = (_re.properties || []).reduce((s, p) => s + (parseFloat(p.value) || 0), 0);
+        const _finTotal = [
+          ...(_fin.bankAccounts || []).map(a => parseFloat(a.balance) || 0),
+          ...(_fin.retirement || []).map(a => parseFloat(a.balance) || 0),
+          ...(_fin.investments || []).map(a => parseFloat(a.value) || 0),
+          ...(_fin.lifeInsurance || []).map(p => parseFloat(p.cashValue) || 0),
+          ...(_fin.annuities || []).map(a => parseFloat(a.currentValue) || 0),
+          ...(_fin.fsaHsaAccounts || []).map(a => parseFloat(a.balance) || 0),
+          ...(_fin.securityDeposits2 || []).map(d => parseFloat(d.amount) || 0),
+          parseFloat(_fin.cashOnHand) || 0, parseFloat(_fin.stocksValue) || 0, parseFloat(_fin.cryptoValue) || 0,
+        ].reduce((s, n) => s + n, 0);
+        const _phyVehs = [...(_phy.vehicles || []), ...(_phy.otherVehicles || [])].reduce((s, v) => s + (parseFloat(v.value) || 0), 0);
+        const _phyGoods = (parseFloat(_phy.householdGoodsValue) || 0) + (parseFloat(_phy.clothing) || 0) + (parseFloat(_phy.electronicsValue) || 0);
+        const _phyJewelry = (_phy.jewelryItems || []).reduce((s, j) => s + (parseFloat(j.totalValue) || 0), 0) || (parseFloat(_phy.jewelryValue) || 0);
+        const _phyOther = (_phy.firearms || []).reduce((s, f) => s + (parseFloat(f.value) || 0), 0)
+          + (_phy.collectibles || []).reduce((s, c) => s + (parseFloat(c.value) || 0), 0)
+          + (_phy.otherItems || []).reduce((s, o) => s + (parseFloat(o.value) || 0), 0);
+        const _grandTotal = _reTotal + _finTotal + _phyVehs + _phyGoods + _phyJewelry + _phyOther;
+        // Schedule J expense total — explicit field list (sumNumeric misses string-typed form values)
+        const _jd = data.schedJ || {};
+        const _jTotal = ["rent","propTax","hoa","homeInsurance","electric","gas","water","phone","internet","cable",
+          "food","clothing","laundry","personalCare","recreation","pets",
+          "carPayment1","carPayment2","transport","carInsurance","carMaint","transit",
+          "healthInsurance","lifePremium","medical","dental",
+          "childCare","tuition","childSupportPaid","alimonyPaid","charity","otherExpenses",
+        ].reduce((s, k) => s + (parseFloat(_jd[k]) || 0), 0);
+        // summaryConfirmedMap — existing aggregation, unchanged
+        const _scm = Array.from(SUMMARY_SECTIONS).reduce((acc, sid) => {
+          const sKey = sid === "personalInfo" ? "petition" : sid;
+          acc[sid] = !!(data[sKey]?.sectionSummaryConfirmed);
+          return acc;
+        }, {});
+        return (
+          <div>
+            <FinalReview
+              data={data}
+              summaryConfirmedMap={_scm}
+              propertyTotal={_grandTotal}
+              monthlyExpenses={_jTotal}
+              onExport={handleExport}
+              overallConfirmed={!!(data.petition?.overallConfirmed)}
+              onOverallConfirm={async (name, date) => {
+                updateSection("petition", {...(data.petition||{}), overallConfirmed: true, declarationName: name, declarationDate: date});
+                if (!data.petition?.overallConfirmed) {
+                  try {
+                    await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-confirmation-email`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+                      },
+                      body: JSON.stringify({
+                        clientId,
+                        clientName,
+                        email: data.petition?.email || INTAKE_SAMPLE.email,
+                        firstName: data.petition?.firstName || INTAKE_SAMPLE.firstName || clientName.split(" ")[0],
+                        chapter: data.petition?.chapter || "7",
+                        submittedAt: new Date().toISOString(),
+                      }),
+                    });
+                  } catch (_) {
+                    // Email send errors are non-fatal
+                  }
                 }
-              }
-            }}
-            overallConfirmed={!!(data.petition?.overallConfirmed)}
-            onDeclarationChange={(field, val) =>
-              updateSection("petition", {...(data.petition||{}), [field]: val})
-            }
-          />
-        </div>
-      );
+              }}
+            />
+          </div>
+        );
+      }
       default: return null;
     }
   };
