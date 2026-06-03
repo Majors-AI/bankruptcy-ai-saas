@@ -18935,6 +18935,10 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                       (data.schedEF_np?.creditors || []).reduce((s, c) => s + (parseFloat(c.amount) || 0), 0),
                     signed: false,
                   }}
+                  confirmed={summaryConfirmed}
+                  onConfirm={isPetition ? undefined : onSummaryConfirm}
+                  communityConfirmed={communityConfirmed}
+                  onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
                 />
               : <SectionSummary
                   sectionId={sectionId}

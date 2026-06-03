@@ -56,9 +56,20 @@ const EXAMPLE_DATA = {
   signed: false,                   // boolean
 };
 
-export default function VoluntaryPetitionReview({ data = EXAMPLE_DATA, chapter: chapterProp }) {
+export default function VoluntaryPetitionReview({
+  data = EXAMPLE_DATA,
+  chapter: chapterProp,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
   const [chapter, setChapter] = useState(chapterProp || "7");
+  const [communityWarning, setCommunityWarning] = useState(false);
   const d = data;
+  const showConfirm = typeof onConfirm === "function";
+  const showCommunity = typeof onCommunityConfirm === "function";
+
   return (
     <div className="vp">
       <Style />
@@ -115,7 +126,69 @@ export default function VoluntaryPetitionReview({ data = EXAMPLE_DATA, chapter: 
         <div className="ph">Part 7 · Signature</div>
         <Row k="Debtor signature" v={d.signed ? "Signed" : null} pending pendingText="Pending at signing review" />
       </div>
+
+      {(showConfirm || showCommunity) && (
+        <div className="confirm-footer">
+          <div className="confirm-footer-hd">
+            <p className="confirm-footer-title">Section Summary — Please Review</p>
+            <p className="confirm-footer-sub">Review the petition summary above before continuing. If anything looks wrong, scroll up and correct it.</p>
+          </div>
+          <div className="confirm-footer-body">
+            {showConfirm && (
+              <ConfirmRow id="vpr_summary_confirm" checked={!!confirmed} onChange={onConfirm}>
+                I have reviewed the summary above and confirm that all information is{" "}
+                <strong className="confirm-strong">true, accurate, and complete</strong> to the best of my
+                knowledge. I understand that the information provided will be used to prepare my official
+                bankruptcy documents filed with the federal court.
+              </ConfirmRow>
+            )}
+            {showCommunity && (
+              <>
+                <ConfirmRow
+                  id="vpr_community_confirm"
+                  checked={!!communityConfirmed}
+                  onChange={(v) => {
+                    setCommunityWarning(!v);
+                    onCommunityConfirm(v);
+                  }}
+                >
+                  I confirm that the petition and filing details listed above includes{" "}
+                  <strong className="confirm-strong">all community property</strong> — all community
+                  income, assets, and debts belonging to me and my non-filing spouse — and that nothing
+                  has been omitted.
+                </ConfirmRow>
+                {communityWarning && !communityConfirmed && (
+                  <div className="community-warn">
+                    <svg className="community-warn-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                    <div>
+                      <p className="community-warn-title">Missing Community Property?</p>
+                      <p>If any community income, assets, or debts are missing, please{" "}
+                        <strong className="confirm-strong">scroll up and re-enter the missing information</strong>{" "}
+                        before confirming. Filing incomplete information can affect your case or result in legal consequences.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ConfirmRow({ id, checked, onChange, children }) {
+  return (
+    <label htmlFor={id} className={`confirm-row ${checked ? "confirm-row-checked" : "confirm-row-unchecked"}`}>
+      <div
+        className={`confirm-box ${checked ? "confirm-box-checked" : "confirm-box-unchecked"}`}
+        onClick={() => onChange(!checked)}
+      >
+        {checked && <svg className="confirm-check-svg" fill="currentColor" viewBox="0 0 12 12"><path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z"/></svg>}
+      </div>
+      <div className="confirm-text">{children}</div>
+    </label>
   );
 }
 
@@ -163,5 +236,22 @@ function Style() {
     .vp .yes { color:var(--good); } .vp .no { color:var(--ink); }
     .vp .note { font-size:12.5px; color:var(--muted); background:var(--bg-2); border:1px dashed var(--line); border-radius:8px; padding:9px 12px; margin:10px 0 2px; }
     .vp .note b { color:var(--ink); }
+    .vp .confirm-footer { margin-top:24px; border:1px solid var(--line); border-radius:16px; overflow:hidden; }
+    .vp .confirm-footer-hd { background:var(--bg-2); padding:12px 20px; border-bottom:1px solid var(--line); }
+    .vp .confirm-footer-title { margin:0; font-family:var(--serif); font-weight:700; font-size:14px; color:#fff; }
+    .vp .confirm-footer-sub { margin:2px 0 0; color:var(--muted); font-size:12px; }
+    .vp .confirm-footer-body { background:#030712; padding:16px 20px; display:flex; flex-direction:column; gap:10px; }
+    .vp .confirm-row { display:flex; align-items:flex-start; gap:12px; padding:12px; border-radius:12px; border:1px solid var(--line); cursor:pointer; transition:border-color .15s,background .15s; }
+    .vp .confirm-row-checked { border-color:rgba(34,197,94,.40); background:rgba(74,222,128,.05); }
+    .vp .confirm-row-unchecked:hover { border-color:#334155; }
+    .vp .confirm-box { width:20px; height:20px; border-radius:4px; border:2px solid #475569; flex-shrink:0; margin-top:2px; display:flex; align-items:center; justify-content:center; transition:all .15s; }
+    .vp .confirm-box-checked { border-color:var(--accent); background:var(--accent); }
+    .vp .confirm-box-unchecked { background:transparent; }
+    .vp .confirm-check-svg { width:12px; height:12px; color:#1c1407; }
+    .vp .confirm-text { font-size:14px; color:#cbd5e1; line-height:1.6; }
+    .vp .confirm-strong { color:#fff; font-weight:700; }
+    .vp .community-warn { margin-top:4px; display:flex; gap:12px; background:var(--warn-bg); border:1px solid rgba(251,191,36,.40); border-radius:12px; padding:12px 16px; font-size:12px; color:#fde68a; line-height:1.5; }
+    .vp .community-warn-icon { width:16px; height:16px; color:var(--accent); flex-shrink:0; margin-top:2px; }
+    .vp .community-warn-title { font-weight:700; color:var(--warn); margin-bottom:4px; }
   `}</style>;
 }
