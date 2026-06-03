@@ -1043,7 +1043,7 @@ export default function LegacyClientImport() {
         </div>
       </div>
 
-      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 28px 80px' }}>
+      <div className="pt-7 pb-20 px-4 sm:px-7" style={{ maxWidth: 1200, margin: '0 auto' }}>
 
         {/* Session controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>

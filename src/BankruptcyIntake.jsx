@@ -1,6 +1,7 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { supabase } from "./lib/supabase";
 import IntakeChatbot from "./components/IntakeChatbot";
+import PageContainer from "./components/layout/PageContainer";
 import irsData from "./data/irs_standards_az_wa_ca_(1).json";
 
 const US_STATES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
@@ -5218,8 +5219,8 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
         </div>
       ) : (
         <div>
-          <div className="bg-slate-900 border-b border-slate-800 px-4 py-4 sticky top-0 z-10">
-            <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <div className="bg-slate-900 border-b border-slate-800 py-4 sticky top-0 z-10">
+            <PageContainer className="flex items-center justify-between">
               <div>
                 <span className="font-serif text-lg font-bold text-white">bankruptcy</span>
                 <span className="font-serif text-lg font-bold text-amber-400">.AI</span>
@@ -5228,12 +5229,12 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                 <p className="text-sm text-slate-400">Step {step+1} of {SECTIONS.length}</p>
                 <p className="text-sm text-amber-400 font-medium">{SECTIONS[step]}</p>
               </div>
-            </div>
-            <div className="max-w-5xl mx-auto mt-3">
+            </PageContainer>
+            <PageContainer className="mt-3">
               <div className="w-full bg-slate-800 rounded-full h-2">
                 <div className="bg-amber-400 h-2 rounded-full transition-all duration-500" style={{width:`${(step/(SECTIONS.length-1))*100}%`}}/>
               </div>
-              <div className="flex justify-between mt-2 gap-1">
+              <div className="flex justify-between mt-2 gap-1 overflow-x-auto">
                 {SECTIONS.map((s,i)=>(
                   <button key={i} onClick={()=>i<step&&setStep(i)}
                     className={`text-sm flex-shrink-0 transition-colors ${i===step?"text-amber-400 font-semibold":i<step?"text-green-400 cursor-pointer":"text-slate-600"}`}>
@@ -5241,11 +5242,11 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                   </button>
                 ))}
               </div>
-            </div>
+            </PageContainer>
           </div>
           {isStaffSession && (
-            <div className={`px-4 py-3 border-b ${isTakeover ? 'bg-amber-900/80 border-amber-500/30' : 'bg-blue-900/70 border-blue-500/30'}`}>
-              <div className="max-w-5xl mx-auto">
+            <div className={`py-3 border-b ${isTakeover ? 'bg-amber-900/80 border-amber-500/30' : 'bg-blue-900/70 border-blue-500/30'}`}>
+              <PageContainer>
                 <div className="flex items-start gap-3">
                   <span className={`flex-shrink-0 mt-0.5 font-bold text-base ${isTakeover ? 'text-amber-400' : 'text-blue-400'}`}>
                     {isTakeover ? '⚠' : 'ℹ'}
@@ -5268,10 +5269,10 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                     )}
                   </div>
                 </div>
-              </div>
+              </PageContainer>
             </div>
           )}
-          <div className="max-w-5xl mx-auto px-4 py-6 pb-28 flex gap-6 items-start">
+          <PageContainer width="narrow" className="py-6 pb-28 flex gap-6 items-start">
             <div className="flex-1 min-w-0">
               <h2 className="font-serif text-2xl font-bold text-white mb-2">{SECTIONS[step]}</h2>
               {stepIntros[step] && (
@@ -5293,7 +5294,7 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                 isAdmin={false}
               />
             </div>
-          </div>
+          </PageContainer>
           <div className="lg:hidden fixed bottom-20 right-4 z-40 w-80">
             <IntakeChatbot
               clientId={clientId}
@@ -5303,8 +5304,8 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
             />
           </div>
           {(step < 9 || (step === 9 && !submitted)) && (
-            <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 px-4 py-4">
-              <div className="max-w-5xl mx-auto flex gap-3">
+            <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 py-4">
+              <PageContainer className="flex gap-3">
                 {step > 0 && (
                   <button onClick={()=>{setErrors({});setStep(s=>s-1);topRef.current?.scrollIntoView({behavior:"smooth"});}}
                     className="flex-1 border border-slate-600 text-slate-300 hover:border-slate-400 font-semibold py-3.5 rounded-xl transition-colors text-base">
@@ -5324,7 +5325,7 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                     Continue →
                   </button>
                 )}
-              </div>
+              </PageContainer>
             </div>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { CheckCircle2, Circle, Clock, ChevronRight, CreditCard, FileText, AlertTriangle, Info, ArrowRight, User, Calendar, Briefcase, Hash, X, RefreshCw, MessageCircle, HelpCircle, ChevronDown, Scale, MapPin, Flag, DollarSign, Send, Lock, Plus, Minus, Home, Car, Building, PiggyBank, Layers, ChevronLeft, CreditCard as Edit3, Trash2, ShieldAlert, CalendarCheck, BadgeCheck, Phone, Mail, Mic, Video } from "lucide-react";
+import PageContainer from "./components/layout/PageContainer";
 import CreditReportUploader from "./CreditReportUploader";
 import PlaidConnectWidget from "./components/PlaidConnectWidget";
 
@@ -1690,7 +1691,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
       {/* ── Top Navigation ── */}
       <header className="bg-[#0d1221]/95 border-b border-slate-800/60 sticky top-0 z-30 backdrop-blur">
-        <div className="max-w-7xl mx-auto px-5 py-3 flex items-center justify-between">
+        <PageContainer className="py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               {firmBranding?.logo_url ? (
@@ -1727,10 +1728,10 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
               {CASE_DATA.clientName.charAt(0)}
             </div>
           </div>
-        </div>
+        </PageContainer>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <PageContainer className="py-8 space-y-8">
 
         {/* ── Where You Are Right Now — Hero Banner ── */}
         <div className="relative overflow-hidden rounded-2xl border border-amber-400/20 bg-gradient-to-br from-[#141b2e] via-[#111827] to-[#0d1221]">
@@ -2351,7 +2352,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
           </div>
         </div>
-      </div>
+      </PageContainer>
 
       {/* ── Payment Panel ── */}
       {showPaymentPanel && (
@@ -2374,7 +2375,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
       {/* ── Stage 2 Detail Panel ── */}
       {showStage2Panel && (
-        <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
           <div className="w-full sm:max-w-2xl bg-[#0d1221] border border-slate-700 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl">
 
             <div className="px-6 py-5 border-b border-slate-800 bg-amber-400/5 flex items-start justify-between gap-4 flex-shrink-0">

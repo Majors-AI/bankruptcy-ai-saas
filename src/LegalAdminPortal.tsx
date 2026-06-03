@@ -5982,7 +5982,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
       <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
 
         {/* Issue 5: Left sidebar nav, 220px, text-only, no icons */}
-        <aside style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <aside className="hidden lg:flex" style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', flexDirection: 'column', gap: 2 }}>
           {/* Staff identity block in sidebar */}
           <div style={{ padding: '0 20px 20px', borderBottom: '1px solid #2A2A28', marginBottom: 12 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -6031,7 +6031,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
         </aside>
 
         {/* Main content */}
-        <div className="flex-1 min-w-0" style={{ padding: '24px 32px' }}>
+        <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
         {/* Stats row — always visible */}
