@@ -1,33 +1,51 @@
 import React, { useMemo } from "react";
 import { CreditCard } from "lucide-react";
+import ConfirmFooter from "./ConfirmFooter";
 
 /* Schedule F — Official Form 106E/F (Part 2) — nonpriority unsecured creditors.
    Restyled to the bankruptcy.ai dark theme.
 
    ── INTEGRATION CONTRACT ──────────────────────────────────────────────
-   PROP-DRIVEN. Pass `unsecured`. EXAMPLE_UNSECURED is SAMPLE ONLY and
-   MUST NOT ship. Wire from the questionnaire/Supabase during merge.
+   PROP-DRIVEN. Pass the full questionnaire `data` object.
 
-   unsecured: { name, acct, basis, amount:number }[]
-   <ScheduleFReview unsecured={unsecuredCreditors} debtor="Jane Sample" />
+   <ScheduleFReview
+     data={questionnaireData}
+     confirmed={summaryConfirmed}
+     onConfirm={onSummaryConfirm}
+     communityConfirmed={communityConfirmed}
+     onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+   />
    ─────────────────────────────────────────────────────────────────────── */
 
 const money = (n) => "$" + Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/* EXAMPLE ONLY — do not ship. */
-const EXAMPLE_UNSECURED = [
-  { name: "Example Bank", acct: "••0000", basis: "Credit card", amount: 0 },
-];
+export default function ScheduleFReview({
+  data,
+  confirmed,
+  onConfirm,
+  communityConfirmed,
+  onCommunityConfirm,
+}) {
+  const pd       = data?.petition || {};
+  const debtor   = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor";
+  const creds    = data?.schedEF_np?.creditors || [];
+  const unsecured = useMemo(() =>
+    creds.map((c) => ({
+      name:   c.name   || "Unknown creditor",
+      acct:   c.acct   || "—",
+      basis:  c.consideration || c._category || "Unsecured",
+      amount: parseFloat(c.balance || c.amount) || 0,
+    })),
+  [creds]);
+  const total = useMemo(() => unsecured.reduce((a, c) => a + c.amount, 0), [unsecured]);
 
-export default function ScheduleFReview({ unsecured = EXAMPLE_UNSECURED, debtor = "Example Debtor" }) {
-  const total = useMemo(() => unsecured.reduce((a, c) => a + (c.amount || 0), 0), [unsecured]);
   return (
     <div className="sf">
       <Style />
       <h1><CreditCard size={20} style={{ verticalAlign: -3, marginRight: 8 }} />Schedule F — Nonpriority unsecured</h1>
       <div className="form">Official Form 106E/F (Part 2) · {debtor}</div>
       <div className="card">
-        <div className="ph">Nonpriority unsecured claims · {unsecured.length} creditors</div>
+        <div className="ph">Nonpriority unsecured claims · {unsecured.length} creditor{unsecured.length !== 1 ? "s" : ""}</div>
         {unsecured.length === 0
           ? <div className="empty">None reported</div>
           : unsecured.map((c, i) => (
@@ -39,6 +57,13 @@ export default function ScheduleFReview({ unsecured = EXAMPLE_UNSECURED, debtor 
         <div className="grand"><span>Total unsecured claims (F) <span className="calc">auto</span></span><span>{money(total)}</span></div>
         <div className="note">Confirm each balance and full account number against a recent statement before filing.</div>
       </div>
+      <ConfirmFooter
+        confirmed={confirmed}
+        onConfirm={onConfirm}
+        communityConfirmed={communityConfirmed}
+        onCommunityConfirm={onCommunityConfirm}
+        sectionLabel="non-priority debts"
+      />
     </div>
   );
 }
@@ -51,7 +76,7 @@ function Style() {
       --ink:#e2e8f0; --muted:#94a3b8; --calc:#7dd3fc; --calc-bg:rgba(56,189,248,.12);
       --serif:'Fraunces',ui-serif,Georgia,'Times New Roman',serif;
       font-family:ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:0 auto; }
+      color:var(--ink); background:transparent; padding:0; max-width:840px; margin:16px auto 0; }
     .sf h1 { font-family:var(--serif); font-weight:600; font-size:24px; margin:0; color:#fff; }
     .sf .form { color:var(--muted); font-size:13px; margin-top:2px; }
     .sf .card { background:var(--bg); border:1px solid var(--line); border-radius:16px; padding:18px 20px; margin-top:16px; }

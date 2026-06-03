@@ -5,6 +5,7 @@ import { normalizeIntake } from "./lib/intakeNormalize";
 import { phaseFromDocType } from "./lib/casePhases";
 import CommCredUrl from "./data/CommCred_complete.csv?url";
 import VoluntaryPetitionReview from "./components/client-portal/section-summaries/01_VoluntaryPetition";
+import ScheduleFReview from "./components/client-portal/section-summaries/06_ScheduleF";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -18940,14 +18941,22 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                   communityConfirmed={communityConfirmed}
                   onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
                 />
-              : <SectionSummary
-                  sectionId={sectionId}
-                  data={data}
-                  confirmed={summaryConfirmed}
-                  onConfirm={onSummaryConfirm}
-                  communityConfirmed={communityConfirmed}
-                  onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
-                />
+              : sectionId === "schedEF_np"
+                ? <ScheduleFReview
+                    data={data}
+                    confirmed={summaryConfirmed}
+                    onConfirm={onSummaryConfirm}
+                    communityConfirmed={communityConfirmed}
+                    onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+                  />
+                : <SectionSummary
+                    sectionId={sectionId}
+                    data={data}
+                    confirmed={summaryConfirmed}
+                    onConfirm={onSummaryConfirm}
+                    communityConfirmed={communityConfirmed}
+                    onCommunityConfirm={communityRequired ? onCommunityConfirm : undefined}
+                  />
           )}
           {/* Section navigation */}
           <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-700">
