@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import PageContainer from '../layout/PageContainer';
 import { supabase } from '../../lib/supabase';
 import { normalizeIntake } from '../../lib/intakeNormalize';
 import {
@@ -3063,7 +3064,7 @@ function FullBankruptcyQuestionnaire({ clientId, clientName, onComplete, onBack,
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <div className="max-w-2xl mx-auto px-4 py-8">
+            <PageContainer width="narrow" className="py-8">
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-1">
                   <Icon className="w-5 h-5 text-amber-400" />
@@ -3103,7 +3104,7 @@ function FullBankruptcyQuestionnaire({ clientId, clientName, onComplete, onBack,
                   </button>
                 )}
               </div>
-            </div>
+            </PageContainer>
           </div>
         </div>
       </div>

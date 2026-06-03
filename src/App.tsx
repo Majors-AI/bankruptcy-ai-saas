@@ -436,7 +436,7 @@ function App() {
 
   if (view === 'questionnaire') {
     return (
-      <div className="relative">
+      <div className="relative min-h-screen bg-slate-950">
         <GateToastOverlay />
         <div className="fixed top-0 left-0 right-0 z-50 flex items-center justify-between px-4 py-2.5
           bg-white/95 dark:bg-slate-900/95 backdrop-blur border-b border-slate-200 dark:border-slate-800 shadow-sm">
