@@ -15,6 +15,7 @@ import ScheduleHReview  from "./components/client-portal/section-summaries/08_Sc
 import ScheduleIReview  from "./components/client-portal/section-summaries/09_ScheduleI";
 import ScheduleJReview  from "./components/client-portal/section-summaries/10_ScheduleJ";
 import MeansTestIncome  from "./components/client-portal/section-summaries/11_MeansTest";
+import CreditorMatrix   from "./components/client-portal/section-summaries/20_CreditorMatrix";
 
 const SUMMARY_COMPONENTS = {
   schedAB:     ScheduleABReview,
@@ -72,8 +73,9 @@ const SECTIONS = [
   { id:"sofa1",        label:"SOFA – Income & Business",   icon:"📊", group:"SOFA" },
   { id:"sofa2",        label:"SOFA – Transfers & Payments",icon:"🔄", group:"SOFA" },
   { id:"sofa3",        label:"SOFA – Legal & Prior Cases", icon:"⚖️", group:"SOFA" },
-  { id:"sofa4",        label:"SOFA – Accounts & Property", icon:"🏦", group:"SOFA" },
-  { id:"docs",         label:"Document Upload",            icon:"📎", group:"Documents" },
+  { id:"sofa4",          label:"SOFA – Accounts & Property", icon:"🏦", group:"SOFA" },
+  { id:"creditorMatrix", label:"Creditor Matrix",           icon:"📋", group:"SOFA" },
+  { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
 
@@ -18820,7 +18822,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     const onSectionImportConfirm = (v) => updateSection(sectionDataKey, {...sectionData, importedConfirmed: v});
 
     // Sections that get a SectionSummary
-    const SUMMARY_SECTIONS = new Set(["personalInfo","schedAB","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","meansTest","sofa1","sofa2","sofa3","sofa4"]);
+    const SUMMARY_SECTIONS = new Set(["personalInfo","schedAB","schedC","schedD","schedEF_pri","schedEF_np","schedG","schedH","schedI","schedJ","meansTest","sofa1","sofa2","sofa3","sofa4","creditorMatrix"]);
     // Summary confirmation stored per section
     const summaryKey = sectionId === "personalInfo" ? "petition" : sectionDataKey;
     const summaryData = data[summaryKey] || {};
@@ -18901,7 +18903,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
           {content}
           {/* Per-section summary + confirmation.
               For personalInfo: only show on the last tab (Tab 3 — Disclosures). */}
-          {hasSectionSummary && sectionId !== "review" && sectionId !== "meansTest" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
+          {hasSectionSummary && sectionId !== "review" && sectionId !== "meansTest" && sectionId !== "creditorMatrix" && (!isPetition || (data.petition?._petTab ?? 0) === 3) && (
             isPetition
               ? <VoluntaryPetitionReview
                   chapter={pd2.chapter || "7"}
@@ -19032,7 +19034,8 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa1":       return withAll(<SectionSOFA1 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa2":       return withAll(<SectionSOFA2 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
-      case "sofa4":       return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
+      case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
+      case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
       case "review":      return (
         <div>
