@@ -18781,6 +18781,16 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
   }, [step, clientId, clientName]);
 
   const updateSection = (key, val) => setData(prev => ({...prev, [key]: val}));
+  const handleExport = () => {
+    const bciXML = generateBCI(data);
+    const blob = new Blob([bciXML], { type: "text/xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${data.petition?.lastName || "debtor"}_${data.petition?.chapter || "7"}_${new Date().toISOString().slice(0, 10)}.bci`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
   const current = SECTIONS[step];
   const groups = [...new Set(SECTIONS.map(s=>s.group))];
 
