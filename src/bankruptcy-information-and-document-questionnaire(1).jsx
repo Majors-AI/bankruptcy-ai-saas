@@ -62,6 +62,12 @@ const COMMUNITY_PROPERTY_STATES = new Set(["Arizona","California","Idaho","Louis
 
 const fmtMoney = (v) => v ? `$${parseFloat(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : null;
 
+// District strings used by the Local Forms gates. Must match the keys in
+// DISTRICT_DIVISIONS exactly — those are the values data.petition.district
+// stores and what getCaseDistrict() returns.
+const DIST_WA_W = "U.S. Bankruptcy Court — Western District of Washington";
+const DIST_WA_E = "U.S. Bankruptcy Court — Eastern District of Washington";
+
 const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
@@ -74,10 +80,43 @@ const SECTIONS = [
   { id:"schedI",       label:"Schedule I – Income",        icon:"💼", group:"Schedules" },
   { id:"schedJ",       label:"Schedule J – Expenses",      icon:"🧾", group:"Schedules" },
   { id:"meansTest",    label:"Means Test (Six-Month Income)", icon:"📊", group:"Schedules" },
-  { id:"sofa",                   label:"Statement of Financial Affairs", icon:"📊", group:"SOFA" },
-  { id:"statementOfIntention",     label:"Statement of Intention",      icon:"📝", group:"SOFA" },
-  { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"SOFA" },
-  { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"SOFA" },
+  { id:"sofa",                   label:"Statement of Financial Affairs", icon:"📊", group:"STATEMENTS" },
+  { id:"statementOfIntention",     label:"Statement of Intention",      icon:"📝", group:"STATEMENTS" },
+  { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"STATEMENTS" },
+  { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"STATEMENTS" },
+  { id:"form121",                  label:"Statement re Social Security Numbers", icon:"🛡️", group:"STATEMENTS" },
+  { id:"az1007_2",      label:"Declaration of Evidence of Payments (1007-2)", icon:"📄", group:"Arizona Local Forms",
+    gate: ({ state }) => state === "Arizona" },
+  { id:"az1007_1",      label:"Declaration re Electronic Filing (1007-1)",    icon:"🖥️", group:"Arizona Local Forms",
+    gate: ({ state }) => state === "Arizona" },
+  { id:"waW13_2",       label:"Trustee Information Sheet (13-2)", icon:"📄", group:"WA W Local Forms",
+    chapters:["13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_W },
+  { id:"waE1007_1",     label:"Declaration Regarding Payments (1007-1)", icon:"📄", group:"W Eastern Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
+  { id:"waE2016E",      label:"Chapter 13 Flat Fee Agreement (2016E)", icon:"💼", group:"W Eastern Local Forms",
+    chapters:["13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
+  { id:"waE2083B",      label:"Chapter 13 Plan Funding Analysis (2083B)", icon:"📐", group:"W Eastern Local Forms",
+    chapters:["13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
+  { id:"waE2083C",      label:"Chapter 7 Liquidation Analysis (2083C)", icon:"⚖️", group:"W Eastern Local Forms",
+    chapters:["7","13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
+  { id:"waE5005_3f",    label:"Statement of Witness to Signing (5005-3f)", icon:"✍️", group:"W Eastern Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
   { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
@@ -188,6 +227,7 @@ const isStaleDate = (dateStr, days = 30) => {
 const INTAKE_SAMPLE = {
   // Step 0 — Identity & Residence
   filingType: "individual-nonfiling-spouse",
+  chapter: "13",                              // dev: WA-W needs Ch.13 for the local-forms gate — revert to undefined for AZ default
   firstName: "Jane", lastName: "Sample",
   dob: "1970-01-01",
   email: "jane.sample@example.com",
@@ -196,7 +236,7 @@ const INTAKE_SAMPLE = {
   spouseDob: "1970-01-01",
   spouseEmail: "john.sample@example.com",
   ssnSpouse: "",
-  state: "Arizona", county: "Maricopa", city: "Anytown",
+  state: "Washington", county: "Spokane", city: "Anytown",    // dev: WA-E test default — revert to Arizona/Maricopa later
   streetAddress: "123 Test St", zipCode: "85001",
   // Prior names
   priorNames: [
@@ -1163,6 +1203,34 @@ function inferDistrictFromCounty(county) {
     }
   }
   return null;
+}
+
+// Resolve the case's federal bankruptcy district. Priority: explicitly-set
+// petition.district (set during Voluntary Petition) > county-inferred fallback.
+function getCaseDistrict(petition) {
+  if (!petition) return null;
+  if (petition.district && DISTRICT_DIVISIONS[petition.district]) return petition.district;
+  if (petition.county) {
+    const inferred = inferDistrictFromCounty(petition.county);
+    if (inferred) return inferred.district;
+  }
+  return null;
+}
+
+// SECTIONS visibility gate. Entries without `gate` are always visible
+// (existing behavior preserved). Each gated entry's `gate` receives
+// { state, district } and returns boolean. Mutually-exclusive gates
+// across Local Forms guarantee at most one matches per case.
+function sectionVisible(s, petition) {
+  // Optional per-entry chapter restriction (e.g. chapters:["13"] hides the entry
+  // for any case whose petition.chapter isn't in the array). Backwards-compatible
+  // — entries without `chapters` are unaffected.
+  if (s.chapters && !s.chapters.includes(String(petition?.chapter || ""))) return false;
+  if (!s.gate) return true;
+  return s.gate({
+    state: petition?.state || "",
+    district: getCaseDistrict(petition),
+  });
 }
 
 // ImportedConfirmation — shown at the bottom of a card that has imported fields
@@ -18591,6 +18659,997 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
   return null;
 }
 
+// ─── Form 121 — Statement About Your Social Security Numbers ─────────────────
+// Filed WITH the petition but kept OUT of the public file: only the last-4
+// digits appear on PACER; the full number goes to the court, U.S. Trustee,
+// case trustee, and creditors. The primary SSN is sourced from
+// data.petition.ssn / data.petition.spouseSsn (not duplicated here). This
+// section captures: SSN-history checkbox + previously-used SSNs, ITIN
+// checkbox + ITIN list, and per-debtor signatures. All numeric identifiers
+// render masked to last-4 via the local mask() helper.
+function SectionForm121({ d, u }) {
+  const pd = d.petition || {};
+  const isJoint = pd.filingType === "Joint";
+  const form121 = d.form121 || {};
+
+  const emptyDebtor = { ssn_none: false, ssns: [], itin_none: false, itins: [] };
+  const debtor1 = form121.debtor1 || emptyDebtor;
+  const debtor2 = form121.debtor2 || emptyDebtor;
+  const signatures = form121.signatures || { debtor1: { name: "", date: "" }, debtor2: { name: "", date: "" } };
+
+  const update = (patch) => u("form121", { ...form121, ...patch });
+  const updateDebtor = (which, patch) =>
+    update({ [which]: { ...(form121[which] || emptyDebtor), ...patch } });
+  const updateSig = (which, patch) =>
+    update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
+
+  const debtor1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
+  const debtor2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation card */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Form 121 — Statement About Your Social Security Numbers</p>
+            <p>This form records your full SSN/ITIN for the court, the U.S. Trustee, your case trustee, and your creditors. It is <strong>filed separately and kept under seal</strong> — it does not appear in your public case file on PACER. After filing, the public record shows only the last 4 digits. Review your full number below to confirm it's correct before filing.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Part 1 — Names + Part 2 — Identifiers, per debtor */}
+      <Form121DebtorBlock
+        label="Debtor 1"
+        name={debtor1Name}
+        debtor={debtor1}
+        petitionSsn={pd.ssn}
+        onUpdate={(patch) => updateDebtor("debtor1", patch)}
+      />
+      {isJoint && (
+        <Form121DebtorBlock
+          label="Debtor 2"
+          name={debtor2Name}
+          debtor={debtor2}
+          petitionSsn={pd.spouseSsn}
+          onUpdate={(patch) => updateDebtor("debtor2", patch)}
+        />
+      )}
+
+      {/* Part 3 — Signatures */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Part 3 — Signatures</h3>
+        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the information above is true and correct.</p>
+        <Form121SignatureRow
+          label={`${debtor1Name} (Debtor 1)`}
+          sig={signatures.debtor1}
+          onUpdate={(patch) => updateSig("debtor1", patch)}
+        />
+        {isJoint && (
+          <Form121SignatureRow
+            label={`${debtor2Name} (Debtor 2)`}
+            sig={signatures.debtor2}
+            onUpdate={(patch) => updateSig("debtor2", patch)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate }) {
+  const ssns = Array.isArray(debtor.ssns) ? debtor.ssns : [];
+  const itins = Array.isArray(debtor.itins) ? debtor.itins : [];
+  const ssnDisabled = !!debtor.ssn_none;
+  const itinDisabled = !!debtor.itin_none;
+
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed";
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white">{label} — <span className="text-slate-300">{name}</span></h3>
+
+      {/* SSN section */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <p className="text-sm font-semibold text-slate-200">Social Security Numbers used</p>
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={ssnDisabled}
+              onChange={(e) => onUpdate({ ssn_none: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+            I do not have an SSN and have never used one
+          </label>
+        </div>
+        <div className={ssnDisabled ? "opacity-40 pointer-events-none" : ""}>
+          {petitionSsn ? (
+            <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
+              <span className="text-sm text-slate-300">Current SSN (from petition): <span className="font-mono">{petitionSsn}</span></span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Source: Voluntary Petition</span>
+            </div>
+          ) : !ssnDisabled && (
+            <p className="text-xs text-amber-400 mb-2">No SSN on file in the Voluntary Petition. Enter it there, or check the box if the debtor has never had an SSN.</p>
+          )}
+          {ssns.map((ssn, i) => (
+            <div key={i} className="flex items-center gap-2 mb-2">
+              <input type="text" value={ssn} disabled={ssnDisabled}
+                onChange={(e) => { const next = [...ssns]; next[i] = e.target.value; onUpdate({ ssns: next }); }}
+                placeholder="Previously used SSN (full number)" className={inputCls}/>
+              <button type="button" onClick={() => onUpdate({ ssns: ssns.filter((_, j) => j !== i) })}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
+            </div>
+          ))}
+          <button type="button" disabled={ssnDisabled}
+            onClick={() => onUpdate({ ssns: [...ssns, ""] })}
+            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add previously-used SSN</button>
+        </div>
+      </div>
+
+      {/* ITIN section */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <p className="text-sm font-semibold text-slate-200">ITINs (Individual Taxpayer ID Numbers) used</p>
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={itinDisabled}
+              onChange={(e) => onUpdate({ itin_none: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+            I have never had an ITIN
+          </label>
+        </div>
+        <div className={itinDisabled ? "opacity-40 pointer-events-none" : ""}>
+          {itins.length === 0 && !itinDisabled && (
+            <p className="text-xs text-slate-500 mb-2">No ITINs entered. Click "Add ITIN" if the debtor has ever been issued one.</p>
+          )}
+          {itins.map((itin, i) => (
+            <div key={i} className="flex items-center gap-2 mb-2">
+              <input type="text" value={itin} disabled={itinDisabled}
+                onChange={(e) => { const next = [...itins]; next[i] = e.target.value; onUpdate({ itins: next }); }}
+                placeholder="ITIN (9 digits)" className={inputCls}/>
+              <button type="button" onClick={() => onUpdate({ itins: itins.filter((_, j) => j !== i) })}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
+            </div>
+          ))}
+          <button type="button" disabled={itinDisabled}
+            onClick={() => onUpdate({ itins: [...itins, ""] })}
+            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add ITIN</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Form121SignatureRow({ label, sig, onUpdate }) {
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
+        <input type="text" value={sig?.name || ""}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Type your full legal name" className={inputCls}/>
+      </div>
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">Date</label>
+        <input type="date" value={sig?.date || ""}
+          onChange={(e) => onUpdate({ date: e.target.value })} className={inputCls}/>
+      </div>
+    </div>
+  );
+}
+
+// ─── Confirm-only display helpers ────────────────────────────────────────────
+// Used by local-form confirm-only sections (AZ 1007-2, AZ 1007-1, WA-W 13-2,
+// WA-E 2016E/2083C and any future local forms). Each form displays read-only
+// data from petition / schedules / disclosures, with "To be completed by your
+// firm" placeholders for fields with no upstream source, then a single
+// affirmation checkbox at the bottom.
+
+// ReadOnlyField — labeled read-only display row.
+//   value     — when truthy, shown as the field value with an optional source tag.
+//   placeholder — when value is empty, falls back to this italic placeholder.
+//   source    — when present alongside a value, renders as "FROM {source}".
+function ReadOnlyField({ label, value, source, placeholder }) {
+  const hasValue = value !== undefined && value !== null && value !== "";
+  return (
+    <div className="mb-3">
+      <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+      {hasValue ? (
+        <div className="text-sm text-slate-200">{value}</div>
+      ) : (
+        <div className="text-sm italic text-slate-500">{placeholder || "Not on file"}</div>
+      )}
+      {hasValue && source && (
+        <div className="mt-1">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">From {source}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ConfirmAffirmation — standard "I affirm…" checkbox + timestamp block at the
+// bottom of every confirm-only local form. Sets affirmedAt on toggle-to-true;
+// clears it on toggle-to-false.
+function ConfirmAffirmation({ affirmed, affirmedAt, onToggle, label }) {
+  return (
+    <div className="bg-slate-900 border border-amber-700/40 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white mb-2">Affirmation</h3>
+      <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-200">
+        <input type="checkbox" checked={!!affirmed}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+        {label}
+      </label>
+      {affirmed && affirmedAt && (
+        <p className="text-xs text-slate-500 mt-3">Affirmed on {new Date(affirmedAt).toLocaleString()}</p>
+      )}
+    </div>
+  );
+}
+
+// ─── AZ Local Form 1007-2 — Declaration of Evidence of Payments (60 days) ────
+// Confirm-only (MAJ-160). The firm picks the right declaration (pay advices
+// attached / none / amount) from the pay stubs the client has uploaded;
+// client confirms they've provided everything. Persists to data.azLocalForms
+// as { affirmed, affirmedAt }. Old declaration/amount/signature fields stay in
+// stored data but are no longer read or written.
+function SectionAZLocalForms({ d, u, docStatus }) {
+  const formData = d.azLocalForms || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("azLocalForms", { ...formData, ...patch });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Paystub status from docStatus. The 60-day window is finer than monthly
+  // buckets; the firm picks the right 1007-2 option from what's on file.
+  const paystubIds = ["paystub_1", "paystub_2", "paystub_3", "paystub_4", "paystub_5", "paystub_6"];
+  const uploadedPaystubs = paystubIds.filter((id) => docStatus && docStatus[id] === "uploaded").length;
+  const anyUploaded = uploadedPaystubs > 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-2 — Declaration of Evidence of Payments (60 days)</p>
+            <p>Filed with your Arizona bankruptcy petition. It declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares the actual declaration</strong> based on the pay stubs you upload. The firm redacts any Social Security numbers, names of minor children, dates of birth, and financial account numbers before filing.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Pay stubs — REQUIRED for this form */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Pay Stubs — Required</h3>
+        <p className="text-xs text-slate-400 leading-relaxed mb-4">
+          This form is your declaration about pay advices from the 60 days before filing. <strong className="text-amber-200">Pay stubs covering that 60-day window are required for this form.</strong> Upload them in the <span className="text-amber-400 font-semibold">Document Upload</span> section of this questionnaire — that's the single place pay stubs are stored.
+        </p>
+        {anyUploaded ? (
+          <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span><span className="font-semibold">{uploadedPaystubs}</span> of {paystubIds.length} monthly paystub uploads on file.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <span><span className="font-semibold">No pay stubs uploaded yet</span> — required before filing.</span>
+          </div>
+        )}
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          The specific declaration text on the filed form (pay advices attached / none received / amount received) is selected and completed by your firm based on the pay stubs uploaded. Signature is collected at attorney review.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have uploaded all pay advices or other evidence of payment I received from any employer in the 60 days before filing, OR I have no pay advices to provide."
+      />
+    </div>
+  );
+}
+
+// ─── AZ Local Form 1007-1 — Declaration re: Electronic Filing ────────────────
+// Confirm-only (MAJ-160). Firm prepares and files the actual document;
+// signatures are collected at attorney review (not here). Consumer-Ch.7
+// election keeps its own acknowledgment checkbox — that IS an affirmation by
+// its nature. Spouse fields use pd.spouseFirst / pd.spouseLast (MAJ-159 fix
+// applied here while in the file). Persists to data.az1007_1 as
+// { affirmed, affirmedAt, consumerCh7Ack }. Old declarantName/signatures/
+// filingOnBehalfOfEntity stay in stored data but are no longer read or written.
+function SectionAZ1007_1({ d, u }) {
+  const pd = d.petition || {};
+  const isJoint = pd.filingType === "Joint" || pd.filingType === "joint";
+  const chapter = String(pd.chapter || "");
+  const isConsumerCh7 = chapter === "7";
+
+  const formData = d.az1007_1 || {};
+
+  // Defensive: clear consumerCh7Ack on chapter switch-away (unchanged behavior).
+  useEffect(() => {
+    const current = d.az1007_1 || {};
+    if (chapter !== "7" && current.consumerCh7Ack) {
+      u("az1007_1", { ...current, consumerCh7Ack: false });
+    }
+  }, [chapter, d, u]);
+
+  // MAJ-159 fix: spouse fields are spouseFirst / spouseLast on data.petition
+  // (NOT spouseFirstName / spouseLastName, which don't exist).
+  const d1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ");
+  const d2Name = isJoint ? [pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") : "";
+  const declarantName = isJoint && d1Name && d2Name
+    ? d1Name + " and " + d2Name
+    : (d1Name || d2Name || "");
+
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+  const consumerCh7Ack = !!formData.consumerCh7Ack;
+
+  const update = (patch) => u("az1007_1", { ...formData, ...patch });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration re: Electronic Filing</p>
+            <p>This declaration authorizes your attorney to electronically file your petition, schedules, and statements. <strong>Your firm prepares and files this form.</strong> You're confirming the information that will appear on it.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Part I — Petitioner declaration body (read-only) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Part I — Petitioner Declaration</h3>
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed mb-4">
+          <p>I/We, the undersigned debtor(s), declare under penalty of perjury that the information provided to my attorney for the petition, schedules, and statements — including Social Security numbers — is true and correct. I have reviewed and signed each document, and my attorney provided me a signed copy. I consent to my attorney electronically filing my petition, schedules, and statements with the United States Bankruptcy Court for the District of Arizona. I understand that the signed original of this Declaration must be filed with the Clerk no later than 21 days after the petition is filed (or 7 days after the schedules and statements are filed if an extension was granted). I further understand that failure to file the signed original will cause my case to be dismissed.</p>
+        </div>
+        <ReadOnlyField label="Declarant Name(s)" value={declarantName} source="Petition" placeholder="To be completed by your firm before filing"/>
+
+        {/* Consumer Chapter 7 paragraph — only when chapter === "7" */}
+        {isConsumerCh7 && (
+          <div className="mt-5 bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+            <p className="text-sm text-slate-200 leading-relaxed mb-3">I am aware that I may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, understand the relief available under each chapter, and choose to proceed under chapter 7. I request relief in accordance with the chapter specified in the petition.</p>
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200">
+              <input type="checkbox" checked={consumerCh7Ack}
+                onChange={(e) => update({ consumerCh7Ack: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+              I acknowledge the above (Chapter 7 election)
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* Part II — Attorney declaration (read-only) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Part II — Attorney Declaration</h3>
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed">
+          <p>I declare under penalty of perjury that I have reviewed the petition, schedules, and statements with the debtor(s). The debtor(s) will have signed this form before I submit the petition, schedules, and statements for electronic filing. I will give the debtor(s) a copy of all forms electronically filed with the Court. I have complied with all other requirements set forth in the most recent Interim Operating Order. If the debtor is an individual, I have informed the petitioner that they may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, and explained the relief available under each chapter.</p>
+        </div>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor, debtor 2 if joint, authorized officer if filing on behalf of an entity, and attorney) are collected by your firm at signing — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the information above and confirm it is accurate. I authorize my attorney to electronically file my petition, schedules, and statements."
+      />
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">File original with court — do not file electronically.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── WA Western LF 13-2 — Chapter 13 Trustee Information Sheet ──────────────
+// Confirm-only (MAJ-160). SECTIONS-level gate already restricts visibility to
+// WA + WD; in-component chapter gate is the Ch.13 safety net. Client confirms
+// the data the firm will use; firm completes the trustee-specific fields
+// (payroll address, tax-return status, DSO claim-holder, wage-deduction
+// election, case number) and signs at the attorney meeting. Persists to
+// data.waWLocalForms.form13_2 as { affirmed, affirmedAt }. Old per-debtor /
+// employer / DSO / tax / signature fields stay in stored data but are no
+// longer read or written.
+function SectionWAWLocalForms({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  const isJoint = pd.filingType === "Joint" || pd.filingType === "joint";
+
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          These Western District of Washington local forms apply to Chapter 13 cases.
+          This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const formData = (d.waWLocalForms || {}).form13_2 || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waWLocalForms", {
+    ...(d.waWLocalForms || {}),
+    form13_2: { ...formData, ...patch }
+  });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Compose address + pay frequency for display (no override — read-only).
+  const composeFullAddress = (a, c, s, z) => {
+    const cs = [c, s].filter(Boolean).join(", ");
+    const csz = [cs, z].filter(Boolean).join(" ");
+    return [a, csz].filter(Boolean).join(", ");
+  };
+  const displayPayFreq = (v) => {
+    const lc = String(v || "").toLowerCase().trim();
+    if (lc === "weekly")                               return "Weekly";
+    if (lc === "bi-weekly" || lc === "biweekly")       return "Biweekly";
+    if (lc === "semi-monthly" || lc === "semimonthly") return "Semi-monthly";
+    if (lc === "monthly")                              return "Monthly";
+    return v ? String(v) : "";
+  };
+
+  const schedI = d.schedI || {};
+  const dEmp = (schedI.employmentSources || [])[0] || null;
+  const sEmp = (schedI.spouseEmploySources || [])[0] || null;
+
+  // MAJ-159: spouseFirst / spouseLast on data.petition.
+  const d1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ");
+  const d2Name = isJoint ? [pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") : "";
+
+  const homeAddress = composeFullAddress(pd.addr1, pd.city, pd.state, pd.zip);
+  const mailingDifferent = pd.mailingDifferent === "yes";
+  const mailingAddress = mailingDifferent
+    ? composeFullAddress(pd.mailingAddr1, pd.mailingCity, pd.mailingState, pd.mailingZip)
+    : "Same as home address";
+
+  const firmTBD = "To be completed by your firm before filing";
+
+  const DebtorReview = ({ label, name, email, phone, employerName, payFreq }) => (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white">
+        {label}{name ? <> — <span className="text-slate-300">{name}</span></> : null}
+      </h3>
+      <div className="mt-5 border-t border-slate-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-x-4">
+        <ReadOnlyField label="Name" value={name} source="Petition" placeholder={firmTBD}/>
+        <ReadOnlyField label="Email" value={email} source="Petition" placeholder={firmTBD}/>
+        <div className="md:col-span-2">
+          <ReadOnlyField label="Home Address" value={homeAddress} source="Petition" placeholder={firmTBD}/>
+        </div>
+        <div className="md:col-span-2">
+          <ReadOnlyField label="Mailing Address" value={mailingAddress} source={mailingDifferent ? "Petition" : null}/>
+        </div>
+        <ReadOnlyField label="Home Phone" value={phone} source="Petition" placeholder={firmTBD}/>
+      </div>
+
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Employer</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+          <div className="md:col-span-2">
+            <ReadOnlyField label="Employer Name" value={employerName} source="Schedule I" placeholder={firmTBD}/>
+          </div>
+          <div className="md:col-span-2">
+            <ReadOnlyField label="Payroll Office Address" value="" placeholder={firmTBD}/>
+          </div>
+          <ReadOnlyField label="Payroll Phone" value="" placeholder={firmTBD}/>
+          <ReadOnlyField label="Payroll Fax" value="" placeholder={firmTBD}/>
+          <ReadOnlyField label="Pay Frequency" value={payFreq} source="Schedule I" placeholder={firmTBD}/>
+        </div>
+      </div>
+
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Domestic Support Obligation</p>
+        <ReadOnlyField label="Owes domestic support obligation (child support, alimony)?" value="" placeholder={firmTBD}/>
+        <ReadOnlyField label="Claim Holder Name / Address / Phone" value="" placeholder={firmTBD}/>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 13-2 — Chapter 13 Trustee Information Sheet</p>
+            <p>Filed with the Chapter 13 Trustee when your case is filed. <strong>Your firm prepares this form</strong> using your petition and Schedule I, plus case-specific details the firm fills in (payroll office, tax filings, support obligations). You're confirming the information shown below is accurate.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Case info */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Case Information</h3>
+        <ReadOnlyField label="Case Number" value="" placeholder="To be assigned at filing"/>
+      </div>
+
+      {/* Debtor 1 */}
+      <DebtorReview
+        label="Debtor 1"
+        name={d1Name}
+        email={pd.email}
+        phone={pd.phone}
+        employerName={dEmp && dEmp.employerName}
+        payFreq={displayPayFreq(dEmp && dEmp.payFrequency)}
+      />
+
+      {/* Debtor 2 — joint only */}
+      {isJoint && (
+        <DebtorReview
+          label="Debtor 2"
+          name={d2Name}
+          email={pd.spouseEmail}
+          phone={pd.spousePhone}
+          employerName={sEmp && sEmp.employerName}
+          payFreq={displayPayFreq(sEmp && sEmp.payFrequency)}
+        />
+      )}
+
+      {/* Wage deduction — joint only */}
+      {isJoint && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-base font-semibold text-white mb-3">Wage Deduction</h3>
+          <ReadOnlyField label="Which debtor's wages should the payroll deduction come from?" value="" placeholder={firmTBD}/>
+        </div>
+      )}
+
+      {/* Tax returns grid — placeholder block (no input) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Tax Return Status</h3>
+        <p className="text-sm italic text-slate-500">To be completed by your firm before filing — 4 years (most recent through 4 years prior) × Federal / State / Local, each marked Filed / NR / EXT.</p>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor and, in a joint case, debtor 2) are collected by your firm at signing — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the information above. I confirm that the data shown is accurate and that I have provided my firm with everything they need to complete this form."
+      />
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 1007-1 — Declaration Regarding Payments (confirm-only) ──
+// Eastern District of Washington analog of AZ 1007-2: declares whether the
+// debtor received pay advices or other evidence of payment from any employer
+// in the 60 days before filing. Filed with the petition. Both Ch.7 and Ch.13
+// (no chapter restriction). DISTINCT from AZ's az1007_1 (Declaration re
+// Electronic Filing) — separate id, separate form. Firm prepares the
+// declaration text and redacts SSNs/account numbers before filing; client
+// uploads pay stubs in the Document Upload section (single source of truth
+// for paystub upload). Persists to data.waELocalForms.form1007_1 as
+// { affirmed, affirmedAt } only.
+function SectionWAE1007_1({ d, u, docStatus }) {
+  const waE = d.waELocalForms || {};
+  const formData = waE.form1007_1 || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form1007_1: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Paystub status from docStatus — same single source of truth used by AZ 1007-2.
+  const paystubIds = ["paystub_1", "paystub_2", "paystub_3", "paystub_4", "paystub_5", "paystub_6"];
+  const uploadedPaystubs = paystubIds.filter((id) => docStatus && docStatus[id] === "uploaded").length;
+  const anyUploaded = uploadedPaystubs > 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration Regarding Payments</p>
+            <p>Local Form 1007-1 declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares and files this declaration</strong>; attach your pay stubs in the Document Upload section and confirm below.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Pay stubs — REQUIRED for this form */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Pay Stubs — Required</h3>
+        <p className="text-xs text-slate-400 leading-relaxed mb-4">
+          This form is your declaration about pay advices from the 60 days before filing. <strong className="text-amber-200">Pay stubs covering that 60-day window are required for this form.</strong> Upload them in the <span className="text-amber-400 font-semibold">Document Upload</span> section of this questionnaire — that's the single place pay stubs are stored.
+        </p>
+        {anyUploaded ? (
+          <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span><span className="font-semibold">{uploadedPaystubs}</span> of {paystubIds.length} monthly paystub uploads on file.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <span><span className="font-semibold">No pay stubs uploaded yet</span> — required before filing.</span>
+          </div>
+        )}
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Your firm redacts any Social Security numbers (all but the last 4), names of minor children, dates of birth, and financial account numbers from the pay stubs before filing. Signature is collected at attorney review.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have uploaded all pay advices or other evidence of payment I received from any employer in the 60 days before filing, OR I have no pay advices to provide."
+      />
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 2016E — Chapter 13 Flat Fee Agreement (confirm-only) ────
+// Confirm-only (MAJ-160). Eastern District of Washington Ch.13 flat-fee
+// engagement. SECTIONS-level chapters:["13"] gate hides this for non-Ch.13;
+// in-component check is the safety net for step-navigation edge cases. Fee
+// figures are read live from data.disclosureOfCompensation (Form 2030 — the
+// single source of truth for the case fee record); not duplicated. Persists
+// to data.waELocalForms.form2016E as { affirmed, affirmedAt } only.
+function SectionWAE2016E({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 13 Flat Fee Agreement applies to Chapter 13 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const waE = d.waELocalForms || {};
+  const formData = waE.form2016E || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form2016E: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Fee figures sourced from data.disclosureOfCompensation (Form 2030).
+  const disclosure = d.disclosureOfCompensation || {};
+  const formatMoney = (n) => {
+    const num = parseFloat(n);
+    if (isNaN(num) || num === 0) return null;
+    return "$" + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const flatFeeNum  = parseFloat(disclosure.agreed)   || 0;
+  const retainerNum = parseFloat(disclosure.received) || 0;
+  const computedBalance = Math.max(0, flatFeeNum - retainerNum);
+
+  const flatFeeDisplay  = formatMoney(disclosure.agreed);
+  const retainerDisplay = formatMoney(disclosure.received);
+  const balanceDisplay  = (flatFeeNum > 0 || retainerNum > 0)
+    ? (formatMoney(computedBalance) || "$0.00")
+    : null;
+
+  const firmTBD = "To be completed by your firm before filing";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2016E — Chapter 13 Flat Fee Agreement</p>
+            <p>Your flat-fee agreement with your attorney for your Chapter 13 case — the agreed fee, what's included, what's paid up front versus through the plan, and the hourly rate for extra work. <strong>Your firm prepares this agreement</strong> and submits a copy to the Chapter 13 Trustee before the §341 meeting. Review the terms below and confirm.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Debtor obligations + Services included (read-only) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Debtor Obligations</h3>
+        <ul className="text-sm text-slate-300 leading-relaxed list-disc pl-5 space-y-1.5">
+          <li>Provide complete, accurate, and timely financial information to your attorney.</li>
+          <li>Notify your attorney promptly of any change of address, employer, income, or household.</li>
+          <li>Make all Chapter 13 plan payments to the Trustee on time, beginning with the first payment within 30 days of filing.</li>
+          <li>Attend the §341 meeting of creditors and any confirmation or post-confirmation hearing required by the court.</li>
+          <li>Complete the post-petition financial-management course before discharge.</li>
+        </ul>
+
+        <h3 className="text-base font-semibold text-white mb-3 mt-6">Legal Services Included</h3>
+        <ul className="text-sm text-slate-300 leading-relaxed list-disc pl-5 space-y-1.5">
+          <li>Analysis of your financial situation and advice on whether to file under Chapter 13.</li>
+          <li>Preparation and filing of the petition, schedules, statements, and the proposed Chapter 13 plan.</li>
+          <li>Representation at the §341 meeting and the confirmation hearing.</li>
+          <li>Routine post-confirmation services through plan completion (e.g., responding to Trustee notices, addressing wage-deduction issues, ordinary plan modifications).</li>
+          <li>Adversary proceedings, non-dischargeability litigation, relief-from-stay litigation, and similar contested matters are NOT included — those are billed separately at the hourly rate below.</li>
+        </ul>
+      </div>
+
+      {/* Fee Terms — read-only */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Fee Terms</h3>
+        <ReadOnlyField label="Flat Fee" value={flatFeeDisplay} source="Disclosure of Compensation" placeholder={firmTBD}/>
+        <ReadOnlyField label="Filing Fee (paid to the court)" value="" placeholder={firmTBD}/>
+        <ReadOnlyField label="Retainer (held in trust; transferred only after plan confirmation)" value={retainerDisplay} source="Disclosure of Compensation" placeholder={firmTBD}/>
+        <ReadOnlyField label="Balance Through Plan (flat fee − retainer)" value={balanceDisplay} placeholder={firmTBD}/>
+        <ReadOnlyField label="Additional Services Hourly Rate" value="" placeholder={firmTBD}/>
+      </div>
+
+      {/* Special Provisions */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Special Provisions</h3>
+        <ReadOnlyField label="Any non-standard terms specific to your case" value="" placeholder={firmTBD}/>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor and attorney) are collected by your firm at attorney review — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the fee terms above and understand my attorney will prepare and file this agreement."
+      />
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">A copy of this agreement is submitted to the Chapter 13 Trustee before the §341 meeting of creditors.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 2083B — Chapter 13 Plan Funding Analysis (view-only) ───
+// View-only (MAJ-160). Eastern District of Washington Ch.13 plan funding
+// analysis. Attorney-prepared end-to-end — shows how Ch.13 plan payments
+// are distributed across categories of claims. The form shows ONLY the
+// structural row layout with TBD placeholders; no schedule reads, no
+// auto-compute. Distribution amounts are determined by the firm when
+// building the plan. Persists nothing. SECTIONS-level chapters:["13"]
+// gate hides this for non-Ch.13; in-component check is the safety net.
+function SectionWAE2083B({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 13 Plan Funding Analysis applies to Chapter 13 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const tbd = "To be determined — your attorney prepares this when your plan is built.";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2083B — Chapter 13 Plan Funding Analysis</p>
+            <p>This shows how your Chapter 13 plan payments are distributed among categories of claims. Your attorney prepares it when building your plan; it's shown here for your information.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Plan funding rows — structural layout, all values TBD */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Plan Funding Analysis</h3>
+        <ReadOnlyField label="Administrative Expenses (excluding Trustee fees)" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Continuing Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Secured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Executory Contracts and Unexpired Leases" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Arrearages / Defaults" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Priority Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Separate Classifications of Unsecured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Unsecured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Postpetition Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Other Provisions" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Sub-total" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Total Payments to Trustee Including Fees (sub-total ÷ 0.9 for the 10% trustee fee)" value="" placeholder={tbd}/>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">Your attorney prepares this analysis when building your Chapter 13 plan.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 2083C — Chapter 7 Liquidation Analysis (view-only) ──────
+// View-only (MAJ-160). Eastern District of Washington Ch.7 liquidation
+// analysis. Attorney-prepared end-to-end — the client cannot meaningfully
+// attest to a liquidation analysis, so there's no affirmation checkbox here.
+// The form shows ONLY the structural row layout with TBD placeholders; no
+// schedule reads, no auto-compute. Net non-exempt is determined by the firm
+// after a full exemption review. Persists nothing. SECTIONS-level chapters:
+// ["7"] gate hides this for non-Ch.7; in-component check is the safety net.
+function SectionWAE2083C({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "7" && chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 7 Liquidation Analysis applies to Chapter 7 and Chapter 13 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const tbd = "To be determined — your attorney will review and apply exemptions before signing.";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2083C — Chapter 7 Liquidation Analysis</p>
+            <p>This analysis, prepared by your firm from your schedules, shows the net non-exempt value of your property — what would be available to creditors in a Chapter 7 liquidation. Your attorney prepares and files it; it's shown here for your information.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Liquidation analysis — structural row layout, all values TBD */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Liquidation Analysis</h3>
+        <ReadOnlyField label="Total Personal Property" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Total Real Property" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Less: Secured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Less: Exemptions Claimed" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Net Non-Exempt Value" value="" placeholder={tbd}/>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">Your attorney prepares and files this analysis after reviewing your exemptions.</p>
+      </div>
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 5005-3(f) — Statement of Witness to Signing (confirm-only)
+// Client reviews which documents the witness statement will cover. Witness
+// and attorney signatures are completed by the firm at signing — no
+// signature/name/address inputs here. Both Ch.7 and Ch.13 (no chapter
+// restriction). Persists to data.waELocalForms.form5005_3f as
+// { affirmed, affirmedAt } only.
+function SectionWAE5005_3f({ d, u }) {
+  const waE = d.waELocalForms || {};
+  const formData = waE.form5005_3f || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form5005_3f: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  const documentsCovered = [
+    "Voluntary Petition",
+    "Declaration re Schedules",
+    "Statement of Affairs",
+    "Statement re Social Security Number",
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 5005-3(f) — Statement of Witness to Signing</p>
+            <p>A witness will attest that they watched you sign your bankruptcy documents. <strong>Your attorney completes and files this form</strong> — you're reviewing it here so you know which documents it covers.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Documents covered — read-only list */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Documents the Witness Statement Covers</h3>
+        <ul className="space-y-2 text-sm text-slate-200">
+          {documentsCovered.map((doc, i) => (
+            <li key={i} className="flex items-center gap-3">
+              <svg className="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+              </svg>
+              {doc}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          The witness and attorney signatures are completed by your firm at signing — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the list above and understand which documents the witness statement covers."
+      />
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -18792,7 +19851,13 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     URL.revokeObjectURL(url);
   };
   const current = SECTIONS[step];
-  const groups = [...new Set(SECTIONS.map(s=>s.group))];
+  // Navigation (Back/Next + counter) walks only the sections visible under
+  // the current petition gates (state / district / chapter). `step` itself
+  // stays an index into the FULL SECTIONS array so the dispatcher and the
+  // sidebar click handler (which compute SECTIONS.indexOf) keep working.
+  const visibleSections = SECTIONS.filter(s => sectionVisible(s, data.petition));
+  const visibleIdx = visibleSections.indexOf(current);
+  const groups = [...new Set(SECTIONS.filter(s => sectionVisible(s, data.petition)).map(s=>s.group))];
 
   // Banner shown on sections that have imported fields
   const importedCount = importedKeys?.size || 0;
@@ -18853,9 +19918,9 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     const introConfirmed = summaryData.sectionIntroConfirmed;
     const onIntroConfirm = () => updateSection(summaryKey, {...summaryData, sectionIntroConfirmed: true});
 
-    const isLastSection = step === SECTIONS.length - 1;
-    const prevSection = step > 0 ? SECTIONS[step - 1] : null;
-    const nextSection = !isLastSection ? SECTIONS[step + 1] : null;
+    const isLastSection = visibleIdx >= 0 && visibleIdx === visibleSections.length - 1;
+    const prevSection = visibleIdx > 0 ? visibleSections[visibleIdx - 1] : null;
+    const nextSection = visibleIdx >= 0 && !isLastSection ? visibleSections[visibleIdx + 1] : null;
 
     const withAll = (content) => {
       const isPetition = sectionId === "personalInfo";
@@ -18890,7 +19955,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
             {/* Still show Back button so client isn't trapped */}
             <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-700">
               {prevSection ? (
-                <button type="button" onClick={() => setStep(s => s - 1)}
+                <button type="button" onClick={() => prevSection && setStep(SECTIONS.indexOf(prevSection))}
                   className="flex items-center gap-2 px-5 py-2.5 border border-slate-600 hover:border-slate-400 text-slate-400 hover:text-white font-semibold text-sm rounded-xl transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
                   Back: {prevSection.label}
@@ -18989,7 +20054,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
             {prevSection ? (
               <button
                 type="button"
-                onClick={() => setStep(s => s - 1)}
+                onClick={() => prevSection && setStep(SECTIONS.indexOf(prevSection))}
                 className="flex items-center gap-2 px-5 py-2.5 border border-slate-600 hover:border-slate-400 text-slate-400 hover:text-white font-semibold text-sm rounded-xl transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
@@ -19018,7 +20083,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                 )}
                 <button
                   type="button"
-                  onClick={() => canAdvance && setStep(s => s + 1)}
+                  onClick={() => canAdvance && nextSection && setStep(SECTIONS.indexOf(nextSection))}
                   disabled={!canAdvance}
                   className={`flex items-center gap-2 px-6 py-2.5 font-bold text-sm rounded-xl transition-all ${canAdvance ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"}`}
                 >
@@ -19052,6 +20117,15 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
+      case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
+      case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection} docStatus={docStatus}/>);
+      case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
+      case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
+      case "waE1007_1":      return withAll(<SectionWAE1007_1 d={data} u={updateSection} docStatus={docStatus}/>);
+      case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
+      case "waE2083B":       return withAll(<SectionWAE2083B d={data} u={updateSection}/>);
+      case "waE2083C":       return withAll(<SectionWAE2083C d={data} u={updateSection}/>);
+      case "waE5005_3f":     return withAll(<SectionWAE5005_3f d={data} u={updateSection}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
       case "review": {
         // A/B grand total — mirrors SectionReview lines 17652-17678 exactly
@@ -19219,7 +20293,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
           {groups.map(g => (
             <div key={g} className="mb-3">
               <p className="text-xs font-bold uppercase tracking-widest text-slate-600 px-3 mb-1">{g}</p>
-              {SECTIONS.filter(s=>s.group===g).map((s,_) => {
+              {SECTIONS.filter(s=>s.group===g && sectionVisible(s, data.petition)).map((s,_) => {
                 const idx = SECTIONS.indexOf(s);
                 const dataKey = s.id === "personalInfo" ? "petition" : s.id;
                 const secData = data[dataKey] || {};
@@ -19390,7 +20464,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                 Need Help?
               </button>
             </div>
-            <p className="text-slate-400 text-sm">Section {step+1} of {SECTIONS.length} · {current.group}</p>
+            <p className="text-slate-400 text-sm">Section {visibleIdx >= 0 ? visibleIdx + 1 : step + 1} of {visibleSections.length} · {current?.group}</p>
           </div>
 
           {sectionContent()}
