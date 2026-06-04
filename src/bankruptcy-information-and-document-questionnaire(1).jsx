@@ -18812,6 +18812,125 @@ function Form121SignatureRow({ label, sig, onUpdate }) {
   );
 }
 
+// ─── AZ Local Form 1007-2 — Declaration of Evidence of Payments (60 days) ────
+// District of Arizona local form, filed with the petition. Declares whether
+// the debtor received pay advices or other evidence of payment from any
+// employer in the 60 days before filing — one of: pay advices are attached,
+// none received, or a stated dollar amount received. Persists to
+// data.azLocalForms.
+function SectionAZLocalForms({ d, u }) {
+  const formData = d.azLocalForms || {};
+  const declaration = formData.declaration || "";
+  const amount = formData.amount || "";
+  const signature = formData.signature || { name: "", date: "" };
+
+  const update = (patch) => u("azLocalForms", { ...formData, ...patch });
+  const setDeclaration = (v) => {
+    // Clear the amount when switching away from the "amount" option so a
+    // stale value can't accidentally end up on the filed form.
+    const patch = { declaration: v };
+    if (v !== "amount") patch.amount = "";
+    update(patch);
+  };
+  const setAmount = (v) => update({ amount: v });
+  const setSignature = (patch) => update({ signature: { ...signature, ...patch } });
+
+  const radios = [
+    { value: "attached", label: "Attached are copies of all payment advices, pay stubs, or other evidence of payment received from any employer within 60 days before filing." },
+    { value: "none",     label: "I received no payment advices, pay stubs, or other evidence of payment from any employer within 60 days before filing." },
+    { value: "amount",   label: "I received the following payments from employers within 60 days before filing:" },
+  ];
+
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation card */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-2 — Declaration of Evidence of Payments (60 days)</p>
+            <p>This form is filed with your Arizona bankruptcy petition. It declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. If you attach pay stubs, you must black out (redact) any Social Security numbers, names of minor children, dates of birth, and financial account numbers first.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Declaration */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Declaration</h3>
+        <p className="text-xs text-slate-400 mb-4">Select one option. The selected statement will appear on the filed form.</p>
+
+        <div className="space-y-3">
+          {radios.map((opt) => (
+            <label key={opt.value} className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-slate-700/60 hover:border-amber-500/40 transition-colors">
+              <input
+                type="radio"
+                name="azLocalForms_declaration"
+                value={opt.value}
+                checked={declaration === opt.value}
+                onChange={() => setDeclaration(opt.value)}
+                className="mt-0.5 w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"
+              />
+              <div className="flex-1 text-sm text-slate-200 leading-relaxed">
+                {opt.label}
+                {opt.value === "amount" && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">$</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={amount}
+                        disabled={declaration !== "amount"}
+                        onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
+                        placeholder="0.00"
+                        className="w-40 bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+                      />
+                    </div>
+                    {amount && declaration === "amount" && (
+                      <span className="text-xs text-slate-500">→ <span className="text-slate-300 font-medium">{fmtMoney(amount)}</span></span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Signature */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Debtor Signature</h3>
+        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the declaration above is true and correct.</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Signed name</label>
+            <input
+              type="text"
+              value={signature.name || ""}
+              onChange={(e) => setSignature({ name: e.target.value })}
+              placeholder="Type your full legal name"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Date</label>
+            <input
+              type="date"
+              value={signature.date || ""}
+              onChange={(e) => setSignature({ date: e.target.value })}
+              className={inputCls}
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -19274,11 +19393,10 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
-      case "azLocalForms":
+      case "azLocalForms":   return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
       case "waWLocalForms":
       case "waELocalForms": {
         const districtName =
-          sectionId === "azLocalForms"  ? "Arizona" :
           sectionId === "waWLocalForms" ? "Western District of Washington" :
                                           "Eastern District of Washington";
         return withAll(
