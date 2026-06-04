@@ -90,10 +90,17 @@ const SECTIONS = [
   { id:"az1007_1",      label:"Declaration re Electronic Filing (1007-1)",    icon:"🖥️", group:"Arizona Local Forms",
     gate: ({ state }) => state === "Arizona" },
   { id:"waW13_2",       label:"Trustee Information Sheet (13-2)", icon:"📄", group:"WA W Local Forms",
+    chapters:["13"],
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_W },
-  { id:"waELocalForms", label:"Eastern WA Local Forms", icon:"🗺️", group:"W Eastern Local Forms",
+  { id:"waE2016E",      label:"Chapter 13 Flat Fee Agreement (2016E)", icon:"💼", group:"W Eastern Local Forms",
+    chapters:["13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
+  { id:"waE2083C",      label:"Chapter 7 Liquidation Analysis (2083C)", icon:"⚖️", group:"W Eastern Local Forms",
+    chapters:["7"],
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_E },
@@ -1202,6 +1209,10 @@ function getCaseDistrict(petition) {
 // { state, district } and returns boolean. Mutually-exclusive gates
 // across Local Forms guarantee at most one matches per case.
 function sectionVisible(s, petition) {
+  // Optional per-entry chapter restriction (e.g. chapters:["13"] hides the entry
+  // for any case whose petition.chapter isn't in the array). Backwards-compatible
+  // — entries without `chapters` are unaffected.
+  if (s.chapters && !s.chapters.includes(String(petition?.chapter || ""))) return false;
   if (!s.gate) return true;
   return s.gate({
     state: petition?.state || "",
@@ -19570,6 +19581,31 @@ function WAWSignatureRow({ label, sig, onUpdate, inputCls }) {
   );
 }
 
+// ─── WA Eastern LF 2016E — Chapter 13 Flat Fee Agreement (stub) ────────────
+// Real implementation lands in Commit B. The SECTIONS-level chapters:["13"]
+// gate keeps this entry hidden for non-Ch.13 cases; a Ch.13 user navigating
+// here today sees the placeholder below.
+function SectionWAE2016E({ d, u }) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
+      <p className="text-sm text-slate-300 font-semibold mb-1">Chapter 13 Flat Fee Agreement (LF 2016E)</p>
+      <p className="text-xs text-slate-500">Form coming next — to be built in Commit B.</p>
+    </div>
+  );
+}
+
+// ─── WA Eastern LF 2083C — Chapter 7 Liquidation Analysis (stub) ───────────
+// Real implementation lands in Commit C. The SECTIONS-level chapters:["7"]
+// gate keeps this entry hidden for non-Ch.7 cases.
+function SectionWAE2083C({ d, u }) {
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
+      <p className="text-sm text-slate-300 font-semibold mb-1">Chapter 7 Liquidation Analysis (LF 2083C)</p>
+      <p className="text-xs text-slate-500">Form coming next — to be built in Commit C.</p>
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -20041,15 +20077,8 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
       case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
       case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
-      case "waELocalForms": {
-        const districtName = "Eastern District of Washington";
-        return withAll(
-          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 text-center">
-            <p className="text-slate-300 text-sm font-semibold mb-1">{districtName} — Local Forms</p>
-            <p className="text-slate-500 text-xs">Placeholder — form data to be added.</p>
-          </div>
-        );
-      }
+      case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
+      case "waE2083C":       return withAll(<SectionWAE2083C d={data} u={updateSection}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
       case "review": {
         // A/B grand total — mirrors SectionReview lines 17652-17678 exactly
