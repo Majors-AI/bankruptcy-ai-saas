@@ -216,7 +216,7 @@ const INTAKE_SAMPLE = {
   spouseDob: "1970-01-01",
   spouseEmail: "john.sample@example.com",
   ssnSpouse: "",
-  state: "Washington", county: "King", city: "Anytown",    // dev: WA-W test default — revert to Arizona/Maricopa later
+  state: "Washington", county: "Spokane", city: "Anytown",    // dev: WA-E test default — revert to Arizona/Maricopa later
   streetAddress: "123 Test St", zipCode: "85001",
   // Prior names
   priorNames: [
