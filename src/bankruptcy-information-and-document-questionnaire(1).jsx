@@ -19293,6 +19293,12 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     URL.revokeObjectURL(url);
   };
   const current = SECTIONS[step];
+  // Navigation (Back/Next + counter) walks only the sections visible under
+  // the current petition gates (state / district / chapter). `step` itself
+  // stays an index into the FULL SECTIONS array so the dispatcher and the
+  // sidebar click handler (which compute SECTIONS.indexOf) keep working.
+  const visibleSections = SECTIONS.filter(s => sectionVisible(s, data.petition));
+  const visibleIdx = visibleSections.indexOf(current);
   const groups = [...new Set(SECTIONS.filter(s => sectionVisible(s, data.petition)).map(s=>s.group))];
 
   // Banner shown on sections that have imported fields
@@ -19354,9 +19360,9 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     const introConfirmed = summaryData.sectionIntroConfirmed;
     const onIntroConfirm = () => updateSection(summaryKey, {...summaryData, sectionIntroConfirmed: true});
 
-    const isLastSection = step === SECTIONS.length - 1;
-    const prevSection = step > 0 ? SECTIONS[step - 1] : null;
-    const nextSection = !isLastSection ? SECTIONS[step + 1] : null;
+    const isLastSection = visibleIdx >= 0 && visibleIdx === visibleSections.length - 1;
+    const prevSection = visibleIdx > 0 ? visibleSections[visibleIdx - 1] : null;
+    const nextSection = visibleIdx >= 0 && !isLastSection ? visibleSections[visibleIdx + 1] : null;
 
     const withAll = (content) => {
       const isPetition = sectionId === "personalInfo";
@@ -19391,7 +19397,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
             {/* Still show Back button so client isn't trapped */}
             <div className="flex items-center justify-between mt-8 pt-5 border-t border-slate-700">
               {prevSection ? (
-                <button type="button" onClick={() => setStep(s => s - 1)}
+                <button type="button" onClick={() => prevSection && setStep(SECTIONS.indexOf(prevSection))}
                   className="flex items-center gap-2 px-5 py-2.5 border border-slate-600 hover:border-slate-400 text-slate-400 hover:text-white font-semibold text-sm rounded-xl transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
                   Back: {prevSection.label}
@@ -19490,7 +19496,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
             {prevSection ? (
               <button
                 type="button"
-                onClick={() => setStep(s => s - 1)}
+                onClick={() => prevSection && setStep(SECTIONS.indexOf(prevSection))}
                 className="flex items-center gap-2 px-5 py-2.5 border border-slate-600 hover:border-slate-400 text-slate-400 hover:text-white font-semibold text-sm rounded-xl transition-colors"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
@@ -19519,7 +19525,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                 )}
                 <button
                   type="button"
-                  onClick={() => canAdvance && setStep(s => s + 1)}
+                  onClick={() => canAdvance && nextSection && setStep(SECTIONS.indexOf(nextSection))}
                   disabled={!canAdvance}
                   className={`flex items-center gap-2 px-6 py-2.5 font-bold text-sm rounded-xl transition-all ${canAdvance ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"}`}
                 >
@@ -19906,7 +19912,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
                 Need Help?
               </button>
             </div>
-            <p className="text-slate-400 text-sm">Section {step+1} of {SECTIONS.length} · {current.group}</p>
+            <p className="text-slate-400 text-sm">Section {visibleIdx >= 0 ? visibleIdx + 1 : step + 1} of {visibleSections.length} · {current?.group}</p>
           </div>
 
           {sectionContent()}
