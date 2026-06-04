@@ -85,7 +85,9 @@ const SECTIONS = [
   { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"STATEMENTS" },
   { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"STATEMENTS" },
   { id:"form121",                  label:"Statement re Social Security Numbers", icon:"🛡️", group:"STATEMENTS" },
-  { id:"azLocalForms",  label:"Arizona Local Forms",    icon:"🗺️", group:"AZ Local Forms",
+  { id:"az1007_2",      label:"Declaration of Evidence of Payments (1007-2)", icon:"📄", group:"Arizona Local Forms",
+    gate: ({ state }) => state === "Arizona" },
+  { id:"az1007_1",      label:"Declaration re Electronic Filing (1007-1)",    icon:"🖥️", group:"Arizona Local Forms",
     gate: ({ state }) => state === "Arizona" },
   { id:"waWLocalForms", label:"Western WA Local Forms", icon:"🗺️", group:"WA W Local Forms",
     gate: ({ state, district }) =>
@@ -18931,6 +18933,165 @@ function SectionAZLocalForms({ d, u }) {
   );
 }
 
+// ─── AZ Local Form 1007-1 — Declaration re: Electronic Filing ────────────────
+// District of Arizona local form. Authorizes the attorney to electronically
+// file the petition, schedules, and statements; the signed original is filed
+// with the Clerk (paper) no later than 21 days after the petition (or 7 days
+// after schedules/statements if extension granted). Applies to both Ch.7 and
+// Ch.13 — no chapter gate at the SECTIONS level. Persists to data.az1007_1.
+function SectionAZ1007_1({ d, u }) {
+  const pd = d.petition || {};
+  const isJoint = pd.filingType === "Joint";
+  const chapter = String(pd.chapter || "");
+  const isConsumerCh7 = chapter === "7";
+
+  const formData = d.az1007_1 || {};
+
+  // Defensive: clear consumerCh7Ack when the petition's chapter switches away
+  // from "7" so a dormant `true` from an earlier Ch.7 election can't survive
+  // onto a Ch.13 (or other) filed form. Matches the AZ 1007-2 amount-on-switch
+  // pattern. Re-runs when chapter or the underlying data object changes.
+  useEffect(() => {
+    const current = d.az1007_1 || {};
+    if (chapter !== "7" && current.consumerCh7Ack) {
+      u("az1007_1", { ...current, consumerCh7Ack: false });
+    }
+  }, [chapter, d, u]);
+
+  // Derive default declarant name from the petition; field stays editable so
+  // an authorized corporate officer or partnership member can replace it.
+  const d1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ");
+  const d2Name = isJoint ? [pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") : "";
+  const petitionDefault = isJoint && d1Name && d2Name
+    ? d1Name + " and " + d2Name
+    : (d1Name || d2Name || "");
+  const declarantName = formData.declarantName !== undefined ? formData.declarantName : petitionDefault;
+
+  const debtor1Sig  = formData.debtor1Sig  || { name: "", date: "" };
+  const debtor2Sig  = formData.debtor2Sig  || { name: "", date: "" };
+  const officerSig  = formData.officerSig  || { name: "", date: "" };
+  const attorneySig = formData.attorneySig || { name: "", date: "" };
+  const consumerCh7Ack         = !!formData.consumerCh7Ack;
+  const filingOnBehalfOfEntity = !!formData.filingOnBehalfOfEntity;
+
+  const update = (patch) => u("az1007_1", { ...formData, ...patch });
+  const updateSig = (key, patch) => update({ [key]: { ...(formData[key] || {}), ...patch } });
+
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation card */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration re: Electronic Filing</p>
+            <p>Local Form 1007-1 is the signed declaration authorizing your attorney to electronically file your petition, schedules, and statements. You confirm under penalty of perjury that everything you gave your attorney — including Social Security numbers — is true and correct, that you reviewed and signed each document, and received a copy. The signed original is filed with the court (not electronically), no later than 21 days after the petition (or 7 days after schedules/statements if an extension was granted). Failure to file the signed original can cause your case to be dismissed.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Part I — Petitioner declaration */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Part I — Petitioner Declaration</h3>
+
+        {/* Declaration body — read-only */}
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed">
+          <p>I/We, the undersigned debtor(s), declare under penalty of perjury that the information provided to my attorney for the petition, schedules, and statements — including Social Security numbers — is true and correct. I have reviewed and signed each document, and my attorney provided me a signed copy. I consent to my attorney electronically filing my petition, schedules, and statements with the United States Bankruptcy Court for the District of Arizona. I understand that the signed original of this Declaration must be filed with the Clerk no later than 21 days after the petition is filed (or 7 days after the schedules and statements are filed if an extension was granted). I further understand that failure to file the signed original will cause my case to be dismissed.</p>
+        </div>
+
+        {/* Declarant name */}
+        <div className="mt-5">
+          <label className="text-xs text-slate-400 mb-1 block">Declarant name(s)</label>
+          <input type="text" value={declarantName}
+            onChange={(e) => update({ declarantName: e.target.value })}
+            placeholder="Defaults to debtor name(s) from the petition; edit only if signing as authorized corporate officer or partnership member"
+            className={inputCls}/>
+          <p className="text-[11px] text-slate-500 mt-1">Pre-filled from the Voluntary Petition. Override if a corporate officer or partnership member is signing.</p>
+        </div>
+
+        {/* Consumer Chapter 7 paragraph — ONLY shown when petition.chapter === "7" */}
+        {isConsumerCh7 && (
+          <div className="mt-5 bg-slate-800/40 border border-slate-700 rounded-lg p-4">
+            <p className="text-sm text-slate-200 leading-relaxed mb-3">I am aware that I may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, understand the relief available under each chapter, and choose to proceed under chapter 7. I request relief in accordance with the chapter specified in the petition.</p>
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200">
+              <input type="checkbox" checked={consumerCh7Ack}
+                onChange={(e) => update({ consumerCh7Ack: e.target.checked })}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+              I acknowledge the above (Chapter 7 election)
+            </label>
+          </div>
+        )}
+      </div>
+
+      {/* Petitioner signatures */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Debtor Signatures</h3>
+        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the declaration above is true and correct.</p>
+        <AZ1007SignatureRow label={(d1Name || "Debtor 1") + " (Debtor 1)"}
+          sig={debtor1Sig} onUpdate={(patch) => updateSig("debtor1Sig", patch)} inputCls={inputCls}/>
+        {isJoint && (
+          <AZ1007SignatureRow label={(d2Name || "Debtor 2") + " (Debtor 2)"}
+            sig={debtor2Sig} onUpdate={(patch) => updateSig("debtor2Sig", patch)} inputCls={inputCls}/>
+        )}
+
+        {/* Optional officer/entity signature */}
+        <div className="mt-5 border-t border-slate-800 pt-5">
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 mb-3">
+            <input type="checkbox" checked={filingOnBehalfOfEntity}
+              onChange={(e) => update({ filingOnBehalfOfEntity: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+            Signing on behalf of a business entity (authorized corporate officer or partnership member)
+          </label>
+          {filingOnBehalfOfEntity && (
+            <AZ1007SignatureRow label="Authorized officer / partnership member"
+              sig={officerSig} onUpdate={(patch) => updateSig("officerSig", patch)} inputCls={inputCls}/>
+          )}
+        </div>
+      </div>
+
+      {/* Part II — Attorney declaration */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Part II — Attorney Declaration</h3>
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed">
+          <p>I declare under penalty of perjury that I have reviewed the petition, schedules, and statements with the debtor(s). The debtor(s) will have signed this form before I submit the petition, schedules, and statements for electronic filing. I will give the debtor(s) a copy of all forms electronically filed with the Court. I have complied with all other requirements set forth in the most recent Interim Operating Order. If the debtor is an individual, I have informed the petitioner that they may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, and explained the relief available under each chapter.</p>
+        </div>
+        <div className="mt-5">
+          <AZ1007SignatureRow label="Attorney for Debtor(s)"
+            sig={attorneySig} onUpdate={(patch) => updateSig("attorneySig", patch)} inputCls={inputCls}/>
+        </div>
+      </div>
+
+      {/* Footer note */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">File original with court — do not file electronically.</p>
+      </div>
+    </div>
+  );
+}
+
+function AZ1007SignatureRow({ label, sig, onUpdate, inputCls }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
+        <input type="text" value={sig.name || ""}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Type full legal name" className={inputCls}/>
+      </div>
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">Date</label>
+        <input type="date" value={sig.date || ""}
+          onChange={(e) => onUpdate({ date: e.target.value })}
+          className={inputCls}/>
+      </div>
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -19393,7 +19554,8 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
-      case "azLocalForms":   return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
+      case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
+      case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
       case "waWLocalForms":
       case "waELocalForms": {
         const districtName =
