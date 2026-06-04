@@ -19092,6 +19092,393 @@ function AZ1007SignatureRow({ label, sig, onUpdate, inputCls }) {
   );
 }
 
+// ─── WA Western District Local Forms (Ch.13) ─────────────────────────────────
+// Western District of Washington local forms. The SECTIONS-level gate already
+// restricts visibility to WA + WD; this component adds the chapter gate
+// (Ch.13 only) and renders LF 13-2 today. LF 13-5 lands in a follow-up commit.
+// Persists to data.waWLocalForms = { form13_2: {...}, form13_5: {...} }.
+function SectionWAWLocalForms({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  const isJoint = pd.filingType === "Joint";
+
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          These Western District of Washington local forms apply to Chapter 13 cases.
+          This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const formData = d.waWLocalForms || {};
+  const form13_2 = formData.form13_2 || {};
+
+  const emptyDebtor = {
+    name: "", homeAddress: "", mailingAddress: "", mailingSameAsHome: false,
+    email: "", homePhone: "",
+    employer: { name: "", address: "", phone: "", fax: "", payFrequency: "", payFrequencyOther: "", otherIncomeSource: "" },
+    dsoYesNo: "", dsoClaimHolderName: "", dsoClaimHolderAddress: "", dsoClaimHolderPhone: "",
+  };
+  const debtor1 = form13_2.debtor1 || emptyDebtor;
+  const debtor2 = form13_2.debtor2 || emptyDebtor;
+  const wageDeductionDebtor = form13_2.wageDeductionDebtor || "";
+  const taxReturns = form13_2.taxReturns || {};
+  const signatures = form13_2.signatures || { debtor1: { name: "", date: "" }, debtor2: { name: "", date: "" } };
+
+  const update = (patch) => u("waWLocalForms", { ...formData, form13_2: { ...form13_2, ...patch } });
+  const updateDebtor = (which, patch) =>
+    update({ [which]: { ...(form13_2[which] || emptyDebtor), ...patch } });
+  const updateEmployer = (which, patch) => {
+    const debtor = form13_2[which] || emptyDebtor;
+    updateDebtor(which, { employer: { ...(debtor.employer || emptyDebtor.employer), ...patch } });
+  };
+  const updateSig = (which, patch) =>
+    update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
+  const updateTaxCell = (rowKey, col, value) =>
+    update({ taxReturns: { ...taxReturns, [rowKey]: { ...(taxReturns[rowKey] || {}), [col]: value } } });
+
+  const pd1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
+  const pd2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
+
+  const taxRows = [
+    { key: "recent", label: "Most recent year" },
+    { key: "year2",  label: "2nd year past" },
+    { key: "year3",  label: "3rd year past" },
+    { key: "year4",  label: "4th year past" },
+  ];
+  const taxCols = [
+    { label: "Federal", key: "federal" },
+    { label: "State",   key: "state" },
+    { label: "Local",   key: "local" },
+  ];
+  const taxStatusOptions = [
+    { value: "",       label: "—" },
+    { value: "filed",  label: "Filed" },
+    { value: "nr",     label: "NR" },
+    { value: "ext",    label: "EXT" },
+  ];
+  const payFreqOptions = [
+    { value: "",              label: "Select…" },
+    { value: "weekly",        label: "Weekly" },
+    { value: "biweekly",      label: "Biweekly" },
+    { value: "monthly",       label: "Monthly" },
+    { value: "semi-monthly",  label: "Semi-monthly" },
+    { value: "other",         label: "Other" },
+  ];
+
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation card */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 13-2 — Chapter 13 Trustee Information Sheet</p>
+            <p>Filed with the Chapter 13 Trustee when your case is filed. The Trustee uses your employer information to send a payroll directive (wage deduction). Listing the wrong payroll address can cause payment delinquency and a motion to dismiss. Make your first plan payment to the Trustee right away — don't wait for the payroll deduction to start.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Case info */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Case Information</h3>
+        <label className="text-xs text-slate-400 mb-1 block">Case Number</label>
+        <input type="text" value={form13_2.caseNumber || ""}
+          onChange={(e) => update({ caseNumber: e.target.value })}
+          placeholder="e.g. 26-12345" className={inputCls}/>
+      </div>
+
+      {/* Debtor 1 */}
+      <WAWDebtorBlock
+        label="Debtor 1" name={pd1Name} debtor={debtor1}
+        onUpdate={(patch) => updateDebtor("debtor1", patch)}
+        onUpdateEmployer={(patch) => updateEmployer("debtor1", patch)}
+        inputCls={inputCls} payFreqOptions={payFreqOptions}
+      />
+
+      {isJoint && (
+        <WAWDebtorBlock
+          label="Debtor 2" name={pd2Name} debtor={debtor2}
+          onUpdate={(patch) => updateDebtor("debtor2", patch)}
+          onUpdateEmployer={(patch) => updateEmployer("debtor2", patch)}
+          inputCls={inputCls} payFreqOptions={payFreqOptions}
+        />
+      )}
+
+      {/* Wage deduction — only in joint cases (single filer is implicit) */}
+      {isJoint && (
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <h3 className="text-base font-semibold text-white mb-1">Wage Deduction</h3>
+          <p className="text-xs text-slate-400 mb-4">Which debtor's wages should the payroll deduction come from?</p>
+          <div className="flex flex-col gap-2">
+            {[
+              { value: "debtor1", label: pd1Name + " (Debtor 1)" },
+              { value: "debtor2", label: pd2Name + " (Debtor 2)" },
+            ].map((opt) => (
+              <label key={opt.value} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-slate-700/60 hover:border-amber-500/40 transition-colors">
+                <input type="radio" name="waWForm13_2_wageDeduction" value={opt.value}
+                  checked={wageDeductionDebtor === opt.value}
+                  onChange={() => update({ wageDeductionDebtor: opt.value })}
+                  className="w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+                <span className="text-sm text-slate-200">{opt.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tax returns */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Tax Return Status</h3>
+        <p className="text-xs text-slate-400 mb-4">For each year, mark whether the return was Filed, Not Required (NR), or filed under an Extension (EXT).</p>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs text-slate-400 border-b border-slate-700">
+                <th className="text-left font-medium py-2 pr-3">Year</th>
+                {taxCols.map((col) => (
+                  <th key={col.key} className="text-left font-medium py-2 px-2">{col.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {taxRows.map((row) => (
+                <tr key={row.key} className="border-b border-slate-800/60 last:border-b-0">
+                  <td className="text-slate-300 py-2 pr-3 whitespace-nowrap">{row.label}</td>
+                  {taxCols.map((col) => {
+                    const cellValue = (taxReturns[row.key] || {})[col.key] || "";
+                    return (
+                      <td key={col.key} className="py-2 px-2">
+                        <select value={cellValue}
+                          onChange={(e) => updateTaxCell(row.key, col.key, e.target.value)}
+                          className={inputCls + " min-w-[6rem]"}>
+                          {taxStatusOptions.map((opt) => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                          ))}
+                        </select>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Signatures */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Signatures</h3>
+        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the information above is true and correct.</p>
+        <WAWSignatureRow
+          label={pd1Name + " (Debtor 1)"}
+          sig={signatures.debtor1 || { name: "", date: "" }}
+          onUpdate={(patch) => updateSig("debtor1", patch)}
+          inputCls={inputCls}
+        />
+        {isJoint && (
+          <WAWSignatureRow
+            label={pd2Name + " (Debtor 2)"}
+            sig={signatures.debtor2 || { name: "", date: "" }}
+            onUpdate={(patch) => updateSig("debtor2", patch)}
+            inputCls={inputCls}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, inputCls, payFreqOptions }) {
+  const employer = debtor.employer || {};
+  const showFreqOther = employer.payFrequency === "other";
+  const dsoNameSuffix = label.replace(/\s+/g, "_");
+
+  const onMailingSameToggle = (checked) => {
+    if (checked) onUpdate({ mailingSameAsHome: true, mailingAddress: debtor.homeAddress || "" });
+    else onUpdate({ mailingSameAsHome: false });
+  };
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white">{label} — <span className="text-slate-300">{name}</span></h3>
+
+      {/* Identity */}
+      <div className="mt-5 border-t border-slate-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="md:col-span-2">
+          <label className="text-xs text-slate-400 mb-1 block">Name (as it should appear on the form)</label>
+          <input type="text" value={debtor.name || ""}
+            onChange={(e) => onUpdate({ name: e.target.value })}
+            placeholder="Type full legal name" className={inputCls}/>
+        </div>
+        <div className="md:col-span-2">
+          <label className="text-xs text-slate-400 mb-1 block">Home Address</label>
+          <input type="text" value={debtor.homeAddress || ""}
+            onChange={(e) => onUpdate(debtor.mailingSameAsHome
+              ? { homeAddress: e.target.value, mailingAddress: e.target.value }
+              : { homeAddress: e.target.value })}
+            placeholder="Street, City, State, ZIP" className={inputCls}/>
+        </div>
+        <div className="md:col-span-2">
+          <div className="flex items-center justify-between mb-1 gap-4">
+            <label className="text-xs text-slate-400 block">Mailing Address</label>
+            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+              <input type="checkbox" checked={!!debtor.mailingSameAsHome}
+                onChange={(e) => onMailingSameToggle(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+              Same as home address
+            </label>
+          </div>
+          <input type="text"
+            value={debtor.mailingSameAsHome ? (debtor.homeAddress || "") : (debtor.mailingAddress || "")}
+            disabled={!!debtor.mailingSameAsHome}
+            onChange={(e) => onUpdate({ mailingAddress: e.target.value })}
+            placeholder="Street, City, State, ZIP"
+            className={inputCls + " disabled:opacity-40 disabled:cursor-not-allowed"}/>
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">Email</label>
+          <input type="email" value={debtor.email || ""}
+            onChange={(e) => onUpdate({ email: e.target.value })}
+            placeholder="you@example.com" className={inputCls}/>
+        </div>
+        <div>
+          <label className="text-xs text-slate-400 mb-1 block">Home Phone</label>
+          <input type="tel" value={debtor.homePhone || ""}
+            onChange={(e) => onUpdate({ homePhone: e.target.value })}
+            placeholder="(206) 555-0100" className={inputCls}/>
+        </div>
+      </div>
+
+      {/* Employer */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Employer</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-400 mb-1 block">Employer Name</label>
+            <input type="text" value={employer.name || ""}
+              onChange={(e) => onUpdateEmployer({ name: e.target.value })}
+              className={inputCls}/>
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-400 mb-1 block">Employer Address (payroll office, if different)</label>
+            <input type="text" value={employer.address || ""}
+              onChange={(e) => onUpdateEmployer({ address: e.target.value })}
+              placeholder="Street, City, State, ZIP" className={inputCls}/>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Employer Phone</label>
+            <input type="tel" value={employer.phone || ""}
+              onChange={(e) => onUpdateEmployer({ phone: e.target.value })}
+              className={inputCls}/>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Employer Fax</label>
+            <input type="tel" value={employer.fax || ""}
+              onChange={(e) => onUpdateEmployer({ fax: e.target.value })}
+              className={inputCls}/>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Pay Frequency</label>
+            <select value={employer.payFrequency || ""}
+              onChange={(e) => onUpdateEmployer(e.target.value === "other"
+                ? { payFrequency: "other" }
+                : { payFrequency: e.target.value, payFrequencyOther: "" })}
+              className={inputCls}>
+              {payFreqOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-400 mb-1 block">Other Frequency (if "Other")</label>
+            <input type="text" value={employer.payFrequencyOther || ""}
+              disabled={!showFreqOther}
+              onChange={(e) => onUpdateEmployer({ payFrequencyOther: e.target.value })}
+              placeholder="e.g. twice yearly"
+              className={inputCls + " disabled:opacity-40 disabled:cursor-not-allowed"}/>
+          </div>
+          <div className="md:col-span-2">
+            <label className="text-xs text-slate-400 mb-1 block">Other Income Source (if any)</label>
+            <input type="text" value={employer.otherIncomeSource || ""}
+              onChange={(e) => onUpdateEmployer({ otherIncomeSource: e.target.value })}
+              placeholder="e.g. side business, rental income"
+              className={inputCls}/>
+          </div>
+        </div>
+      </div>
+
+      {/* Domestic Support Obligation */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Domestic Support Obligation</p>
+        <div className="flex items-center gap-4 mb-3 flex-wrap">
+          <span className="text-xs text-slate-400">Do you owe a domestic support obligation (child support, alimony)?</span>
+          {[
+            { value: "yes", label: "Yes" },
+            { value: "no",  label: "No" },
+          ].map((opt) => (
+            <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm text-slate-200">
+              <input type="radio" name={"waWForm13_2_dso_" + dsoNameSuffix} value={opt.value}
+                checked={debtor.dsoYesNo === opt.value}
+                onChange={() => onUpdate({ dsoYesNo: opt.value })}
+                className="w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+              {opt.label}
+            </label>
+          ))}
+        </div>
+        {debtor.dsoYesNo === "yes" && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+            <div className="md:col-span-2">
+              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Name</label>
+              <input type="text" value={debtor.dsoClaimHolderName || ""}
+                onChange={(e) => onUpdate({ dsoClaimHolderName: e.target.value })}
+                placeholder="Person or agency receiving support" className={inputCls}/>
+            </div>
+            <div className="md:col-span-2">
+              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Address</label>
+              <input type="text" value={debtor.dsoClaimHolderAddress || ""}
+                onChange={(e) => onUpdate({ dsoClaimHolderAddress: e.target.value })}
+                placeholder="Street, City, State, ZIP" className={inputCls}/>
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Phone</label>
+              <input type="tel" value={debtor.dsoClaimHolderPhone || ""}
+                onChange={(e) => onUpdate({ dsoClaimHolderPhone: e.target.value })}
+                className={inputCls}/>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function WAWSignatureRow({ label, sig, onUpdate, inputCls }) {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
+        <input type="text" value={sig.name || ""}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Type your full legal name" className={inputCls}/>
+      </div>
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">Date</label>
+        <input type="date" value={sig.date || ""}
+          onChange={(e) => onUpdate({ date: e.target.value })}
+          className={inputCls}/>
+      </div>
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -19562,11 +19949,9 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
       case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
       case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
-      case "waWLocalForms":
+      case "waWLocalForms":  return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
       case "waELocalForms": {
-        const districtName =
-          sectionId === "waWLocalForms" ? "Western District of Washington" :
-                                          "Eastern District of Washington";
+        const districtName = "Eastern District of Washington";
         return withAll(
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 text-center">
             <p className="text-slate-300 text-sm font-semibold mb-1">{districtName} — Local Forms</p>
