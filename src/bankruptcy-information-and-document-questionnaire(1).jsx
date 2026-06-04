@@ -104,6 +104,10 @@ const SECTIONS = [
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_E },
+  { id:"waE5005_3f",    label:"Statement of Witness to Signing (5005-3f)", icon:"✍️", group:"W Eastern Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
   { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
@@ -19422,6 +19426,77 @@ function SectionWAE2083C({ d, u }) {
   );
 }
 
+// ─── WA Eastern LF 5005-3(f) — Statement of Witness to Signing (confirm-only)
+// Client reviews which documents the witness statement will cover. Witness
+// and attorney signatures are completed by the firm at signing — no
+// signature/name/address inputs here. Both Ch.7 and Ch.13 (no chapter
+// restriction). Persists to data.waELocalForms.form5005_3f as
+// { affirmed, affirmedAt } only.
+function SectionWAE5005_3f({ d, u }) {
+  const waE = d.waELocalForms || {};
+  const formData = waE.form5005_3f || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form5005_3f: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  const documentsCovered = [
+    "Voluntary Petition",
+    "Declaration re Schedules",
+    "Statement of Affairs",
+    "Statement re Social Security Number",
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 5005-3(f) — Statement of Witness to Signing</p>
+            <p>A witness will attest that they watched you sign your bankruptcy documents. <strong>Your attorney completes and files this form</strong> — you're reviewing it here so you know which documents it covers.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Documents covered — read-only list */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Documents the Witness Statement Covers</h3>
+        <ul className="space-y-2 text-sm text-slate-200">
+          {documentsCovered.map((doc, i) => (
+            <li key={i} className="flex items-center gap-3">
+              <svg className="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+              </svg>
+              {doc}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          The witness and attorney signatures are completed by your firm at signing — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the list above and understand which documents the witness statement covers."
+      />
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -19895,6 +19970,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
       case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
       case "waE2083C":       return withAll(<SectionWAE2083C d={data} u={updateSection}/>);
+      case "waE5005_3f":     return withAll(<SectionWAE5005_3f d={data} u={updateSection}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
       case "review": {
         // A/B grand total — mirrors SectionReview lines 17652-17678 exactly
