@@ -103,6 +103,11 @@ const SECTIONS = [
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_E },
+  { id:"waE2083B",      label:"Chapter 13 Plan Funding Analysis (2083B)", icon:"📐", group:"W Eastern Local Forms",
+    chapters:["13"],
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
   { id:"waE2083C",      label:"Chapter 7 Liquidation Analysis (2083C)", icon:"⚖️", group:"W Eastern Local Forms",
     chapters:["7","13"],
     gate: ({ state, district }) =>
@@ -19455,6 +19460,69 @@ function SectionWAE2016E({ d, u }) {
   );
 }
 
+// ─── WA Eastern LF 2083B — Chapter 13 Plan Funding Analysis (view-only) ───
+// View-only (MAJ-160). Eastern District of Washington Ch.13 plan funding
+// analysis. Attorney-prepared end-to-end — shows how Ch.13 plan payments
+// are distributed across categories of claims. The form shows ONLY the
+// structural row layout with TBD placeholders; no schedule reads, no
+// auto-compute. Distribution amounts are determined by the firm when
+// building the plan. Persists nothing. SECTIONS-level chapters:["13"]
+// gate hides this for non-Ch.13; in-component check is the safety net.
+function SectionWAE2083B({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 13 Plan Funding Analysis applies to Chapter 13 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const tbd = "To be determined — your attorney prepares this when your plan is built.";
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2083B — Chapter 13 Plan Funding Analysis</p>
+            <p>This shows how your Chapter 13 plan payments are distributed among categories of claims. Your attorney prepares it when building your plan; it's shown here for your information.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Plan funding rows — structural layout, all values TBD */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Plan Funding Analysis</h3>
+        <ReadOnlyField label="Administrative Expenses (excluding Trustee fees)" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Continuing Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Secured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Executory Contracts and Unexpired Leases" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Arrearages / Defaults" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Priority Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Separate Classifications of Unsecured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Unsecured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Postpetition Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Other Provisions" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Sub-total" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Total Payments to Trustee Including Fees (sub-total ÷ 0.9 for the 10% trustee fee)" value="" placeholder={tbd}/>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">Your attorney prepares this analysis when building your Chapter 13 plan.</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── WA Eastern LF 2083C — Chapter 7 Liquidation Analysis (view-only) ──────
 // View-only (MAJ-160). Eastern District of Washington Ch.7 liquidation
 // analysis. Attorney-prepared end-to-end — the client cannot meaningfully
@@ -20055,6 +20123,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
       case "waE1007_1":      return withAll(<SectionWAE1007_1 d={data} u={updateSection} docStatus={docStatus}/>);
       case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
+      case "waE2083B":       return withAll(<SectionWAE2083B d={data} u={updateSection}/>);
       case "waE2083C":       return withAll(<SectionWAE2083C d={data} u={updateSection}/>);
       case "waE5005_3f":     return withAll(<SectionWAE5005_3f d={data} u={updateSection}/>);
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
