@@ -18826,40 +18826,80 @@ function Form121SignatureRow({ label, sig, onUpdate }) {
   );
 }
 
+// ─── Confirm-only display helpers ────────────────────────────────────────────
+// Used by local-form confirm-only sections (AZ 1007-2, AZ 1007-1, WA-W 13-2,
+// WA-E 2016E/2083C and any future local forms). Each form displays read-only
+// data from petition / schedules / disclosures, with "To be completed by your
+// firm" placeholders for fields with no upstream source, then a single
+// affirmation checkbox at the bottom.
+
+// ReadOnlyField — labeled read-only display row.
+//   value     — when truthy, shown as the field value with an optional source tag.
+//   placeholder — when value is empty, falls back to this italic placeholder.
+//   source    — when present alongside a value, renders as "FROM {source}".
+function ReadOnlyField({ label, value, source, placeholder }) {
+  const hasValue = value !== undefined && value !== null && value !== "";
+  return (
+    <div className="mb-3">
+      <label className="text-xs text-slate-400 mb-1 block">{label}</label>
+      {hasValue ? (
+        <div className="text-sm text-slate-200">{value}</div>
+      ) : (
+        <div className="text-sm italic text-slate-500">{placeholder || "Not on file"}</div>
+      )}
+      {hasValue && source && (
+        <div className="mt-1">
+          <span className="text-[10px] text-slate-500 uppercase tracking-wider">From {source}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ConfirmAffirmation — standard "I affirm…" checkbox + timestamp block at the
+// bottom of every confirm-only local form. Sets affirmedAt on toggle-to-true;
+// clears it on toggle-to-false.
+function ConfirmAffirmation({ affirmed, affirmedAt, onToggle, label }) {
+  return (
+    <div className="bg-slate-900 border border-amber-700/40 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white mb-2">Affirmation</h3>
+      <label className="flex items-start gap-3 cursor-pointer text-sm text-slate-200">
+        <input type="checkbox" checked={!!affirmed}
+          onChange={(e) => onToggle(e.target.checked)}
+          className="mt-0.5 w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+        {label}
+      </label>
+      {affirmed && affirmedAt && (
+        <p className="text-xs text-slate-500 mt-3">Affirmed on {new Date(affirmedAt).toLocaleString()}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── AZ Local Form 1007-2 — Declaration of Evidence of Payments (60 days) ────
-// District of Arizona local form, filed with the petition. Declares whether
-// the debtor received pay advices or other evidence of payment from any
-// employer in the 60 days before filing — one of: pay advices are attached,
-// none received, or a stated dollar amount received. Persists to
-// data.azLocalForms.
-function SectionAZLocalForms({ d, u }) {
+// Confirm-only (MAJ-160). The firm picks the right declaration (pay advices
+// attached / none / amount) from the pay stubs the client has uploaded;
+// client confirms they've provided everything. Persists to data.azLocalForms
+// as { affirmed, affirmedAt }. Old declaration/amount/signature fields stay in
+// stored data but are no longer read or written.
+function SectionAZLocalForms({ d, u, docStatus }) {
   const formData = d.azLocalForms || {};
-  const declaration = formData.declaration || "";
-  const amount = formData.amount || "";
-  const signature = formData.signature || { name: "", date: "" };
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
 
   const update = (patch) => u("azLocalForms", { ...formData, ...patch });
-  const setDeclaration = (v) => {
-    // Clear the amount when switching away from the "amount" option so a
-    // stale value can't accidentally end up on the filed form.
-    const patch = { declaration: v };
-    if (v !== "amount") patch.amount = "";
-    update(patch);
-  };
-  const setAmount = (v) => update({ amount: v });
-  const setSignature = (patch) => update({ signature: { ...signature, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
 
-  const radios = [
-    { value: "attached", label: "Attached are copies of all payment advices, pay stubs, or other evidence of payment received from any employer within 60 days before filing." },
-    { value: "none",     label: "I received no payment advices, pay stubs, or other evidence of payment from any employer within 60 days before filing." },
-    { value: "amount",   label: "I received the following payments from employers within 60 days before filing:" },
-  ];
-
-  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+  // Paystub status from docStatus. The 60-day window is finer than monthly
+  // buckets; the firm picks the right 1007-2 option from what's on file.
+  const paystubIds = ["paystub_1", "paystub_2", "paystub_3", "paystub_4", "paystub_5", "paystub_6"];
+  const uploadedPaystubs = paystubIds.filter((id) => docStatus && docStatus[id] === "uploaded").length;
+  const anyUploaded = uploadedPaystubs > 0;
 
   return (
     <div className="space-y-6">
-      {/* Explanation card */}
+      {/* Explanation */}
       <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
         <div className="flex items-start gap-3">
           <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -18867,102 +18907,69 @@ function SectionAZLocalForms({ d, u }) {
           </svg>
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Local Form 1007-2 — Declaration of Evidence of Payments (60 days)</p>
-            <p>This form is filed with your Arizona bankruptcy petition. It declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. If you attach pay stubs, you must black out (redact) any Social Security numbers, names of minor children, dates of birth, and financial account numbers first.</p>
+            <p>Filed with your Arizona bankruptcy petition. It declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares the actual declaration</strong> based on the pay stubs you upload. The firm redacts any Social Security numbers, names of minor children, dates of birth, and financial account numbers before filing.</p>
           </div>
         </div>
       </div>
 
-      {/* Declaration */}
+      {/* Pay stubs — REQUIRED for this form */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Declaration</h3>
-        <p className="text-xs text-slate-400 mb-4">Select one option. The selected statement will appear on the filed form.</p>
-
-        <div className="space-y-3">
-          {radios.map((opt) => (
-            <label key={opt.value} className="flex items-start gap-3 cursor-pointer p-3 rounded-lg border border-slate-700/60 hover:border-amber-500/40 transition-colors">
-              <input
-                type="radio"
-                name="azLocalForms_declaration"
-                value={opt.value}
-                checked={declaration === opt.value}
-                onChange={() => setDeclaration(opt.value)}
-                className="mt-0.5 w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"
-              />
-              <div className="flex-1 text-sm text-slate-200 leading-relaxed">
-                {opt.label}
-                {opt.value === "amount" && (
-                  <div className="mt-3 flex items-center gap-3">
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm pointer-events-none">$</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        value={amount}
-                        disabled={declaration !== "amount"}
-                        onChange={(e) => setAmount(e.target.value.replace(/[^\d.]/g, ""))}
-                        placeholder="0.00"
-                        className="w-40 bg-slate-800 border border-slate-700 rounded-lg pl-7 pr-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
-                      />
-                    </div>
-                    {amount && declaration === "amount" && (
-                      <span className="text-xs text-slate-500">→ <span className="text-slate-300 font-medium">{fmtMoney(amount)}</span></span>
-                    )}
-                  </div>
-                )}
-              </div>
-            </label>
-          ))}
-        </div>
+        <h3 className="text-base font-semibold text-white mb-1">Pay Stubs — Required</h3>
+        <p className="text-xs text-slate-400 leading-relaxed mb-4">
+          This form is your declaration about pay advices from the 60 days before filing. <strong className="text-amber-200">Pay stubs covering that 60-day window are required for this form.</strong> Upload them in the <span className="text-amber-400 font-semibold">Document Upload</span> section of this questionnaire — that's the single place pay stubs are stored.
+        </p>
+        {anyUploaded ? (
+          <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span><span className="font-semibold">{uploadedPaystubs}</span> of {paystubIds.length} monthly paystub uploads on file.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <span><span className="font-semibold">No pay stubs uploaded yet</span> — required before filing.</span>
+          </div>
+        )}
       </div>
 
-      {/* Signature */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Debtor Signature</h3>
-        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the declaration above is true and correct.</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Signed name</label>
-            <input
-              type="text"
-              value={signature.name || ""}
-              onChange={(e) => setSignature({ name: e.target.value })}
-              placeholder="Type your full legal name"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Date</label>
-            <input
-              type="date"
-              value={signature.date || ""}
-              onChange={(e) => setSignature({ date: e.target.value })}
-              className={inputCls}
-            />
-          </div>
-        </div>
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          The specific declaration text on the filed form (pay advices attached / none received / amount received) is selected and completed by your firm based on the pay stubs uploaded. Signature is collected at attorney review.
+        </p>
       </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have uploaded all pay advices or other evidence of payment I received from any employer in the 60 days before filing, OR I have no pay advices to provide."
+      />
     </div>
   );
 }
 
 // ─── AZ Local Form 1007-1 — Declaration re: Electronic Filing ────────────────
-// District of Arizona local form. Authorizes the attorney to electronically
-// file the petition, schedules, and statements; the signed original is filed
-// with the Clerk (paper) no later than 21 days after the petition (or 7 days
-// after schedules/statements if extension granted). Applies to both Ch.7 and
-// Ch.13 — no chapter gate at the SECTIONS level. Persists to data.az1007_1.
+// Confirm-only (MAJ-160). Firm prepares and files the actual document;
+// signatures are collected at attorney review (not here). Consumer-Ch.7
+// election keeps its own acknowledgment checkbox — that IS an affirmation by
+// its nature. Spouse fields use pd.spouseFirst / pd.spouseLast (MAJ-159 fix
+// applied here while in the file). Persists to data.az1007_1 as
+// { affirmed, affirmedAt, consumerCh7Ack }. Old declarantName/signatures/
+// filingOnBehalfOfEntity stay in stored data but are no longer read or written.
 function SectionAZ1007_1({ d, u }) {
   const pd = d.petition || {};
-  const isJoint = pd.filingType === "Joint";
+  const isJoint = pd.filingType === "Joint" || pd.filingType === "joint";
   const chapter = String(pd.chapter || "");
   const isConsumerCh7 = chapter === "7";
 
   const formData = d.az1007_1 || {};
 
-  // Defensive: clear consumerCh7Ack when the petition's chapter switches away
-  // from "7" so a dormant `true` from an earlier Ch.7 election can't survive
-  // onto a Ch.13 (or other) filed form. Matches the AZ 1007-2 amount-on-switch
-  // pattern. Re-runs when chapter or the underlying data object changes.
+  // Defensive: clear consumerCh7Ack on chapter switch-away (unchanged behavior).
   useEffect(() => {
     const current = d.az1007_1 || {};
     if (chapter !== "7" && current.consumerCh7Ack) {
@@ -18970,30 +18977,25 @@ function SectionAZ1007_1({ d, u }) {
     }
   }, [chapter, d, u]);
 
-  // Derive default declarant name from the petition; field stays editable so
-  // an authorized corporate officer or partnership member can replace it.
+  // MAJ-159 fix: spouse fields are spouseFirst / spouseLast on data.petition
+  // (NOT spouseFirstName / spouseLastName, which don't exist).
   const d1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ");
-  const d2Name = isJoint ? [pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") : "";
-  const petitionDefault = isJoint && d1Name && d2Name
+  const d2Name = isJoint ? [pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") : "";
+  const declarantName = isJoint && d1Name && d2Name
     ? d1Name + " and " + d2Name
     : (d1Name || d2Name || "");
-  const declarantName = formData.declarantName !== undefined ? formData.declarantName : petitionDefault;
 
-  const debtor1Sig  = formData.debtor1Sig  || { name: "", date: "" };
-  const debtor2Sig  = formData.debtor2Sig  || { name: "", date: "" };
-  const officerSig  = formData.officerSig  || { name: "", date: "" };
-  const attorneySig = formData.attorneySig || { name: "", date: "" };
-  const consumerCh7Ack         = !!formData.consumerCh7Ack;
-  const filingOnBehalfOfEntity = !!formData.filingOnBehalfOfEntity;
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+  const consumerCh7Ack = !!formData.consumerCh7Ack;
 
   const update = (patch) => u("az1007_1", { ...formData, ...patch });
-  const updateSig = (key, patch) => update({ [key]: { ...(formData[key] || {}), ...patch } });
-
-  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
 
   return (
     <div className="space-y-6">
-      {/* Explanation card */}
+      {/* Explanation */}
       <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
         <div className="flex items-start gap-3">
           <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19001,31 +19003,20 @@ function SectionAZ1007_1({ d, u }) {
           </svg>
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration re: Electronic Filing</p>
-            <p>Local Form 1007-1 is the signed declaration authorizing your attorney to electronically file your petition, schedules, and statements. You confirm under penalty of perjury that everything you gave your attorney — including Social Security numbers — is true and correct, that you reviewed and signed each document, and received a copy. The signed original is filed with the court (not electronically), no later than 21 days after the petition (or 7 days after schedules/statements if an extension was granted). Failure to file the signed original can cause your case to be dismissed.</p>
+            <p>This declaration authorizes your attorney to electronically file your petition, schedules, and statements. <strong>Your firm prepares and files this form.</strong> You're confirming the information that will appear on it.</p>
           </div>
         </div>
       </div>
 
-      {/* Part I — Petitioner declaration */}
+      {/* Part I — Petitioner declaration body (read-only) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
         <h3 className="text-base font-semibold text-white mb-3">Part I — Petitioner Declaration</h3>
-
-        {/* Declaration body — read-only */}
-        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed">
+        <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed mb-4">
           <p>I/We, the undersigned debtor(s), declare under penalty of perjury that the information provided to my attorney for the petition, schedules, and statements — including Social Security numbers — is true and correct. I have reviewed and signed each document, and my attorney provided me a signed copy. I consent to my attorney electronically filing my petition, schedules, and statements with the United States Bankruptcy Court for the District of Arizona. I understand that the signed original of this Declaration must be filed with the Clerk no later than 21 days after the petition is filed (or 7 days after the schedules and statements are filed if an extension was granted). I further understand that failure to file the signed original will cause my case to be dismissed.</p>
         </div>
+        <ReadOnlyField label="Declarant Name(s)" value={declarantName} source="Petition" placeholder="To be completed by your firm before filing"/>
 
-        {/* Declarant name */}
-        <div className="mt-5">
-          <label className="text-xs text-slate-400 mb-1 block">Declarant name(s)</label>
-          <input type="text" value={declarantName}
-            onChange={(e) => update({ declarantName: e.target.value })}
-            placeholder="Defaults to debtor name(s) from the petition; edit only if signing as authorized corporate officer or partnership member"
-            className={inputCls}/>
-          <p className="text-[11px] text-slate-500 mt-1">Pre-filled from the Voluntary Petition. Override if a corporate officer or partnership member is signing.</p>
-        </div>
-
-        {/* Consumer Chapter 7 paragraph — ONLY shown when petition.chapter === "7" */}
+        {/* Consumer Chapter 7 paragraph — only when chapter === "7" */}
         {isConsumerCh7 && (
           <div className="mt-5 bg-slate-800/40 border border-slate-700 rounded-lg p-4">
             <p className="text-sm text-slate-200 leading-relaxed mb-3">I am aware that I may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, understand the relief available under each chapter, and choose to proceed under chapter 7. I request relief in accordance with the chapter specified in the petition.</p>
@@ -19039,45 +19030,30 @@ function SectionAZ1007_1({ d, u }) {
         )}
       </div>
 
-      {/* Petitioner signatures */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Debtor Signatures</h3>
-        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the declaration above is true and correct.</p>
-        <AZ1007SignatureRow label={(d1Name || "Debtor 1") + " (Debtor 1)"}
-          sig={debtor1Sig} onUpdate={(patch) => updateSig("debtor1Sig", patch)} inputCls={inputCls}/>
-        {isJoint && (
-          <AZ1007SignatureRow label={(d2Name || "Debtor 2") + " (Debtor 2)"}
-            sig={debtor2Sig} onUpdate={(patch) => updateSig("debtor2Sig", patch)} inputCls={inputCls}/>
-        )}
-
-        {/* Optional officer/entity signature */}
-        <div className="mt-5 border-t border-slate-800 pt-5">
-          <label className="flex items-center gap-2 cursor-pointer text-sm text-slate-200 mb-3">
-            <input type="checkbox" checked={filingOnBehalfOfEntity}
-              onChange={(e) => update({ filingOnBehalfOfEntity: e.target.checked })}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-            Signing on behalf of a business entity (authorized corporate officer or partnership member)
-          </label>
-          {filingOnBehalfOfEntity && (
-            <AZ1007SignatureRow label="Authorized officer / partnership member"
-              sig={officerSig} onUpdate={(patch) => updateSig("officerSig", patch)} inputCls={inputCls}/>
-          )}
-        </div>
-      </div>
-
-      {/* Part II — Attorney declaration */}
+      {/* Part II — Attorney declaration (read-only) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
         <h3 className="text-base font-semibold text-white mb-3">Part II — Attorney Declaration</h3>
         <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-4 text-sm text-slate-200 leading-relaxed">
           <p>I declare under penalty of perjury that I have reviewed the petition, schedules, and statements with the debtor(s). The debtor(s) will have signed this form before I submit the petition, schedules, and statements for electronic filing. I will give the debtor(s) a copy of all forms electronically filed with the Court. I have complied with all other requirements set forth in the most recent Interim Operating Order. If the debtor is an individual, I have informed the petitioner that they may proceed under chapter 7, 11, 12, or 13 of title 11 of the United States Code, and explained the relief available under each chapter.</p>
         </div>
-        <div className="mt-5">
-          <AZ1007SignatureRow label="Attorney for Debtor(s)"
-            sig={attorneySig} onUpdate={(patch) => updateSig("attorneySig", patch)} inputCls={inputCls}/>
-        </div>
       </div>
 
-      {/* Footer note */}
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor, debtor 2 if joint, authorized officer if filing on behalf of an entity, and attorney) are collected by your firm at signing — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the information above and confirm it is accurate. I authorize my attorney to electronically file my petition, schedules, and statements."
+      />
+
+      {/* Footer */}
       <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
         <p className="text-xs text-amber-300 font-semibold">File original with court — do not file electronically.</p>
       </div>
@@ -19085,34 +19061,19 @@ function SectionAZ1007_1({ d, u }) {
   );
 }
 
-function AZ1007SignatureRow({ label, sig, onUpdate, inputCls }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
-        <input type="text" value={sig.name || ""}
-          onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="Type full legal name" className={inputCls}/>
-      </div>
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">Date</label>
-        <input type="date" value={sig.date || ""}
-          onChange={(e) => onUpdate({ date: e.target.value })}
-          className={inputCls}/>
-      </div>
-    </div>
-  );
-}
-
-// ─── WA Western District Local Forms (Ch.13) ─────────────────────────────────
-// Western District of Washington local forms. The SECTIONS-level gate already
-// restricts visibility to WA + WD; this component adds the chapter gate
-// (Ch.13 only) and renders LF 13-2 today. LF 13-5 lands in a follow-up commit.
-// Persists to data.waWLocalForms = { form13_2: {...}, form13_5: {...} }.
+// ─── WA Western LF 13-2 — Chapter 13 Trustee Information Sheet ──────────────
+// Confirm-only (MAJ-160). SECTIONS-level gate already restricts visibility to
+// WA + WD; in-component chapter gate is the Ch.13 safety net. Client confirms
+// the data the firm will use; firm completes the trustee-specific fields
+// (payroll address, tax-return status, DSO claim-holder, wage-deduction
+// election, case number) and signs at the attorney meeting. Persists to
+// data.waWLocalForms.form13_2 as { affirmed, affirmedAt }. Old per-debtor /
+// employer / DSO / tax / signature fields stay in stored data but are no
+// longer read or written.
 function SectionWAWLocalForms({ d, u }) {
   const pd = d.petition || {};
   const chapter = String(pd.chapter || "");
-  const isJoint = pd.filingType === "Joint";
+  const isJoint = pd.filingType === "Joint" || pd.filingType === "joint";
 
   if (chapter !== "13") {
     return (
@@ -19125,117 +19086,91 @@ function SectionWAWLocalForms({ d, u }) {
     );
   }
 
-  const formData = d.waWLocalForms || {};
-  const form13_2 = formData.form13_2 || {};
+  const formData = (d.waWLocalForms || {}).form13_2 || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
 
-  const emptyDebtor = {
-    name: "", homeAddress: "", mailingAddress: "", mailingSameAsHome: false,
-    email: "", homePhone: "",
-    employer: { name: "", address: "", phone: "", fax: "", payFrequency: "", payFrequencyOther: "", otherIncomeSource: "" },
-    dsoYesNo: "", dsoClaimHolderName: "", dsoClaimHolderAddress: "", dsoClaimHolderPhone: "",
-  };
-  const debtor1 = form13_2.debtor1 || emptyDebtor;
-  const debtor2 = form13_2.debtor2 || emptyDebtor;
-  const wageDeductionDebtor = form13_2.wageDeductionDebtor || "";
-  const taxReturns = form13_2.taxReturns || {};
-  const signatures = form13_2.signatures || { debtor1: { name: "", date: "" }, debtor2: { name: "", date: "" } };
+  const update = (patch) => u("waWLocalForms", {
+    ...(d.waWLocalForms || {}),
+    form13_2: { ...formData, ...patch }
+  });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
 
-  const update = (patch) => u("waWLocalForms", { ...formData, form13_2: { ...form13_2, ...patch } });
-  const updateDebtor = (which, patch) =>
-    update({ [which]: { ...(form13_2[which] || emptyDebtor), ...patch } });
-  const updateEmployer = (which, patch) => {
-    const debtor = form13_2[which] || emptyDebtor;
-    updateDebtor(which, { employer: { ...(debtor.employer || emptyDebtor.employer), ...patch } });
-  };
-  const updateSig = (which, patch) =>
-    update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
-  const updateTaxCell = (rowKey, col, value) =>
-    update({ taxReturns: { ...taxReturns, [rowKey]: { ...(taxReturns[rowKey] || {}), [col]: value } } });
-
-  const pd1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
-  const pd2Name = isJoint ? ([pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") || "Debtor 2") : null;
-
-  // ── Pre-fill plumbing ─────────────────────────────────────────────────────
-  // Each pre-fillable 13-2 field stays editable; an "Imported from {Petition |
-  // Schedule I}" tag appears next to a field while its stored value is
-  // undefined and an import source is available. Once the client types
-  // anything (including an explicit empty string), stored wins and the tag
-  // disappears. Edits never mutate the import source.
+  // Compose address + pay frequency for display (no override — read-only).
   const composeFullAddress = (a, c, s, z) => {
     const cs = [c, s].filter(Boolean).join(", ");
     const csz = [cs, z].filter(Boolean).join(" ");
     return [a, csz].filter(Boolean).join(", ");
   };
-  const normalizeSchedIPayFreq = (v) => {
+  const displayPayFreq = (v) => {
     const lc = String(v || "").toLowerCase().trim();
-    if (lc === "weekly")                               return "weekly";
-    if (lc === "bi-weekly" || lc === "biweekly")       return "biweekly";
-    if (lc === "semi-monthly" || lc === "semimonthly") return "semi-monthly";
-    if (lc === "monthly")                              return "monthly";
-    return v ? "other" : "";  // unknown but truthy → "other" so the Other text input becomes available
+    if (lc === "weekly")                               return "Weekly";
+    if (lc === "bi-weekly" || lc === "biweekly")       return "Biweekly";
+    if (lc === "semi-monthly" || lc === "semimonthly") return "Semi-monthly";
+    if (lc === "monthly")                              return "Monthly";
+    return v ? String(v) : "";
   };
-  const composeEmployerAddress = (emp) =>
-    emp ? composeFullAddress(emp.employerAddress, emp.employerCity, emp.employerState, emp.employerZip) : "";
 
   const schedI = d.schedI || {};
   const dEmp = (schedI.employmentSources || [])[0] || null;
   const sEmp = (schedI.spouseEmploySources || [])[0] || null;
-  const importedHomeAddress = composeFullAddress(pd.addr1, pd.city, pd.state, pd.zip);
-  const importedMailing = pd.mailingDifferent === "yes"
+
+  // MAJ-159: spouseFirst / spouseLast on data.petition.
+  const d1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ");
+  const d2Name = isJoint ? [pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") : "";
+
+  const homeAddress = composeFullAddress(pd.addr1, pd.city, pd.state, pd.zip);
+  const mailingDifferent = pd.mailingDifferent === "yes";
+  const mailingAddress = mailingDifferent
     ? composeFullAddress(pd.mailingAddr1, pd.mailingCity, pd.mailingState, pd.mailingZip)
-    : "";
-  const mailingSameDefault = pd.mailingDifferent !== "yes";
+    : "Same as home address";
 
-  const importedFor = (which) => {
-    const isD1 = which === "debtor1";
-    const emp = isD1 ? dEmp : sEmp;
-    return {
-      name:              isD1 ? pd1Name : (pd2Name || ""),
-      homeAddress:       importedHomeAddress,
-      mailingAddress:    importedMailing,
-      mailingSameAsHome: mailingSameDefault,
-      email:             isD1 ? (pd.email || "") : (pd.spouseEmail || ""),
-      homePhone:         isD1 ? (pd.phone || "") : (pd.spousePhone || ""),
-      employer: {
-        name:         emp?.employerName || "",
-        address:      composeEmployerAddress(emp),
-        phone:        emp?.employerPhone || "",
-        payFrequency: normalizeSchedIPayFreq(emp?.payFrequency),
-      },
-    };
-  };
+  const firmTBD = "To be completed by your firm before filing";
 
-  const taxRows = [
-    { key: "recent", label: "Most recent year" },
-    { key: "year2",  label: "2nd year past" },
-    { key: "year3",  label: "3rd year past" },
-    { key: "year4",  label: "4th year past" },
-  ];
-  const taxCols = [
-    { label: "Federal", key: "federal" },
-    { label: "State",   key: "state" },
-    { label: "Local",   key: "local" },
-  ];
-  const taxStatusOptions = [
-    { value: "",       label: "—" },
-    { value: "filed",  label: "Filed" },
-    { value: "nr",     label: "NR" },
-    { value: "ext",    label: "EXT" },
-  ];
-  const payFreqOptions = [
-    { value: "",              label: "Select…" },
-    { value: "weekly",        label: "Weekly" },
-    { value: "biweekly",      label: "Biweekly" },
-    { value: "monthly",       label: "Monthly" },
-    { value: "semi-monthly",  label: "Semi-monthly" },
-    { value: "other",         label: "Other" },
-  ];
+  const DebtorReview = ({ label, name, email, phone, employerName, payFreq }) => (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white">
+        {label}{name ? <> — <span className="text-slate-300">{name}</span></> : null}
+      </h3>
+      <div className="mt-5 border-t border-slate-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-x-4">
+        <ReadOnlyField label="Name" value={name} source="Petition" placeholder={firmTBD}/>
+        <ReadOnlyField label="Email" value={email} source="Petition" placeholder={firmTBD}/>
+        <div className="md:col-span-2">
+          <ReadOnlyField label="Home Address" value={homeAddress} source="Petition" placeholder={firmTBD}/>
+        </div>
+        <div className="md:col-span-2">
+          <ReadOnlyField label="Mailing Address" value={mailingAddress} source={mailingDifferent ? "Petition" : null}/>
+        </div>
+        <ReadOnlyField label="Home Phone" value={phone} source="Petition" placeholder={firmTBD}/>
+      </div>
 
-  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Employer</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4">
+          <div className="md:col-span-2">
+            <ReadOnlyField label="Employer Name" value={employerName} source="Schedule I" placeholder={firmTBD}/>
+          </div>
+          <div className="md:col-span-2">
+            <ReadOnlyField label="Payroll Office Address" value="" placeholder={firmTBD}/>
+          </div>
+          <ReadOnlyField label="Payroll Phone" value="" placeholder={firmTBD}/>
+          <ReadOnlyField label="Payroll Fax" value="" placeholder={firmTBD}/>
+          <ReadOnlyField label="Pay Frequency" value={payFreq} source="Schedule I" placeholder={firmTBD}/>
+        </div>
+      </div>
+
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <p className="text-sm font-semibold text-slate-200 mb-3">Domestic Support Obligation</p>
+        <ReadOnlyField label="Owes domestic support obligation (child support, alimony)?" value="" placeholder={firmTBD}/>
+        <ReadOnlyField label="Claim Holder Name / Address / Phone" value="" placeholder={firmTBD}/>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Explanation card */}
+      {/* Explanation */}
       <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
         <div className="flex items-start gap-3">
           <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -19243,340 +19178,67 @@ function SectionWAWLocalForms({ d, u }) {
           </svg>
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">LF 13-2 — Chapter 13 Trustee Information Sheet</p>
-            <p>Filed with the Chapter 13 Trustee when your case is filed. The Trustee uses your employer information to send a payroll directive (wage deduction). Listing the wrong payroll address can cause payment delinquency and a motion to dismiss. Make your first plan payment to the Trustee right away — don't wait for the payroll deduction to start.</p>
+            <p>Filed with the Chapter 13 Trustee when your case is filed. <strong>Your firm prepares this form</strong> using your petition and Schedule I, plus case-specific details the firm fills in (payroll office, tax filings, support obligations). You're confirming the information shown below is accurate.</p>
           </div>
         </div>
       </div>
 
       {/* Case info */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-4">Case Information</h3>
-        <label className="text-xs text-slate-400 mb-1 block">Case Number</label>
-        <input type="text" value={form13_2.caseNumber || ""}
-          onChange={(e) => update({ caseNumber: e.target.value })}
-          placeholder="e.g. 26-12345" className={inputCls}/>
+        <h3 className="text-base font-semibold text-white mb-3">Case Information</h3>
+        <ReadOnlyField label="Case Number" value="" placeholder="To be assigned at filing"/>
       </div>
 
       {/* Debtor 1 */}
-      <WAWDebtorBlock
-        label="Debtor 1" name={pd1Name} debtor={debtor1}
-        imported={importedFor("debtor1")}
-        onUpdate={(patch) => updateDebtor("debtor1", patch)}
-        onUpdateEmployer={(patch) => updateEmployer("debtor1", patch)}
-        inputCls={inputCls} payFreqOptions={payFreqOptions}
+      <DebtorReview
+        label="Debtor 1"
+        name={d1Name}
+        email={pd.email}
+        phone={pd.phone}
+        employerName={dEmp && dEmp.employerName}
+        payFreq={displayPayFreq(dEmp && dEmp.payFrequency)}
       />
 
+      {/* Debtor 2 — joint only */}
       {isJoint && (
-        <WAWDebtorBlock
-          label="Debtor 2" name={pd2Name} debtor={debtor2}
-          imported={importedFor("debtor2")}
-          onUpdate={(patch) => updateDebtor("debtor2", patch)}
-          onUpdateEmployer={(patch) => updateEmployer("debtor2", patch)}
-          inputCls={inputCls} payFreqOptions={payFreqOptions}
+        <DebtorReview
+          label="Debtor 2"
+          name={d2Name}
+          email={pd.spouseEmail}
+          phone={pd.spousePhone}
+          employerName={sEmp && sEmp.employerName}
+          payFreq={displayPayFreq(sEmp && sEmp.payFrequency)}
         />
       )}
 
-      {/* Wage deduction — only in joint cases (single filer is implicit) */}
+      {/* Wage deduction — joint only */}
       {isJoint && (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-          <h3 className="text-base font-semibold text-white mb-1">Wage Deduction</h3>
-          <p className="text-xs text-slate-400 mb-4">Which debtor's wages should the payroll deduction come from?</p>
-          <div className="flex flex-col gap-2">
-            {[
-              { value: "debtor1", label: pd1Name + " (Debtor 1)" },
-              { value: "debtor2", label: pd2Name + " (Debtor 2)" },
-            ].map((opt) => (
-              <label key={opt.value} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg border border-slate-700/60 hover:border-amber-500/40 transition-colors">
-                <input type="radio" name="waWForm13_2_wageDeduction" value={opt.value}
-                  checked={wageDeductionDebtor === opt.value}
-                  onChange={() => update({ wageDeductionDebtor: opt.value })}
-                  className="w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-                <span className="text-sm text-slate-200">{opt.label}</span>
-              </label>
-            ))}
-          </div>
+          <h3 className="text-base font-semibold text-white mb-3">Wage Deduction</h3>
+          <ReadOnlyField label="Which debtor's wages should the payroll deduction come from?" value="" placeholder={firmTBD}/>
         </div>
       )}
 
-      {/* Tax returns */}
+      {/* Tax returns grid — placeholder block (no input) */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Tax Return Status</h3>
-        <p className="text-xs text-slate-400 mb-4">For each year, mark whether the return was Filed, Not Required (NR), or filed under an Extension (EXT).</p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-xs text-slate-400 border-b border-slate-700">
-                <th className="text-left font-medium py-2 pr-3">Year</th>
-                {taxCols.map((col) => (
-                  <th key={col.key} className="text-left font-medium py-2 px-2">{col.label}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {taxRows.map((row) => (
-                <tr key={row.key} className="border-b border-slate-800/60 last:border-b-0">
-                  <td className="text-slate-300 py-2 pr-3 whitespace-nowrap">{row.label}</td>
-                  {taxCols.map((col) => {
-                    const cellValue = (taxReturns[row.key] || {})[col.key] || "";
-                    return (
-                      <td key={col.key} className="py-2 px-2">
-                        <select value={cellValue}
-                          onChange={(e) => updateTaxCell(row.key, col.key, e.target.value)}
-                          className={inputCls + " min-w-[6rem]"}>
-                          {taxStatusOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                          ))}
-                        </select>
-                      </td>
-                    );
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <h3 className="text-base font-semibold text-white mb-3">Tax Return Status</h3>
+        <p className="text-sm italic text-slate-500">To be completed by your firm before filing — 4 years (most recent through 4 years prior) × Federal / State / Local, each marked Filed / NR / EXT.</p>
       </div>
 
-      {/* Signatures */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Signatures</h3>
-        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the information above is true and correct.</p>
-        <WAWSignatureRow
-          label={pd1Name + " (Debtor 1)"}
-          sig={signatures.debtor1 || { name: "", date: "" }}
-          onUpdate={(patch) => updateSig("debtor1", patch)}
-          inputCls={inputCls}
-        />
-        {isJoint && (
-          <WAWSignatureRow
-            label={pd2Name + " (Debtor 2)"}
-            sig={signatures.debtor2 || { name: "", date: "" }}
-            onUpdate={(patch) => updateSig("debtor2", patch)}
-            inputCls={inputCls}
-          />
-        )}
-      </div>
-    </div>
-  );
-}
-
-function WAWDebtorBlock({ label, name, debtor, imported, onUpdate, onUpdateEmployer, inputCls, payFreqOptions }) {
-  const employer = debtor.employer || {};
-  const showFreqOther = employer.payFrequency === "other";
-  const dsoNameSuffix = label.replace(/\s+/g, "_");
-
-  // pick(stored, importValue, source) → { value, tag }. Untouched fields show
-  // the imported value + an "Imported from {source}" tag; once the user types
-  // anything (including an explicit empty string), stored wins and the tag
-  // disappears.
-  const pick = (stored, importValue, source) => {
-    if (stored !== undefined) return { value: stored, tag: null };
-    if (importValue) return { value: importValue, tag: source };
-    return { value: "", tag: null };
-  };
-  const ImportedTag = ({ source }) => source
-    ? <div className="mt-1"><span className="text-[10px] text-slate-500 uppercase tracking-wider">Imported from {source}</span></div>
-    : null;
-
-  // Effective mailing-same-as-home: respect explicit user toggle, otherwise
-  // default to whatever the petition's mailingDifferent flag implied.
-  const effectiveMailingSame = debtor.mailingSameAsHome !== undefined
-    ? debtor.mailingSameAsHome
-    : !!imported?.mailingSameAsHome;
-
-  const onMailingSameToggle = (checked) => {
-    if (checked) onUpdate({ mailingSameAsHome: true, mailingAddress: debtor.homeAddress ?? imported?.homeAddress ?? "" });
-    else onUpdate({ mailingSameAsHome: false });
-  };
-
-  const fName       = pick(debtor.name,            imported?.name,              "Petition");
-  const fHomeAddr   = pick(debtor.homeAddress,     imported?.homeAddress,       "Petition");
-  const fMailing    = pick(debtor.mailingAddress,  imported?.mailingAddress,    "Petition");
-  const fEmail      = pick(debtor.email,           imported?.email,             "Petition");
-  const fHomePhone  = pick(debtor.homePhone,       imported?.homePhone,         "Petition");
-  const fEmpName    = pick(employer.name,          imported?.employer?.name,         "Schedule I");
-  const fEmpAddress = pick(employer.address,       imported?.employer?.address,      "Schedule I");
-  const fEmpPhone   = pick(employer.phone,         imported?.employer?.phone,        "Schedule I");
-  const fEmpFreq    = pick(employer.payFrequency,  imported?.employer?.payFrequency, "Schedule I");
-
-  return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-      <h3 className="text-base font-semibold text-white">{label} — <span className="text-slate-300">{name}</span></h3>
-
-      {/* Identity */}
-      <div className="mt-5 border-t border-slate-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div className="md:col-span-2">
-          <label className="text-xs text-slate-400 mb-1 block">Name (as it should appear on the form)</label>
-          <input type="text" value={fName.value}
-            onChange={(e) => onUpdate({ name: e.target.value })}
-            placeholder="Type full legal name" className={inputCls}/>
-          <ImportedTag source={fName.tag}/>
-        </div>
-        <div className="md:col-span-2">
-          <label className="text-xs text-slate-400 mb-1 block">Home Address</label>
-          <input type="text" value={fHomeAddr.value}
-            onChange={(e) => onUpdate(effectiveMailingSame
-              ? { homeAddress: e.target.value, mailingAddress: e.target.value }
-              : { homeAddress: e.target.value })}
-            placeholder="Street, City, State, ZIP" className={inputCls}/>
-          <ImportedTag source={fHomeAddr.tag}/>
-        </div>
-        <div className="md:col-span-2">
-          <div className="flex items-center justify-between mb-1 gap-4">
-            <label className="text-xs text-slate-400 block">Mailing Address</label>
-            <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-              <input type="checkbox" checked={!!effectiveMailingSame}
-                onChange={(e) => onMailingSameToggle(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-              Same as home address
-            </label>
-          </div>
-          <input type="text"
-            value={effectiveMailingSame ? fHomeAddr.value : fMailing.value}
-            disabled={!!effectiveMailingSame}
-            onChange={(e) => onUpdate({ mailingAddress: e.target.value })}
-            placeholder="Street, City, State, ZIP"
-            className={inputCls + " disabled:opacity-40 disabled:cursor-not-allowed"}/>
-          {!effectiveMailingSame && <ImportedTag source={fMailing.tag}/>}
-        </div>
-        <div>
-          <label className="text-xs text-slate-400 mb-1 block">Email</label>
-          <input type="email" value={fEmail.value}
-            onChange={(e) => onUpdate({ email: e.target.value })}
-            placeholder="you@example.com" className={inputCls}/>
-          <ImportedTag source={fEmail.tag}/>
-        </div>
-        <div>
-          <label className="text-xs text-slate-400 mb-1 block">Home Phone</label>
-          <input type="tel" value={fHomePhone.value}
-            onChange={(e) => onUpdate({ homePhone: e.target.value })}
-            placeholder="(206) 555-0100" className={inputCls}/>
-          <ImportedTag source={fHomePhone.tag}/>
-        </div>
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor and, in a joint case, debtor 2) are collected by your firm at signing — not here.
+        </p>
       </div>
 
-      {/* Employer */}
-      <div className="mt-5 border-t border-slate-800 pt-5">
-        <p className="text-sm font-semibold text-slate-200 mb-3">Employer</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div className="md:col-span-2">
-            <label className="text-xs text-slate-400 mb-1 block">Employer Name</label>
-            <input type="text" value={fEmpName.value}
-              onChange={(e) => onUpdateEmployer({ name: e.target.value })}
-              className={inputCls}/>
-            <ImportedTag source={fEmpName.tag}/>
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-xs text-slate-400 mb-1 block">Employer Address (payroll office, if different)</label>
-            <input type="text" value={fEmpAddress.value}
-              onChange={(e) => onUpdateEmployer({ address: e.target.value })}
-              placeholder="Street, City, State, ZIP" className={inputCls}/>
-            <ImportedTag source={fEmpAddress.tag}/>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Employer Phone</label>
-            <input type="tel" value={fEmpPhone.value}
-              onChange={(e) => onUpdateEmployer({ phone: e.target.value })}
-              className={inputCls}/>
-            <ImportedTag source={fEmpPhone.tag}/>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Employer Fax</label>
-            <input type="tel" value={employer.fax || ""}
-              onChange={(e) => onUpdateEmployer({ fax: e.target.value })}
-              className={inputCls}/>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Pay Frequency</label>
-            <select value={fEmpFreq.value}
-              onChange={(e) => onUpdateEmployer(e.target.value === "other"
-                ? { payFrequency: "other" }
-                : { payFrequency: e.target.value, payFrequencyOther: "" })}
-              className={inputCls}>
-              {payFreqOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <ImportedTag source={fEmpFreq.tag}/>
-          </div>
-          <div>
-            <label className="text-xs text-slate-400 mb-1 block">Other Frequency (if "Other")</label>
-            <input type="text" value={employer.payFrequencyOther || ""}
-              disabled={!showFreqOther}
-              onChange={(e) => onUpdateEmployer({ payFrequencyOther: e.target.value })}
-              placeholder="e.g. twice yearly"
-              className={inputCls + " disabled:opacity-40 disabled:cursor-not-allowed"}/>
-          </div>
-          <div className="md:col-span-2">
-            <label className="text-xs text-slate-400 mb-1 block">Other Income Source (if any)</label>
-            <input type="text" value={employer.otherIncomeSource || ""}
-              onChange={(e) => onUpdateEmployer({ otherIncomeSource: e.target.value })}
-              placeholder="e.g. side business, rental income"
-              className={inputCls}/>
-          </div>
-        </div>
-      </div>
-
-      {/* Domestic Support Obligation */}
-      <div className="mt-5 border-t border-slate-800 pt-5">
-        <p className="text-sm font-semibold text-slate-200 mb-3">Domestic Support Obligation</p>
-        <div className="flex items-center gap-4 mb-3 flex-wrap">
-          <span className="text-xs text-slate-400">Do you owe a domestic support obligation (child support, alimony)?</span>
-          {[
-            { value: "yes", label: "Yes" },
-            { value: "no",  label: "No" },
-          ].map((opt) => (
-            <label key={opt.value} className="flex items-center gap-1.5 cursor-pointer text-sm text-slate-200">
-              <input type="radio" name={"waWForm13_2_dso_" + dsoNameSuffix} value={opt.value}
-                checked={debtor.dsoYesNo === opt.value}
-                onChange={() => onUpdate({ dsoYesNo: opt.value })}
-                className="w-4 h-4 border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-              {opt.label}
-            </label>
-          ))}
-        </div>
-        {debtor.dsoYesNo === "yes" && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
-            <div className="md:col-span-2">
-              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Name</label>
-              <input type="text" value={debtor.dsoClaimHolderName || ""}
-                onChange={(e) => onUpdate({ dsoClaimHolderName: e.target.value })}
-                placeholder="Person or agency receiving support" className={inputCls}/>
-            </div>
-            <div className="md:col-span-2">
-              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Address</label>
-              <input type="text" value={debtor.dsoClaimHolderAddress || ""}
-                onChange={(e) => onUpdate({ dsoClaimHolderAddress: e.target.value })}
-                placeholder="Street, City, State, ZIP" className={inputCls}/>
-            </div>
-            <div>
-              <label className="text-xs text-slate-400 mb-1 block">Claim Holder Phone</label>
-              <input type="tel" value={debtor.dsoClaimHolderPhone || ""}
-                onChange={(e) => onUpdate({ dsoClaimHolderPhone: e.target.value })}
-                className={inputCls}/>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function WAWSignatureRow({ label, sig, onUpdate, inputCls }) {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
-        <input type="text" value={sig.name || ""}
-          onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="Type your full legal name" className={inputCls}/>
-      </div>
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">Date</label>
-        <input type="date" value={sig.date || ""}
-          onChange={(e) => onUpdate({ date: e.target.value })}
-          className={inputCls}/>
-      </div>
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the information above. I confirm that the data shown is accurate and that I have provided my firm with everything they need to complete this form."
+      />
     </div>
   );
 }
@@ -20074,7 +19736,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
-      case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
+      case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection} docStatus={docStatus}/>);
       case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
       case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
       case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
