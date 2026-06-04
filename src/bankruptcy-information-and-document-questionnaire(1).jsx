@@ -104,7 +104,7 @@ const SECTIONS = [
       state === "Washington" &&
       district === DIST_WA_E },
   { id:"waE2083C",      label:"Chapter 7 Liquidation Analysis (2083C)", icon:"⚖️", group:"W Eastern Local Forms",
-    chapters:["7"],
+    chapters:["7","13"],
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_E },
@@ -19466,11 +19466,11 @@ function SectionWAE2016E({ d, u }) {
 function SectionWAE2083C({ d, u }) {
   const pd = d.petition || {};
   const chapter = String(pd.chapter || "");
-  if (chapter !== "7") {
+  if (chapter !== "7" && chapter !== "13") {
     return (
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
         <p className="text-sm text-slate-300 leading-relaxed">
-          The Chapter 7 Liquidation Analysis applies to Chapter 7 cases. This case is Chapter {chapter || "—"}.
+          The Chapter 7 Liquidation Analysis applies to Chapter 7 and Chapter 13 cases. This case is Chapter {chapter || "—"}.
         </p>
       </div>
     );
