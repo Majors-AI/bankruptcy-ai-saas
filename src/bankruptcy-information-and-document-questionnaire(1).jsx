@@ -94,6 +94,10 @@ const SECTIONS = [
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_W },
+  { id:"waE1007_1",     label:"Declaration Regarding Payments (1007-1)", icon:"📄", group:"W Eastern Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
   { id:"waE2016E",      label:"Chapter 13 Flat Fee Agreement (2016E)", icon:"💼", group:"W Eastern Local Forms",
     chapters:["13"],
     gate: ({ state, district }) =>
@@ -19247,6 +19251,87 @@ function SectionWAWLocalForms({ d, u }) {
   );
 }
 
+// ─── WA Eastern LF 1007-1 — Declaration Regarding Payments (confirm-only) ──
+// Eastern District of Washington analog of AZ 1007-2: declares whether the
+// debtor received pay advices or other evidence of payment from any employer
+// in the 60 days before filing. Filed with the petition. Both Ch.7 and Ch.13
+// (no chapter restriction). DISTINCT from AZ's az1007_1 (Declaration re
+// Electronic Filing) — separate id, separate form. Firm prepares the
+// declaration text and redacts SSNs/account numbers before filing; client
+// uploads pay stubs in the Document Upload section (single source of truth
+// for paystub upload). Persists to data.waELocalForms.form1007_1 as
+// { affirmed, affirmedAt } only.
+function SectionWAE1007_1({ d, u, docStatus }) {
+  const waE = d.waELocalForms || {};
+  const formData = waE.form1007_1 || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form1007_1: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Paystub status from docStatus — same single source of truth used by AZ 1007-2.
+  const paystubIds = ["paystub_1", "paystub_2", "paystub_3", "paystub_4", "paystub_5", "paystub_6"];
+  const uploadedPaystubs = paystubIds.filter((id) => docStatus && docStatus[id] === "uploaded").length;
+  const anyUploaded = uploadedPaystubs > 0;
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration Regarding Payments</p>
+            <p>Local Form 1007-1 declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares and files this declaration</strong>; attach your pay stubs in the Document Upload section and confirm below.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Pay stubs — REQUIRED for this form */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Pay Stubs — Required</h3>
+        <p className="text-xs text-slate-400 leading-relaxed mb-4">
+          This form is your declaration about pay advices from the 60 days before filing. <strong className="text-amber-200">Pay stubs covering that 60-day window are required for this form.</strong> Upload them in the <span className="text-amber-400 font-semibold">Document Upload</span> section of this questionnaire — that's the single place pay stubs are stored.
+        </p>
+        {anyUploaded ? (
+          <div className="flex items-center gap-2 text-sm text-emerald-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            <span><span className="font-semibold">{uploadedPaystubs}</span> of {paystubIds.length} monthly paystub uploads on file.</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-sm text-amber-400">
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+            </svg>
+            <span><span className="font-semibold">No pay stubs uploaded yet</span> — required before filing.</span>
+          </div>
+        )}
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Your firm redacts any Social Security numbers (all but the last 4), names of minor children, dates of birth, and financial account numbers from the pay stubs before filing. Signature is collected at attorney review.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have uploaded all pay advices or other evidence of payment I received from any employer in the 60 days before filing, OR I have no pay advices to provide."
+      />
+    </div>
+  );
+}
+
 // ─── WA Eastern LF 2016E — Chapter 13 Flat Fee Agreement (confirm-only) ────
 // Confirm-only (MAJ-160). Eastern District of Washington Ch.13 flat-fee
 // engagement. SECTIONS-level chapters:["13"] gate hides this for non-Ch.13;
@@ -19968,6 +20053,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection} docStatus={docStatus}/>);
       case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
       case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
+      case "waE1007_1":      return withAll(<SectionWAE1007_1 d={data} u={updateSection} docStatus={docStatus}/>);
       case "waE2016E":       return withAll(<SectionWAE2016E d={data} u={updateSection}/>);
       case "waE2083C":       return withAll(<SectionWAE2083C d={data} u={updateSection}/>);
       case "waE5005_3f":     return withAll(<SectionWAE5005_3f d={data} u={updateSection}/>);
