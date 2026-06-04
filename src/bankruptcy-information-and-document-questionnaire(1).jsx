@@ -74,10 +74,12 @@ const SECTIONS = [
   { id:"schedI",       label:"Schedule I – Income",        icon:"💼", group:"Schedules" },
   { id:"schedJ",       label:"Schedule J – Expenses",      icon:"🧾", group:"Schedules" },
   { id:"meansTest",    label:"Means Test (Six-Month Income)", icon:"📊", group:"Schedules" },
-  { id:"sofa",                   label:"Statement of Financial Affairs", icon:"📊", group:"SOFA" },
-  { id:"statementOfIntention",     label:"Statement of Intention",      icon:"📝", group:"SOFA" },
-  { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"SOFA" },
-  { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"SOFA" },
+  { id:"sofa",                   label:"Statement of Financial Affairs", icon:"📊", group:"STATEMENTS" },
+  { id:"statementOfIntention",     label:"Statement of Intention",      icon:"📝", group:"STATEMENTS" },
+  { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"STATEMENTS" },
+  { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"STATEMENTS" },
+  { id:"localForms_AZ",            label:"Local Forms — Arizona",       icon:"🗺️", group:"STATEMENTS" },
+  { id:"localForms_WA",            label:"Local Forms — Washington",    icon:"🗺️", group:"STATEMENTS" },
   { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
@@ -19052,6 +19054,16 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
+      case "localForms_AZ":
+      case "localForms_WA": {
+        const stateName = sectionId === "localForms_AZ" ? "Arizona" : "Washington";
+        return withAll(
+          <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 text-center">
+            <p className="text-slate-300 text-sm font-semibold mb-1">{stateName} — Local Forms</p>
+            <p className="text-slate-500 text-xs">Placeholder — form data to be added.</p>
+          </div>
+        );
+      }
       case "docs":        return <SectionDocs docStatus={docStatus} setDocStatus={setDocStatus} intakeData={INTAKE_SAMPLE} petition={data.petition} formData={data}/>;
       case "review": {
         // A/B grand total — mirrors SectionReview lines 17652-17678 exactly
