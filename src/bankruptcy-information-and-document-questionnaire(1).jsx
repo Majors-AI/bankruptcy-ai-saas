@@ -19243,15 +19243,125 @@ function SectionWAWLocalForms({ d, u }) {
   );
 }
 
-// ─── WA Eastern LF 2016E — Chapter 13 Flat Fee Agreement (stub) ────────────
-// Real implementation lands in Commit B. The SECTIONS-level chapters:["13"]
-// gate keeps this entry hidden for non-Ch.13 cases; a Ch.13 user navigating
-// here today sees the placeholder below.
+// ─── WA Eastern LF 2016E — Chapter 13 Flat Fee Agreement (confirm-only) ────
+// Confirm-only (MAJ-160). Eastern District of Washington Ch.13 flat-fee
+// engagement. SECTIONS-level chapters:["13"] gate hides this for non-Ch.13;
+// in-component check is the safety net for step-navigation edge cases. Fee
+// figures are read live from data.disclosureOfCompensation (Form 2030 — the
+// single source of truth for the case fee record); not duplicated. Persists
+// to data.waELocalForms.form2016E as { affirmed, affirmedAt } only.
 function SectionWAE2016E({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "13") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 13 Flat Fee Agreement applies to Chapter 13 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const waE = d.waELocalForms || {};
+  const formData = waE.form2016E || {};
+  const affirmed = !!formData.affirmed;
+  const affirmedAt = formData.affirmedAt || "";
+
+  const update = (patch) => u("waELocalForms", { ...waE, form2016E: { ...formData, ...patch } });
+  const toggleAffirm = (checked) =>
+    update({ affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
+
+  // Fee figures sourced from data.disclosureOfCompensation (Form 2030).
+  const disclosure = d.disclosureOfCompensation || {};
+  const formatMoney = (n) => {
+    const num = parseFloat(n);
+    if (isNaN(num) || num === 0) return null;
+    return "$" + num.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+  const flatFeeNum  = parseFloat(disclosure.agreed)   || 0;
+  const retainerNum = parseFloat(disclosure.received) || 0;
+  const computedBalance = Math.max(0, flatFeeNum - retainerNum);
+
+  const flatFeeDisplay  = formatMoney(disclosure.agreed);
+  const retainerDisplay = formatMoney(disclosure.received);
+  const balanceDisplay  = (flatFeeNum > 0 || retainerNum > 0)
+    ? (formatMoney(computedBalance) || "$0.00")
+    : null;
+
+  const firmTBD = "To be completed by your firm before filing";
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
-      <p className="text-sm text-slate-300 font-semibold mb-1">Chapter 13 Flat Fee Agreement (LF 2016E)</p>
-      <p className="text-xs text-slate-500">Form coming next — to be built in Commit B.</p>
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2016E — Chapter 13 Flat Fee Agreement</p>
+            <p>Your flat-fee agreement with your attorney for your Chapter 13 case — the agreed fee, what's included, what's paid up front versus through the plan, and the hourly rate for extra work. <strong>Your firm prepares this agreement</strong> and submits a copy to the Chapter 13 Trustee before the §341 meeting. Review the terms below and confirm.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Debtor obligations + Services included (read-only) */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Debtor Obligations</h3>
+        <ul className="text-sm text-slate-300 leading-relaxed list-disc pl-5 space-y-1.5">
+          <li>Provide complete, accurate, and timely financial information to your attorney.</li>
+          <li>Notify your attorney promptly of any change of address, employer, income, or household.</li>
+          <li>Make all Chapter 13 plan payments to the Trustee on time, beginning with the first payment within 30 days of filing.</li>
+          <li>Attend the §341 meeting of creditors and any confirmation or post-confirmation hearing required by the court.</li>
+          <li>Complete the post-petition financial-management course before discharge.</li>
+        </ul>
+
+        <h3 className="text-base font-semibold text-white mb-3 mt-6">Legal Services Included</h3>
+        <ul className="text-sm text-slate-300 leading-relaxed list-disc pl-5 space-y-1.5">
+          <li>Analysis of your financial situation and advice on whether to file under Chapter 13.</li>
+          <li>Preparation and filing of the petition, schedules, statements, and the proposed Chapter 13 plan.</li>
+          <li>Representation at the §341 meeting and the confirmation hearing.</li>
+          <li>Routine post-confirmation services through plan completion (e.g., responding to Trustee notices, addressing wage-deduction issues, ordinary plan modifications).</li>
+          <li>Adversary proceedings, non-dischargeability litigation, relief-from-stay litigation, and similar contested matters are NOT included — those are billed separately at the hourly rate below.</li>
+        </ul>
+      </div>
+
+      {/* Fee Terms — read-only */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Fee Terms</h3>
+        <ReadOnlyField label="Flat Fee" value={flatFeeDisplay} source="Disclosure of Compensation" placeholder={firmTBD}/>
+        <ReadOnlyField label="Filing Fee (paid to the court)" value="" placeholder={firmTBD}/>
+        <ReadOnlyField label="Retainer (held in trust; transferred only after plan confirmation)" value={retainerDisplay} source="Disclosure of Compensation" placeholder={firmTBD}/>
+        <ReadOnlyField label="Balance Through Plan (flat fee − retainer)" value={balanceDisplay} placeholder={firmTBD}/>
+        <ReadOnlyField label="Additional Services Hourly Rate" value="" placeholder={firmTBD}/>
+      </div>
+
+      {/* Special Provisions */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-3">Special Provisions</h3>
+        <ReadOnlyField label="Any non-standard terms specific to your case" value="" placeholder={firmTBD}/>
+      </div>
+
+      {/* Firm-completed note */}
+      <div className="bg-slate-900/40 border border-slate-800 rounded-xl p-4">
+        <p className="text-xs text-slate-400 leading-relaxed italic">
+          Signatures (debtor and attorney) are collected by your firm at attorney review — not here.
+        </p>
+      </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the fee terms above and understand my attorney will prepare and file this agreement."
+      />
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">A copy of this agreement is submitted to the Chapter 13 Trustee before the §341 meeting of creditors.</p>
+      </div>
     </div>
   );
 }
