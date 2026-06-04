@@ -62,6 +62,12 @@ const COMMUNITY_PROPERTY_STATES = new Set(["Arizona","California","Idaho","Louis
 
 const fmtMoney = (v) => v ? `$${parseFloat(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : null;
 
+// District strings used by the Local Forms gates. Must match the keys in
+// DISTRICT_DIVISIONS exactly — those are the values data.petition.district
+// stores and what getCaseDistrict() returns.
+const DIST_WA_W = "U.S. Bankruptcy Court — Western District of Washington";
+const DIST_WA_E = "U.S. Bankruptcy Court — Eastern District of Washington";
+
 const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
@@ -79,8 +85,16 @@ const SECTIONS = [
   { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"STATEMENTS" },
   { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"STATEMENTS" },
   { id:"form121",                  label:"Statement re Social Security Numbers", icon:"🛡️", group:"STATEMENTS" },
-  { id:"localForms_AZ",            label:"Local Forms — Arizona",       icon:"🗺️", group:"STATEMENTS" },
-  { id:"localForms_WA",            label:"Local Forms — Washington",    icon:"🗺️", group:"STATEMENTS" },
+  { id:"azLocalForms",  label:"Arizona Local Forms",    icon:"🗺️", group:"AZ Local Forms",
+    gate: ({ state }) => state === "Arizona" },
+  { id:"waWLocalForms", label:"Western WA Local Forms", icon:"🗺️", group:"WA W Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_W },
+  { id:"waELocalForms", label:"Eastern WA Local Forms", icon:"🗺️", group:"W Eastern Local Forms",
+    gate: ({ state, district }) =>
+      state === "Washington" &&
+      district === DIST_WA_E },
   { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
   { id:"review",       label:"Review & Export",            icon:"✅", group:"Export" },
 ];
@@ -1166,6 +1180,30 @@ function inferDistrictFromCounty(county) {
     }
   }
   return null;
+}
+
+// Resolve the case's federal bankruptcy district. Priority: explicitly-set
+// petition.district (set during Voluntary Petition) > county-inferred fallback.
+function getCaseDistrict(petition) {
+  if (!petition) return null;
+  if (petition.district && DISTRICT_DIVISIONS[petition.district]) return petition.district;
+  if (petition.county) {
+    const inferred = inferDistrictFromCounty(petition.county);
+    if (inferred) return inferred.district;
+  }
+  return null;
+}
+
+// SECTIONS visibility gate. Entries without `gate` are always visible
+// (existing behavior preserved). Each gated entry's `gate` receives
+// { state, district } and returns boolean. Mutually-exclusive gates
+// across Local Forms guarantee at most one matches per case.
+function sectionVisible(s, petition) {
+  if (!s.gate) return true;
+  return s.gate({
+    state: petition?.state || "",
+    district: getCaseDistrict(petition),
+  });
 }
 
 // ImportedConfirmation — shown at the bottom of a card that has imported fields
@@ -18975,7 +19013,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
     URL.revokeObjectURL(url);
   };
   const current = SECTIONS[step];
-  const groups = [...new Set(SECTIONS.map(s=>s.group))];
+  const groups = [...new Set(SECTIONS.filter(s => sectionVisible(s, data.petition)).map(s=>s.group))];
 
   // Banner shown on sections that have imported fields
   const importedCount = importedKeys?.size || 0;
@@ -19236,12 +19274,16 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
-      case "localForms_AZ":
-      case "localForms_WA": {
-        const stateName = sectionId === "localForms_AZ" ? "Arizona" : "Washington";
+      case "azLocalForms":
+      case "waWLocalForms":
+      case "waELocalForms": {
+        const districtName =
+          sectionId === "azLocalForms"  ? "Arizona" :
+          sectionId === "waWLocalForms" ? "Western District of Washington" :
+                                          "Eastern District of Washington";
         return withAll(
           <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-8 text-center">
-            <p className="text-slate-300 text-sm font-semibold mb-1">{stateName} — Local Forms</p>
+            <p className="text-slate-300 text-sm font-semibold mb-1">{districtName} — Local Forms</p>
             <p className="text-slate-500 text-xs">Placeholder — form data to be added.</p>
           </div>
         );
@@ -19413,7 +19455,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
           {groups.map(g => (
             <div key={g} className="mb-3">
               <p className="text-xs font-bold uppercase tracking-widest text-slate-600 px-3 mb-1">{g}</p>
-              {SECTIONS.filter(s=>s.group===g).map((s,_) => {
+              {SECTIONS.filter(s=>s.group===g && sectionVisible(s, data.petition)).map((s,_) => {
                 const idx = SECTIONS.indexOf(s);
                 const dataKey = s.id === "personalInfo" ? "petition" : s.id;
                 const secData = data[dataKey] || {};
