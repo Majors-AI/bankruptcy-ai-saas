@@ -78,6 +78,7 @@ const SECTIONS = [
   { id:"statementOfIntention",     label:"Statement of Intention",      icon:"📝", group:"STATEMENTS" },
   { id:"disclosureOfCompensation", label:"Disclosure of Compensation",  icon:"⚖️", group:"STATEMENTS" },
   { id:"creditorMatrix",           label:"Creditor Matrix",             icon:"📋", group:"STATEMENTS" },
+  { id:"form121",                  label:"Statement re Social Security Numbers", icon:"🛡️", group:"STATEMENTS" },
   { id:"localForms_AZ",            label:"Local Forms — Arizona",       icon:"🗺️", group:"STATEMENTS" },
   { id:"localForms_WA",            label:"Local Forms — Washington",    icon:"🗺️", group:"STATEMENTS" },
   { id:"docs",           label:"Document Upload",           icon:"📎", group:"Documents" },
@@ -18593,6 +18594,193 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
   return null;
 }
 
+// ─── Form 121 — Statement About Your Social Security Numbers ─────────────────
+// Filed WITH the petition but kept OUT of the public file: only the last-4
+// digits appear on PACER; the full number goes to the court, U.S. Trustee,
+// case trustee, and creditors. The primary SSN is sourced from
+// data.petition.ssn / data.petition.spouseSsn (not duplicated here). This
+// section captures: SSN-history checkbox + previously-used SSNs, ITIN
+// checkbox + ITIN list, and per-debtor signatures. All numeric identifiers
+// render masked to last-4 via the local mask() helper.
+function SectionForm121({ d, u }) {
+  const pd = d.petition || {};
+  const isJoint = pd.filingType === "Joint";
+  const form121 = d.form121 || {};
+
+  const emptyDebtor = { ssn_none: false, ssns: [], itin_none: false, itins: [] };
+  const debtor1 = form121.debtor1 || emptyDebtor;
+  const debtor2 = form121.debtor2 || emptyDebtor;
+  const signatures = form121.signatures || { debtor1: { name: "", date: "" }, debtor2: { name: "", date: "" } };
+
+  const update = (patch) => u("form121", { ...form121, ...patch });
+  const updateDebtor = (which, patch) =>
+    update({ [which]: { ...(form121[which] || emptyDebtor), ...patch } });
+  const updateSig = (which, patch) =>
+    update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
+
+  const mask = (val) => {
+    const digits = String(val || "").replace(/\D/g, "");
+    return digits.length >= 4 ? `•••-••-${digits.slice(-4)}` : "—";
+  };
+
+  const debtor1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
+  const debtor2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
+
+  return (
+    <div className="space-y-6">
+      {/* Explanation card */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">Form 121 — Statement About Your Social Security Numbers</p>
+            <p>Form 121 tells the court your full SSN/ITIN. It is <strong>not part of the public file</strong> — it is submitted separately; the public sees only the last 4 digits. The full number goes only to creditors, the U.S. Trustee, and your case trustee.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Part 1 — Names + Part 2 — Identifiers, per debtor */}
+      <Form121DebtorBlock
+        label="Debtor 1"
+        name={debtor1Name}
+        debtor={debtor1}
+        petitionSsn={pd.ssn}
+        onUpdate={(patch) => updateDebtor("debtor1", patch)}
+        mask={mask}
+      />
+      {isJoint && (
+        <Form121DebtorBlock
+          label="Debtor 2"
+          name={debtor2Name}
+          debtor={debtor2}
+          petitionSsn={pd.spouseSsn}
+          onUpdate={(patch) => updateDebtor("debtor2", patch)}
+          mask={mask}
+        />
+      )}
+
+      {/* Part 3 — Signatures */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-1">Part 3 — Signatures</h3>
+        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the information above is true and correct.</p>
+        <Form121SignatureRow
+          label={`${debtor1Name} (Debtor 1)`}
+          sig={signatures.debtor1}
+          onUpdate={(patch) => updateSig("debtor1", patch)}
+        />
+        {isJoint && (
+          <Form121SignatureRow
+            label={`${debtor2Name} (Debtor 2)`}
+            sig={signatures.debtor2}
+            onUpdate={(patch) => updateSig("debtor2", patch)}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate, mask }) {
+  const ssns = Array.isArray(debtor.ssns) ? debtor.ssns : [];
+  const itins = Array.isArray(debtor.itins) ? debtor.itins : [];
+  const ssnDisabled = !!debtor.ssn_none;
+  const itinDisabled = !!debtor.itin_none;
+
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed";
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <h3 className="text-base font-semibold text-white">{label} — <span className="text-slate-300">{name}</span></h3>
+
+      {/* SSN section */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <p className="text-sm font-semibold text-slate-200">Social Security Numbers used</p>
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={ssnDisabled}
+              onChange={(e) => onUpdate({ ssn_none: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+            I do not have an SSN and have never used one
+          </label>
+        </div>
+        <div className={ssnDisabled ? "opacity-40 pointer-events-none" : ""}>
+          {petitionSsn ? (
+            <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
+              <span className="text-sm text-slate-300">Current SSN (from petition): <span className="font-mono">{mask(petitionSsn)}</span></span>
+              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Source: Voluntary Petition</span>
+            </div>
+          ) : !ssnDisabled && (
+            <p className="text-xs text-amber-400 mb-2">No SSN on file in the Voluntary Petition. Enter it there, or check the box if the debtor has never had an SSN.</p>
+          )}
+          {ssns.map((ssn, i) => (
+            <div key={i} className="flex items-center gap-2 mb-2">
+              <input type="text" value={ssn} disabled={ssnDisabled}
+                onChange={(e) => { const next = [...ssns]; next[i] = e.target.value; onUpdate({ ssns: next }); }}
+                placeholder="Previously used SSN (full number)" className={inputCls}/>
+              <button type="button" onClick={() => onUpdate({ ssns: ssns.filter((_, j) => j !== i) })}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
+            </div>
+          ))}
+          <button type="button" disabled={ssnDisabled}
+            onClick={() => onUpdate({ ssns: [...ssns, ""] })}
+            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add previously-used SSN</button>
+        </div>
+      </div>
+
+      {/* ITIN section */}
+      <div className="mt-5 border-t border-slate-800 pt-5">
+        <div className="flex items-center justify-between mb-3 gap-4">
+          <p className="text-sm font-semibold text-slate-200">ITINs (Individual Taxpayer ID Numbers) used</p>
+          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
+            <input type="checkbox" checked={itinDisabled}
+              onChange={(e) => onUpdate({ itin_none: e.target.checked })}
+              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
+            I have never had an ITIN
+          </label>
+        </div>
+        <div className={itinDisabled ? "opacity-40 pointer-events-none" : ""}>
+          {itins.length === 0 && !itinDisabled && (
+            <p className="text-xs text-slate-500 mb-2">No ITINs entered. Click "Add ITIN" if the debtor has ever been issued one.</p>
+          )}
+          {itins.map((itin, i) => (
+            <div key={i} className="flex items-center gap-2 mb-2">
+              <input type="text" value={itin} disabled={itinDisabled}
+                onChange={(e) => { const next = [...itins]; next[i] = e.target.value; onUpdate({ itins: next }); }}
+                placeholder="ITIN (9 digits)" className={inputCls}/>
+              <button type="button" onClick={() => onUpdate({ itins: itins.filter((_, j) => j !== i) })}
+                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
+            </div>
+          ))}
+          <button type="button" disabled={itinDisabled}
+            onClick={() => onUpdate({ itins: [...itins, ""] })}
+            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add ITIN</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Form121SignatureRow({ label, sig, onUpdate }) {
+  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
+        <input type="text" value={sig?.name || ""}
+          onChange={(e) => onUpdate({ name: e.target.value })}
+          placeholder="Type your full legal name" className={inputCls}/>
+      </div>
+      <div>
+        <label className="text-xs text-slate-400 mb-1 block">Date</label>
+        <input type="date" value={sig?.date || ""}
+          onChange={(e) => onUpdate({ date: e.target.value })} className={inputCls}/>
+      </div>
+    </div>
+  );
+}
+
 export default function BankruptcyDocumentQuestionnaire({ updateMode = false } = {}) {
   const [step, setStep] = useState(0);
 
@@ -19054,6 +19242,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "sofa3":       return withAll(<SectionSOFA3 d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner}/>);
       case "sofa4":          return withAll(<SectionSOFA4 d={data} u={updateSection}/>);
       case "creditorMatrix": return withAll(<CreditorMatrix data={data} onChange={(cm) => updateSection("creditorMatrix", cm)} confirmed={summaryConfirmed} onConfirm={onSummaryConfirm}/>);
+      case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
       case "localForms_AZ":
       case "localForms_WA": {
         const stateName = sectionId === "localForms_AZ" ? "Arizona" : "Washington";
