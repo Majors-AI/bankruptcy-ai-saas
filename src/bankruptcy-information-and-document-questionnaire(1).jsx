@@ -207,6 +207,7 @@ const isStaleDate = (dateStr, days = 30) => {
 const INTAKE_SAMPLE = {
   // Step 0 — Identity & Residence
   filingType: "individual-nonfiling-spouse",
+  chapter: "13",                              // dev: WA-W needs Ch.13 for the local-forms gate — revert to undefined for AZ default
   firstName: "Jane", lastName: "Sample",
   dob: "1970-01-01",
   email: "jane.sample@example.com",
@@ -215,7 +216,7 @@ const INTAKE_SAMPLE = {
   spouseDob: "1970-01-01",
   spouseEmail: "john.sample@example.com",
   ssnSpouse: "",
-  state: "Arizona", county: "Maricopa", city: "Anytown",
+  state: "Washington", county: "King", city: "Anytown",    // dev: WA-W test default — revert to Arizona/Maricopa later
   streetAddress: "123 Test St", zipCode: "85001",
   // Prior names
   priorNames: [
