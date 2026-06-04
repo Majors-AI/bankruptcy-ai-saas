@@ -89,7 +89,7 @@ const SECTIONS = [
     gate: ({ state }) => state === "Arizona" },
   { id:"az1007_1",      label:"Declaration re Electronic Filing (1007-1)",    icon:"🖥️", group:"Arizona Local Forms",
     gate: ({ state }) => state === "Arizona" },
-  { id:"waWLocalForms", label:"Western WA Local Forms", icon:"🗺️", group:"WA W Local Forms",
+  { id:"waW13_2",       label:"Trustee Information Sheet (13-2)", icon:"📄", group:"WA W Local Forms",
     gate: ({ state, district }) =>
       state === "Washington" &&
       district === DIST_WA_W },
@@ -19142,7 +19142,57 @@ function SectionWAWLocalForms({ d, u }) {
     update({ taxReturns: { ...taxReturns, [rowKey]: { ...(taxReturns[rowKey] || {}), [col]: value } } });
 
   const pd1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
-  const pd2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
+  const pd2Name = isJoint ? ([pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") || "Debtor 2") : null;
+
+  // ── Pre-fill plumbing ─────────────────────────────────────────────────────
+  // Each pre-fillable 13-2 field stays editable; an "Imported from {Petition |
+  // Schedule I}" tag appears next to a field while its stored value is
+  // undefined and an import source is available. Once the client types
+  // anything (including an explicit empty string), stored wins and the tag
+  // disappears. Edits never mutate the import source.
+  const composeFullAddress = (a, c, s, z) => {
+    const cs = [c, s].filter(Boolean).join(", ");
+    const csz = [cs, z].filter(Boolean).join(" ");
+    return [a, csz].filter(Boolean).join(", ");
+  };
+  const normalizeSchedIPayFreq = (v) => {
+    const lc = String(v || "").toLowerCase().trim();
+    if (lc === "weekly")                               return "weekly";
+    if (lc === "bi-weekly" || lc === "biweekly")       return "biweekly";
+    if (lc === "semi-monthly" || lc === "semimonthly") return "semi-monthly";
+    if (lc === "monthly")                              return "monthly";
+    return v ? "other" : "";  // unknown but truthy → "other" so the Other text input becomes available
+  };
+  const composeEmployerAddress = (emp) =>
+    emp ? composeFullAddress(emp.employerAddress, emp.employerCity, emp.employerState, emp.employerZip) : "";
+
+  const schedI = d.schedI || {};
+  const dEmp = (schedI.employmentSources || [])[0] || null;
+  const sEmp = (schedI.spouseEmploySources || [])[0] || null;
+  const importedHomeAddress = composeFullAddress(pd.addr1, pd.city, pd.state, pd.zip);
+  const importedMailing = pd.mailingDifferent === "yes"
+    ? composeFullAddress(pd.mailingAddr1, pd.mailingCity, pd.mailingState, pd.mailingZip)
+    : "";
+  const mailingSameDefault = pd.mailingDifferent !== "yes";
+
+  const importedFor = (which) => {
+    const isD1 = which === "debtor1";
+    const emp = isD1 ? dEmp : sEmp;
+    return {
+      name:              isD1 ? pd1Name : (pd2Name || ""),
+      homeAddress:       importedHomeAddress,
+      mailingAddress:    importedMailing,
+      mailingSameAsHome: mailingSameDefault,
+      email:             isD1 ? (pd.email || "") : (pd.spouseEmail || ""),
+      homePhone:         isD1 ? (pd.phone || "") : (pd.spousePhone || ""),
+      employer: {
+        name:         emp?.employerName || "",
+        address:      composeEmployerAddress(emp),
+        phone:        emp?.employerPhone || "",
+        payFrequency: normalizeSchedIPayFreq(emp?.payFrequency),
+      },
+    };
+  };
 
   const taxRows = [
     { key: "recent", label: "Most recent year" },
@@ -19199,6 +19249,7 @@ function SectionWAWLocalForms({ d, u }) {
       {/* Debtor 1 */}
       <WAWDebtorBlock
         label="Debtor 1" name={pd1Name} debtor={debtor1}
+        imported={importedFor("debtor1")}
         onUpdate={(patch) => updateDebtor("debtor1", patch)}
         onUpdateEmployer={(patch) => updateEmployer("debtor1", patch)}
         inputCls={inputCls} payFreqOptions={payFreqOptions}
@@ -19207,6 +19258,7 @@ function SectionWAWLocalForms({ d, u }) {
       {isJoint && (
         <WAWDebtorBlock
           label="Debtor 2" name={pd2Name} debtor={debtor2}
+          imported={importedFor("debtor2")}
           onUpdate={(patch) => updateDebtor("debtor2", patch)}
           onUpdateEmployer={(patch) => updateEmployer("debtor2", patch)}
           inputCls={inputCls} payFreqOptions={payFreqOptions}
@@ -19297,15 +19349,44 @@ function SectionWAWLocalForms({ d, u }) {
   );
 }
 
-function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, inputCls, payFreqOptions }) {
+function WAWDebtorBlock({ label, name, debtor, imported, onUpdate, onUpdateEmployer, inputCls, payFreqOptions }) {
   const employer = debtor.employer || {};
   const showFreqOther = employer.payFrequency === "other";
   const dsoNameSuffix = label.replace(/\s+/g, "_");
 
+  // pick(stored, importValue, source) → { value, tag }. Untouched fields show
+  // the imported value + an "Imported from {source}" tag; once the user types
+  // anything (including an explicit empty string), stored wins and the tag
+  // disappears.
+  const pick = (stored, importValue, source) => {
+    if (stored !== undefined) return { value: stored, tag: null };
+    if (importValue) return { value: importValue, tag: source };
+    return { value: "", tag: null };
+  };
+  const ImportedTag = ({ source }) => source
+    ? <div className="mt-1"><span className="text-[10px] text-slate-500 uppercase tracking-wider">Imported from {source}</span></div>
+    : null;
+
+  // Effective mailing-same-as-home: respect explicit user toggle, otherwise
+  // default to whatever the petition's mailingDifferent flag implied.
+  const effectiveMailingSame = debtor.mailingSameAsHome !== undefined
+    ? debtor.mailingSameAsHome
+    : !!imported?.mailingSameAsHome;
+
   const onMailingSameToggle = (checked) => {
-    if (checked) onUpdate({ mailingSameAsHome: true, mailingAddress: debtor.homeAddress || "" });
+    if (checked) onUpdate({ mailingSameAsHome: true, mailingAddress: debtor.homeAddress ?? imported?.homeAddress ?? "" });
     else onUpdate({ mailingSameAsHome: false });
   };
+
+  const fName       = pick(debtor.name,            imported?.name,              "Petition");
+  const fHomeAddr   = pick(debtor.homeAddress,     imported?.homeAddress,       "Petition");
+  const fMailing    = pick(debtor.mailingAddress,  imported?.mailingAddress,    "Petition");
+  const fEmail      = pick(debtor.email,           imported?.email,             "Petition");
+  const fHomePhone  = pick(debtor.homePhone,       imported?.homePhone,         "Petition");
+  const fEmpName    = pick(employer.name,          imported?.employer?.name,         "Schedule I");
+  const fEmpAddress = pick(employer.address,       imported?.employer?.address,      "Schedule I");
+  const fEmpPhone   = pick(employer.phone,         imported?.employer?.phone,        "Schedule I");
+  const fEmpFreq    = pick(employer.payFrequency,  imported?.employer?.payFrequency, "Schedule I");
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
@@ -19315,46 +19396,51 @@ function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, input
       <div className="mt-5 border-t border-slate-800 pt-5 grid grid-cols-1 md:grid-cols-2 gap-3">
         <div className="md:col-span-2">
           <label className="text-xs text-slate-400 mb-1 block">Name (as it should appear on the form)</label>
-          <input type="text" value={debtor.name || ""}
+          <input type="text" value={fName.value}
             onChange={(e) => onUpdate({ name: e.target.value })}
             placeholder="Type full legal name" className={inputCls}/>
+          <ImportedTag source={fName.tag}/>
         </div>
         <div className="md:col-span-2">
           <label className="text-xs text-slate-400 mb-1 block">Home Address</label>
-          <input type="text" value={debtor.homeAddress || ""}
-            onChange={(e) => onUpdate(debtor.mailingSameAsHome
+          <input type="text" value={fHomeAddr.value}
+            onChange={(e) => onUpdate(effectiveMailingSame
               ? { homeAddress: e.target.value, mailingAddress: e.target.value }
               : { homeAddress: e.target.value })}
             placeholder="Street, City, State, ZIP" className={inputCls}/>
+          <ImportedTag source={fHomeAddr.tag}/>
         </div>
         <div className="md:col-span-2">
           <div className="flex items-center justify-between mb-1 gap-4">
             <label className="text-xs text-slate-400 block">Mailing Address</label>
             <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-              <input type="checkbox" checked={!!debtor.mailingSameAsHome}
+              <input type="checkbox" checked={!!effectiveMailingSame}
                 onChange={(e) => onMailingSameToggle(e.target.checked)}
                 className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
               Same as home address
             </label>
           </div>
           <input type="text"
-            value={debtor.mailingSameAsHome ? (debtor.homeAddress || "") : (debtor.mailingAddress || "")}
-            disabled={!!debtor.mailingSameAsHome}
+            value={effectiveMailingSame ? fHomeAddr.value : fMailing.value}
+            disabled={!!effectiveMailingSame}
             onChange={(e) => onUpdate({ mailingAddress: e.target.value })}
             placeholder="Street, City, State, ZIP"
             className={inputCls + " disabled:opacity-40 disabled:cursor-not-allowed"}/>
+          {!effectiveMailingSame && <ImportedTag source={fMailing.tag}/>}
         </div>
         <div>
           <label className="text-xs text-slate-400 mb-1 block">Email</label>
-          <input type="email" value={debtor.email || ""}
+          <input type="email" value={fEmail.value}
             onChange={(e) => onUpdate({ email: e.target.value })}
             placeholder="you@example.com" className={inputCls}/>
+          <ImportedTag source={fEmail.tag}/>
         </div>
         <div>
           <label className="text-xs text-slate-400 mb-1 block">Home Phone</label>
-          <input type="tel" value={debtor.homePhone || ""}
+          <input type="tel" value={fHomePhone.value}
             onChange={(e) => onUpdate({ homePhone: e.target.value })}
             placeholder="(206) 555-0100" className={inputCls}/>
+          <ImportedTag source={fHomePhone.tag}/>
         </div>
       </div>
 
@@ -19364,21 +19450,24 @@ function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, input
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
             <label className="text-xs text-slate-400 mb-1 block">Employer Name</label>
-            <input type="text" value={employer.name || ""}
+            <input type="text" value={fEmpName.value}
               onChange={(e) => onUpdateEmployer({ name: e.target.value })}
               className={inputCls}/>
+            <ImportedTag source={fEmpName.tag}/>
           </div>
           <div className="md:col-span-2">
             <label className="text-xs text-slate-400 mb-1 block">Employer Address (payroll office, if different)</label>
-            <input type="text" value={employer.address || ""}
+            <input type="text" value={fEmpAddress.value}
               onChange={(e) => onUpdateEmployer({ address: e.target.value })}
               placeholder="Street, City, State, ZIP" className={inputCls}/>
+            <ImportedTag source={fEmpAddress.tag}/>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Employer Phone</label>
-            <input type="tel" value={employer.phone || ""}
+            <input type="tel" value={fEmpPhone.value}
               onChange={(e) => onUpdateEmployer({ phone: e.target.value })}
               className={inputCls}/>
+            <ImportedTag source={fEmpPhone.tag}/>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Employer Fax</label>
@@ -19388,7 +19477,7 @@ function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, input
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Pay Frequency</label>
-            <select value={employer.payFrequency || ""}
+            <select value={fEmpFreq.value}
               onChange={(e) => onUpdateEmployer(e.target.value === "other"
                 ? { payFrequency: "other" }
                 : { payFrequency: e.target.value, payFrequencyOther: "" })}
@@ -19397,6 +19486,7 @@ function WAWDebtorBlock({ label, name, debtor, onUpdate, onUpdateEmployer, input
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
+            <ImportedTag source={fEmpFreq.tag}/>
           </div>
           <div>
             <label className="text-xs text-slate-400 mb-1 block">Other Frequency (if "Other")</label>
@@ -19950,7 +20040,7 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "form121":        return withAll(<SectionForm121 d={data} u={updateSection}/>);
       case "az1007_2":       return withAll(<SectionAZLocalForms d={data} u={updateSection}/>);
       case "az1007_1":       return withAll(<SectionAZ1007_1 d={data} u={updateSection}/>);
-      case "waWLocalForms":  return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
+      case "waW13_2":        return withAll(<SectionWAWLocalForms d={data} u={updateSection}/>);
       case "waELocalForms": {
         const districtName = "Eastern District of Washington";
         return withAll(
