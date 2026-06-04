@@ -18618,11 +18618,6 @@ function SectionForm121({ d, u }) {
   const updateSig = (which, patch) =>
     update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
 
-  const mask = (val) => {
-    const digits = String(val || "").replace(/\D/g, "");
-    return digits.length >= 4 ? `•••-••-${digits.slice(-4)}` : "—";
-  };
-
   const debtor1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
   const debtor2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
 
@@ -18636,7 +18631,7 @@ function SectionForm121({ d, u }) {
           </svg>
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Form 121 — Statement About Your Social Security Numbers</p>
-            <p>Form 121 tells the court your full SSN/ITIN. It is <strong>not part of the public file</strong> — it is submitted separately; the public sees only the last 4 digits. The full number goes only to creditors, the U.S. Trustee, and your case trustee.</p>
+            <p>This form records your full SSN/ITIN for the court, the U.S. Trustee, your case trustee, and your creditors. It is <strong>filed separately and kept under seal</strong> — it does not appear in your public case file on PACER. After filing, the public record shows only the last 4 digits. Review your full number below to confirm it's correct before filing.</p>
           </div>
         </div>
       </div>
@@ -18648,7 +18643,6 @@ function SectionForm121({ d, u }) {
         debtor={debtor1}
         petitionSsn={pd.ssn}
         onUpdate={(patch) => updateDebtor("debtor1", patch)}
-        mask={mask}
       />
       {isJoint && (
         <Form121DebtorBlock
@@ -18657,7 +18651,6 @@ function SectionForm121({ d, u }) {
           debtor={debtor2}
           petitionSsn={pd.spouseSsn}
           onUpdate={(patch) => updateDebtor("debtor2", patch)}
-          mask={mask}
         />
       )}
 
@@ -18682,7 +18675,7 @@ function SectionForm121({ d, u }) {
   );
 }
 
-function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate, mask }) {
+function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate }) {
   const ssns = Array.isArray(debtor.ssns) ? debtor.ssns : [];
   const itins = Array.isArray(debtor.itins) ? debtor.itins : [];
   const ssnDisabled = !!debtor.ssn_none;
@@ -18708,7 +18701,7 @@ function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate, mask }
         <div className={ssnDisabled ? "opacity-40 pointer-events-none" : ""}>
           {petitionSsn ? (
             <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
-              <span className="text-sm text-slate-300">Current SSN (from petition): <span className="font-mono">{mask(petitionSsn)}</span></span>
+              <span className="text-sm text-slate-300">Current SSN (from petition): <span className="font-mono">{petitionSsn}</span></span>
               <span className="text-[10px] text-slate-500 uppercase tracking-wider">Source: Voluntary Petition</span>
             </div>
           ) : !ssnDisabled && (
