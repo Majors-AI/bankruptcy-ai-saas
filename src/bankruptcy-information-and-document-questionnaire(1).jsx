@@ -19366,14 +19366,58 @@ function SectionWAE2016E({ d, u }) {
   );
 }
 
-// ─── WA Eastern LF 2083C — Chapter 7 Liquidation Analysis (stub) ───────────
-// Real implementation lands in Commit C. The SECTIONS-level chapters:["7"]
-// gate keeps this entry hidden for non-Ch.7 cases.
+// ─── WA Eastern LF 2083C — Chapter 7 Liquidation Analysis (view-only) ──────
+// View-only (MAJ-160). Eastern District of Washington Ch.7 liquidation
+// analysis. Attorney-prepared end-to-end — the client cannot meaningfully
+// attest to a liquidation analysis, so there's no affirmation checkbox here.
+// The form shows ONLY the structural row layout with TBD placeholders; no
+// schedule reads, no auto-compute. Net non-exempt is determined by the firm
+// after a full exemption review. Persists nothing. SECTIONS-level chapters:
+// ["7"] gate hides this for non-Ch.7; in-component check is the safety net.
 function SectionWAE2083C({ d, u }) {
+  const pd = d.petition || {};
+  const chapter = String(pd.chapter || "");
+  if (chapter !== "7") {
+    return (
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <p className="text-sm text-slate-300 leading-relaxed">
+          The Chapter 7 Liquidation Analysis applies to Chapter 7 cases. This case is Chapter {chapter || "—"}.
+        </p>
+      </div>
+    );
+  }
+
+  const tbd = "To be determined — your attorney will review and apply exemptions before signing.";
+
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 text-center">
-      <p className="text-sm text-slate-300 font-semibold mb-1">Chapter 7 Liquidation Analysis (LF 2083C)</p>
-      <p className="text-xs text-slate-500">Form coming next — to be built in Commit C.</p>
+    <div className="space-y-6">
+      {/* Explanation */}
+      <div className="bg-amber-900/20 border border-amber-700/40 rounded-2xl p-5">
+        <div className="flex items-start gap-3">
+          <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <div className="text-sm text-slate-200 leading-relaxed">
+            <p className="font-semibold text-amber-200 mb-1">LF 2083C — Chapter 7 Liquidation Analysis</p>
+            <p>This analysis, prepared by your firm from your schedules, shows the net non-exempt value of your property — what would be available to creditors in a Chapter 7 liquidation. Your attorney prepares and files it; it's shown here for your information.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Liquidation analysis — structural row layout, all values TBD */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+        <h3 className="text-base font-semibold text-white mb-4">Liquidation Analysis</h3>
+        <ReadOnlyField label="Total Personal Property" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Total Real Property" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Less: Secured Claims" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Less: Exemptions Claimed" value="" placeholder={tbd}/>
+        <ReadOnlyField label="Net Non-Exempt Value" value="" placeholder={tbd}/>
+      </div>
+
+      {/* Footer */}
+      <div className="bg-amber-900/10 border border-amber-700/30 rounded-xl p-3 text-center">
+        <p className="text-xs text-amber-300 font-semibold">Your attorney prepares and files this analysis after reviewing your exemptions.</p>
+      </div>
     </div>
   );
 }
