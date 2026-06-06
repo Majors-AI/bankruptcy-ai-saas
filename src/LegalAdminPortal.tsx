@@ -409,6 +409,12 @@ function IntakeAttorneyReviewModal({
   const [decisionNotes, setDecisionNotes] = useState("");
   const [showAddIssue, setShowAddIssue] = useState(false);
 
+  // 4-tab attorney case review — consolidated from the retired
+  // AttorneyIntakeDashboard. Reset to Overview when the selected lead changes.
+  const [activeReviewTab, setActiveReviewTab] = useState<'overview' | 'eligibility' | 'issues' | 'decision'>('overview');
+  const [elgSubTab, setElgSubTab] = useState<'ch7' | 'ch13'>('ch7');
+  useEffect(() => { setActiveReviewTab('overview'); setElgSubTab('ch7'); }, [lead.id]);
+
   // ── Computed eligibility from submission ──
   const cmi = submission ? computeCMI(submission) : (lead.income_estimate ?? 0);
   const houseSize = submission ? computeHouseholdSize(submission) : 1 + (Number(submission?.num_dependents ?? 0));
@@ -2356,6 +2362,607 @@ function LeadDetailPanel({
                 <p className="text-xs text-slate-400 mb-4">{stage.desc}</p>
                 {stage.cta}
               </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Attorney Case Review — 4-tab redesign ──────────────────────── */}
+      {submission && (() => {
+        // ── Local derivations for the four tabs (use existing helpers above) ──
+        const fd = submission;
+        const sourcesRaw = (fd.income_sources_json as Array<Record<string, unknown>>) ?? [];
+        const properties = (fd.real_properties_json as Array<Record<string, unknown>>) ?? [];
+        const ssExcluded = new Set([
+          "Social Security – Retirement", "Social Security – Disability (SSDI)",
+          "Supplemental Security Income (SSI)", "VA Benefits",
+          "social_security", "ssdi", "ssi", "va_benefits",
+        ]);
+
+        const stateCode = ((fd.state as string) ?? lead.state ?? "").toUpperCase().slice(0, 2);
+        const county = (fd.county as string) ?? "";
+        const hasRealProp = properties.length > 0
+          || (fd.owns_real_estate === true)
+          || (fd.real_prop_value != null && Number(fd.real_prop_value) > 0);
+
+        // Homestead — null when WA inputs missing per "never compute against missing inputs" rule.
+        const homeAcquired = fd.home_acquired_date as string | undefined;
+        const isOccupied = fd.is_occupied_primary as string | undefined;
+        let homesteadExemption: number | null = null;
+        let homesteadIncomplete = false;
+        try {
+          const stEx = getApplicableExemptions(stateCode, undefined, hasRealProp);
+          if (stateCode === "CA" && hasRealProp) {
+            homesteadExemption = getCaHomesteadByCounty(county);
+          } else if (stateCode === "WA" && hasRealProp) {
+            if (!homeAcquired || !isOccupied) {
+              homesteadIncomplete = true;
+              homesteadExemption = null;
+            } else {
+              const waH = getWaHomesteadEligibility(homeAcquired, isOccupied, county);
+              homesteadExemption = waH.eligible ? waH.amount : 0;
+            }
+          } else {
+            homesteadExemption = stEx.homestead === "unlimited" || stEx.homestead === -1
+              ? Infinity : (stEx.homestead as number);
+          }
+        } catch { homesteadExemption = null; }
+
+        const vehExemption = (() => {
+          try { return getApplicableExemptions(stateCode, undefined, hasRealProp).vehicle ?? 0; }
+          catch { return 0; }
+        })();
+
+        // ── Schedule C build — per-asset equity, exemption applied, non-exempt ──
+        type ExRow = { label: string; equity: number; exemption: number | null; nonExempt: number; cite?: string; incomplete?: boolean };
+        const exRows: ExRow[] = [];
+
+        properties.forEach((p, i) => {
+          const fmv = Number(p.propertyValue ?? p.fmv ?? 0);
+          const lien = Number(p.loanBalance ?? p.mortgageBalance ?? 0);
+          const equity = Math.max(0, fmv - lien);
+          if (fmv === 0 && lien === 0) return;
+          const isPrimary = i === 0; // first property treated as homestead-eligible
+          if (isPrimary) {
+            if (homesteadIncomplete) {
+              exRows.push({ label: `Real property — ${p.address ?? "primary"}`, equity, exemption: null, nonExempt: equity, incomplete: true, cite: `${stateCode} homestead — incomplete data` });
+            } else {
+              const cap = homesteadExemption ?? 0;
+              const exempt = cap === Infinity ? equity : Math.min(equity, cap);
+              exRows.push({ label: `Real property — ${p.address ?? "primary"}`, equity, exemption: exempt, nonExempt: Math.max(0, equity - exempt), cite: `${stateCode} homestead` });
+            }
+          } else {
+            // non-primary properties get no homestead protection
+            exRows.push({ label: `Real property — ${p.address ?? `property ${i+1}`}`, equity, exemption: 0, nonExempt: equity, cite: "No homestead (non-primary)" });
+          }
+        });
+
+        vehicles.forEach(v => {
+          const equity = Math.max(0, Number(v.value ?? 0) - Number(v.loanBalance ?? 0));
+          if (equity === 0) return;
+          const exempt = Math.min(equity, vehExemption);
+          exRows.push({ label: `Vehicle — ${v.year} ${v.make} ${v.model}`, equity, exemption: exempt, nonExempt: Math.max(0, equity - exempt), cite: `${stateCode} vehicle exemption` });
+        });
+
+        // Brokerage / stocks (non-exempt in most states; wildcard limited)
+        const stocksVal = Number(fd.stocks_value ?? 0);
+        if (stocksVal > 0) exRows.push({ label: "Brokerage / stocks", equity: stocksVal, exemption: 0, nonExempt: stocksVal, cite: "Non-exempt — wildcard limited" });
+        const cryptoVal = Number(fd.crypto_value ?? 0);
+        if (cryptoVal > 0) exRows.push({ label: "Crypto", equity: cryptoVal, exemption: 0, nonExempt: cryptoVal, cite: "Non-exempt" });
+        const bankVal = Number(fd.bank_balance ?? 0);
+        if (bankVal > 0) exRows.push({ label: "Bank balances", equity: bankVal, exemption: 0, nonExempt: bankVal, cite: "State-specific bank exemption" });
+        const retVal = Number(fd.retirement_balance ?? 0);
+        if (retVal > 0) exRows.push({ label: "Retirement (401k/IRA)", equity: retVal, exemption: retVal, nonExempt: 0, cite: "ERISA / § 522(b)(3)(C)" });
+
+        const totalEquity = exRows.reduce((s, r) => s + r.equity, 0);
+        const totalNonExempt = exRows.reduce((s, r) => s + r.nonExempt, 0);
+        const liquidationFloor = totalNonExempt;
+
+        // ── Income split (CMI vs Schedule I) — flag SS as excluded from CMI ──
+        type IncomeRow = { who: string; type: string; label: string; monthly: number; excluded: boolean };
+        const incomeRows: IncomeRow[] = [];
+        const periodFactor: Record<string, number> = { Weekly: 4.333, "Bi-Weekly": 2.167, "Semi-Monthly": 2, Monthly: 1 };
+        for (const s of sourcesRaw) {
+          const owner = String(s.owner ?? "debtor");
+          const sourceType = String(s.sourceType ?? "");
+          const isSE = sourceType === "selfEmployment";
+          const grossPerPeriod = Number(s.grossPerPeriod ?? 0);
+          const pf = periodFactor[String(s.payFrequency ?? "Monthly")] ?? 1;
+          const monthly = isSE
+            ? Number(s.businessGrossIncome ?? 0)
+            : grossPerPeriod * pf;
+          const label = isSE
+            ? String(s.businessName ?? s.employerName ?? "Self-employment")
+            : String(s.employerName ?? sourceType ?? "Employment");
+          incomeRows.push({
+            who: owner.charAt(0).toUpperCase() + owner.slice(1),
+            type: sourceType || "wages",
+            label,
+            monthly,
+            excluded: ssExcluded.has(sourceType) || ssExcluded.has(label),
+          });
+        }
+        const totalIncomeAll = incomeRows.reduce((s, r) => s + r.monthly, 0);  // Schedule I (includes SS)
+        const cmiPerStatute = incomeRows.filter(r => !r.excluded).reduce((s, r) => s + r.monthly, 0);
+
+        // ── ACP and Ch.13 plan math ──
+        const acp = aboveMedian ? 60 : 36;
+        const pdiTimesAcp = Math.max(0, disposableIncome) * acp;
+        const taxDebtP = Number(fd.tax_debt ?? 0);
+        const dsoArrears = Number(fd.dso_arrears_amount ?? 0);
+        const priorityTotal = taxDebtP + dsoArrears;
+        const mortgageArrears = properties.reduce((s, p) => s + Number(p.arrearsAmount ?? 0), 0);
+        const arrearsCure = mortgageArrears;
+        const minPlanFunding = Math.max(pdiTimesAcp, liquidationFloor + priorityTotal + arrearsCure);
+        const planExtendsPastAcp = liquidationFloor > pdiTimesAcp && pdiTimesAcp > 0;
+
+        // ── Primarily-consumer check (skip means test if business > 50%) ──
+        const businessDebt = Number(fd.business_credit_card_debt ?? 0)
+          + Number(fd.business_mortgage_debt ?? 0)
+          + Number(fd.business_equipment_debt ?? 0)
+          + Number(fd.other_business_debt ?? 0)
+          + Number(fd.supply_vendor_debt ?? 0);
+        const totalDebtAll = Number(fd.secured_debt ?? 0) + Number(fd.credit_card_debt ?? 0)
+          + Number(fd.medical_debt ?? 0) + Number(fd.student_loan_debt ?? 0)
+          + Number(fd.tax_debt ?? 0) + Number(fd.personal_loan_debt ?? 0)
+          + Number(fd.other_unsecured ?? 0) + businessDebt;
+        const primarilyBusiness = totalDebtAll > 0 && (businessDebt / totalDebtAll) > 0.5;
+
+        // ── § 707(b)(2) presumption (above-median only) ──
+        const presumption252 = disposableIncome * 60 >= 15150;  // ≈$252.50/mo × 60
+        const presumption151 = disposableIncome * 60 >= 9075;   // ≈$151.25/mo × 60
+        const unsecuredTotal = Number(fd.credit_card_debt ?? 0) + Number(fd.medical_debt ?? 0)
+          + Number(fd.student_loan_debt ?? 0) + Number(fd.personal_loan_debt ?? 0) + Number(fd.other_unsecured ?? 0);
+        const meets25pctUnsec = presumption151 && unsecuredTotal > 0 && (disposableIncome * 60) >= unsecuredTotal * 0.25;
+        const sevenB2Triggers = aboveMedian && !primarilyBusiness && (presumption252 || meets25pctUnsec);
+
+        // ── Issues (statute-tagged) ──
+        type Issue = { statute: string; severity: 'critical' | 'warning' | 'info'; title: string; detail: string };
+        const issues: Issue[] = [];
+        if (liquidationFloor > 0) issues.push({ statute: "§ 522 / § 1325(a)(4)", severity: "warning", title: "Non-exempt asset equity", detail: `Non-exempt equity totals ${fmt(liquidationFloor)}. In Ch.7 exposed to trustee; in Ch.13 sets the § 1325(a)(4) liquidation floor.` });
+
+        const priorState = (fd.prior_state as string) ?? "";
+        const addrYears = parseInt((fd.address_years as string) ?? "0") || 0;
+        if (priorState && priorState !== stateCode && addrYears < 2) {
+          issues.push({ statute: "§ 1408 / § 522(b)(3)", severity: "warning", title: "Domicile under 730 days", detail: `In ${stateCode} only ${addrYears}y. Prior-state exemption (${priorState}) may apply if it held domicile the greater portion of the 730-day window.` });
+        }
+
+        const priorBKs = (fd.prior_bankruptcies_json as Array<Record<string, unknown>>) ?? [];
+        for (const pb of priorBKs) {
+          const ch = String(pb.chapter ?? "");
+          const dDate = pb.dischargeDate as string | undefined;
+          if (pb.discharged && dDate) {
+            const months = Math.floor((Date.now() - new Date(dDate).getTime()) / (1000*60*60*24*30));
+            if (ch === "7" && months < 96) {
+              issues.push({ statute: "§ 727(a)(8)", severity: "critical", title: "Prior Ch.7 discharge within 8 years", detail: `Discharged ${months} months ago — Ch.7 discharge barred for 8 years from prior filing.` });
+              if (months < 48) {
+                issues.push({ statute: "§ 1328(f)(1)", severity: "critical", title: "Ch.13 discharge barred (Ch.7→Ch.13 4-year)", detail: `Ch.7 discharged ${Math.floor(months/12)}y ${months%12}m ago. Ch.13 discharge barred; case may file for plan relief only.` });
+              }
+            }
+          }
+        }
+
+        if (aboveMedian && !primarilyBusiness) {
+          issues.push({ statute: "§ 707(b)(2)", severity: "warning", title: "Above-median income — presumption of abuse", detail: `CMI ${fmt(cmi)}/mo exceeds median ${fmt(medianMonthly)}/mo. Long-form Form 122A-2 required.` });
+        }
+
+        if (prefPayFlagged) {
+          issues.push({ statute: insiderPrefTotal > 0 ? "§ 547(b) + § 101(31)" : "§ 547(b)", severity: "warning", title: insiderPrefTotal > 0 ? "Insider preferential payment" : "Preferential payment", detail: `${fmt(prefPays.reduce((s,p)=>s+Number(p.amount),0))} total. ${insiderPrefTotal > 0 ? "1-year insider lookback." : "90-day lookback."} Trustee may avoid.` });
+        }
+
+        if (fd.transferred_property === true || fd.has_transfers === true) {
+          issues.push({ statute: "§ 548 / state UVTA", severity: "warning", title: "Transfer within reach-back", detail: "Disclosed transfer(s) within § 548 2-year reach-back. Trustee may avoid as fraud if insolvent at transfer." });
+        }
+
+        if (taxDebtP > 0) issues.push({ statute: "§ 523(a)(1) / § 507(a)(8)", severity: "info", title: `Recent income tax debt: ${fmt(taxDebtP)}`, detail: "Likely non-dischargeable; plan should treat appropriately." });
+        if (Number(fd.student_loan_debt ?? 0) > 0) issues.push({ statute: "§ 523(a)(8)", severity: "info", title: `Student loan debt: ${fmt(Number(fd.student_loan_debt))}`, detail: "Presumptively non-dischargeable absent undue hardship adversary." });
+        if (dsoArrears > 0) issues.push({ statute: "§ 523(a)(5)", severity: "info", title: `Domestic support arrears: ${fmt(dsoArrears)}`, detail: "Non-dischargeable; § 507(a)(1) first priority." });
+
+        if (fd.recent_luxury === true || (fd as Record<string, unknown>).recentCashAdvance === "yes") {
+          issues.push({ statute: "§ 523(a)(2)(C)", severity: "warning", title: "Recent luxury / cash advance", detail: "Presumption of nondischargeability: luxury > $1,000 in 90 days, or cash advance > $1,100 in 70 days pre-petition." });
+        }
+
+        if (homesteadIncomplete) {
+          issues.push({ statute: "§ 522(p)", severity: "warning", title: "Homestead acquisition date missing", detail: "Cannot verify § 522(p) 1215-day cap on state homestead. Collect homeAcquiredDate + isOccupiedPrimary on intake." });
+        }
+
+        // DMI chapter-aware flag (Overview)
+        const dmiFlag = disposableIncome > 500
+          ? aboveMedian
+            ? { color: 'red', text: `Positive DMI ${fmt(disposableIncome)}/mo — above-median household, evaluate § 707(b)(2) presumption (≈$252.50/mo over 60mo, or ≈$151.25/mo if ≥ 25% of unsecured).` }
+            : { color: 'amber', text: `Positive DMI ${fmt(disposableIncome)}/mo — Ch.13 funding capacity. Not an abuse signal for below-median debtors.` }
+          : null;
+
+        return (
+          <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            {/* Tab bar */}
+            <div className="px-5 pt-4 border-b border-slate-800 flex gap-1">
+              {([
+                { id: 'overview' as const,    label: 'Overview' },
+                { id: 'eligibility' as const, label: 'Eligibility' },
+                { id: 'issues' as const,      label: `Issues${issues.length > 0 ? ` (${issues.length})` : ''}` },
+                { id: 'decision' as const,    label: 'Decision & fees' },
+              ]).map(t => (
+                <button key={t.id} onClick={() => setActiveReviewTab(t.id)}
+                  className={`px-4 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all ${
+                    activeReviewTab === t.id
+                      ? 'border-amber-400 text-amber-400 bg-amber-500/5'
+                      : 'border-transparent text-slate-500 hover:text-slate-300'
+                  }`}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-5 space-y-5">
+              {/* ── OVERVIEW TAB ── */}
+              {activeReviewTab === 'overview' && (
+                <>
+                  {/* Assets (Schedule A/B) */}
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Assets — Schedule A/B</p>
+                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 divide-y divide-slate-800/60">
+                      {exRows.length === 0 ? (
+                        <p className="px-3 py-3 text-xs text-slate-500">No assets disclosed.</p>
+                      ) : exRows.map((r, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
+                          <span className="text-slate-300">{r.label}</span>
+                          <span className="text-white font-mono">{fmt(r.equity)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Schedule C — exempt property */}
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Exempt Property — Schedule C</p>
+                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-800/60 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                          <tr>
+                            <th className="text-left px-3 py-2">Asset</th>
+                            <th className="text-right px-3 py-2">Equity</th>
+                            <th className="text-right px-3 py-2">Exemption</th>
+                            <th className="text-right px-3 py-2">Non-exempt</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/60">
+                          {exRows.map((r, i) => (
+                            <tr key={i}>
+                              <td className="px-3 py-2 text-slate-300">
+                                {r.label}
+                                {r.cite && <span className="block text-[9px] text-slate-600">{r.cite}</span>}
+                              </td>
+                              <td className="px-3 py-2 text-right text-slate-300 font-mono">{fmt(r.equity)}</td>
+                              <td className="px-3 py-2 text-right text-green-400 font-mono">
+                                {r.incomplete ? <span className="text-amber-400 font-semibold">Incomplete</span> : fmt(r.exemption ?? 0)}
+                              </td>
+                              <td className={`px-3 py-2 text-right font-mono font-bold ${r.nonExempt > 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                                {fmt(r.nonExempt)}
+                              </td>
+                            </tr>
+                          ))}
+                          <tr className="bg-slate-800/40 font-bold">
+                            <td className="px-3 py-2 text-slate-200">Total</td>
+                            <td className="px-3 py-2 text-right text-white font-mono">{fmt(totalEquity)}</td>
+                            <td className="px-3 py-2 text-right text-green-400 font-mono">{fmt(totalEquity - totalNonExempt)}</td>
+                            <td className={`px-3 py-2 text-right font-mono ${totalNonExempt > 0 ? 'text-red-400' : 'text-slate-500'}`}>{fmt(totalNonExempt)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Income — Schedule I (with SS tagged "excluded from CMI") */}
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Income — Schedule I (CMI excludes SS-Act / VA per § 101(10A))</p>
+                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 divide-y divide-slate-800/60">
+                      {incomeRows.length === 0 ? (
+                        <p className="px-3 py-3 text-xs text-slate-500">No income sources disclosed.</p>
+                      ) : incomeRows.map((r, i) => (
+                        <div key={i} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
+                          <div className="min-w-0">
+                            <span className="text-slate-300">{r.label}</span>
+                            <span className="ml-2 text-[9px] text-slate-600">({r.who})</span>
+                            {r.excluded && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">excluded from CMI</span>}
+                          </div>
+                          <span className="text-white font-mono">{fmt(r.monthly)}/mo</span>
+                        </div>
+                      ))}
+                      <div className="flex items-center justify-between px-3 py-2 text-xs bg-slate-800/40">
+                        <span className="text-slate-300 font-bold">Schedule I total (incl. SS)</span>
+                        <span className="text-white font-mono font-bold">{fmt(totalIncomeAll)}/mo</span>
+                      </div>
+                      <div className="flex items-center justify-between px-3 py-2 text-xs bg-slate-800/40">
+                        <span className="text-amber-300 font-bold">CMI (per § 101(10A), excl. SS / VA)</span>
+                        <span className="text-amber-300 font-mono font-bold">{fmt(cmiPerStatute)}/mo</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Schedule J total + DMI flag */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 p-3">
+                      <p className="text-[10px] text-slate-500 mb-1">Total Monthly Expenses — Schedule J</p>
+                      <p className="text-base font-bold text-white">{fmt(totalExpenses)}/mo</p>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${disposableIncome >= 0 ? 'bg-green-500/5 border-green-500/30' : 'bg-red-500/5 border-red-500/30'}`}>
+                      <p className="text-[10px] text-slate-500 mb-1">Disposable Monthly Income (DMI)</p>
+                      <p className={`text-base font-bold ${disposableIncome >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmt(disposableIncome)}/mo</p>
+                    </div>
+                  </div>
+
+                  {dmiFlag && (
+                    <div className={`rounded-xl border p-3 ${dmiFlag.color === 'red' ? 'bg-red-500/8 border-red-500/30 text-red-200' : 'bg-amber-500/8 border-amber-500/30 text-amber-200'}`}>
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${dmiFlag.color === 'red' ? 'text-red-400' : 'text-amber-400'}`} />
+                        <p className="text-xs leading-relaxed">{dmiFlag.text}</p>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── ELIGIBILITY TAB (Ch.7 / Ch.13 sub-tabs) ── */}
+              {activeReviewTab === 'eligibility' && (
+                <>
+                  <div className="flex gap-1 border-b border-slate-800 -mt-2">
+                    {([{ id: 'ch7' as const, label: 'Chapter 7' }, { id: 'ch13' as const, label: 'Chapter 13' }]).map(t => (
+                      <button key={t.id} onClick={() => setElgSubTab(t.id)}
+                        className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-all ${
+                          elgSubTab === t.id ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-500 hover:text-slate-300'
+                        }`}>{t.label}</button>
+                    ))}
+                  </div>
+
+                  {elgSubTab === 'ch7' && (
+                    <div className="space-y-4">
+                      {primarilyBusiness ? (
+                        <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
+                          <p className="text-sm font-bold text-blue-300 mb-1">Means test skipped — primarily business debt</p>
+                          <p className="text-xs text-blue-200/80">Business debt {fmt(businessDebt)} is {((businessDebt/totalDebtAll)*100).toFixed(0)}% of total — exceeds 50%. § 707(b) means test applies only when "primarily consumer debts"; not applicable here.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <div>
+                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">CMI vs. {stateCode || lead.state} {houseSize}-Person Median</p>
+                            <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
+                              <div className="flex items-center justify-between mb-2 text-xs">
+                                <span className="text-slate-400">CMI</span>
+                                <span className="text-white font-bold tabular-nums">{fmt(cmi)}/mo</span>
+                              </div>
+                              <div className="relative h-2 rounded-full bg-slate-700/50 mb-2">
+                                <div className="absolute inset-y-0 left-0 rounded-full bg-amber-400" style={{ width: `${Math.min(100, (cmi / Math.max(medianMonthly, 1)) * 100)}%` }} />
+                                <div className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-white" style={{ left: '100%' }} />
+                              </div>
+                              <div className="flex items-center justify-between text-[10px] text-slate-500">
+                                <span>$0</span>
+                                <span>Median {fmt(medianMonthly)}/mo</span>
+                              </div>
+                              <div className="mt-3 text-xs">
+                                {aboveMedian
+                                  ? <p className="text-red-300"><span className="font-bold">Above median</span> by {fmt(cmi - medianMonthly)}/mo — § 707(b)(2) presumption test required.</p>
+                                  : <p className="text-green-300"><span className="font-bold">Below median</span> — presumed Ch.7 eligible (no abuse presumption).</p>}
+                              </div>
+                            </div>
+                          </div>
+
+                          {aboveMedian && (
+                            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
+                              <p className="text-xs font-bold text-red-300 mb-2">§ 707(b)(2) Presumption Test</p>
+                              <div className="space-y-1.5 text-xs">
+                                <div className="flex justify-between"><span className="text-slate-400">Monthly disposable income</span><span className="font-mono text-white">{fmt(disposableIncome)}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-400">× 60 months</span><span className="font-mono text-white">{fmt(disposableIncome * 60)}</span></div>
+                                <div className="flex justify-between"><span className="text-slate-400">Total unsecured debt</span><span className="font-mono text-white">{fmt(unsecuredTotal)}</span></div>
+                                <div className="border-t border-red-500/20 mt-1 pt-1 space-y-1">
+                                  <div className="flex items-center gap-2"><span className={`w-1.5 h-1.5 rounded-full ${presumption252 ? 'bg-red-400' : 'bg-slate-600'}`} /><span className="text-slate-300">≥ $15,150 over 60mo (≈$252.50/mo) — {presumption252 ? <span className="text-red-400 font-bold">PRESUMED</span> : <span className="text-slate-500">no</span>}</span></div>
+                                  <div className="flex items-center gap-2"><span className={`w-1.5 h-1.5 rounded-full ${meets25pctUnsec ? 'bg-red-400' : 'bg-slate-600'}`} /><span className="text-slate-300">≥ $9,075 over 60mo AND ≥ 25% of unsecured — {meets25pctUnsec ? <span className="text-red-400 font-bold">PRESUMED</span> : <span className="text-slate-500">no</span>}</span></div>
+                                </div>
+                                <p className={`mt-2 font-bold text-xs ${sevenB2Triggers ? 'text-red-400' : 'text-amber-400'}`}>
+                                  {sevenB2Triggers ? "Presumption of abuse arises — Ch.13 conversion likely." : "Presumption does not arise (but means test still required)."}
+                                </p>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
+
+                  {elgSubTab === 'ch13' && (
+                    <div className="space-y-3">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
+                          <p className="text-[10px] text-slate-500 mb-1">Applicable Commitment Period (§ 1325(b)(4))</p>
+                          <p className="text-base font-bold text-white">{acp} months</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{aboveMedian ? "Above median → 60-month ACP" : "Below median → 36-month ACP"}</p>
+                        </div>
+                        <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
+                          <p className="text-[10px] text-slate-500 mb-1">Projected Disposable Income × ACP</p>
+                          <p className="text-base font-bold text-white">{fmt(pdiTimesAcp)}</p>
+                          <p className="text-[10px] text-slate-500 mt-0.5">{fmt(disposableIncome)}/mo × {acp}mo</p>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 overflow-hidden">
+                        <table className="w-full text-xs">
+                          <tbody className="divide-y divide-slate-800/60">
+                            <tr>
+                              <td className="px-3 py-2 text-slate-400">Liquidation floor (§ 1325(a)(4))</td>
+                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(liquidationFloor)}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 text-slate-400">Priority debts (taxes + DSO arrears)</td>
+                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(priorityTotal)}</td>
+                            </tr>
+                            <tr>
+                              <td className="px-3 py-2 text-slate-400">Secured arrears cure</td>
+                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(arrearsCure)}</td>
+                            </tr>
+                            <tr className="bg-amber-500/5 border-t border-amber-500/20">
+                              <td className="px-3 py-2 font-bold text-amber-300">Minimum plan funding required</td>
+                              <td className="px-3 py-2 text-right font-mono font-bold text-amber-300">{fmt(minPlanFunding)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {planExtendsPastAcp && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+                          <p className="text-xs text-amber-200 leading-relaxed">
+                            <span className="font-bold">Liquidation floor exceeds PDI×ACP.</span> Plan must satisfy the floor; ACP is only a floor on committed income, not the plan length. Plan length capped at 60 months under § 1322(d).
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── ISSUES TAB ── */}
+              {activeReviewTab === 'issues' && (
+                issues.length === 0 ? (
+                  <div className="text-center py-10">
+                    <CheckCircle2 className="w-7 h-7 text-emerald-500/50 mx-auto mb-2" />
+                    <p className="text-slate-400 text-sm">No flagged issues detected.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {issues.map((i, idx) => {
+                      const sev = i.severity === 'critical' ? 'bg-red-500/8 border-red-500/30 text-red-200'
+                        : i.severity === 'warning' ? 'bg-amber-500/8 border-amber-500/30 text-amber-200'
+                        : 'bg-slate-800/40 border-slate-700/40 text-slate-300';
+                      const dot = i.severity === 'critical' ? 'bg-red-400' : i.severity === 'warning' ? 'bg-amber-400' : 'bg-slate-500';
+                      return (
+                        <div key={idx} className={`rounded-xl border p-3 ${sev}`}>
+                          <div className="flex items-center gap-2 mb-1 flex-wrap">
+                            <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                            <span className="text-xs font-bold text-white">{i.title}</span>
+                            <span className="ml-auto text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700/50 text-slate-400">{i.statute}</span>
+                          </div>
+                          {i.detail && <p className="text-[11px] leading-relaxed opacity-90 pl-3">{i.detail}</p>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+
+              {/* ── DECISION & FEES TAB (READ-ONLY) ── */}
+              {activeReviewTab === 'decision' && (
+                <div className="space-y-4">
+                  {/* Recommendation */}
+                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Recommendation</p>
+                    {(() => {
+                      let recChapter = "Ch.13";
+                      let recAction: 'accept' | 'decline' | 'review' = 'review';
+                      const rationale: string[] = [];
+                      const priorBkBars = issues.some(i => i.statute.includes("§ 1328(f)") || i.statute.includes("§ 727(a)(8)"));
+                      if (priorBkBars) {
+                        recAction = 'review';
+                        rationale.push("Prior bankruptcy bar — discharge restricted; may file Ch.13 for plan relief only.");
+                      }
+                      if (primarilyBusiness) {
+                        recChapter = "Ch.7";
+                        recAction = 'accept';
+                        rationale.push("Primarily business debt — § 707(b) means test inapplicable; Ch.7 available.");
+                      } else if (aboveMedian && sevenB2Triggers) {
+                        recChapter = "Ch.13";
+                        recAction = 'accept';
+                        rationale.push("Above-median + § 707(b)(2) presumption — Ch.7 abuse presumed; Ch.13 plan recommended.");
+                      } else if (!aboveMedian && disposableIncome <= 100) {
+                        recChapter = "Ch.7";
+                        recAction = 'accept';
+                        rationale.push("Below median + low DMI — Ch.7 fresh start fits.");
+                      } else if (liquidationFloor > pdiTimesAcp) {
+                        recChapter = "Ch.13";
+                        recAction = 'review';
+                        rationale.push("Liquidation floor exceeds PDI×ACP — plan must extend payments and may pinch feasibility.");
+                      }
+                      const badgeColor = recAction === 'accept' ? 'bg-green-500/15 border-green-500/40 text-green-300'
+                        : recAction === 'decline' ? 'bg-red-500/15 border-red-500/40 text-red-300'
+                        : 'bg-amber-500/15 border-amber-500/40 text-amber-300';
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <span className="text-base font-bold text-white">{recChapter}</span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}>
+                              {recAction === 'accept' ? 'ACCEPT' : recAction === 'decline' ? 'DECLINE' : 'REVIEW REQUIRED'}
+                            </span>
+                          </div>
+                          <ul className="space-y-1 text-xs text-slate-400">
+                            {rationale.length === 0 ? <li>Insufficient signal for confident recommendation — attorney judgment required.</li> : rationale.map((r, i) => <li key={i}>• {r}</li>)}
+                          </ul>
+                        </>
+                      );
+                    })()}
+                  </div>
+
+                  {/* Recommended attorney fees */}
+                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Recommended Attorney Fees</p>
+                    <div className="grid grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <p className="text-[10px] text-slate-500">Ch.7 attorney fee</p>
+                        <p className="text-sm font-bold text-white">$1,800</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500">Ch.13 attorney fee</p>
+                        <p className="text-sm font-bold text-white">$4,200</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-slate-500">Court filing fee</p>
+                        <p className="text-sm font-bold text-white">{lead.chapter_interest === 13 ? "$313" : "$338"}</p>
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-2">Standard fee schedule. Attorney may adjust per case complexity; actual fees set at decision.</p>
+                  </div>
+
+                  {/* Payment terms (READ-ONLY from intake) */}
+                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Payment Terms — captured at intake</p>
+                    {(() => {
+                      const dp = (fd as Record<string, unknown>).downPayment ?? (fd as Record<string, unknown>).down_payment;
+                      const pamt = (fd as Record<string, unknown>).paymentAmount ?? (fd as Record<string, unknown>).payment_amount;
+                      const pfreq = (fd as Record<string, unknown>).paymentFrequency ?? (fd as Record<string, unknown>).payment_frequency;
+                      const any = dp != null || pamt != null || pfreq != null;
+                      if (!any) {
+                        return <p className="text-xs text-slate-500 italic">Payment terms not captured at intake yet. Intake form needs down-payment / payment-schedule fields wired up.</p>;
+                      }
+                      return (
+                        <div className="grid grid-cols-3 gap-3 text-xs">
+                          <div>
+                            <p className="text-[10px] text-slate-500">Down payment</p>
+                            <p className="text-sm font-semibold text-white">{dp != null ? fmt(Number(dp)) : '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500">Payment amount</p>
+                            <p className="text-sm font-semibold text-white">{pamt != null ? fmt(Number(pamt)) : '—'}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500">Frequency</p>
+                            <p className="text-sm font-semibold text-white">{pfreq != null ? String(pfreq) : '—'}</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                    <p className="text-[9px] text-slate-600 mt-2 italic">
+                      Note: existing "Record Decision &amp; Set Fees" modal still captures down_payment as an attorney input — flagged for reconciliation; pending intake form adding the field.
+                    </p>
+                  </div>
+
+                  {/* Capture button — opens existing modal (decision write is unchanged) */}
+                  {canReview && (
+                    <div className="flex justify-end">
+                      <button onClick={() => setShowAcceptanceModal(true)}
+                        className="px-4 py-2 text-sm font-bold bg-amber-500 hover:bg-amber-400 text-white rounded-xl transition-colors shadow-lg shadow-amber-500/20">
+                        {acceptance ? "Update Decision" : "Record Decision & Set Fees"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         );
