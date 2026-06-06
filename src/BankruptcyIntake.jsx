@@ -1911,6 +1911,11 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
         status:           "pending_review",
         submitted_at:     new Date().toISOString(),
 
+        // Dual-write: full camelCase intake state for the attorney review
+        // portal + questionnaire prefill. Flat columns below remain for
+        // legacy callers; BAN-40 phase 2 will collapse to form_data only.
+        form_data:        data,
+
         // Filing
         filing_type:      data.filingType   || "",
         marital_status:   data.maritalStatus || "",

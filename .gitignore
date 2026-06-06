@@ -21,3 +21,10 @@ dist-ssr
 *.sln
 *.sw?
 .env
+.env*
+
+# Claude Code harness internals (not source)
+.claude/
+
+# One-shot REST helper for seeding Dixon Cider (not part of the app build)
+scripts/seed_dixon_cider_via_rest.mjs
