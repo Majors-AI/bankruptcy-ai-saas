@@ -596,9 +596,9 @@ export default function IntakeDashboard({
           <button
             onClick={onLogNewLead}
             className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#0F0F0E] bg-[#B8945F] hover:bg-[#C8A46F] px-3 py-1.5 rounded transition-colors"
-            title="Open the full-window flow for logging a new caller"
+            title="Open the New Client Lead window"
           >
-            <span className="text-base leading-none">+</span> Log new caller
+            <span className="text-base leading-none">+</span> New Client Lead
           </button>
         )}
       </div>

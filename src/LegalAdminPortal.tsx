@@ -7,10 +7,15 @@ import { mapIntakePortalRoleToPlatformRole, canAcceptCase } from "./lib/auth";
 import { getFirmFeatures } from "./lib/featureFlags";
 import NewClientModal from "./admin/NewClientModal";
 import { supabase } from "./lib/supabase";
-import { sendVia } from "./lib/sendGate";
 import IntakeDashboard from "./components/intake-dashboard/IntakeDashboard";
 import StaffGuidedIntake from "./components/intake-script/StaffGuidedIntake";
 import NewLeadInline from "./components/intake-new-lead/NewLeadInline";
+import ConsultSchedulerPanel, {
+  StaffAvailabilityList, todayInFirmTz,
+  StaffDetail as SchedulerStaffDetail,
+  CalEvent as SchedulerCalEvent,
+  SchedulerSelection,
+} from "./components/scheduler/ConsultSchedulerPanel";
 
 // V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
 // firms get the same feature-flag config per Section 6 of the V1 migration,
@@ -2775,8 +2780,10 @@ function LeadDetailPanel({
       {showSchedule && (
         <ScheduleConsultModal
           lead={lead}
+          session={session}
           onClose={() => setShowSchedule(false)}
           onSaved={() => { setShowSchedule(false); onRefresh(); }}
+          onLaunchGuidedIntake={(l) => { setShowSchedule(false); onLaunchGuidedIntake(l); }}
         />
       )}
       {/* ConsultIntakeModal render branch removed — superseded by
@@ -4844,210 +4851,231 @@ function FollowUpQueue({ leads, onSelect }: {
 // Books a consultation for a specific lead and sends them an email with the
 // pre-intake form link so they can complete it before the appointment.
 
-function ScheduleConsultModal({ lead, onClose, onSaved }: {
+// Unified scheduling experience for existing leads — full-screen overlay that
+// renders the SAME 5-day ConsultSchedulerPanel + 3-action ladder as the
+// new-lead window. The legacy free date/time + duration picker and the
+// "Schedule & Send Invite" email send were removed in this build (no real
+// sends, no DB writes outside book_consultation).
+function ScheduleConsultModal({ lead, session, onClose, onSaved, onLaunchGuidedIntake }: {
   lead: Lead;
+  session: PortalSession;
   onClose: () => void;
   onSaved: () => void;
+  /** Launches StaffGuidedIntake for this lead after an immediate consult books. */
+  onLaunchGuidedIntake: (lead: Lead) => void;
 }) {
-  const [date, setDate]         = useState(new Date().toISOString().slice(0, 10));
-  const [time, setTime]         = useState("10:00");
-  const [duration, setDuration] = useState("45");
-  const [notes, setNotes]       = useState("");
-  const [sendEmail, setSendEmail] = useState(!!lead.email);
-  const [saving, setSaving]     = useState(false);
-  const [emailSent, setEmailSent] = useState(false);
+  const [bookingNow, setBookingNow] = useState(false);
+  const [bookError, setBookError]   = useState<string | null>(null);
+  const [showWhosAvailable, setShowWhosAvailable] = useState(false);
 
-  const inp = "w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-400/60 transition-all";
-  const lbl = "block text-xs font-semibold text-slate-400 mb-1.5 uppercase tracking-wide";
+  // Staff pool + cal events for the panel's recommendation logic.
+  const [staffPool, setStaffPool] = useState<SchedulerStaffDetail[]>([]);
+  const [calEvents, setCalEvents] = useState<SchedulerCalEvent[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [staffRes, eventsRes] = await Promise.all([
+        supabase
+          .from("staff_members")
+          .select("id,name,role,role_level,intake_portal_role,is_active")
+          .eq("is_active", true)
+          .in("intake_portal_role", ["legal_admin", "super_admin", "attorney_super_admin"])
+          .order("role_level", { ascending: true, nullsFirst: false })
+          .order("name", { ascending: true }),
+        supabase
+          .from("calendar_events")
+          .select("id,start_time,end_time,staff_id,lead_id,client_name,title,event_subtype,status,department")
+          .gte("start_time", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+          .lte("start_time", new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()),
+      ]);
+      if (cancelled) return;
+      if (staffRes.data) setStaffPool(staffRes.data as SchedulerStaffDetail[]);
+      if (eventsRes.data) setCalEvents(eventsRes.data as SchedulerCalEvent[]);
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
-  const apptDateFmt = date
-    ? new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
-    : "";
+  const todayLocal = todayInFirmTz();
+  const [selection, setSelection] = useState<SchedulerSelection>({
+    staffId: null, slotStartIso: null, dateStr: null,
+  });
 
-  const [bookError, setBookError] = useState<string | null>(null);
-  async function save() {
-    if (!date) return;
-    setSaving(true);
+  const DEFAULT_SLOT_MINUTES = 45;
+  const IMMEDIATE_START_BUFFER_MS = 60_000;
+
+  // Schedule — books the slot/staff picked in the calendar.
+  async function handleSchedule() {
+    if (!selection.staffId || !selection.slotStartIso) return;
     setBookError(null);
-
-    const startDt = new Date(`${date}T${time}:00`);
-    const endDt   = new Date(startDt.getTime() + parseInt(duration) * 60000);
-
-    // Route through book_consultation RPC for atomic capacity/lunch/gap checks.
-    const { data, error } = await supabase.rpc("book_consultation", {
-      p_staff_id:      null,            // least-loaded staffer
-      p_lead_id:       lead.id,
-      p_start_time:    startDt.toISOString(),
-      p_end_time:      endDt.toISOString(),
-      p_client_name:   lead.full_name,
-      p_client_phone:  lead.phone ?? null,
-      p_client_email:  lead.email ?? null,
-      p_is_walk_in:    false,
-      p_event_subtype: "consultation",
-      p_calendar_type: "intake",
-      p_department:    "intake",
-      p_notes:         notes || null,
-      p_created_by:    "admin",
-    });
-
-    const result = data as { ok: boolean; reason: string | null } | null;
-    if (error || !result?.ok) {
-      setBookError(result?.reason ?? error?.message ?? "Booking failed");
-      setSaving(false);
-      return;
-    }
-
-    // Lead status + consultation_event_id + consultation_date + last_contact_at
-    // are now updated atomically inside book_consultation. No separate sbPatch.
-
-    // Send invitation email with intake form link — routes through consent gate.
-    if (sendEmail && lead.email) {
-      const intakeFormUrl = `${window.location.origin}/?intake_lead=${lead.id}`;
-      const result = await sendVia(
-        "send-intake-invite",
-        {
-          leadId:          lead.id,
-          leadName:        lead.full_name,
-          email:           lead.email,
-          phone:           lead.phone ?? null,
-          consultDate:     date,
-          consultTime:     time,
-          duration:        parseInt(duration),
-          staffName:       "bankruptcy.ai Intake Team",
-          chapterInterest: lead.chapter_interest ?? 7,
-          intakeFormUrl,
-        },
-        {
-          recipientType: "lead",
-          leadId: lead.id,
-          actor: "Intake admin",
-          summary: "Consultation invitation email",
-        },
-      );
-      if (result.sent) {
-        setEmailSent(true);
-      } else {
-        const msg =
-          result.reason === "no_consent" ? "Invitation email skipped — lead did not consent to messaging at intake." :
-          result.reason === "opted_out"  ? "Invitation email skipped — lead opted out of messaging." :
-          result.reason === "no_recipient_row" ? "Invitation email skipped — no consent record found for this lead." :
-          `Invitation email not sent — ${result.reason ?? "provider error"}.`;
-        if (typeof window !== "undefined") setTimeout(() => window.alert(msg), 0);
+    setBookingNow(true);
+    try {
+      const startMs = new Date(selection.slotStartIso).getTime();
+      const endMs   = startMs + DEFAULT_SLOT_MINUTES * 60_000;
+      const { data, error } = await supabase.rpc("book_consultation", {
+        p_staff_id:    selection.staffId,
+        p_lead_id:     lead.id,
+        p_start_time:  new Date(startMs).toISOString(),
+        p_end_time:    new Date(endMs).toISOString(),
+        p_client_name: lead.full_name,
+        p_client_phone: lead.phone ?? null,
+        p_client_email: lead.email ?? null,
+        p_is_walk_in:  false,
+        p_notes:       `Scheduled by ${session.name}`,
+        p_created_by:  session.name,
+      });
+      const result = (data ?? null) as { ok: boolean; reason: string | null } | null;
+      if (error || !result?.ok) {
+        setBookError(result?.reason ?? error?.message ?? "Booking failed");
+        return;
       }
+      onSaved();
+    } finally {
+      setBookingNow(false);
     }
-
-    setSaving(false);
-    onSaved();
   }
 
+  // Do Consult Now — books immediate (least-loaded if no staff picked) and
+  // bounces to StaffGuidedIntake. Matches the new-lead window behavior.
+  async function handleDoConsultNow() {
+    setBookError(null);
+    setBookingNow(true);
+    try {
+      const startMs = Date.now() + IMMEDIATE_START_BUFFER_MS;
+      const endMs   = startMs + DEFAULT_SLOT_MINUTES * 60_000;
+      const { data, error } = await supabase.rpc("book_consultation", {
+        p_staff_id:    selection.staffId,
+        p_lead_id:     lead.id,
+        p_start_time:  new Date(startMs).toISOString(),
+        p_end_time:    new Date(endMs).toISOString(),
+        p_client_name: lead.full_name,
+        p_client_phone: lead.phone ?? null,
+        p_client_email: lead.email ?? null,
+        p_is_walk_in:  true,
+        p_notes:       `Walk-in consult — logged by ${session.name}`,
+        p_created_by:  session.name,
+      });
+      const result = (data ?? null) as { ok: boolean; reason: string | null } | null;
+      if (error || !result?.ok) {
+        setBookError(result?.reason ?? error?.message ?? "Booking failed");
+        return;
+      }
+      onLaunchGuidedIntake(lead);
+    } finally {
+      setBookingNow(false);
+    }
+  }
+
+  const canSchedule = !!selection.staffId && !!selection.slotStartIso && !bookingNow;
+  const canDoConsultNow = !bookingNow;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-
-        {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-500/15 border border-teal-500/25 flex items-center justify-center">
-              <Calendar className="w-4 h-4 text-teal-400" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white">Schedule Consultation</h3>
-              <p className="text-xs text-slate-500">{lead.full_name}</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1"><X className="w-4 h-4" /></button>
+    <div className="fixed inset-0 z-50 flex flex-col text-[#FAFAF7]" style={{ background: "#0F0F0E" }}>
+      {/* Top bar */}
+      <header
+        className="sticky top-0 z-30 px-6 flex-shrink-0"
+        style={{ height: 56, background: "#0F0F0E", borderBottom: "1px solid #2A2A28", display: "flex", alignItems: "center" }}
+      >
+        <button
+          onClick={onClose}
+          className="flex items-center gap-1.5 text-xs text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" /> Back
+        </button>
+        <div className="mx-auto flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-[#B8945F]" />
+          <span className="text-sm font-semibold" style={{ fontFamily: "'Fraunces', Georgia, serif" }}>
+            Schedule consult
+          </span>
         </div>
+        <span className="text-[11px] font-mono text-[#6B6B66]">{session.name}</span>
+      </header>
 
-        <div className="px-6 py-5 space-y-4">
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl px-6 py-6 lg:px-8 lg:py-8 space-y-6">
 
-          {/* Date + Time */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className={lbl}>Date</label>
-              <input type="date" value={date} onChange={e => setDate(e.target.value)} className={inp} />
+          {/* Lead summary header */}
+          <section className="rounded-xl border border-[#B8945F]/30 bg-[#1A1A18] p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#B8945F] mb-2">Scheduling for</p>
+            <p className="text-lg font-semibold text-[#FAFAF7]">{lead.full_name}</p>
+            <div className="mt-1 flex flex-wrap gap-3 text-[11px] text-[#6B6B66]">
+              {lead.phone && <span className="flex items-center gap-1"><Phone className="w-3 h-3" />{lead.phone}</span>}
+              {lead.email && <span className="flex items-center gap-1"><Mail className="w-3 h-3" />{lead.email}</span>}
+              <span className="flex items-center gap-1"><Hash className="w-3 h-3" />{lead.status}</span>
+              {lead.chapter_interest && <span className="flex items-center gap-1">Ch. {lead.chapter_interest}</span>}
             </div>
-            <div>
-              <label className={lbl}>Start Time</label>
-              <input type="time" value={time} onChange={e => setTime(e.target.value)} className={inp} />
+          </section>
+
+          {/* Actions (3) — same set as the new-lead window */}
+          <section className="rounded-xl border border-[#2A2A28] bg-[#1A1A18] p-4">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-3">Action</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                disabled={!canDoConsultNow}
+                onClick={handleDoConsultNow}
+                className="flex items-center gap-2 bg-[#B8945F] hover:bg-[#C8A46F] disabled:opacity-40 disabled:cursor-not-allowed text-[#0F0F0E] font-bold text-xs px-4 py-2 rounded transition-colors"
+                title="Books an immediate consult and opens the staff-guided intake call."
+              >
+                {bookingNow ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <PhoneCall className="w-3.5 h-3.5" />}
+                Do Consult Now
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowWhosAvailable(v => !v)}
+                className="flex items-center gap-2 bg-[#1A1A18] hover:bg-[#2A2A28] border border-[#B8945F]/40 text-[#FAFAF7] font-semibold text-xs px-4 py-2 rounded transition-colors"
+                title="Shows each intake staffer's current status."
+              >
+                <Users className="w-3.5 h-3.5" />
+                {showWhosAvailable ? "Hide Who's Available" : "See Who's Available"}
+              </button>
+
+              <button
+                disabled={!canSchedule}
+                onClick={handleSchedule}
+                className="flex items-center gap-2 bg-[#1A1A18] hover:bg-[#2A2A28] border border-[#2A2A28] disabled:opacity-40 disabled:cursor-not-allowed text-[#FAFAF7] font-semibold text-xs px-4 py-2 rounded transition-colors"
+                title={selection.slotStartIso ? "Books the slot picked in the calendar below." : "Pick a time bubble in the calendar below first."}
+              >
+                {bookingNow ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Calendar className="w-3.5 h-3.5" />}
+                Schedule
+              </button>
+
+              <button
+                onClick={onClose}
+                className="ml-auto flex items-center gap-2 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] font-semibold text-xs px-3 py-2 rounded transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+                Cancel
+              </button>
             </div>
-          </div>
 
-          {/* Duration */}
-          <div>
-            <label className={lbl}>Duration</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {["30","45","60","90"].map(d => (
-                <button key={d} onClick={() => setDuration(d)}
-                  className={`py-2 text-xs font-bold rounded-xl border transition-all ${duration === d
-                    ? "bg-teal-500/15 text-teal-400 border-teal-500/30"
-                    : "text-slate-500 border-slate-700/60 hover:text-slate-300"}`}>
-                  {d} min
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Notes */}
-          <div>
-            <label className={lbl}>Notes (optional)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
-              className="w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-all resize-none"
-              placeholder="Any context or preparation notes…" />
-          </div>
-
-          {/* Appointment preview */}
-          {date && (
-            <div className="bg-teal-500/8 border border-teal-500/20 rounded-xl px-4 py-3">
-              <div className="flex items-center gap-2 mb-1">
-                <Calendar className="w-3.5 h-3.5 text-teal-400" />
-                <span className="text-xs font-bold text-teal-400">Appointment Preview</span>
+            {bookError && (
+              <div className="mt-3 text-[11px] text-rose-300 bg-rose-950/30 border border-rose-700/40 rounded px-3 py-1.5">
+                <span className="font-semibold">Booking failed:</span> {bookError}
               </div>
-              <p className="text-sm text-white font-semibold">{apptDateFmt}</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {(() => {
-                  const [h, mn] = time.split(":").map(Number);
-                  const d = new Date(); d.setHours(h, mn, 0);
-                  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-                })()} · {duration} minutes
-              </p>
-            </div>
+            )}
+          </section>
+
+          {/* See Who's Available — toggleable read-only roster. */}
+          {showWhosAvailable && (
+            <StaffAvailabilityList
+              staffPool={staffPool}
+              calEvents={calEvents}
+              currentSessionId={session.id}
+              todayLocal={todayLocal}
+            />
           )}
 
-          {/* Email invite toggle */}
-          <div className={`rounded-xl border p-3.5 transition-all ${sendEmail ? "bg-amber-500/8 border-amber-500/20" : "bg-slate-800/30 border-slate-700/60"}`}>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="checkbox" checked={sendEmail} onChange={e => setSendEmail(e.target.checked)}
-                className="mt-0.5 accent-amber-400 w-4 h-4 flex-shrink-0" />
-              <div>
-                <p className={`text-sm font-semibold ${sendEmail ? "text-amber-300" : "text-slate-400"}`}>
-                  Send email invite with intake form
-                </p>
-                {lead.email ? (
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Will send to <span className="text-slate-300">{lead.email}</span> with appointment details and a link to complete the intake form before the consultation.
-                  </p>
-                ) : (
-                  <p className="text-xs text-red-400 mt-0.5">No email on file — cannot send invite.</p>
-                )}
-              </div>
-            </label>
-          </div>
+          {/* Unified 5-day scheduler */}
+          <ConsultSchedulerPanel
+            staffPool={staffPool}
+            calEvents={calEvents}
+            currentSessionId={session.id}
+            selection={selection}
+            onChangeSelection={setSelection}
+            todayLocal={todayLocal}
+          />
 
-        </div>
-
-        {bookError && (
-          <div className="mx-6 mb-3 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs">
-            <span className="font-semibold">Cannot book this slot:</span> {bookError}
-          </div>
-        )}
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
-          <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
-          <button onClick={save} disabled={saving || !date}
-            className="flex items-center gap-2 px-5 py-2.5 bg-teal-500 hover:bg-teal-400 disabled:opacity-40 text-white font-bold text-sm rounded-xl transition-all">
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
-            Schedule{sendEmail && lead.email ? " & Send Invite" : ""}
-          </button>
         </div>
       </div>
     </div>
@@ -6187,6 +6215,12 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           if (data) setSelectedLead(data as Lead);
           load();
         }}
+        onDoIntakeNow={async (leadId) => {
+          setNewLeadWindow(false);
+          const { data } = await supabase.from("intake_leads").select("*").eq("id", leadId).single();
+          if (data) setGuidedIntakeLead(data as Lead);
+          load();
+        }}
       />
     );
   }
@@ -6264,8 +6298,12 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     // Dashboard — legal_admin / super_admin only. Pure attorneys never see this tab.
     ...( canManageLeads ? [{ id: "dashboard" as const, label: "Dashboard", icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }] : []),
     ...( (canManageLeads || isSuperAdmin) && showLeadsTab ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }] : []),
-    // V1 — Manual Clients tab (always visible; replaces Leads when intake_bot is off)
-    { id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null },
+    // V1 — Manual Clients tab HIDDEN from the inner nav (being replaced later).
+    //       The render branch + state are intentionally kept intact so flipping
+    //       the gate below back to true restores the tab. Do not delete.
+    ...(false
+      ? [{ id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null }]
+      : []),
     { id: "followup" as const,     label: isAtty && !isSuperAdmin ? "Review Queue" : "Follow-Up", icon: <BellRing className="w-3.5 h-3.5" />,  badge: isAtty ? (reviewQueue.length + feeQuotedLeads.length || null) : followUpBadge },
     { id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null },
     ...( canManageLeads || isSuperAdmin ? [{ id: "availability" as const, label: "Availability", icon: <Clock className="w-3.5 h-3.5" />, badge: null }] : []),
@@ -6308,7 +6346,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A2F'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
               >
-                <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Lead
+                <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
               </button>
             )}
             <button onClick={load} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
@@ -6520,7 +6558,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 <Users className="w-10 h-10 text-slate-700 mx-auto mb-3" />
                 <p className="text-slate-500">No leads found</p>
                 <button onClick={() => setNewLeadWindow(true)} className="mt-4 flex items-center gap-2 mx-auto text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl transition-colors">
-                  <Plus className="w-3.5 h-3.5" /> Add First Lead
+                  <Plus className="w-3.5 h-3.5" /> New Client Lead
                 </button>
               </div>
             ) : (

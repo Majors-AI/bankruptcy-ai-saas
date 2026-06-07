@@ -14,6 +14,9 @@ import StaffDashboard from './StaffDashboard';
 import SuperAdminPortal from './SuperAdminPortal';
 import StaffCommHub from './StaffCommHub';
 import TrusteeDocumentPortal from './TrusteeDocumentPortal';
+import Training from './Training';
+import SuperAdminConsole from './SuperAdminConsole';
+import LawFirmOwnerPortal from './LawFirmOwnerPortal';
 import LegalAdminPortal from './LegalAdminPortal';
 import AttorneyIntakeDashboard from './AttorneyIntakeDashboard';
 import ECFNoticesPortal from './ECFNoticesPortal';
@@ -52,7 +55,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_appt_portal' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_appt_portal' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -134,6 +137,16 @@ function App() {
   // Until auth is wired, read from env vars so each deployment is configured per firm.
   const firmId = (import.meta.env.VITE_FIRM_ID as string | undefined) ?? '00000000-0000-0000-0000-000000000001';
   const isSuperAdmin = (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) === 'super_admin_bankruptcy_ai';
+  // BAN-40 phase 2 stubs — replace with auth-derived firm role lookup.
+  // Role hierarchy: law_firm_owner ⊃ super_admin ⊃ attorney
+  //   VITE_FIRM_ROLE='law_firm_owner' → firm owner (sees Law Firm Owner Portal + everything below)
+  //   VITE_FIRM_ROLE='super_admin'    → firm super admin (sees Super Admin Setting Portal + Training)
+  //   VITE_FIRM_ROLE='attorney'       → attorney-tier staff (sees Training)
+  // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops testing.
+  const firmRole = (import.meta.env.VITE_FIRM_ROLE as string | undefined);
+  const isLawFirmOwner   = firmRole === 'law_firm_owner' || isSuperAdmin;
+  const isFirmSuperAdmin = firmRole === 'super_admin' || isLawFirmOwner;
+  const isAttorneyRole   = firmRole === 'attorney' || isFirmSuperAdmin;
 
   const flags = useFirmFlags(firmId, isSuperAdmin);
 
@@ -330,6 +343,33 @@ function App() {
       activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
     },
+    {
+      // #18 — Staff Training (scaffold). Platform-onboarding training; required
+      // for every staffer, with a 30-day tutorial for new hires + role-specific
+      // modules. Ungated at the nav level; subsections are "coming soon" only.
+      id: 'training', label: '18. Staff Training',
+      activeClass: 'bg-amber-700 text-white shadow-amber-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/></svg>,
+    },
+    {
+      // #19 — Super Admin Setting Portal. Firm-facing platform adjustments
+      // (firm settings, feature toggles, staff & roles). Visible to firm
+      // super-admin and Law Firm Owner. Distinct from bankruptcy.ai Admin.
+      id: 'firm_super_admin_console', label: '19. Super Admin Setting Portal',
+      hidden: !isFirmSuperAdmin,
+      activeClass: 'bg-rose-600 text-white shadow-rose-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
+    },
+    {
+      // #20 — Law Firm Owner Portal. Owner-tier role. Inherits everything from
+      // Super Admin Setting Portal PLUS owner-only sections (accounting +
+      // productivity reporting, feature-grant controls). Hidden unless the
+      // viewer is the firm owner.
+      id: 'law_firm_owner_portal', label: '20. Law Firm Owner Portal',
+      hidden: !isLawFirmOwner,
+      activeClass: 'bg-rose-500 text-white shadow-rose-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l3.057 3.057a2 2 0 002.828 0L12 5l1.115 1.057a2 2 0 002.828 0L19 3l1.5 6.5L18 21H6L3.5 9.5 5 3z"/></svg>,
+    },
     // ── Hidden — route + component intact ─────────────────────────────────
     {
       // Nav entry hidden (PRE-EXISTING). Attorney Intake Review detail panel
@@ -380,7 +420,12 @@ function App() {
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>,
     },
     {
+      // Productivity top-level nav HIDDEN — now hosted inside the firm-facing
+      // Super Admin Console (src/SuperAdminConsole.tsx) as a feature-toggle
+      // subsection. Route + component (SuperAdminPortal) preserved so the
+      // embed inside the console keeps working.
       id: 'superadmin', label: 'Productivity', flagKey: 'feature_productivity',
+      hidden: true,
       activeClass: 'bg-rose-700 text-white shadow-rose-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>,
     },
@@ -760,6 +805,36 @@ function App() {
       <ErrorBoundary>
         <GateToastOverlay />
         <div className="pb-24"><TrusteeDocumentPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'training') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><Training isAttorneyRole={isAttorneyRole} /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'firm_super_admin_console') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><SuperAdminConsole isFirmSuperAdmin={isFirmSuperAdmin} /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'law_firm_owner_portal') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><LawFirmOwnerPortal isLawFirmOwner={isLawFirmOwner} /></div>
         <PortalToggle />
       </ErrorBoundary>
     );
