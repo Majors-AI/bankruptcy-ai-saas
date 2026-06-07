@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { X, TrendingUp, TrendingDown, Minus, CreditCard as Edit3, Save, RotateCcw, CheckCircle, AlertTriangle } from "lucide-react";
 import { supabase } from "../../lib/supabase";
+import { sendSmsEmail } from "../../lib/sendGate";
 
 const PERIOD_TO_MONTHLY: Record<string, number> = {
   Weekly: 4.333,
@@ -255,14 +256,14 @@ export default function IncomeExpenseModal({
       });
 
       if (clientEmail) {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
         const fieldCount = Object.keys(changedFields).length;
         const emailBody = `Dear ${clientName},\n\nYour case file has been updated by our office. The following adjustment was made to your ${mode === "income" ? "income (Schedule I)" : mode === "expenses" ? "monthly expenses (Schedule J)" : "income and expenses (Schedule I & J)"} for your Chapter ${chapter} case:\n\nReason: ${reasonLabel}${changeNote ? `\nNotes: ${changeNote}` : ""}\n\n${fieldCount} field(s) were adjusted. If you have questions about this change, please contact our office.\n\nThank you,\nThe Legal Team`;
-        await fetch(`${supabaseUrl}/functions/v1/send-sms-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ channel: "email", to: clientEmail, name: clientName, subject: `Case File Update — Schedule ${mode === "income" ? "I" : mode === "expenses" ? "J" : "I & J"} Adjusted`, message: emailBody }),
+        await sendSmsEmail({
+          recipientType: "client",
+          submissionId: submissionId ?? null,
+          actor: staffName || "Legal team",
+          summary: `Case File Update — Schedule ${mode === "income" ? "I" : mode === "expenses" ? "J" : "I & J"} Adjusted`,
+          payload: { channel: "email", to: clientEmail, name: clientName, subject: `Case File Update — Schedule ${mode === "income" ? "I" : mode === "expenses" ? "J" : "I & J"} Adjusted`, message: emailBody },
         });
       }
 

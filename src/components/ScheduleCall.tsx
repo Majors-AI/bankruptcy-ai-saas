@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Calendar, Clock, Video, CheckCircle, ChevronRight, X, User, Mail, Phone } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { sendVia } from "../lib/sendGate";
 
 interface Props {
   client: { id: string; name: string; email: string; phone: string } | null;
@@ -67,19 +68,35 @@ export default function ScheduleCall({ client, onClose, onScheduled }: Props) {
 
       const generatedMeetLink = createGoogleMeetLink(`Bankruptcy Consultation – ${name}`, startTime, endTime);
 
-      await supabase.from("calendar_events").insert({
-        client_id: client?.id ?? null,
-        client_name: name,
-        client_email: email,
-        client_phone: phone,
-        title: `Bankruptcy Consultation – ${name}`,
-        description: notes,
-        start_time: startTime.toISOString(),
-        end_time: endTime.toISOString(),
-        meet_link: generatedMeetLink,
-        event_type: 'consultation',
-        status: "scheduled",
+      // Route through book_consultation RPC (capacity/lunch/gap/time-off
+      // checks server-side, atomic). Raw inserts are no longer allowed.
+      const { data: bookData, error: bookErr } = await supabase.rpc("book_consultation", {
+        p_staff_id:      null,
+        p_lead_id:       null,                 // self-booking — no lead yet
+        p_start_time:    startTime.toISOString(),
+        p_end_time:      endTime.toISOString(),
+        p_client_name:   name,
+        p_client_phone:  phone || null,
+        p_client_email:  email,
+        p_is_walk_in:    false,
+        p_event_subtype: "consultation",
+        p_calendar_type: "intake",
+        p_department:    "intake",
+        p_notes:         notes || null,
+        p_created_by:    "client_self",
       });
+      const bookResult = bookData as { ok: boolean; reason: string | null; event_id: string | null } | null;
+      if (bookErr || !bookResult?.ok) {
+        // Show a clear error so the client sees why the slot was rejected.
+        // eslint-disable-next-line no-alert
+        alert(`We couldn't book that slot — ${bookResult?.reason ?? bookErr?.message ?? "please pick another time."}`);
+        setLoading(false);
+        return;
+      }
+      // Best-effort: attach meet link to the booked event for the client's confirmation flow.
+      if (bookResult.event_id) {
+        await supabase.from("calendar_events").update({ meet_link: generatedMeetLink }).eq("id", bookResult.event_id);
+      }
 
       if (client?.id) {
         await supabase.from("clients").update({
@@ -101,18 +118,33 @@ export default function ScheduleCall({ client, onClose, onScheduled }: Props) {
       }
 
       try {
-        await fetch(`${supabaseUrl}/functions/v1/send-confirmation`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${supabaseKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
+        // Public self-booking — no lead/submission exists yet. Routes through
+        // the gate as 'transactional_self_initiated' (email only, TCPA does
+        // not apply to email and the user deliberately initiated this action).
+        // The gate writes an audit row to intake_contact_log proving the
+        // rationale. SMS/voice would be upgraded to strict — N/A here, this
+        // endpoint is email-only.
+        await sendVia(
+          "send-confirmation",
+          {
             type: "call_scheduled",
             to: email,
             name,
             date: selectedDate,
             time: selectedTime,
             meet_link: generatedMeetLink,
-          }),
-        });
+            // The edge function's destructure expects (clientName, referenceNumber, …);
+            // include common synonyms so it can render the email even though
+            // the public self-booking flow has no submission yet.
+            clientName: name,
+            referenceNumber: "SELF-BOOKING",
+          },
+          {
+            recipientType: "transactional_self_initiated",
+            actor: "client_self",
+            summary: "Self-booked consultation confirmation email",
+          },
+        );
       } catch {
         // Email optional
       }

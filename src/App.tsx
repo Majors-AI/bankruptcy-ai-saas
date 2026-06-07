@@ -24,6 +24,9 @@ import ClientRegistration from './ClientRegistration';
 import AttorneyRegistration from './AttorneyRegistration';
 import LegacyClientImport from './LegacyClientImport';
 import SuperAdminPage from './admin/SuperAdminPage';
+import LegalDepartmentPortal from './LegalDepartmentPortal';
+import SigningApptPortal from './SigningApptPortal';
+import EFilingPortal from './EFilingPortal';
 import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
 import type { NavFlags } from './lib/useFirmFlags';
@@ -49,7 +52,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'bankruptcy_ai_admin';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_appt_portal' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -117,6 +120,9 @@ function MoonIcon() {
 
 function App() {
   const [view, setView] = useState<View>('legal_admin');
+  // Lead id to preselect when AttorneyIntakeDashboard opens — set by
+  // LegalAdminPortal's queue click for leads in 'sent_for_attorney_review'.
+  const [preselectLeadId, setPreselectLeadId] = useState<string | null>(null);
   const [updateMode, setUpdateMode] = useState(false);
   const [questions, setQuestions] = useState<ClientQuestion[]>([]);
   const [impersonateClient, setImpersonateClient] = useState<{ clientName: string; clientId: string } | null>(null);
@@ -149,13 +155,6 @@ function App() {
     }
     flagsLoadedRef.current = true;
   }, [view, flags, isSuperAdmin]);
-
-  // Lazy-retire AttorneyIntakeDashboard — consolidated into LegalAdminPortal's
-  // LeadDetailPanel. Any lingering caller of view='attorney' is redirected to
-  // the Intake Portal so there's a single review surface.
-  useEffect(() => {
-    if (view === 'attorney') setView('legal_admin');
-  }, [view]);
 
   // Auto-dismiss gate toast after 4 s.
   useEffect(() => {
@@ -241,107 +240,142 @@ function App() {
   }
 
   const NAV_ITEMS: { id: View; label: string; icon: ReactNode; activeClass: string; flagKey?: keyof NavFlags; hidden?: boolean }[] = [
+    // ── Workflow sequence (1–17) ──────────────────────────────────────────
     {
-      id: 'legal_admin', label: '1. Intake Portal (Staff)', flagKey: 'feature_intake_portal',
-      activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>,
+      id: 'attorney_register', label: '1. Law Firm Registration', flagKey: 'feature_attorney_registration',
+      activeClass: 'bg-amber-700 text-white shadow-amber-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
     },
     {
-      id: 'intake_questionnaire', label: '2. New Client Intake Form', flagKey: 'feature_intake_portal',
+      id: 'client_register', label: '2. Client Registration', flagKey: 'feature_client_registration',
+      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>,
+    },
+    {
+      id: 'intake_questionnaire', label: '3. New Client Intake Form', flagKey: 'feature_intake_portal',
       activeClass: 'bg-amber-400 text-slate-900 shadow-amber-400/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
     },
     {
-      // Nav entry hidden — Attorney Intake Review detail panel is now reached
-      // exclusively via the Intake Portal (Staff) "Pending Your Review" list.
-      // Route key 'attorney', VIEW_FLAGS entry, and component remain intact.
+      id: 'legal_admin', label: '4. Intake Portal (Staff)', flagKey: 'feature_intake_portal',
+      activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>,
+    },
+    {
+      id: 'accounting', label: '5. Accounting Portal (Staff)', flagKey: 'feature_accounting',
+      activeClass: 'bg-teal-600 text-white shadow-teal-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
+    },
+    {
+      id: 'legacy_import', label: '6. Legacy Import', flagKey: 'feature_legacy_import',
+      activeClass: 'bg-stone-700 text-white shadow-stone-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
+    },
+    {
+      id: 'dashboard', label: '7. Client Portal', flagKey: 'feature_client_portal',
+      activeClass: 'bg-slate-600 text-white shadow-slate-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
+    },
+    {
+      // Placeholder route — Phase 2 hosts Paralegal Review, Signing Review,
+      // and File Cabinet inside this portal.
+      id: 'legal_dept_portal', label: '8. Legal Department Portal',
+      activeClass: 'bg-indigo-700 text-white shadow-indigo-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11m16-11v11M8 14v3m4-3v3m4-3v3"/></svg>,
+    },
+    {
+      id: 'creditor_verification', label: '9. Creditor Verification Portal', flagKey: 'feature_creditor_verification',
+      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
+    },
+    {
+      id: 'file_cabinet', label: '10. File Cabinet', flagKey: 'feature_file_cabinet',
+      activeClass: 'bg-slate-500 text-white shadow-slate-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>,
+    },
+    {
+      id: 'signing_review', label: '11. Signing Review Portal', flagKey: 'feature_signing_review',
+      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
+    },
+    {
+      // NEW placeholder — schedules / manages signing appointments. No functionality yet.
+      id: 'signing_appt_portal', label: '12. Signing Appt. Portal',
+      activeClass: 'bg-sky-500 text-white shadow-sky-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 16l2 2 4-4"/></svg>,
+    },
+    {
+      // NEW placeholder — replaces File a Case (now hidden). No functionality yet.
+      id: 'efiling_portal', label: '13. E-Filing Portal',
+      activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
+    },
+    {
+      id: 'ecf_notices', label: '14. ECF Notices', flagKey: 'feature_ecf_notices',
+      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>,
+    },
+    {
+      id: 'ai_bots', label: '15. AI Bots', flagKey: 'feature_ai_bots',
+      activeClass: 'bg-teal-700 text-white shadow-teal-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2M12 3v4"/></svg>,
+    },
+    {
+      id: 'calendar', label: '16. Law Firm Calendar', flagKey: 'feature_calendar',
+      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
+    },
+    {
+      id: 'trustee', label: '17. 341 / Trustee Documents', flagKey: 'feature_trustee_portal',
+      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
+    },
+    // ── Hidden — route + component intact ─────────────────────────────────
+    {
+      // Nav entry hidden (PRE-EXISTING). Attorney Intake Review detail panel
+      // is reached exclusively via the Intake Portal (Staff) "Pending Your
+      // Review" list. Route, VIEW_FLAGS entry, and AttorneyIntakeDashboard
+      // component remain intact.
       id: 'attorney', label: '3. Attorney Intake Review', flagKey: 'feature_attorney_intake_review',
       hidden: true,
       activeClass: 'bg-amber-600 text-white shadow-amber-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
     },
     {
-      id: 'client_register', label: '4. Client Registration', flagKey: 'feature_client_registration',
-      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>,
-    },
-    {
-      id: 'attorney_register', label: 'Attorney Registration', flagKey: 'feature_attorney_registration',
-      activeClass: 'bg-amber-700 text-white shadow-amber-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
-    },
-    {
-      id: 'legacy_import', label: 'Legacy Import', flagKey: 'feature_legacy_import',
-      activeClass: 'bg-stone-700 text-white shadow-stone-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>,
-    },
-    {
-      id: 'dashboard', label: '5. Client Portal', flagKey: 'feature_client_portal',
-      activeClass: 'bg-slate-600 text-white shadow-slate-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>,
-    },
-    {
-      id: 'paralegal', label: '6. Paralegal Review', flagKey: 'feature_paralegal_review',
-      activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>,
-    },
-    {
-      id: 'attorney_sign', label: '7. Attorney / Client Review and Sign', flagKey: 'feature_attorney_review',
+      // Nav entry hidden — superseded by Signing Review Portal (#11). Route,
+      // VIEW_FLAGS entry, and AttorneyReviewPortal component preserved.
+      id: 'attorney_sign', label: 'Attorney / Client Review and Sign', flagKey: 'feature_attorney_review',
+      hidden: true,
       activeClass: 'bg-amber-600 text-white shadow-amber-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
     },
     {
-      id: 'signing_review', label: '7.5. Signing Review', flagKey: 'feature_signing_review',
-      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
-    },
-    {
-      id: 'file_a_case', label: '8. File a Case', flagKey: 'feature_file_a_case',
+      // Nav entry newly hidden — replaced by E-Filing Portal (#13). Route,
+      // VIEW_FLAGS entry, and FileACasePortal component preserved.
+      id: 'file_a_case', label: 'File a Case', flagKey: 'feature_file_a_case',
+      hidden: true,
       activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
     },
     {
-      id: 'ecf_notices', label: '9. ECF Notices', flagKey: 'feature_ecf_notices',
-      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>,
+      // Nav entry newly hidden — Paralegal Review accessed via Legal Department
+      // Portal sub-nav. Route, VIEW_FLAGS entry, and ParalegalReview component
+      // remain intact.
+      id: 'paralegal', label: 'Paralegal Review', flagKey: 'feature_paralegal_review',
+      hidden: true,
+      activeClass: 'bg-emerald-700 text-white shadow-emerald-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>,
     },
-    {
-      id: 'creditor_verification', label: '10. Creditor Verification', flagKey: 'feature_creditor_verification',
-      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>,
-    },
-    {
-      id: 'ai_bots', label: '11. AI Bots', flagKey: 'feature_ai_bots',
-      activeClass: 'bg-teal-700 text-white shadow-teal-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17H3a2 2 0 01-2-2V5a2 2 0 012-2h14a2 2 0 012 2v10a2 2 0 01-2 2h-2M12 3v4"/></svg>,
-    },
-    {
-      id: 'calendar', label: '12. Law Firm Calendar', flagKey: 'feature_calendar',
-      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>,
-    },
-    {
-      id: 'file_cabinet', label: '13. File Cabinet', flagKey: 'feature_file_cabinet',
-      activeClass: 'bg-slate-500 text-white shadow-slate-500/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>,
-    },
-    {
-      id: 'accounting', label: '14. Accounting', flagKey: 'feature_accounting',
-      activeClass: 'bg-teal-600 text-white shadow-teal-600/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>,
-    },
-    {
-      id: 'trustee', label: '15. 341 / Trustee Documents', flagKey: 'feature_trustee_portal',
-      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>,
-    },
+    // ── Administrative tail (unchanged) ───────────────────────────────────
     {
       id: 'messages', label: 'Messages', flagKey: 'feature_messages',
+      hidden: true,
       activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>,
     },
     {
       id: 'staff_dashboard', label: 'My Tasks', flagKey: 'feature_tasks',
+      hidden: true,
       activeClass: 'bg-cyan-700 text-white shadow-cyan-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>,
     },
@@ -352,6 +386,7 @@ function App() {
     },
     {
       id: 'staff_comms', label: 'Comms', flagKey: 'feature_comms',
+      hidden: true,
       activeClass: 'bg-violet-700 text-white shadow-violet-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>,
     },
@@ -493,7 +528,7 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><AttorneyIntakeDashboard /></div>
+        <div className="pb-24"><AttorneyIntakeDashboard preselectLeadId={preselectLeadId} onPreselectConsumed={() => setPreselectLeadId(null)} /></div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -554,6 +589,36 @@ function App() {
       <ErrorBoundary>
         <GateToastOverlay />
         <div className="pb-24"><AIBotPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'legal_dept_portal') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><LegalDepartmentPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'signing_appt_portal') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><SigningApptPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'efiling_portal') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><EFilingPortal /></div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -704,7 +769,10 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><LegalAdminPortal /></div>
+        <div className="pb-24"><LegalAdminPortal
+          onOpenAttorneyReview={(leadId) => { setPreselectLeadId(leadId); setView('attorney'); }}
+          onOpenView={(v) => setView(v)}
+        /></div>
         <PortalToggle />
       </ErrorBoundary>
     );

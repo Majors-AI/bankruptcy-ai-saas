@@ -586,16 +586,16 @@ function resolveDestination(caseType: AClient["case_type"], paymentType: string)
 
 function chapterBadge(chapter: 7 | 13) {
   return chapter === 7
-    ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-sky-500/10 border-sky-500/25 text-sky-400">Ch. 7</span>
-    : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-500/10 border-amber-500/25 text-amber-400">Ch. 13</span>;
+    ? <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-sky-50 border-sky-500/25 text-sky-700">Ch. 7</span>
+    : <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-amber-50 border-amber-500/25 text-amber-700">Ch. 13</span>;
 }
 
 function statusBadge(status: AClient["status"]) {
   const cfgs = {
-    active:  "text-emerald-400 bg-emerald-500/10 border-emerald-500/25",
-    filed:   "text-sky-400 bg-sky-500/10 border-sky-500/25",
-    closed:  "text-slate-500 bg-slate-700/30 border-slate-700",
-    on_hold: "text-amber-400 bg-amber-500/10 border-amber-500/25",
+    active:  "text-emerald-700 bg-emerald-50 border-emerald-500/25",
+    filed:   "text-sky-700 bg-sky-50 border-sky-500/25",
+    closed:  "text-slate-500 bg-slate-200/30 border-slate-200",
+    on_hold: "text-amber-700 bg-amber-50 border-amber-500/25",
   };
   const labels = { active: "Active", filed: "Filed", closed: "Closed", on_hold: "On Hold" };
   return (
@@ -608,8 +608,8 @@ function statusBadge(status: AClient["status"]) {
 function destBadge(dest: "operating" | "iolta" | null) {
   if (!dest) return null;
   return dest === "iolta"
-    ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-400 bg-amber-500/10 border-amber-500/20">IOLTA</span>
-    : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Operating</span>;
+    ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-700 bg-amber-50 border-amber-500/20">IOLTA</span>
+    : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-700 bg-emerald-50 border-emerald-500/20">Operating</span>;
 }
 
 // ─── Admin Auth Context ───────────────────────────────────────────────────────
@@ -632,20 +632,20 @@ function AdminLoginModal({ onLogin, onClose }: { onLogin: (name: string) => void
   }
 
   const PROFILES = [
-    { label: "Accounting Admin",         pin: "9999", color: "text-slate-400",   bg: "bg-slate-800/60",  border: "border-slate-700",    desc: "Standard access — clients, payments, filed cases, cancellations" },
-    { label: "Accounting Super Admin",   pin: "7777", color: "text-amber-400",   bg: "bg-amber-400/8",   border: "border-amber-400/25", desc: "Full accounting access — Trust Hub, Reports, batch transfers" },
-    { label: "Attorney Super Admin",     pin: "8888", color: "text-emerald-400", bg: "bg-emerald-500/8", border: "border-emerald-500/20",desc: "Full firm access — approve transfers, view all reports" },
+    { label: "Accounting Admin",         pin: "9999", color: "text-slate-600",   bg: "bg-slate-100",  border: "border-slate-200",    desc: "Standard access — clients, payments, filed cases, cancellations" },
+    { label: "Accounting Super Admin",   pin: "7777", color: "text-amber-700",   bg: "bg-amber-50",   border: "border-amber-400/25", desc: "Full accounting access — Trust Hub, Reports, batch transfers" },
+    { label: "Attorney Super Admin",     pin: "8888", color: "text-emerald-700", bg: "bg-emerald-50", border: "border-emerald-500/20",desc: "Full firm access — approve transfers, view all reports" },
   ];
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-sm bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center">
-            <Shield className="w-4 h-4 text-amber-400" />
+      <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
+            <Shield className="w-4 h-4 text-amber-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Admin Login</h3>
+            <h3 className="text-sm font-bold text-slate-900">Admin Login</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Enter your name and role PIN to authenticate</p>
           </div>
         </div>
@@ -668,22 +668,22 @@ function AdminLoginModal({ onLogin, onClose }: { onLogin: (name: string) => void
 
         <div className="px-5 py-4 space-y-3">
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Your Name</label>
-            <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500" />
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Your Name</label>
+            <input value={name} onChange={e => setName(e.target.value)} placeholder="Full name" className="w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300" />
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">PIN</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">PIN</label>
             <div className="relative">
-              <input type={show ? "text" : "password"} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && attempt()} placeholder="••••" maxLength={4} className={`w-full bg-slate-800 border text-white text-sm rounded-xl px-3 py-2.5 pr-10 placeholder-slate-600 focus:outline-none ${err ? "border-red-500" : "border-slate-700 focus:border-slate-500"}`} />
-              <button onClick={() => setShow(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300">
+              <input type={show ? "text" : "password"} value={pin} onChange={e => setPin(e.target.value)} onKeyDown={e => e.key === "Enter" && attempt()} placeholder="••••" maxLength={4} className={`w-full bg-slate-100 border text-slate-900 text-sm rounded-xl px-3 py-2.5 pr-10 placeholder-slate-600 focus:outline-none ${err ? "border-red-500" : "border-slate-200 focus:border-slate-300"}`} />
+              <button onClick={() => setShow(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700">
                 {show ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               </button>
             </div>
-            {err && <p className="text-xs text-red-400 mt-1">Invalid name or PIN. Try again.</p>}
+            {err && <p className="text-xs text-rose-700 mt-1">Invalid name or PIN. Try again.</p>}
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={attempt} disabled={!name.trim() || !pin} className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <Shield className="w-4 h-4" /> Authenticate
           </button>
@@ -704,11 +704,11 @@ const STAFF_ROLE_LABELS: Record<string, string> = {
 };
 
 const STAFF_ROLE_COLORS: Record<string, string> = {
-  attorney:     "bg-amber-400/15 text-amber-500 border-amber-400/25",
+  attorney:     "bg-amber-100 text-amber-500 border-amber-400/25",
   paralegal:    "bg-teal-500/15 text-teal-400 border-teal-500/25",
-  accounting:   "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-  admin:        "bg-sky-500/15 text-sky-400 border-sky-500/25",
-  receptionist: "bg-slate-700/60 text-slate-400 border-slate-700",
+  accounting:   "bg-emerald-100 text-emerald-700 border-emerald-500/25",
+  admin:        "bg-sky-100 text-sky-700 border-sky-500/25",
+  receptionist: "bg-slate-200/60 text-slate-600 border-slate-200",
 };
 
 function StaffModal({ staff, onClose, onSaved }: {
@@ -776,8 +776,8 @@ function StaffModal({ staff, onClose, onSaved }: {
         {/* Header */}
         <div className="px-5 py-4 border-b border-[var(--border)] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center">
-              <UserCheck className="w-4 h-4 text-sky-400" />
+            <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center">
+              <UserCheck className="w-4 h-4 text-sky-700" />
             </div>
             <div>
               <h3 className="text-base font-bold text-[var(--text-primary)]">Firm Staff</h3>
@@ -785,7 +785,7 @@ function StaffModal({ staff, onClose, onSaved }: {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={startAdd} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs px-3 py-1.5 rounded-xl transition-all">
+            <button onClick={startAdd} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs px-3 py-1.5 rounded-xl transition-all">
               <UserPlus className="w-3.5 h-3.5" /> Add Staff
             </button>
             <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1 transition-colors"><X className="w-4 h-4" /></button>
@@ -820,7 +820,7 @@ function StaffModal({ staff, onClose, onSaved }: {
             </div>
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={() => { setAdding(false); setEditing(null); }} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-3 py-2 transition-colors">Cancel</button>
-              <button onClick={save} disabled={saving || !form.full_name.trim()} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all">
+              <button onClick={save} disabled={saving || !form.full_name.trim()} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-900 font-bold text-xs px-4 py-2 rounded-xl transition-all">
                 {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
                 {editing ? "Save Changes" : "Add Member"}
               </button>
@@ -854,10 +854,10 @@ function StaffModal({ staff, onClose, onSaved }: {
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <button onClick={() => startEdit(s)} className="w-7 h-7 rounded-lg bg-[var(--bg-surface-3)] hover:bg-amber-400/15 text-[var(--text-muted)] hover:text-amber-500 flex items-center justify-center transition-all">
+                  <button onClick={() => startEdit(s)} className="w-7 h-7 rounded-lg bg-[var(--bg-surface-3)] hover:bg-amber-100 text-[var(--text-muted)] hover:text-amber-500 flex items-center justify-center transition-all">
                     <Pencil className="w-3 h-3" />
                   </button>
-                  <button onClick={() => toggleActive(s)} title="Deactivate" className="w-7 h-7 rounded-lg bg-[var(--bg-surface-3)] hover:bg-red-500/10 text-[var(--text-muted)] hover:text-red-400 flex items-center justify-center transition-all">
+                  <button onClick={() => toggleActive(s)} title="Deactivate" className="w-7 h-7 rounded-lg bg-[var(--bg-surface-3)] hover:bg-rose-50 text-[var(--text-muted)] hover:text-rose-700 flex items-center justify-center transition-all">
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
@@ -874,7 +874,7 @@ function StaffModal({ staff, onClose, onSaved }: {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-[var(--text-muted)] line-through">{s.full_name}</p>
                   </div>
-                  <button onClick={() => toggleActive(s)} className="text-[10px] font-bold text-sky-400 hover:text-sky-300 transition-colors">Reactivate</button>
+                  <button onClick={() => toggleActive(s)} className="text-[10px] font-bold text-sky-700 hover:text-sky-300 transition-colors">Reactivate</button>
                 </div>
               ))}
             </div>
@@ -924,14 +924,14 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
 
   const extSt = (client.extended_status ?? client.status) as string;
   const EXT_COLORS: Record<string, string> = {
-    active:     "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-    on_hold:    "bg-amber-400/15 text-amber-400 border-amber-400/25",
-    inactive:   "bg-slate-700/60 text-slate-400 border-slate-700",
-    case_closed:"bg-slate-800/80 text-slate-400 border-slate-700",
-    cancelled:  "bg-red-500/15 text-red-400 border-red-500/25",
-    completed:  "bg-sky-500/15 text-sky-400 border-sky-500/25",
-    filed:      "bg-sky-500/15 text-sky-400 border-sky-500/25",
-    closed:     "bg-slate-800/80 text-slate-400 border-slate-700",
+    active:     "bg-emerald-100 text-emerald-700 border-emerald-500/25",
+    on_hold:    "bg-amber-100 text-amber-700 border-amber-400/25",
+    inactive:   "bg-slate-200/60 text-slate-600 border-slate-200",
+    case_closed:"bg-slate-100/80 text-slate-600 border-slate-200",
+    cancelled:  "bg-rose-100 text-rose-700 border-red-500/25",
+    completed:  "bg-sky-100 text-sky-700 border-sky-500/25",
+    filed:      "bg-sky-100 text-sky-700 border-sky-500/25",
+    closed:     "bg-slate-100/80 text-slate-600 border-slate-200",
   };
 
   return (
@@ -947,7 +947,7 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${EXT_COLORS[extSt] ?? EXT_COLORS.active}`}>
                   {extSt.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())}
                 </span>
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${client.chapter === 7 ? "text-sky-400 bg-sky-500/10 border-sky-500/25" : "text-amber-400 bg-amber-500/10 border-amber-500/25"}`}>
+                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${client.chapter === 7 ? "text-sky-700 bg-sky-50 border-sky-500/25" : "text-amber-700 bg-amber-50 border-amber-500/25"}`}>
                   Ch. {client.chapter}
                 </span>
                 <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-[var(--border)] text-[var(--text-muted)]">
@@ -970,7 +970,7 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
               { label: "Filed Date",      val: client.filed_date ? fmtDate(client.filed_date) : "—" },
               { label: "Total Fee",       val: fmt(totalFee), color: "text-[var(--text-primary)] font-bold" },
               { label: "Total Paid",      val: fmt(totalPaid), color: "text-emerald-500 font-bold" },
-              { label: "Balance Due",     val: fmt(balance), color: balance > 0 ? "text-red-400 font-bold" : "text-emerald-500 font-bold" },
+              { label: "Balance Due",     val: fmt(balance), color: balance > 0 ? "text-rose-700 font-bold" : "text-emerald-500 font-bold" },
             ].map(item => (
               <div key={item.label} className="bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-xl px-3 py-2.5">
                 <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-widest">{item.label}</p>
@@ -998,7 +998,7 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
               <p className="text-[10px] font-bold text-[var(--text-muted)] uppercase tracking-widest mb-2">Disposition</p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 {client.case_closed_date && <div><p className="text-[9px] text-[var(--text-muted)]">Closed</p><p className="font-semibold text-[var(--text-primary)]">{fmtDate(client.case_closed_date)}</p></div>}
-                {client.case_closed_reason && <div><p className="text-[9px] text-[var(--text-muted)]">Reason</p><p className={`font-semibold capitalize ${client.case_closed_reason === "discharged" ? "text-emerald-500" : "text-red-400"}`}>{client.case_closed_reason.replace(/_/g, " ")}</p></div>}
+                {client.case_closed_reason && <div><p className="text-[9px] text-[var(--text-muted)]">Reason</p><p className={`font-semibold capitalize ${client.case_closed_reason === "discharged" ? "text-emerald-500" : "text-rose-700"}`}>{client.case_closed_reason.replace(/_/g, " ")}</p></div>}
                 {client.discharge_date && <div><p className="text-[9px] text-[var(--text-muted)]">Discharge</p><p className="font-semibold text-emerald-500">{fmtDate(client.discharge_date)}</p></div>}
               </div>
               {client.case_closed_notes && <p className="text-[11px] text-[var(--text-muted)] mt-2 leading-relaxed border-t border-[var(--border-subtle)] pt-2">{client.case_closed_notes}</p>}
@@ -1019,11 +1019,11 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
                     return (
                       <div key={stage.key} className={`relative flex items-start gap-3 px-3 py-2 rounded-xl transition-colors ${current ? "bg-amber-500/8 border border-amber-500/20" : done ? "opacity-70" : "opacity-30"}`}>
                         <div className={`w-4 h-4 rounded-full flex-shrink-0 mt-0.5 flex items-center justify-center z-10 relative ${done ? current ? "bg-amber-500" : "bg-emerald-500" : "bg-[var(--bg-surface-3)] border border-[var(--border)]"}`}>
-                          {done && !current && <Check className="w-2.5 h-2.5 text-white" />}
+                          {done && !current && <Check className="w-2.5 h-2.5 text-slate-900" />}
                           {current && <div className="w-2 h-2 rounded-full bg-white" />}
                         </div>
                         <div>
-                          <p className={`text-xs font-semibold ${current ? "text-amber-400" : done ? "text-[var(--text-secondary)]" : "text-[var(--text-faint)]"}`}>{stage.label}</p>
+                          <p className={`text-xs font-semibold ${current ? "text-amber-700" : done ? "text-[var(--text-secondary)]" : "text-[var(--text-faint)]"}`}>{stage.label}</p>
                           <p className="text-[10px] text-[var(--text-muted)]">{stage.desc}</p>
                         </div>
                       </div>
@@ -1045,7 +1045,7 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
           {/* Time log link */}
           <div className="flex items-center justify-between bg-[var(--bg-surface-2)] border border-[var(--border)] rounded-xl px-4 py-3">
             <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-sky-400 flex-shrink-0" />
+              <Clock className="w-4 h-4 text-sky-700 flex-shrink-0" />
               <div>
                 <p className="text-xs font-semibold text-[var(--text-primary)]">Time Log</p>
                 <p className="text-[10px] text-[var(--text-muted)]">
@@ -1055,7 +1055,7 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
             </div>
             <button
               onClick={() => { onClose(); onViewTimelog(); }}
-              className="flex items-center gap-1.5 text-xs font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-3 py-1.5 rounded-xl transition-all"
+              className="flex items-center gap-1.5 text-xs font-bold text-sky-700 hover:text-sky-300 bg-sky-50 hover:bg-sky-100 border border-sky-500/20 px-3 py-1.5 rounded-xl transition-all"
             >
               View All <ChevronRight className="w-3 h-3" />
             </button>
@@ -1081,12 +1081,12 @@ function CaseSummaryModal({ client, feeStructure, payments, timeLog, onClose, on
 // ─── Additional Matters Panel ─────────────────────────────────────────────────
 
 const MATTER_STATUS_COLORS: Record<string, string> = {
-  draft:            "bg-slate-700/60 text-slate-400 border-slate-700",
-  pending_approval: "bg-amber-400/15 text-amber-400 border-amber-400/25",
-  approved:         "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-  invoiced:         "bg-sky-500/15 text-sky-400 border-sky-500/25",
-  paid:             "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",
-  cancelled:        "bg-red-500/15 text-red-400 border-red-500/25",
+  draft:            "bg-slate-200/60 text-slate-600 border-slate-200",
+  pending_approval: "bg-amber-100 text-amber-700 border-amber-400/25",
+  approved:         "bg-emerald-100 text-emerald-700 border-emerald-500/25",
+  invoiced:         "bg-sky-100 text-sky-700 border-sky-500/25",
+  paid:             "bg-emerald-100 text-emerald-500 border-emerald-500/30",
+  cancelled:        "bg-rose-100 text-rose-700 border-red-500/25",
 };
 
 function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
@@ -1169,20 +1169,20 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
           <p className="text-[9px] text-[var(--text-muted)] uppercase tracking-wide">Matters</p>
           <p className="text-base font-bold text-[var(--text-primary)] mt-0.5">{matters.length}</p>
         </div>
-        <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[9px] text-amber-500 uppercase tracking-wide">Invoiced</p>
-          <p className="text-base font-bold text-amber-400 mt-0.5">{fmt(totalInvoiced)}</p>
+          <p className="text-base font-bold text-amber-700 mt-0.5">{fmt(totalInvoiced)}</p>
         </div>
-        <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[9px] text-emerald-500 uppercase tracking-wide">Collected</p>
-          <p className="text-base font-bold text-emerald-400 mt-0.5">{fmt(totalPaid)}</p>
+          <p className="text-base font-bold text-emerald-700 mt-0.5">{fmt(totalPaid)}</p>
         </div>
       </div>
 
       {totalPending > 0 && (
-        <div className="flex items-center gap-2 bg-amber-400/8 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
-          <Bell className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-          <p className="text-xs text-amber-300">{fmt(totalPending)} pending client approval</p>
+        <div className="flex items-center gap-2 bg-amber-50 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
+          <Bell className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+          <p className="text-xs text-amber-700">{fmt(totalPending)} pending client approval</p>
         </div>
       )}
 
@@ -1221,7 +1221,7 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
                 </div>
                 <div className="col-span-2 bg-[var(--bg-surface-3)] rounded-xl px-3 py-2 text-xs">
                   <span className="text-[var(--text-muted)]">Total: </span>
-                  <span className="font-bold text-amber-400">{fmt((parseFloat(form.hours_billed) || 0) * (parseFloat(form.hourly_rate) || 0))}</span>
+                  <span className="font-bold text-amber-700">{fmt((parseFloat(form.hours_billed) || 0) * (parseFloat(form.hourly_rate) || 0))}</span>
                 </div>
               </>
             ) : (
@@ -1247,10 +1247,10 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
             </div>
           </div>
           {form.approval_method === "client_email" && (
-            <div className="flex items-start gap-2 bg-sky-500/8 border border-sky-500/20 rounded-xl px-3 py-2.5">
-              <Info className="w-3 h-3 text-sky-400 flex-shrink-0 mt-0.5" />
-              <p className="text-[10px] text-slate-400 leading-relaxed">
-                Client will receive an email requesting approval. On acceptance, they will be redirected to <strong className="text-white">BoldSign</strong> to e-sign the fee agreement. Attorney approval is required by default.
+            <div className="flex items-start gap-2 bg-sky-50 border border-sky-500/20 rounded-xl px-3 py-2.5">
+              <Info className="w-3 h-3 text-sky-700 flex-shrink-0 mt-0.5" />
+              <p className="text-[10px] text-slate-600 leading-relaxed">
+                Client will receive an email requesting approval. On acceptance, they will be redirected to <strong className="text-slate-900">BoldSign</strong> to e-sign the fee agreement. Attorney approval is required by default.
               </p>
             </div>
           )}
@@ -1260,7 +1260,7 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
           </div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowAdd(false)} className="text-xs text-[var(--text-muted)] hover:text-[var(--text-primary)] px-3 py-1.5 transition-colors">Cancel</button>
-            <button onClick={save} disabled={saving || !form.description.trim()} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-white font-bold text-xs px-4 py-1.5 rounded-xl transition-all">
+            <button onClick={save} disabled={saving || !form.description.trim()} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-900 font-bold text-xs px-4 py-1.5 rounded-xl transition-all">
               {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Plus className="w-3 h-3" />} Add Matter
             </button>
           </div>
@@ -1280,7 +1280,7 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
               </span>
             </div>
             <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-sm font-bold text-amber-400">{fmt(m.amount)}</span>
+              <span className="text-sm font-bold text-amber-700">{fmt(m.amount)}</span>
               <span className="text-[10px] text-[var(--text-muted)] capitalize">{m.fee_type.replace(/_/g, " ")}</span>
               {m.hours_billed && <span className="text-[10px] text-[var(--text-muted)]">{m.hours_billed}h @ {fmt(m.hourly_rate ?? 0)}/hr</span>}
               <span className="text-[10px] text-[var(--text-muted)]">by {m.created_by}</span>
@@ -1289,35 +1289,35 @@ function AdditionalMattersPanel({ client, matters, adminUser, onRefresh }: {
             {m.notes && <p className="text-[10px] text-[var(--text-muted)] italic leading-relaxed">{m.notes}</p>}
             {/* Approval indicators */}
             <div className="flex items-center gap-2 flex-wrap text-[9px]">
-              {m.approval_email_sent_at && <span className="flex items-center gap-1 text-sky-400"><Check className="w-2.5 h-2.5" /> Email sent</span>}
-              {m.client_approved_at     && <span className="flex items-center gap-1 text-emerald-400"><CheckCircle2 className="w-2.5 h-2.5" /> Client approved</span>}
-              {m.boldsign_signed_at     && <span className="flex items-center gap-1 text-emerald-400"><CheckCircle2 className="w-2.5 h-2.5" /> Signed</span>}
-              {m.attorney_approved_at   && <span className="flex items-center gap-1 text-amber-400"><CheckCircle2 className="w-2.5 h-2.5" /> Atty approved</span>}
+              {m.approval_email_sent_at && <span className="flex items-center gap-1 text-sky-700"><Check className="w-2.5 h-2.5" /> Email sent</span>}
+              {m.client_approved_at     && <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 className="w-2.5 h-2.5" /> Client approved</span>}
+              {m.boldsign_signed_at     && <span className="flex items-center gap-1 text-emerald-700"><CheckCircle2 className="w-2.5 h-2.5" /> Signed</span>}
+              {m.attorney_approved_at   && <span className="flex items-center gap-1 text-amber-700"><CheckCircle2 className="w-2.5 h-2.5" /> Atty approved</span>}
             </div>
             {/* Action buttons */}
             <div className="flex gap-1.5 flex-wrap pt-1">
               {m.status === "draft" && (
                 <>
-                  <button onClick={() => updateStatus(m, "pending_approval")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/25 transition-all">
+                  <button onClick={() => updateStatus(m, "pending_approval")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-100 border border-amber-500/25 transition-all">
                     Send for Approval
                   </button>
-                  <button onClick={() => updateStatus(m, "cancelled")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 transition-all">
+                  <button onClick={() => updateStatus(m, "cancelled")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-rose-50 text-rose-700 hover:bg-rose-100 border border-red-500/20 transition-all">
                     Cancel
                   </button>
                 </>
               )}
               {m.status === "pending_approval" && (
-                <button onClick={() => updateStatus(m, "approved")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/25 transition-all">
+                <button onClick={() => updateStatus(m, "approved")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-500/25 transition-all">
                   Mark Approved
                 </button>
               )}
               {m.status === "approved" && (
-                <button onClick={() => updateStatus(m, "invoiced")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-400 hover:bg-sky-500/25 border border-sky-500/25 transition-all">
+                <button onClick={() => updateStatus(m, "invoiced")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-sky-100 text-sky-700 hover:bg-sky-500/25 border border-sky-500/25 transition-all">
                   Mark Invoiced
                 </button>
               )}
               {m.status === "invoiced" && (
-                <button onClick={() => updateStatus(m, "paid")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/25 transition-all">
+                <button onClick={() => updateStatus(m, "paid")} className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border border-emerald-500/25 transition-all">
                   Mark Paid
                 </button>
               )}
@@ -1560,7 +1560,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
           <div>
             <h3 className="text-base font-bold text-[var(--text-primary)]">Adjust Payment Schedule</h3>
             <p className="text-xs text-[var(--text-muted)] mt-0.5">
-              {client.full_name} · {paidEntries.length} paid · {pendingEntries.length} pending · <span className="text-amber-400 font-semibold">{fmt(remaining)} remaining balance</span>
+              {client.full_name} · {paidEntries.length} paid · {pendingEntries.length} pending · <span className="text-amber-700 font-semibold">{fmt(remaining)} remaining balance</span>
             </p>
           </div>
           <button onClick={onClose} className="text-[var(--text-muted)] hover:text-[var(--text-primary)] p-1"><X className="w-4 h-4" /></button>
@@ -1575,7 +1575,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
               {(["weekly","biweekly","semi_monthly","monthly","custom"] as FreqOption[]).map(f => (
                 <button key={f} onClick={() => { setFreq(f); setPreviewGenerated(false); }}
                   className={`py-2 px-1 text-[10px] font-bold rounded-xl border transition-all ${freq === f
-                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                    ? "bg-amber-100 text-amber-700 border-amber-500/30"
                     : "text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text-secondary)]"}`}>
                   {f === "semi_monthly" ? "Semi-Monthly" : f === "biweekly" ? "Bi-Weekly" : f === "custom" ? "Custom" : f.charAt(0).toUpperCase() + f.slice(1)}
                 </button>
@@ -1630,10 +1630,10 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
             </div>
             <div>
               <p className="text-[var(--text-muted)] mb-0.5">Drafted Total</p>
-              <p className={`font-bold ${Math.abs(balanceDiff) < 0.02 ? "text-emerald-400" : "text-amber-400"}`}>
+              <p className={`font-bold ${Math.abs(balanceDiff) < 0.02 ? "text-emerald-700" : "text-amber-700"}`}>
                 {fmt(totalDrafted)}
                 {previewGenerated && Math.abs(balanceDiff) > 0.01 && (
-                  <span className="text-[10px] text-amber-400 ml-1">({balanceDiff > 0 ? "+" : ""}{fmt(balanceDiff)})</span>
+                  <span className="text-[10px] text-amber-700 ml-1">({balanceDiff > 0 ? "+" : ""}{fmt(balanceDiff)})</span>
                 )}
               </p>
             </div>
@@ -1642,7 +1642,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
           {/* Generate preview button */}
           {freq !== "custom" && !previewGenerated && (
             <button onClick={handlePreview}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-all">
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100 transition-all">
               <RefreshCw className="w-3.5 h-3.5" /> Generate Schedule Preview
             </button>
           )}
@@ -1650,7 +1650,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
           {/* Custom: start with blank or existing pending */}
           {freq === "custom" && !previewGenerated && (
             <button onClick={() => { setDrafts(buildDrafts()); setPreviewGenerated(true); }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400 text-sm font-bold hover:bg-amber-500/20 transition-all">
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-amber-500/30 bg-amber-50 text-amber-700 text-sm font-bold hover:bg-amber-100 transition-all">
               <Pencil className="w-3.5 h-3.5" /> Load Existing Pending as Custom
             </button>
           )}
@@ -1664,7 +1664,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
                 </p>
                 {freq === "custom" && (
                   <button onClick={addCustomRow}
-                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors">
+                    className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 hover:text-emerald-700 transition-colors">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
                     Add Row
                   </button>
@@ -1695,14 +1695,14 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
                       </div>
                       <div className="col-span-2 flex items-center justify-end gap-1">
                         <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
-                          d.status === "paid"    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25" :
-                          d.status === "partial" ? "text-amber-400 bg-amber-500/10 border-amber-500/25" :
-                          d.status === "late"    ? "text-red-400 bg-red-500/10 border-red-500/25" :
-                                                   "text-slate-400 bg-slate-700/30 border-slate-700"
+                          d.status === "paid"    ? "text-emerald-700 bg-emerald-50 border-emerald-500/25" :
+                          d.status === "partial" ? "text-amber-700 bg-amber-50 border-amber-500/25" :
+                          d.status === "late"    ? "text-rose-700 bg-rose-50 border-red-500/25" :
+                                                   "text-slate-600 bg-slate-200/30 border-slate-200"
                         }`}>{d.status}</span>
                         {freq === "custom" && (
                           <button onClick={() => removeCustomRow(i)}
-                            className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition-all">
+                            className="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-rose-700 transition-all">
                             <X className="w-3 h-3" />
                           </button>
                         )}
@@ -1713,7 +1713,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
               </div>
 
               {Math.abs(balanceDiff) > 0.01 && (
-                <p className="text-[11px] text-amber-400 flex items-center gap-1.5">
+                <p className="text-[11px] text-amber-700 flex items-center gap-1.5">
                   <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                   Drafted total ({fmt(totalDrafted)}) differs from remaining balance ({fmt(remaining)}) by {fmt(Math.abs(balanceDiff))}.
                   The last installment will be auto-adjusted on save to close the balance.
@@ -1738,8 +1738,8 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
                   <div key={e.id} className="flex items-center gap-3 px-3 py-2 rounded-xl bg-emerald-500/5 border border-emerald-500/15 opacity-60">
                     <span className="text-[10px] font-mono text-[var(--text-faint)] w-6">#{e.installment_number}</span>
                     <span className="text-xs text-[var(--text-secondary)] flex-1">{fmtDate(e.due_date)}</span>
-                    <span className="text-xs font-semibold text-emerald-400">{fmt(e.amount_due)}</span>
-                    <span className="text-[9px] font-bold text-emerald-400 px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/25">{e.status}</span>
+                    <span className="text-xs font-semibold text-emerald-700">{fmt(e.amount_due)}</span>
+                    <span className="text-[9px] font-bold text-emerald-700 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-500/25">{e.status}</span>
                   </div>
                 ))}
               </div>
@@ -1755,7 +1755,7 @@ function ScheduleAdjustModal({ client, feeStructure, schedule, adminUser, onClos
           <div className="flex gap-2">
             <button onClick={onClose} className="px-4 py-2 text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">Cancel</button>
             <button onClick={save} disabled={!canSave || saving}
-              className="flex items-center gap-1.5 font-bold text-xs px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-white transition-all disabled:opacity-40">
+              className="flex items-center gap-1.5 font-bold text-xs px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-900 transition-all disabled:opacity-40">
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               Save Schedule ({drafts.length} installments)
             </button>
@@ -1934,9 +1934,9 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
         {/* Mode tabs */}
         <div className="px-5 pt-4 flex-shrink-0">
           <div className="flex rounded-xl overflow-hidden border border-[var(--border)] mb-4">
-            {modeBtn("edit",           "Edit Payment",   <Pencil className="w-3 h-3" />,       "bg-amber-500/15 text-amber-500")}
-            {modeBtn("fee_adjustment", "Fee Adjustment", <DollarSign className="w-3 h-3" />,   "bg-sky-500/15 text-sky-400")}
-            {modeBtn("void",           "Void Payment",   <X className="w-3 h-3" />,             "bg-red-500/15 text-red-400")}
+            {modeBtn("edit",           "Edit Payment",   <Pencil className="w-3 h-3" />,       "bg-amber-100 text-amber-500")}
+            {modeBtn("fee_adjustment", "Fee Adjustment", <DollarSign className="w-3 h-3" />,   "bg-sky-100 text-sky-700")}
+            {modeBtn("void",           "Void Payment",   <X className="w-3 h-3" />,             "bg-rose-100 text-rose-700")}
           </div>
         </div>
 
@@ -1994,15 +1994,15 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
                     <button key={d} onClick={() => setForm(f => ({ ...f, destination_account: d }))}
                       className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${effectiveDest === d
                         ? d === "iolta"
-                          ? "bg-amber-400/15 text-amber-400 border-amber-400/30"
-                          : "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                          ? "bg-amber-100 text-amber-700 border-amber-400/30"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-500/30"
                         : "text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text-secondary)]"}`}>
                       {d === "iolta" ? "IOLTA / Trust" : "Operating"}
                     </button>
                   ))}
                 </div>
                 {effectiveDest !== autoDest && (
-                  <p className="text-[10px] text-amber-400 mt-1">
+                  <p className="text-[10px] text-amber-700 mt-1">
                     Note: auto-destination for this type is <strong>{autoDest.toUpperCase()}</strong> — you've overridden it.
                   </p>
                 )}
@@ -2019,10 +2019,10 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
           {mode === "fee_adjustment" && (
             <>
               {!isSuperAdmin && (
-                <div className="flex items-start gap-2.5 bg-sky-500/8 border border-sky-500/20 rounded-xl px-3.5 py-3">
-                  <AlertTriangle className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2.5 bg-sky-50 border border-sky-500/20 rounded-xl px-3.5 py-3">
+                  <AlertTriangle className="w-4 h-4 text-sky-700 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-sky-400">Requires Approval</p>
+                    <p className="text-xs font-bold text-sky-700">Requires Approval</p>
                     <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
                       Fee adjustments require super admin approval. Your request will be submitted for review.
                     </p>
@@ -2030,9 +2030,9 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
                 </div>
               )}
               {isSuperAdmin && (
-                <div className="flex items-start gap-2.5 bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3.5 py-3">
-                  <Check className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-emerald-300 leading-relaxed">
+                <div className="flex items-start gap-2.5 bg-emerald-50 border border-emerald-500/20 rounded-xl px-3.5 py-3">
+                  <Check className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-emerald-700 leading-relaxed">
                     Super admin — fee adjustment will be applied immediately.
                   </p>
                 </div>
@@ -2086,9 +2086,9 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
               </div>
 
               {saved && (
-                <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-3">
-                  <Check className="w-4 h-4 text-emerald-400" />
-                  <p className="text-sm font-semibold text-emerald-300">
+                <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-500/20 rounded-xl px-4 py-3">
+                  <Check className="w-4 h-4 text-emerald-700" />
+                  <p className="text-sm font-semibold text-emerald-700">
                     {isSuperAdmin ? "Fee adjustment applied." : "Request submitted for approval."}
                   </p>
                 </div>
@@ -2100,9 +2100,9 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
           {mode === "void" && (
             <>
               <div className="flex items-start gap-2.5 bg-red-500/8 border border-red-500/20 rounded-xl px-3.5 py-3">
-                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-bold text-red-400">Void this payment?</p>
+                  <p className="text-xs font-bold text-rose-700">Void this payment?</p>
                   <p className="text-[11px] text-[var(--text-muted)] mt-0.5 leading-relaxed">
                     This marks the payment as voided and removes it from all totals. A time log entry will be created. This cannot be undone.
                   </p>
@@ -2131,9 +2131,9 @@ function AdjustPaymentModal({ payment, client, adminUser, role, feeStructure, on
             <button onClick={save} disabled={saving || saved ||
               (mode === "fee_adjustment" && (!feeForm.new_amount || !feeForm.reason.trim()))
             } className={`flex items-center gap-1.5 font-bold text-xs px-5 py-2 rounded-xl transition-all disabled:opacity-50 ${
-              mode === "void"           ? "bg-red-500 hover:bg-red-400 text-white" :
-              mode === "fee_adjustment" ? "bg-sky-500 hover:bg-sky-400 text-white" :
-                                         "bg-amber-500 hover:bg-amber-400 text-white"
+              mode === "void"           ? "bg-red-500 hover:bg-red-400 text-slate-900" :
+              mode === "fee_adjustment" ? "bg-sky-500 hover:bg-sky-400 text-slate-900" :
+                                         "bg-amber-500 hover:bg-amber-400 text-slate-900"
             }`}>
               {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> :
                mode === "void"           ? <><X className="w-3.5 h-3.5" /> Void Payment</> :
@@ -2325,24 +2325,24 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     onSaved();
   }
 
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-xl bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between flex-shrink-0">
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
           <div>
-            <h3 className="text-base font-bold text-white">Add New Client</h3>
+            <h3 className="text-base font-bold text-slate-900">Add New Client</h3>
             <p className="text-xs text-slate-500 mt-0.5">Set up client billing and fee structure</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 p-1"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-5 overflow-y-auto flex-1">
 
           {/* Client Info */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Client Information</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Client Information</p>
             <div className="grid grid-cols-2 gap-3">
               <div className="col-span-2">
                 <label className={lbl}>Full Name *</label>
@@ -2373,7 +2373,7 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
           {/* Case Type */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Case Type</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Case Type</p>
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className={lbl}>Chapter</label>
@@ -2397,7 +2397,7 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
           {/* Fee Structure */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Fee Structure</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Fee Structure</p>
             <div className="grid grid-cols-2 gap-3">
               {ct !== "hourly" && (
                 <div>
@@ -2408,7 +2408,7 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
               <div>
                 <label className={lbl}>
                   Court Filing Fee
-                  <span className="ml-1.5 text-[10px] font-normal text-amber-400">(collected separately — not in payment plan)</span>
+                  <span className="ml-1.5 text-[10px] font-normal text-amber-700">(collected separately — not in payment plan)</span>
                 </label>
                 <input value={fee.court_filing_fee} onChange={e => setFee(f => ({ ...f, court_filing_fee: e.target.value }))} placeholder={ch === "7" ? "338" : "313"} className={inp} />
               </div>
@@ -2444,8 +2444,8 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
           {/* Payment Plan — regular Ch.7 only */}
           {isRegularCh7 && (
-            <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 px-4 py-4 space-y-4">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Payment Plan</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 space-y-4">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Payment Plan</p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -2495,10 +2495,10 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                       </select>
                     </div>
                     <div className="col-span-2">
-                      <div className="flex items-center gap-2 bg-sky-500/8 border border-sky-500/20 rounded-xl px-3 py-2.5">
-                        <Info className="w-3 h-3 text-sky-400 flex-shrink-0" />
-                        <p className="text-[10px] text-slate-400">
-                          Payments will be collected on the <strong className="text-white">{smDay1}{smDay1===1?"st":smDay1===2?"nd":smDay1===3?"rd":"th"}</strong> and <strong className="text-white">{smDay2}{smDay2===21?"st":smDay2===22?"nd":smDay2===23?"rd":"th"}</strong> of each month.
+                      <div className="flex items-center gap-2 bg-sky-50 border border-sky-500/20 rounded-xl px-3 py-2.5">
+                        <Info className="w-3 h-3 text-sky-700 flex-shrink-0" />
+                        <p className="text-[10px] text-slate-600">
+                          Payments will be collected on the <strong className="text-slate-900">{smDay1}{smDay1===1?"st":smDay1===2?"nd":smDay1===3?"rd":"th"}</strong> and <strong className="text-slate-900">{smDay2}{smDay2===21?"st":smDay2===22?"nd":smDay2===23?"rd":"th"}</strong> of each month.
                           Common pairs: 1st &amp; 15th · 5th &amp; 20th.
                         </p>
                       </div>
@@ -2509,10 +2509,10 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                 {/* Bi-weekly: auto info */}
                 {fee.payment_frequency === "biweekly" && fee.first_payment_date && (
                   <div className="col-span-2">
-                    <div className="flex items-center gap-2 bg-sky-500/8 border border-sky-500/20 rounded-xl px-3 py-2.5">
-                      <Info className="w-3 h-3 text-sky-400 flex-shrink-0" />
-                      <p className="text-[10px] text-slate-400">
-                        Payments auto-calculated every <strong className="text-white">14 days</strong> from {fee.first_payment_date}.
+                    <div className="flex items-center gap-2 bg-sky-50 border border-sky-500/20 rounded-xl px-3 py-2.5">
+                      <Info className="w-3 h-3 text-sky-700 flex-shrink-0" />
+                      <p className="text-[10px] text-slate-600">
+                        Payments auto-calculated every <strong className="text-slate-900">14 days</strong> from {fee.first_payment_date}.
                       </p>
                     </div>
                   </div>
@@ -2521,40 +2521,40 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 
               {/* Preview */}
               {attyFeeNum > 0 && (
-                <div className="bg-slate-800/60 rounded-xl px-4 py-3 space-y-1.5">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Schedule Preview</p>
+                <div className="bg-slate-100 rounded-xl px-4 py-3 space-y-1.5">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-2">Schedule Preview</p>
                   <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Attorney Fee</span>
-                    <span className="text-white font-semibold">{fmt(attyFeeNum)}</span>
+                    <span className="text-slate-600">Attorney Fee</span>
+                    <span className="text-slate-900 font-semibold">{fmt(attyFeeNum)}</span>
                   </div>
                   {downPmtNum > 0 && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-slate-400">Down Payment (Day 1)</span>
-                      <span className="text-emerald-400 font-semibold">−{fmt(downPmtNum)}</span>
+                      <span className="text-slate-600">Down Payment (Day 1)</span>
+                      <span className="text-emerald-700 font-semibold">−{fmt(downPmtNum)}</span>
                     </div>
                   )}
-                  <div className="flex justify-between text-xs border-t border-slate-700 pt-1.5">
-                    <span className="text-slate-400">Remaining over {planMonths} months</span>
-                    <span className="text-white font-semibold">{fmt(remaining)}</span>
+                  <div className="flex justify-between text-xs border-t border-slate-200 pt-1.5">
+                    <span className="text-slate-600">Remaining over {planMonths} months</span>
+                    <span className="text-slate-900 font-semibold">{fmt(remaining)}</span>
                   </div>
                   {remaining > 0 && (
                     <div className="flex justify-between text-xs">
-                      <span className="text-amber-400">
+                      <span className="text-amber-700">
                         {FREQ_LABELS[fee.payment_frequency] ?? "Installment"} × {installCount}
                       </span>
-                      <span className="text-amber-400 font-bold">{fmt(installment)}/pmt</span>
+                      <span className="text-amber-700 font-bold">{fmt(installment)}/pmt</span>
                     </div>
                   )}
                   {fee.payment_frequency === "semi_monthly" && (
                     <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Payment days</span>
-                      <span className="text-slate-300">{smDay1}{smDay1===1?"st":smDay1===2?"nd":smDay1===3?"rd":"th"} &amp; {smDay2}{smDay2===21?"st":smDay2===22?"nd":smDay2===23?"rd":"th"}</span>
+                      <span className="text-slate-700">{smDay1}{smDay1===1?"st":smDay1===2?"nd":smDay1===3?"rd":"th"} &amp; {smDay2}{smDay2===21?"st":smDay2===22?"nd":smDay2===23?"rd":"th"}</span>
                     </div>
                   )}
-                  <div className="mt-2 pt-2 border-t border-slate-700/60 flex items-start gap-1.5">
-                    <Info className="w-3 h-3 text-sky-400 flex-shrink-0 mt-0.5" />
+                  <div className="mt-2 pt-2 border-t border-slate-200 flex items-start gap-1.5">
+                    <Info className="w-3 h-3 text-sky-700 flex-shrink-0 mt-0.5" />
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                      Court filing fee ({fee.court_filing_fee || (ch === "7" ? "338" : "313")}) is <strong className="text-amber-400">not included</strong> in this plan. It is collected separately once the client is approved to schedule signing.
+                      Court filing fee ({fee.court_filing_fee || (ch === "7" ? "338" : "313")}) is <strong className="text-amber-700">not included</strong> in this plan. It is collected separately once the client is approved to schedule signing.
                     </p>
                   </div>
                 </div>
@@ -2577,8 +2577,8 @@ function AddClientModal({ onClose, onSaved }: { onClose: () => void; onSaved: ()
           )}
 
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={saving || !form.full_name.trim()} className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Add Client
           </button>
@@ -2604,8 +2604,8 @@ function RecordPaymentModal({ client, onClose, onSaved }: {
 
   const destination = resolveDestination(client.case_type, form.payment_type);
   const isActiveState = (ACTIVE_STATES as readonly string[]).includes(client.state ?? "");
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   async function save() {
     if (!form.amount) return;
@@ -2638,13 +2638,13 @@ function RecordPaymentModal({ client, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-white">Record Payment</h3>
+            <h3 className="text-base font-bold text-slate-900">Record Payment</h3>
             <p className="text-xs text-slate-500 mt-0.5">{client.full_name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 p-1"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -2681,12 +2681,12 @@ function RecordPaymentModal({ client, onClose, onSaved }: {
           </div>
 
           {/* Auto-routing indicator */}
-          <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border ${destination === "iolta" ? "bg-amber-500/8 border-amber-500/20" : "bg-emerald-500/8 border-emerald-500/20"}`}>
+          <div className={`flex items-center gap-2.5 rounded-xl px-3.5 py-2.5 border ${destination === "iolta" ? "bg-amber-500/8 border-amber-500/20" : "bg-emerald-50 border-emerald-500/20"}`}>
             {destination === "iolta"
-              ? <Landmark className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              : <Building className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />}
+              ? <Landmark className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+              : <Building className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />}
             <div className="flex-1 min-w-0">
-              <p className={`text-xs font-bold ${destination === "iolta" ? "text-amber-300" : "text-emerald-300"}`}>
+              <p className={`text-xs font-bold ${destination === "iolta" ? "text-amber-700" : "text-emerald-700"}`}>
                 {destination === "iolta" ? "IOLTA Trust Account" : "Operating Account"}
                 {isActiveState && client.state ? ` — ${client.state}` : ""}
               </p>
@@ -2709,9 +2709,9 @@ function RecordPaymentModal({ client, onClose, onSaved }: {
             <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} placeholder="Optional note…" className={inp + " resize-none"} />
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
-          <button onClick={save} disabled={saving || !form.amount} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
+          <button onClick={save} disabled={saving || !form.amount} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />} Record Payment
           </button>
         </div>
@@ -2733,8 +2733,8 @@ function ThresholdModal({ client, feeStructure, onClose, onSaved }: {
   const [reason, setReason]     = useState("");
   const [bypassedBy, setBypassedBy] = useState("");
   const [saving, setSaving]     = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   async function save() {
     setSaving(true);
@@ -2748,20 +2748,20 @@ function ThresholdModal({ client, feeStructure, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-white">Signing Threshold</h3>
+            <h3 className="text-base font-bold text-slate-900">Signing Threshold</h3>
             <p className="text-xs text-slate-500 mt-0.5">{client.full_name} — Bifurcated Ch. 7</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 p-1"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
-          <div className="flex rounded-xl overflow-hidden border border-slate-700">
-            <button onClick={() => setMode("edit")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all ${mode === "edit" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}>
+          <div className="flex rounded-xl overflow-hidden border border-slate-200">
+            <button onClick={() => setMode("edit")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all ${mode === "edit" ? "bg-slate-200 text-slate-900" : "text-slate-500 hover:text-slate-700"}`}>
               <Edit2 className="w-3.5 h-3.5" /> Modify Threshold
             </button>
-            <button onClick={() => setMode("bypass")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all ${mode === "bypass" ? "bg-amber-500/20 text-amber-400" : "text-slate-500 hover:text-slate-300"}`}>
+            <button onClick={() => setMode("bypass")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-xs font-bold transition-all ${mode === "bypass" ? "bg-amber-100 text-amber-700" : "text-slate-500 hover:text-slate-700"}`}>
               <Unlock className="w-3.5 h-3.5" /> Bypass Threshold
             </button>
           </div>
@@ -2777,8 +2777,8 @@ function ThresholdModal({ client, feeStructure, onClose, onSaved }: {
           ) : (
             <div className="space-y-3">
               <div className="flex items-start gap-2.5 bg-amber-500/8 border border-amber-500/25 rounded-xl px-3 py-3">
-                <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-amber-300 leading-relaxed">Bypassing allows the client to schedule their signing appointment immediately regardless of payment amount.</p>
+                <AlertTriangle className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-700 leading-relaxed">Bypassing allows the client to schedule their signing appointment immediately regardless of payment amount.</p>
               </div>
               <div>
                 <label className={lbl}>Bypassed By</label>
@@ -2791,8 +2791,8 @@ function ThresholdModal({ client, feeStructure, onClose, onSaved }: {
             </div>
           )}
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
             {mode === "bypass" ? "Bypass Threshold" : "Update Threshold"}
@@ -2817,8 +2817,8 @@ function TransferNotificationCard({ notification, client, adminUser, trustAccoun
   const [showAdminReq, setShowAdminReq] = useState(false);
   const [form, setForm] = useState({ processor_confirmation: "", confirmed_at: "" });
   const isReady = new Date() >= new Date(notification.notify_after);
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
   const fromAcct = trustAccounts.find(a => a.state === notification.state && a.account_type === "iolta");
   const toAcct   = trustAccounts.find(a => a.state === notification.state && a.account_type === "operating");
 
@@ -2864,23 +2864,23 @@ function TransferNotificationCard({ notification, client, adminUser, trustAccoun
   }
 
   return (
-    <div className={`rounded-2xl border overflow-hidden ${isReady ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700/60 bg-[#0d1221]"}`}>
+    <div className={`rounded-2xl border overflow-hidden ${isReady ? "border-amber-500/30 bg-amber-500/5" : "border-slate-200 bg-white"}`}>
       <div className="px-4 py-3.5">
         <div className="flex items-start gap-3">
-          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isReady ? "bg-amber-500/15" : "bg-slate-800"}`}>
-            {isReady ? <Bell className="w-4 h-4 text-amber-400" /> : <Clock className="w-4 h-4 text-slate-500" />}
+          <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${isReady ? "bg-amber-100" : "bg-slate-100"}`}>
+            {isReady ? <Bell className="w-4 h-4 text-amber-700" /> : <Clock className="w-4 h-4 text-slate-500" />}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className={`text-sm font-bold ${isReady ? "text-amber-300" : "text-white"}`}>
+              <p className={`text-sm font-bold ${isReady ? "text-amber-700" : "text-slate-900"}`}>
                 {isReady ? "Filing Fee Ready to Transfer" : "Filing Fee Transfer Pending"}
               </p>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isReady ? "text-amber-400 bg-amber-500/10 border-amber-500/25" : "text-slate-500 bg-slate-700/30 border-slate-700"}`}>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${isReady ? "text-amber-700 bg-amber-50 border-amber-500/25" : "text-slate-500 bg-slate-200/30 border-slate-200"}`}>
                 {notification.state}
               </span>
             </div>
             <div className="mt-1 flex items-center gap-2 flex-wrap">
-              {client && <span className="text-xs text-slate-400">{client.full_name}</span>}
+              {client && <span className="text-xs text-slate-600">{client.full_name}</span>}
               <span className="text-slate-700 text-[10px]">·</span>
               <span className="text-xs text-slate-500">Case {notification.case_number}</span>
               <span className="text-slate-700 text-[10px]">·</span>
@@ -2888,11 +2888,11 @@ function TransferNotificationCard({ notification, client, adminUser, trustAccoun
             </div>
             <div className="mt-2 flex items-center gap-3 flex-wrap">
               <div className="flex items-center gap-1.5">
-                <Landmark className="w-3 h-3 text-amber-400" />
-                <span className="text-[11px] text-amber-300">IOLTA → </span>
-                <Building className="w-3 h-3 text-emerald-400" />
-                <span className="text-[11px] text-emerald-300">Operating</span>
-                <span className="text-[11px] font-bold text-white ml-1">{fmt(notification.amount)}</span>
+                <Landmark className="w-3 h-3 text-amber-700" />
+                <span className="text-[11px] text-amber-700">IOLTA → </span>
+                <Building className="w-3 h-3 text-emerald-700" />
+                <span className="text-[11px] text-emerald-700">Operating</span>
+                <span className="text-[11px] font-bold text-slate-900 ml-1">{fmt(notification.amount)}</span>
               </div>
               {!isReady && (
                 <span className="text-[10px] text-slate-500">Available {fmtDateTime(notification.notify_after)}</span>
@@ -2903,7 +2903,7 @@ function TransferNotificationCard({ notification, client, adminUser, trustAccoun
             <div className="flex items-center gap-1.5 flex-shrink-0">
               <button
                 onClick={dismiss}
-                className="p-1.5 text-slate-500 hover:text-slate-300 hover:bg-slate-800 rounded-lg transition-all"
+                className="p-1.5 text-slate-500 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition-all"
                 title="Dismiss"
               >
                 <X className="w-3.5 h-3.5" />
@@ -2931,9 +2931,9 @@ function TransferNotificationCard({ notification, client, adminUser, trustAccoun
                 <input type="datetime-local" value={form.confirmed_at} onChange={e => setForm(f => ({ ...f, confirmed_at: e.target.value }))} className={inp} />
               </div>
             </div>
-            <div className="mt-2.5 flex items-center gap-2 bg-slate-800/60 rounded-xl px-3 py-2">
-              <Shield className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
-              <p className="text-[11px] text-slate-400">Accounting admin authentication required to execute transfers.</p>
+            <div className="mt-2.5 flex items-center gap-2 bg-slate-100 rounded-xl px-3 py-2">
+              <Shield className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
+              <p className="text-[11px] text-slate-600">Accounting admin authentication required to execute transfers.</p>
             </div>
           </>
         )}
@@ -3004,10 +3004,10 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
   }
 
   const CFF_STAGE_CONFIG = {
-    awaiting_approval: { label: "Awaiting Approval", color: "bg-slate-700/60 text-slate-400 border-slate-700", dot: "bg-slate-600" },
-    send_link:         { label: "Send CFF Link",      color: "bg-sky-500/15 text-sky-400 border-sky-500/25",   dot: "bg-sky-500" },
-    awaiting_payment:  { label: "CFF Link Sent",       color: "bg-amber-400/15 text-amber-400 border-amber-400/25", dot: "bg-amber-400 animate-pulse" },
-    paid_schedule:     { label: "CFF Paid",            color: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25", dot: "bg-emerald-500" },
+    awaiting_approval: { label: "Awaiting Approval", color: "bg-slate-200/60 text-slate-600 border-slate-200", dot: "bg-slate-300" },
+    send_link:         { label: "Send CFF Link",      color: "bg-sky-100 text-sky-700 border-sky-500/25",   dot: "bg-sky-500" },
+    awaiting_payment:  { label: "CFF Link Sent",       color: "bg-amber-100 text-amber-700 border-amber-400/25", dot: "bg-amber-400 animate-pulse" },
+    paid_schedule:     { label: "CFF Paid",            color: "bg-emerald-100 text-emerald-700 border-emerald-500/25", dot: "bg-emerald-500" },
   };
 
   return (
@@ -3015,9 +3015,9 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
 
       {/* Transfer alert bar */}
       {pendingNotifs.length > 0 && (
-        <div className="flex-shrink-0 bg-amber-400/8 border-b border-amber-400/20 px-4 sm:px-6 py-2 flex items-center gap-3">
-          <Bell className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 animate-pulse" />
-          <p className="text-xs font-bold text-amber-300">{pendingNotifs.length} filing fee transfer alert{pendingNotifs.length !== 1 ? "s" : ""} pending</p>
+        <div className="flex-shrink-0 bg-amber-50 border-b border-amber-400/20 px-4 sm:px-6 py-2 flex items-center gap-3">
+          <Bell className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 animate-pulse" />
+          <p className="text-xs font-bold text-amber-700">{pendingNotifs.length} filing fee transfer alert{pendingNotifs.length !== 1 ? "s" : ""} pending</p>
           <div className="flex gap-2 flex-wrap">
             {pendingNotifs.map(n => (
               <TransferNotificationCard
@@ -3035,16 +3035,16 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
       )}
 
       {/* State selector tabs */}
-      <div className="flex-shrink-0 border-b border-slate-800/60 bg-[#0d1221]/80 px-4 sm:px-6 flex items-center gap-1">
+      <div className="flex-shrink-0 border-b border-slate-200 bg-white/80 px-4 sm:px-6 flex items-center gap-1">
         {ACTIVE_STATES.map(st => {
           const count = clients.filter(c => c.state === st && (c.status === "active" || c.status === "filed")).length;
           return (
             <button key={st} onClick={() => setActiveState(st)}
               className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all -mb-px flex-shrink-0 ${
-                activeState === st ? "border-amber-400 text-amber-400" : "border-transparent text-slate-500 hover:text-slate-300"
+                activeState === st ? "border-amber-400 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-700"
               }`}>
               {st}
-              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeState === st ? "bg-amber-400/20 text-amber-400" : "bg-slate-800 text-slate-600"}`}>{count}</span>
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${activeState === st ? "bg-amber-400/20 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{count}</span>
             </button>
           );
         })}
@@ -3062,15 +3062,15 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
             {/* Operating */}
             <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 px-5 py-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                  <Building className="w-4 h-4 text-emerald-400" />
+                <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center">
+                  <Building className="w-4 h-4 text-emerald-700" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-emerald-300">Operating Account</p>
+                  <p className="text-xs font-bold text-emerald-700">Operating Account</p>
                   <p className="text-[10px] text-slate-600">{operating?.bank_name ?? "—"} · ···{operating?.account_number_last4 ?? "0000"}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-white tracking-tight">{fmt(operating?.current_balance ?? 0)}</p>
+              <p className="text-3xl font-bold text-slate-900 tracking-tight">{fmt(operating?.current_balance ?? 0)}</p>
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                 Attorney fees (Ch. 7 regular & bifurcated). CFF transferred here 48 hrs after filing.
               </p>
@@ -3079,15 +3079,15 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
             {/* IOLTA */}
             <div className="rounded-2xl border border-amber-400/20 bg-amber-400/5 px-5 py-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center">
-                  <Landmark className="w-4 h-4 text-amber-400" />
+                <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center">
+                  <Landmark className="w-4 h-4 text-amber-700" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-amber-300">IOLTA Trust Account</p>
+                  <p className="text-xs font-bold text-amber-700">IOLTA Trust Account</p>
                   <p className="text-[10px] text-slate-600">{iolta?.bank_name ?? "—"} · ···{iolta?.account_number_last4 ?? "0000"}</p>
                 </div>
               </div>
-              <p className="text-3xl font-bold text-white tracking-tight">{fmt(iolta?.current_balance ?? 0)}</p>
+              <p className="text-3xl font-bold text-slate-900 tracking-tight">{fmt(iolta?.current_balance ?? 0)}</p>
               <p className="text-[11px] text-slate-500 mt-1.5 leading-relaxed">
                 CFF (pre-filing), retainers, hourly Ch. 13 client funds. Released 48 hrs post-filing.
               </p>
@@ -3097,28 +3097,28 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
           {/* Client payment schedules */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Active Client Payment Schedules — {activeState}</p>
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Active Client Payment Schedules — {activeState}</p>
               <span className="text-[10px] text-slate-600">{stateClients.length} client{stateClients.length !== 1 ? "s" : ""}</span>
             </div>
 
             {stateClients.length === 0 ? (
-              <div className="rounded-2xl border border-slate-800 bg-[#0d1221] px-5 py-8 text-center">
+              <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center">
                 <Users className="w-8 h-8 text-slate-700 mx-auto mb-2" />
                 <p className="text-xs text-slate-600">No active clients in {activeState}.</p>
               </div>
             ) : (
-              <div className="rounded-2xl border border-slate-800/60 bg-[#0d1221] overflow-hidden">
+              <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
                 <table className="w-full text-xs">
-                  <thead className="bg-slate-900/60 border-b border-slate-800/60">
+                  <thead className="bg-white/80 border-b border-slate-200">
                     <tr>
-                      <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Client</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Type</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Total Fee</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Down Pmt</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Collected</th>
-                      <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Balance</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Next Due</th>
-                      <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">CFF Status</th>
+                      <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Client</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Type</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Total Fee</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Down Pmt</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Collected</th>
+                      <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Balance</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Next Due</th>
+                      <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">CFF Status</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-800/40">
@@ -3129,45 +3129,45 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
                       const stageCfg = CFF_STAGE_CONFIG[stage];
 
                       return (
-                        <tr key={c.id} className="hover:bg-slate-800/20 transition-colors">
+                        <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3">
-                            <p className="font-semibold text-white">{c.full_name}</p>
+                            <p className="font-semibold text-slate-900">{c.full_name}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${c.chapter === 7 ? "bg-sky-500/10 text-sky-400 border-sky-500/20" : "bg-amber-400/10 text-amber-400 border-amber-400/20"}`}>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${c.chapter === 7 ? "bg-sky-50 text-sky-700 border-sky-500/20" : "bg-amber-50 text-amber-700 border-amber-400/20"}`}>
                                 Ch. {c.chapter}
                               </span>
                               {overdue > 0 && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-500/15 text-red-400 border-red-500/25 flex items-center gap-1">
+                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-rose-100 text-rose-700 border-red-500/25 flex items-center gap-1">
                                   <AlertTriangle className="w-2.5 h-2.5" /> {overdue} late
                                 </span>
                               )}
                             </div>
                           </td>
-                          <td className="px-3 py-3 text-slate-400">{CASE_TYPE_LABELS[c.case_type]}</td>
+                          <td className="px-3 py-3 text-slate-600">{CASE_TYPE_LABELS[c.case_type]}</td>
                           <td className="px-3 py-3 text-right">
-                            <p className="text-white font-semibold">{fmt(total)}</p>
+                            <p className="text-slate-900 font-semibold">{fmt(total)}</p>
                             {fs?.plan_months ? <p className="text-[10px] text-slate-600">{fs.plan_months}-mo plan</p> : null}
                           </td>
                           <td className="px-3 py-3 text-right">
                             {fs?.down_payment ? (
-                              <span className="text-emerald-400 font-semibold">{fmt(fs.down_payment)}</span>
+                              <span className="text-emerald-700 font-semibold">{fmt(fs.down_payment)}</span>
                             ) : <span className="text-slate-600">—</span>}
                           </td>
                           <td className="px-3 py-3 text-right">
-                            <p className="text-white font-semibold">{fmt(paid)}</p>
-                            <div className="mt-1 w-16 ml-auto bg-slate-700/50 rounded-full h-1">
+                            <p className="text-slate-900 font-semibold">{fmt(paid)}</p>
+                            <div className="mt-1 w-16 ml-auto bg-slate-200/50 rounded-full h-1">
                               <div className="h-1 rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
                             </div>
                           </td>
                           <td className="px-3 py-3 text-right">
-                            <span className={`font-semibold ${balance > 0 ? "text-white" : "text-emerald-400"}`}>
+                            <span className={`font-semibold ${balance > 0 ? "text-slate-900" : "text-emerald-700"}`}>
                               {balance > 0 ? fmt(balance) : "Paid"}
                             </span>
                           </td>
                           <td className="px-3 py-3">
                             {nextDue ? (
                               <div>
-                                <p className="text-white font-semibold">{fmt(nextDue.amount_due)}</p>
+                                <p className="text-slate-900 font-semibold">{fmt(nextDue.amount_due)}</p>
                                 <p className="text-[10px] text-slate-600">{nextDue.due_date}</p>
                               </div>
                             ) : (
@@ -3179,7 +3179,7 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
                           <td className="px-3 py-3">
                             <div className="flex flex-col gap-1.5">
                               {c.status === "filed" ? (
-                                <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border w-fit bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border w-fit bg-emerald-50 text-emerald-700 border-emerald-500/20">
                                   <CheckCircle2 className="w-2.5 h-2.5" /> Case Filed {c.filed_date ? `· ${fmtDate(c.filed_date)}` : ""}
                                 </span>
                               ) : (
@@ -3192,7 +3192,7 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
                                 <button
                                   onClick={() => markCffLinkSent(fs.id)}
                                   disabled={sendingCff === fs.id}
-                                  className="flex items-center gap-1 text-[9px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-2 py-1 rounded-lg transition-all disabled:opacity-50"
+                                  className="flex items-center gap-1 text-[9px] font-bold text-sky-700 hover:text-sky-300 bg-sky-50 hover:bg-sky-100 border border-sky-500/20 px-2 py-1 rounded-lg transition-all disabled:opacity-50"
                                 >
                                   {sendingCff === fs.id ? <RefreshCw className="w-2.5 h-2.5 animate-spin" /> : <SendHorizonal className="w-2.5 h-2.5" />}
                                   Send CFF Link
@@ -3207,12 +3207,12 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
                                 return canApprove ? (
                                   <button
                                     onClick={() => markApprovedForSigning(fs.id)}
-                                    className="flex items-center gap-1 text-[9px] font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2 py-1 rounded-lg transition-all"
+                                    className="flex items-center gap-1 text-[9px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2 py-1 rounded-lg transition-all"
                                   >
                                     <CheckCircle2 className="w-2.5 h-2.5" /> Approve
                                   </button>
                                 ) : (
-                                  <span className="flex items-center gap-1 text-[9px] font-bold text-red-400/70 bg-red-500/5 border border-red-500/15 px-2 py-1 rounded-lg cursor-not-allowed" title={cffRequired ? "Court filing fee must be paid before approval" : `$${bifThreshold} threshold not yet met`}>
+                                  <span className="flex items-center gap-1 text-[9px] font-bold text-rose-700/70 bg-red-500/5 border border-red-500/15 px-2 py-1 rounded-lg cursor-not-allowed" title={cffRequired ? "Court filing fee must be paid before approval" : `$${bifThreshold} threshold not yet met`}>
                                     <AlertTriangle className="w-2.5 h-2.5" />
                                     {cffRequired ? "CFF Required" : `Need ${fmt(bifThreshold - paid)} more`}
                                   </span>
@@ -3232,17 +3232,17 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
           {/* Recent transfers */}
           {stateTransfers.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Recent Transfers — {activeState}</p>
-              <div className="rounded-2xl border border-slate-800/60 bg-[#0d1221] divide-y divide-slate-800/40 overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Recent Transfers — {activeState}</p>
+              <div className="rounded-2xl border border-slate-200 bg-white divide-y divide-slate-800/40 overflow-hidden">
                 {stateTransfers.map(t => {
                   const fromOp = operating && t.from_account_id === operating.id;
                   return (
-                    <div key={t.id} className="flex items-center gap-3 px-4 py-3 text-xs hover:bg-slate-800/20 transition-colors">
-                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${fromOp ? "bg-red-500/10" : "bg-emerald-500/10"}`}>
-                        <ArrowLeftRight className={`w-3 h-3 ${fromOp ? "text-red-400" : "text-emerald-400"}`} />
+                    <div key={t.id} className="flex items-center gap-3 px-4 py-3 text-xs hover:bg-slate-50 transition-colors">
+                      <div className={`w-6 h-6 rounded-lg flex items-center justify-center flex-shrink-0 ${fromOp ? "bg-rose-50" : "bg-emerald-50"}`}>
+                        <ArrowLeftRight className={`w-3 h-3 ${fromOp ? "text-rose-700" : "text-emerald-700"}`} />
                       </div>
-                      <span className={`font-bold flex-shrink-0 ${fromOp ? "text-red-400" : "text-emerald-400"}`}>{fromOp ? "−" : "+"}{fmt(t.amount)}</span>
-                      <span className="text-slate-400 truncate flex-1">{t.reason}</span>
+                      <span className={`font-bold flex-shrink-0 ${fromOp ? "text-rose-700" : "text-emerald-700"}`}>{fromOp ? "−" : "+"}{fmt(t.amount)}</span>
+                      <span className="text-slate-600 truncate flex-1">{t.reason}</span>
                       <span className="text-slate-600 flex-shrink-0 text-[10px]">{fmtDate(t.transfer_date)}</span>
                     </div>
                   );
@@ -3252,18 +3252,18 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
           )}
 
           {/* CFF workflow explainer */}
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1221] px-5 py-4">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Court Filing Fee Workflow</p>
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Court Filing Fee Workflow</p>
             <div className="flex items-start gap-3 flex-wrap">
               {[
-                { step: "1", label: "Attorney Approval", desc: "Attorney approves client to schedule signing", color: "text-slate-400", bg: "bg-slate-800" },
-                { step: "2", label: "CFF Link Sent",     desc: "Payment link sent to client for court filing fee", color: "text-sky-400",    bg: "bg-sky-500/10" },
-                { step: "3", label: "CFF Collected",     desc: "Client pays CFF — deposited to IOLTA trust", color: "text-amber-400",  bg: "bg-amber-400/10" },
-                { step: "4", label: "Signing Scheduled", desc: "Client books appointment after CFF confirmed", color: "text-emerald-400", bg: "bg-emerald-500/10" },
-                { step: "5", label: "IOLTA → Operating", desc: "CFF transferred from IOLTA to operating 48 hrs after filing", color: "text-slate-300", bg: "bg-slate-800" },
+                { step: "1", label: "Attorney Approval", desc: "Attorney approves client to schedule signing", color: "text-slate-600", bg: "bg-slate-100" },
+                { step: "2", label: "CFF Link Sent",     desc: "Payment link sent to client for court filing fee", color: "text-sky-700",    bg: "bg-sky-50" },
+                { step: "3", label: "CFF Collected",     desc: "Client pays CFF — deposited to IOLTA trust", color: "text-amber-700",  bg: "bg-amber-50" },
+                { step: "4", label: "Signing Scheduled", desc: "Client books appointment after CFF confirmed", color: "text-emerald-700", bg: "bg-emerald-50" },
+                { step: "5", label: "IOLTA → Operating", desc: "CFF transferred from IOLTA to operating 48 hrs after filing", color: "text-slate-700", bg: "bg-slate-100" },
               ].map((s, i, arr) => (
                 <div key={s.step} className="flex items-center gap-2">
-                  <div className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border border-slate-800 ${s.bg} min-w-[120px]`}>
+                  <div className={`flex flex-col items-center gap-1 px-3 py-2.5 rounded-xl border border-slate-200 ${s.bg} min-w-[120px]`}>
                     <span className={`text-[10px] font-bold ${s.color}`}>Step {s.step}</span>
                     <p className={`text-xs font-bold ${s.color}`}>{s.label}</p>
                     <p className="text-[10px] text-slate-600 text-center leading-snug">{s.desc}</p>
@@ -3275,21 +3275,21 @@ function AccountsView({ trustAccounts, transfers, notifications, clients, feeStr
           </div>
 
           {/* Account routing rules */}
-          <div className="rounded-2xl border border-slate-800 bg-[#0d1221] px-5 py-4">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Account Routing Rules</p>
+          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Account Routing Rules</p>
             <div className="space-y-2">
               {[
-                { label: "Ch. 7 Regular — Attorney Fee (incl. down payment + installments)", dest: "Operating", color: "text-emerald-400", note: "Deposited immediately upon receipt" },
-                { label: "Ch. 7 Regular — Court Filing Fee",  dest: "IOLTA",    color: "text-amber-400", note: "Held until case filed + 48 hrs, then admin transfers to operating" },
-                { label: "Ch. 7 Bifurcated — Attorney Fee",   dest: "Operating", color: "text-emerald-400", note: "Deposited to operating as received" },
-                { label: "Ch. 7 Bifurcated — Filing Fee",     dest: "IOLTA",    color: "text-amber-400", note: "Held in IOLTA — same 48hr release rule applies" },
-                { label: "Ch. 13 Flat Fee — Upfront",          dest: "Operating", color: "text-emerald-400", note: "Attorney fee portion to operating" },
-                { label: "Ch. 13 Flat Fee — Filing Fee",       dest: "IOLTA",    color: "text-amber-400", note: "Held in IOLTA until filed + 48 hrs" },
-                { label: "Ch. 13 Hourly — Retainer",           dest: "IOLTA",    color: "text-amber-400", note: "Held in trust; earned fees transferred as billed" },
+                { label: "Ch. 7 Regular — Attorney Fee (incl. down payment + installments)", dest: "Operating", color: "text-emerald-700", note: "Deposited immediately upon receipt" },
+                { label: "Ch. 7 Regular — Court Filing Fee",  dest: "IOLTA",    color: "text-amber-700", note: "Held until case filed + 48 hrs, then admin transfers to operating" },
+                { label: "Ch. 7 Bifurcated — Attorney Fee",   dest: "Operating", color: "text-emerald-700", note: "Deposited to operating as received" },
+                { label: "Ch. 7 Bifurcated — Filing Fee",     dest: "IOLTA",    color: "text-amber-700", note: "Held in IOLTA — same 48hr release rule applies" },
+                { label: "Ch. 13 Flat Fee — Upfront",          dest: "Operating", color: "text-emerald-700", note: "Attorney fee portion to operating" },
+                { label: "Ch. 13 Flat Fee — Filing Fee",       dest: "IOLTA",    color: "text-amber-700", note: "Held in IOLTA until filed + 48 hrs" },
+                { label: "Ch. 13 Hourly — Retainer",           dest: "IOLTA",    color: "text-amber-700", note: "Held in trust; earned fees transferred as billed" },
               ].map(r => (
-                <div key={r.label} className="flex items-center gap-3 py-1.5 border-b border-slate-800/40 last:border-0">
-                  <div className="w-1.5 h-1.5 rounded-full bg-slate-700 flex-shrink-0" />
-                  <span className="text-xs text-slate-300 flex-1">{r.label}</span>
+                <div key={r.label} className="flex items-center gap-3 py-1.5 border-b border-slate-200 last:border-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-slate-200 flex-shrink-0" />
+                  <span className="text-xs text-slate-700 flex-1">{r.label}</span>
                   <span className={`text-xs font-bold flex-shrink-0 ${r.color}`}>{r.dest}</span>
                   <span className="text-[10px] text-slate-600 hidden sm:block w-64 text-right">{r.note}</span>
                 </div>
@@ -3366,24 +3366,24 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="px-6 pt-6 pb-4 border-b border-slate-800/60">
+      <div className="px-6 pt-6 pb-4 border-b border-slate-200">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h2 className="text-xl font-bold text-white">{client.full_name}</h2>
+              <h2 className="text-xl font-bold text-slate-900">{client.full_name}</h2>
               {statusBadge(client.status)}
             </div>
             {(client.phone || client.email) && (
               <div className="flex items-center gap-3 mt-1 flex-wrap">
                 {client.phone && (
-                  <a href={`tel:${client.phone}`} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+                  <a href={`tel:${client.phone}`} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 transition-colors">
                     <svg className="w-3 h-3 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                     {client.phone}
                   </a>
                 )}
                 {client.phone && client.email && <span className="text-slate-700">·</span>}
                 {client.email && (
-                  <a href={`mailto:${client.email}`} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white transition-colors">
+                  <a href={`mailto:${client.email}`} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900 transition-colors">
                     <svg className="w-3 h-3 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
                     {client.email}
                   </a>
@@ -3391,9 +3391,9 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
               </div>
             )}
             <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${client.chapter === 7 ? "text-sky-400 bg-sky-500/10 border-sky-500/25" : "text-amber-400 bg-amber-500/10 border-amber-500/25"}`}>{CASE_TYPE_LABELS[client.case_type]}</span>
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${client.chapter === 7 ? "text-sky-700 bg-sky-50 border-sky-500/25" : "text-amber-700 bg-amber-50 border-amber-500/25"}`}>{CASE_TYPE_LABELS[client.case_type]}</span>
               {client.state && <><span className="text-slate-700">·</span><span className="text-xs text-slate-500">{client.state}{isActiveState ? " ✓" : ""}</span></>}
-              {client.case_number && <><span className="text-slate-700">·</span><span className="text-xs text-slate-400 font-mono">{client.case_number}</span></>}
+              {client.case_number && <><span className="text-slate-700">·</span><span className="text-xs text-slate-600 font-mono">{client.case_number}</span></>}
               {client.intake_date && <><span className="text-slate-700">·</span><span className="text-xs text-slate-500">Intake: {fmtDate(client.intake_date)}</span></>}
             </div>
           </div>
@@ -3401,7 +3401,7 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
             <button onClick={() => setShowSummary(true)} className="flex items-center gap-1.5 text-[var(--text-muted)] hover:text-[var(--text-secondary)] bg-[var(--bg-surface-2)] hover:bg-[var(--bg-surface-3)] border border-[var(--border)] font-bold text-xs px-3 py-2 rounded-xl transition-all">
               <ClipboardList className="w-3.5 h-3.5" /> Summary
             </button>
-            <button onClick={() => setShowPayModal(true)} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all">
+            <button onClick={() => setShowPayModal(true)} className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs px-4 py-2 rounded-xl transition-all">
               <Plus className="w-3.5 h-3.5" /> Record Payment
             </button>
           </div>
@@ -3411,9 +3411,9 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
           <div className="mt-4">
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-[11px] text-slate-500">Total Collected</span>
-              <span className="text-[11px] text-slate-400">{fmt(totalPaid)} / {fmt(totalFee)}</span>
+              <span className="text-[11px] text-slate-600">{fmt(totalPaid)} / {fmt(totalFee)}</span>
             </div>
-            <div className="w-full bg-slate-800 rounded-full h-1.5">
+            <div className="w-full bg-slate-100 rounded-full h-1.5">
               <div className="h-1.5 rounded-full bg-emerald-500 transition-all duration-500" style={{ width: `${pct}%` }} />
             </div>
           </div>
@@ -3423,28 +3423,28 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
         {(operatingHeld > 0 || ioltaHeld > 0) && (
           <div className="mt-3 grid grid-cols-2 gap-2">
             <div className="flex items-center gap-2 bg-emerald-500/5 border border-emerald-500/15 rounded-xl px-3 py-2.5">
-              <Building className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+              <Building className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
               <div>
                 <p className="text-[10px] text-slate-500">Operating{isActiveState && client.state ? ` (${client.state})` : ""}</p>
-                <p className="text-sm font-bold text-emerald-400">{fmt(operatingHeld)}</p>
+                <p className="text-sm font-bold text-emerald-700">{fmt(operatingHeld)}</p>
               </div>
             </div>
             <div className="flex items-center gap-2 bg-amber-500/5 border border-amber-500/15 rounded-xl px-3 py-2.5">
-              <Landmark className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+              <Landmark className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
               <div>
                 <p className="text-[10px] text-slate-500">IOLTA{isActiveState && client.state ? ` (${client.state})` : ""}</p>
-                <p className="text-sm font-bold text-amber-400">{fmt(ioltaHeld)}</p>
+                <p className="text-sm font-bold text-amber-700">{fmt(ioltaHeld)}</p>
               </div>
             </div>
           </div>
         )}
 
         {client.case_type === "bifurcated" && (
-          <div className={`mt-3 flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 border ${thresholdMet ? "bg-emerald-500/8 border-emerald-500/20" : "bg-amber-500/8 border-amber-500/20"}`}>
+          <div className={`mt-3 flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 border ${thresholdMet ? "bg-emerald-50 border-emerald-500/20" : "bg-amber-500/8 border-amber-500/20"}`}>
             <div className="flex items-center gap-2">
-              {thresholdMet ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" /> : <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />}
+              {thresholdMet ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" /> : <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />}
               <div>
-                <p className={`text-xs font-bold ${thresholdMet ? "text-emerald-300" : "text-amber-300"}`}>
+                <p className={`text-xs font-bold ${thresholdMet ? "text-emerald-700" : "text-amber-700"}`}>
                   {feeStructure?.threshold_bypassed ? "Threshold Bypassed" : thresholdMet ? "Signing Threshold Met" : `Signing Threshold: ${fmt(threshold)} required`}
                 </p>
                 {!feeStructure?.threshold_bypassed && (
@@ -3453,7 +3453,7 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
                 {feeStructure?.threshold_bypass_reason && <p className="text-[10px] text-slate-500 mt-0.5 italic">{feeStructure.threshold_bypass_reason}</p>}
               </div>
             </div>
-            <button onClick={() => setShowThreshModal(true)} className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1.5 rounded-lg transition-all flex-shrink-0">
+            <button onClick={() => setShowThreshModal(true)} className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 border border-slate-200 px-2.5 py-1.5 rounded-lg transition-all flex-shrink-0">
               <Edit2 className="w-3 h-3" /> Modify
             </button>
           </div>
@@ -3461,9 +3461,9 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
 
         {client.case_type === "hourly" && (
           <div className="mt-3 flex items-center gap-2.5 bg-amber-500/8 border border-amber-500/20 rounded-xl px-3.5 py-2.5">
-            <Landmark className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />
+            <Landmark className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />
             <div>
-              <p className="text-xs font-bold text-amber-300">IOLTA Trust Balance: {fmt(ioltaBalance)}</p>
+              <p className="text-xs font-bold text-amber-700">IOLTA Trust Balance: {fmt(ioltaBalance)}</p>
               {feeStructure?.hourly_rate && <p className="text-[10px] text-slate-500 mt-0.5">Rate: {fmt(feeStructure.hourly_rate)}/hr</p>}
             </div>
           </div>
@@ -3471,21 +3471,21 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
 
         {client.case_type === "flat_fee" && feeStructure?.ch13_upfront_amount && (
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2.5">
+            <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide">Upfront Required</p>
-              <p className="text-sm font-bold text-white mt-0.5">{fmt(feeStructure.ch13_upfront_amount)}</p>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{fmt(feeStructure.ch13_upfront_amount)}</p>
             </div>
-            <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2.5">
+            <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5">
               <p className="text-[10px] text-slate-500 uppercase tracking-wide">Through Plan</p>
-              <p className="text-sm font-bold text-white mt-0.5">{fmt(feeStructure.ch13_plan_remainder ?? 0)}</p>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{fmt(feeStructure.ch13_plan_remainder ?? 0)}</p>
             </div>
           </div>
         )}
       </div>
 
-      <div className="flex border-b border-slate-800/60 px-6">
+      <div className="flex border-b border-slate-200 px-6">
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)} className={`py-3 px-1 mr-5 text-xs font-semibold border-b-2 transition-all -mb-px ${tab === t.id ? "border-amber-400 text-amber-400" : "border-transparent text-slate-500 hover:text-slate-300"}`}>
+          <button key={t.id} onClick={() => setTab(t.id)} className={`py-3 px-1 mr-5 text-xs font-semibold border-b-2 transition-all -mb-px ${tab === t.id ? "border-amber-400 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-700"}`}>
             {t.label}
           </button>
         ))}
@@ -3499,13 +3499,13 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
                 { label: "Attorney Fee",       val: fmt(feeStructure?.attorney_fee ?? 0) },
                 { label: "Court Filing Fee",   val: fmt(feeStructure?.court_filing_fee ?? 0) },
                 { label: "Total Fee",          val: fmt(totalFee), highlight: true },
-                { label: "Total Paid",         val: fmt(totalPaid), color: "text-emerald-400" },
-                { label: "Balance Due",        val: fmt(Math.max(0, balance)), color: balance > 0 ? "text-red-400" : "text-emerald-400" },
+                { label: "Total Paid",         val: fmt(totalPaid), color: "text-emerald-700" },
+                { label: "Balance Due",        val: fmt(Math.max(0, balance)), color: balance > 0 ? "text-rose-700" : "text-emerald-700" },
                 { label: "Payment Frequency",  val: FREQ_LABELS[feeStructure?.payment_frequency ?? ""] ?? "—" },
               ].map(item => (
-                <div key={item.label} className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-3.5 py-3">
+                <div key={item.label} className="bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3">
                   <p className="text-[10px] text-slate-500 uppercase tracking-wide">{item.label}</p>
-                  <p className={`text-sm font-bold mt-0.5 ${item.color ?? "text-white"}`}>{item.val}</p>
+                  <p className={`text-sm font-bold mt-0.5 ${item.color ?? "text-slate-900"}`}>{item.val}</p>
                 </div>
               ))}
             </div>
@@ -3549,25 +3549,25 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
               const allMet = gates.every(g => g.met);
 
               return (
-                <div className={`rounded-xl border px-4 py-3 ${allMet ? "bg-emerald-500/5 border-emerald-500/20" : "bg-slate-800/40 border-slate-700/60"}`}>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
+                <div className={`rounded-xl border px-4 py-3 ${allMet ? "bg-emerald-500/5 border-emerald-500/20" : "bg-slate-50 border-slate-200"}`}>
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
                     <Shield className="w-3 h-3" /> Filing Readiness
                   </p>
                   <div className="space-y-1.5">
                     {gates.map(g => (
                       <div key={g.label} className="flex items-center gap-2.5">
                         {g.met
-                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                          : <Clock className="w-3.5 h-3.5 text-amber-400 flex-shrink-0" />}
+                          ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0" />
+                          : <Clock className="w-3.5 h-3.5 text-amber-700 flex-shrink-0" />}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs font-semibold ${g.met ? "text-emerald-300" : "text-slate-300"}`}>{g.label}</span>
+                          <span className={`text-xs font-semibold ${g.met ? "text-emerald-700" : "text-slate-700"}`}>{g.label}</span>
                           <span className="text-[10px] text-slate-500 ml-2">{g.detail}</span>
                         </div>
                       </div>
                     ))}
                   </div>
                   {allMet && (
-                    <p className="text-[10px] text-emerald-400 font-semibold mt-2.5 flex items-center gap-1">
+                    <p className="text-[10px] text-emerald-700 font-semibold mt-2.5 flex items-center gap-1">
                       <CheckCircle2 className="w-3 h-3" /> Ready to file
                     </p>
                   )}
@@ -3579,14 +3579,14 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
             {(client.extended_status === "case_closed" || client.extended_status === "cancelled") && (
               <div className={`rounded-xl border px-4 py-3.5 space-y-2 ${
                 client.extended_status === "case_closed"
-                  ? "bg-slate-800/40 border-slate-700/60"
+                  ? "bg-slate-50 border-slate-200"
                   : "bg-red-500/5 border-red-500/20"
               }`}>
                 <div className="flex items-center gap-2 mb-1">
                   {client.extended_status === "case_closed"
-                    ? <CheckCircle2 className="w-3.5 h-3.5 text-slate-400" />
-                    : <Ban className="w-3.5 h-3.5 text-red-400" />}
-                  <p className={`text-xs font-bold ${client.extended_status === "case_closed" ? "text-slate-300" : "text-red-400"}`}>
+                    ? <CheckCircle2 className="w-3.5 h-3.5 text-slate-600" />
+                    : <Ban className="w-3.5 h-3.5 text-rose-700" />}
+                  <p className={`text-xs font-bold ${client.extended_status === "case_closed" ? "text-slate-700" : "text-rose-700"}`}>
                     {client.extended_status === "case_closed" ? "Case Closed — Disposition" : "Cancelled"}
                   </p>
                 </div>
@@ -3594,34 +3594,34 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
                   {client.filed_date && (
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">Filed</p>
-                      <p className="text-white font-semibold">{fmtDate(client.filed_date)}</p>
+                      <p className="text-slate-900 font-semibold">{fmtDate(client.filed_date)}</p>
                     </div>
                   )}
                   {client.case_closed_date && (
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">Closed</p>
-                      <p className="text-white font-semibold">{fmtDate(client.case_closed_date)}</p>
+                      <p className="text-slate-900 font-semibold">{fmtDate(client.case_closed_date)}</p>
                     </div>
                   )}
                   {client.discharge_date && (
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">Discharge</p>
-                      <p className="text-emerald-400 font-semibold">{fmtDate(client.discharge_date)}</p>
+                      <p className="text-emerald-700 font-semibold">{fmtDate(client.discharge_date)}</p>
                     </div>
                   )}
                   {client.case_closed_reason && (
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">Reason</p>
                       <p className={`font-semibold capitalize ${
-                        client.case_closed_reason === "discharged" ? "text-emerald-400" :
-                        client.case_closed_reason === "dismissed"  ? "text-red-400" :
-                        "text-slate-300"
+                        client.case_closed_reason === "discharged" ? "text-emerald-700" :
+                        client.case_closed_reason === "dismissed"  ? "text-rose-700" :
+                        "text-slate-700"
                       }`}>{client.case_closed_reason.replace(/_/g, " ")}</p>
                     </div>
                   )}
                 </div>
                 {client.case_closed_notes && (
-                  <p className="text-[11px] text-slate-400 leading-relaxed border-t border-slate-700/60 pt-2 mt-1">{client.case_closed_notes}</p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed border-t border-slate-200 pt-2 mt-1">{client.case_closed_notes}</p>
                 )}
               </div>
             )}
@@ -3629,20 +3629,20 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
             {/* On hold / inactive context */}
             {client.extended_status === "on_hold" && client.notes && (
               <div className="flex items-start gap-2 bg-amber-400/5 border border-amber-400/20 rounded-xl px-3.5 py-3">
-                <PauseCircle className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-400">{client.notes}</p>
+                <PauseCircle className="w-3.5 h-3.5 text-amber-700 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-600">{client.notes}</p>
               </div>
             )}
             {client.extended_status === "inactive" && client.notes && (
-              <div className="flex items-start gap-2 bg-slate-800/60 border border-slate-700/60 rounded-xl px-3.5 py-3">
+              <div className="flex items-start gap-2 bg-slate-100 border border-slate-200 rounded-xl px-3.5 py-3">
                 <AlertTriangle className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-400">{client.notes}</p>
+                <p className="text-xs text-slate-600">{client.notes}</p>
               </div>
             )}
             {!(client.extended_status === "on_hold" || client.extended_status === "inactive") && client.notes && (
-              <div className="flex items-start gap-2 bg-slate-800/40 border border-slate-700/60 rounded-xl px-3.5 py-3">
+              <div className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-3">
                 <Info className="w-3.5 h-3.5 text-slate-500 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-400">{client.notes}</p>
+                <p className="text-xs text-slate-600">{client.notes}</p>
               </div>
             )}
           </>
@@ -3654,18 +3654,18 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
               <p className="text-xs text-slate-600 py-4 text-center">No payments recorded yet.</p>
             ) : clientPayments.slice().reverse().map(p => (
               <div key={p.id} className={`flex items-center gap-3 px-3.5 py-3 rounded-xl border group ${
-                p.voided ? "opacity-40 bg-slate-800/20 border-slate-800 line-through" :
+                p.voided ? "opacity-40 bg-slate-50 border-slate-200 line-through" :
                 p.destination_account === "iolta" ? "bg-amber-500/5 border-amber-500/20" : "bg-emerald-500/5 border-emerald-500/15"
               }`}>
-                <div className="w-7 h-7 rounded-lg bg-slate-700/60 flex items-center justify-center flex-shrink-0 text-slate-400">
+                <div className="w-7 h-7 rounded-lg bg-slate-200/60 flex items-center justify-center flex-shrink-0 text-slate-600">
                   {METHOD_ICONS[p.payment_method] ?? <DollarSign className="w-3 h-3" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-bold text-white">{fmt(p.amount)}</span>
-                    <span className="text-[10px] font-semibold text-slate-400 capitalize">{p.payment_type.replace(/_/g, " ")}</span>
+                    <span className="text-sm font-bold text-slate-900">{fmt(p.amount)}</span>
+                    <span className="text-[10px] font-semibold text-slate-600 capitalize">{p.payment_type.replace(/_/g, " ")}</span>
                     {destBadge(p.destination_account)}
-                    {p.voided && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-500/10 text-red-400 border-red-500/20">Voided</span>}
+                    {p.voided && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-rose-50 text-rose-700 border-red-500/20">Voided</span>}
                     {p.account_state && (ACTIVE_STATES as readonly string[]).includes(p.account_state) && (
                       <span className="text-[10px] text-slate-600">{p.account_state}</span>
                     )}
@@ -3680,7 +3680,7 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
                 {!p.voided && (
                   <button
                     onClick={() => setAdjustPayment(p)}
-                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-700/60 hover:bg-amber-400/15 text-slate-500 hover:text-amber-400 flex items-center justify-center transition-all flex-shrink-0"
+                    className="opacity-0 group-hover:opacity-100 w-7 h-7 rounded-lg bg-slate-200/60 hover:bg-amber-100 text-slate-500 hover:text-amber-700 flex items-center justify-center transition-all flex-shrink-0"
                     title="Adjust payment"
                   >
                     <Pencil className="w-3 h-3" />
@@ -3698,11 +3698,11 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
               <div className="text-[10px] text-[var(--text-muted)]">
                 {schedule.filter(s => s.status === "paid" || s.status === "waived").length} paid ·{" "}
                 {schedule.filter(s => s.status !== "paid" && s.status !== "waived").length} pending ·{" "}
-                {feeStructure?.payment_frequency ? <span className="font-semibold text-amber-400">{FREQ_LABELS[feeStructure.payment_frequency]}</span> : "—"}
+                {feeStructure?.payment_frequency ? <span className="font-semibold text-amber-700">{FREQ_LABELS[feeStructure.payment_frequency]}</span> : "—"}
               </div>
               <button
                 onClick={() => setShowScheduleAdjust(true)}
-                className="flex items-center gap-1.5 text-[10px] font-bold text-amber-400 hover:text-amber-300 border border-amber-500/25 hover:border-amber-400/40 bg-amber-500/8 hover:bg-amber-500/15 px-3 py-1.5 rounded-lg transition-all">
+                className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 hover:text-amber-700 border border-amber-500/25 hover:border-amber-400/40 bg-amber-500/8 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-all">
                 <Pencil className="w-3 h-3" /> Adjust Schedule
               </button>
             </div>
@@ -3714,24 +3714,24 @@ function ClientDetail({ client, payments, feeStructure, schedule, enrollment, re
                 s.status === "paid" ? "bg-emerald-500/5 border-emerald-500/20" :
                 s.status === "late" ? "bg-red-500/5 border-red-500/20" :
                 s.status === "partial" ? "bg-amber-500/5 border-amber-500/20" :
-                "bg-slate-800/40 border-slate-700/60"
+                "bg-slate-50 border-slate-200"
               }`}>
-                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-700/60">
-                  <span className="text-[10px] font-bold text-slate-400">#{s.installment_number}</span>
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 bg-slate-200/60">
+                  <span className="text-[10px] font-bold text-slate-600">#{s.installment_number}</span>
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white">{fmt(s.amount_due)}</span>
-                    {s.amount_paid > 0 && s.amount_paid < s.amount_due && <span className="text-[10px] text-amber-400">{fmt(s.amount_paid)} paid</span>}
+                    <span className="text-sm font-bold text-slate-900">{fmt(s.amount_due)}</span>
+                    {s.amount_paid > 0 && s.amount_paid < s.amount_due && <span className="text-[10px] text-amber-700">{fmt(s.amount_paid)} paid</span>}
                   </div>
                   <span className="text-[10px] text-slate-600">Due {fmtDate(s.due_date)}</span>
                 </div>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border capitalize ${
-                  s.status === "paid"    ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/25" :
-                  s.status === "late"    ? "text-red-400 bg-red-500/10 border-red-500/25" :
-                  s.status === "partial" ? "text-amber-400 bg-amber-500/10 border-amber-500/25" :
-                  s.status === "waived"  ? "text-slate-500 bg-slate-700/30 border-slate-700" :
-                                           "text-slate-400 bg-slate-700/30 border-slate-700"
+                  s.status === "paid"    ? "text-emerald-700 bg-emerald-50 border-emerald-500/25" :
+                  s.status === "late"    ? "text-rose-700 bg-rose-50 border-red-500/25" :
+                  s.status === "partial" ? "text-amber-700 bg-amber-50 border-amber-500/25" :
+                  s.status === "waived"  ? "text-slate-500 bg-slate-200/30 border-slate-200" :
+                                           "text-slate-600 bg-slate-200/30 border-slate-200"
                 }`}>{s.status}</span>
               </div>
             ))}
@@ -3916,14 +3916,14 @@ function CheckDepositForm({ clients, adminUser, onClose, onSaved }: {
     onSaved();
   }
 
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   function ImgUploadSlot({ label, preview, onChange }: { label: string; preview: string | null; onChange: (f: File) => void }) {
     return (
       <div>
         <p className={lbl}>{label}</p>
-        <label className={`flex flex-col items-center justify-center h-24 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${preview ? "border-emerald-500/40 bg-emerald-500/5" : "border-slate-700 hover:border-slate-500 bg-slate-800/40"}`}>
+        <label className={`flex flex-col items-center justify-center h-24 rounded-xl border-2 border-dashed transition-colors cursor-pointer ${preview ? "border-emerald-500/40 bg-emerald-500/5" : "border-slate-200 hover:border-slate-300 bg-slate-50"}`}>
           {preview
             ? <img src={preview} alt={label} className="h-full w-full object-cover rounded-xl" />
             : <div className="flex flex-col items-center gap-1 text-slate-500">
@@ -3939,22 +3939,22 @@ function CheckDepositForm({ clients, adminUser, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-xl bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
-            <Receipt className="w-4 h-4 text-emerald-400" />
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <Receipt className="w-4 h-4 text-emerald-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Log Trustee Check Deposit</h3>
+            <h3 className="text-sm font-bold text-slate-900">Log Trustee Check Deposit</h3>
             <p className="text-[11px] text-slate-500">Physical checks received from trustees</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Check photos */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Check Photos</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-2">Check Photos</p>
             <div className="grid grid-cols-3 gap-3">
               <ImgUploadSlot label="Front of Check" preview={frontPrev}
                 onChange={f => handleImgChange(f, setFrontImg, setFrontPrev)} />
@@ -4060,10 +4060,10 @@ function CheckDepositForm({ clients, adminUser, onClose, onSaved }: {
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={saving || !trustee.trim() || !amount}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <Check className="w-4 h-4" />
             {uploading ? "Uploading…" : saving ? "Saving…" : "Save Deposit"}
           </button>
@@ -4267,39 +4267,39 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
   // ── Stat card helper ──
   const sc = (label: string, value: string, sub?: string, color?: string) => (
-    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
-      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${color ?? "text-white"}`}>{value}</p>
+    <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4">
+      <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{label}</p>
+      <p className={`text-2xl font-bold ${color ?? "text-slate-900"}`}>{value}</p>
       {sub && <p className="text-[11px] text-slate-600 mt-0.5">{sub}</p>}
     </div>
   );
 
   const hasActiveFilters = dateFrom || dateTo || fState !== "all" || fChapter !== "all" || fCaseType !== "all" || fPayDay !== "all" || fMonth;
   const filterBar = (
-    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3 mb-5 space-y-3">
+    <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 mb-5 space-y-3">
       {/* Row 1: Date range + payment day + month */}
       <div className="flex flex-wrap gap-2 items-center">
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <Search className="w-3.5 h-3.5 text-slate-500" />
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Filters</span>
+          <span className="text-xs font-bold text-slate-700 uppercase tracking-widest">Filters</span>
         </div>
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] text-slate-500 whitespace-nowrap">From</label>
           <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-slate-500 w-32" />
+            className="bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-slate-300 w-32" />
         </div>
         <div className="flex items-center gap-1.5">
           <label className="text-[10px] text-slate-500 whitespace-nowrap">To</label>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
-            className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-slate-500 w-32" />
+            className="bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-lg px-2 py-1.5 focus:outline-none focus:border-slate-300 w-32" />
         </div>
         <select value={fMonth} onChange={e => { setFMonth(e.target.value); if (e.target.value) { setDateFrom(""); setDateTo(""); } }}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[140px]">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[140px]">
           <option value="">All Months</option>
           {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
         <select value={fPayDay} onChange={e => setFPayDay(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
           <option value="all">Any Pay Day</option>
           {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
             <option key={d} value={String(d)}>Day {d}</option>
@@ -4310,7 +4310,7 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
         </select>
         {hasActiveFilters && (
           <button onClick={() => { setDateFrom(""); setDateTo(""); setFState("all"); setFChapter("all"); setFCaseType("all"); setFPayDay("all"); setFMonth(""); setCmpMonth(""); }}
-            className="flex items-center gap-1 text-[10px] text-red-400 hover:text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-2 py-1.5 transition-colors">
+            className="flex items-center gap-1 text-[10px] text-rose-700 hover:text-rose-700 bg-rose-50 border border-red-500/20 rounded-lg px-2 py-1.5 transition-colors">
             <X className="w-3 h-3" /> Clear
           </button>
         )}
@@ -4319,18 +4319,18 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {/* Row 2: Segmentation filters + comparison */}
       <div className="flex flex-wrap gap-2 items-center">
         <select value={fState} onChange={e => setFState(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
           <option value="all">All States</option>
           {allStates.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={fChapter} onChange={e => setFChapter(e.target.value as typeof fChapter)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
           <option value="all">All Chapters</option>
           <option value="7">Chapter 7</option>
           <option value="13">Chapter 13</option>
         </select>
         <select value={fCaseType} onChange={e => setFCaseType(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
           <option value="all">All Types</option>
           <option value="regular">Ch. 7 Prepaid</option>
           <option value="bifurcated">Ch. 7 Bifurcated</option>
@@ -4339,14 +4339,14 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
           <option value="limited_scope">Limited Scope</option>
         </select>
         <button onClick={() => setShowCompare(v => !v)}
-          className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${showCompare ? "bg-sky-500/15 border-sky-500/30 text-sky-300" : "bg-slate-800 border-slate-700 text-slate-400 hover:text-slate-300"}`}>
+          className={`flex items-center gap-1.5 text-[10px] font-semibold px-2.5 py-1.5 rounded-lg border transition-all ${showCompare ? "bg-sky-100 border-sky-500/30 text-sky-300" : "bg-slate-100 border-slate-200 text-slate-600 hover:text-slate-700"}`}>
           <BarChart2 className="w-3 h-3" /> Compare Periods
         </button>
         {showCompare && (
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-slate-500">vs.</span>
             <select value={cmpMonth} onChange={e => setCmpMonth(e.target.value)}
-              className="bg-slate-800 border border-sky-500/30 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[140px]">
+              className="bg-slate-100 border border-sky-500/30 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none min-w-[140px]">
               <option value="">Select comparison month</option>
               {monthOptions.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
@@ -4375,10 +4375,10 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
     <div className="px-6 py-6 overflow-y-auto h-full space-y-0">
 
       {/* Section tabs */}
-      <div className="flex gap-1 mb-5 bg-slate-900/60 border border-slate-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 mb-5 bg-white/80 border border-slate-200 rounded-xl p-1 w-fit">
         {SECTIONS.map(s => (
           <button key={s.id} onClick={() => setSection(s.id)}
-            className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${section === s.id ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-300"}`}>
+            className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${section === s.id ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-700"}`}>
             {s.label}
           </button>
         ))}
@@ -4391,60 +4391,60 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {section === "overview" && (
         <div className="space-y-6">
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Key Metrics</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Key Metrics</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {sc("Total Clients", String(filteredClients.length),
                 `${filteredClients.filter(c => c.status === "active").length} active · ${filedClients.length} filed`)}
               {sc("Paying Clients", String(payingClientsCount),
                 `${filteredClients.length > 0 ? ((payingClientsCount / filteredClients.length) * 100).toFixed(0) : 0}% of total`,
-                payingClientsCount > 0 ? "text-emerald-400" : "text-red-400")}
-              {sc("Total Collected", fmt(totalRevenue), `${activePayments.length} payments`, "text-emerald-400")}
-              {sc("Total Past Due", fmt(totalPastDue), "Across filtered clients", totalPastDue > 0 ? "text-red-400" : "text-emerald-400")}
+                payingClientsCount > 0 ? "text-emerald-700" : "text-rose-700")}
+              {sc("Total Collected", fmt(totalRevenue), `${activePayments.length} payments`, "text-emerald-700")}
+              {sc("Total Past Due", fmt(totalPastDue), "Across filtered clients", totalPastDue > 0 ? "text-rose-700" : "text-emerald-700")}
             </div>
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Cancellations & Refunds</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Cancellations & Refunds</p>
             <div className="grid grid-cols-3 gap-3">
-              {sc("Voided Payments", String(voidedPayments.length), fmt(totalVoided), "text-red-400")}
+              {sc("Voided Payments", String(voidedPayments.length), fmt(totalVoided), "text-rose-700")}
               {sc("Refunds", String(refundPayments.length), fmt(totalRefunds), "text-orange-400")}
-              {sc("IOLTA Held", fmt(ioltaTotal), "Trust accounts", "text-amber-400")}
+              {sc("IOLTA Held", fmt(ioltaTotal), "Trust accounts", "text-amber-700")}
             </div>
           </div>
 
           {/* ── Period Comparison ── */}
           {showCompare && cmpMonth && (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Period Comparison</p>
-              <div className="bg-[#0d1221] border border-sky-500/20 rounded-2xl overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Period Comparison</p>
+              <div className="bg-white border border-sky-500/20 rounded-2xl overflow-hidden">
                 <div className="grid grid-cols-2 divide-x divide-slate-800">
                   {/* Primary period */}
                   <div className="px-5 py-4">
-                    <p className="text-[11px] font-bold text-sky-400 mb-3">
+                    <p className="text-[11px] font-bold text-sky-700 mb-3">
                       {fMonth ? monthOptions.find(m => m.value === fMonth)?.label ?? fMonth : dateFrom || dateTo ? `${dateFrom || "Start"} → ${dateTo || "Now"}` : "Current Filter"}
                     </p>
                     <div className="space-y-2 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-500">Payments</span>
-                        <span className="text-white font-semibold">{activePayments.length}</span>
+                        <span className="text-slate-900 font-semibold">{activePayments.length}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Revenue</span>
-                        <span className="text-emerald-400 font-bold">{fmt(totalRevenue)}</span>
+                        <span className="text-emerald-700 font-bold">{fmt(totalRevenue)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Avg Payment</span>
-                        <span className="text-white">{fmt(avgPayment)}</span>
+                        <span className="text-slate-900">{fmt(avgPayment)}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Voided</span>
-                        <span className="text-red-400">{voidedPayments.length} · {fmt(totalVoided)}</span>
+                        <span className="text-rose-700">{voidedPayments.length} · {fmt(totalVoided)}</span>
                       </div>
                     </div>
                   </div>
                   {/* Comparison period */}
                   <div className="px-5 py-4">
-                    <p className="text-[11px] font-bold text-slate-400 mb-3">
+                    <p className="text-[11px] font-bold text-slate-600 mb-3">
                       {monthOptions.find(m => m.value === cmpMonth)?.label ?? cmpMonth} <span className="text-slate-600">(comparison)</span>
                     </p>
                     {(() => {
@@ -4457,27 +4457,27 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                         <div className="space-y-2 text-xs">
                           <div className="flex justify-between">
                             <span className="text-slate-500">Payments</span>
-                            <span className="text-white font-semibold">{cmpPayments.length}
-                              <span className={`ml-1.5 text-[10px] ${cntDelta > 0 ? "text-emerald-400" : cntDelta < 0 ? "text-red-400" : "text-slate-500"}`}>
+                            <span className="text-slate-900 font-semibold">{cmpPayments.length}
+                              <span className={`ml-1.5 text-[10px] ${cntDelta > 0 ? "text-emerald-700" : cntDelta < 0 ? "text-rose-700" : "text-slate-500"}`}>
                                 {cntDelta > 0 ? `+${cntDelta}` : cntDelta}
                               </span>
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">Revenue</span>
-                            <span className="font-bold text-white">{fmt(cmpRevenue)}
-                              <span className={`ml-1.5 text-[10px] ${revDelta > 0 ? "text-emerald-400" : revDelta < 0 ? "text-red-400" : "text-slate-500"}`}>
+                            <span className="font-bold text-slate-900">{fmt(cmpRevenue)}
+                              <span className={`ml-1.5 text-[10px] ${revDelta > 0 ? "text-emerald-700" : revDelta < 0 ? "text-rose-700" : "text-slate-500"}`}>
                                 {revDelta > 0 ? `+${fmt(revDelta)}` : fmt(revDelta)}
                               </span>
                             </span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">Avg Payment</span>
-                            <span className="text-white">{fmt(cmpAvg)}</span>
+                            <span className="text-slate-900">{fmt(cmpAvg)}</span>
                           </div>
                           <div className="flex justify-between">
                             <span className="text-slate-500">Voided</span>
-                            <span className="text-red-400">{cmpVoided.length} · {fmt(cmpVoided.reduce((s, p) => s + p.amount, 0))}</span>
+                            <span className="text-rose-700">{cmpVoided.length} · {fmt(cmpVoided.reduce((s, p) => s + p.amount, 0))}</span>
                           </div>
                         </div>
                       );
@@ -4490,8 +4490,8 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
           {monthKeys.length > 0 && (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Monthly Collections</p>
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Monthly Collections</p>
+              <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4">
                 <div className="flex items-end gap-3 h-28">
                   {(() => {
                     const maxVal = Math.max(...monthKeys.map(k => monthlyRevenue[k]));
@@ -4512,35 +4512,35 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
           {Object.keys(byState).length > 0 && (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">By State</p>
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">By State</p>
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-800">
-                      <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">State</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Clients</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Filed</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:table-cell">Operating</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:table-cell">IOLTA</th>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">State</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Clients</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Filed</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Total</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden sm:table-cell">Operating</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden sm:table-cell">IOLTA</th>
                     </tr>
                   </thead>
                   <tbody>
                     {Object.entries(byState).sort((a, b) => b[1].count - a[1].count).map(([state, d]) => (
-                      <tr key={state} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
+                      <tr key={state} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-bold text-white">{state}</span>
+                            <span className="text-sm font-bold text-slate-900">{state}</span>
                             {(ACTIVE_STATES as readonly string[]).includes(state) && (
-                              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">Active</span>
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-500/20 px-1.5 py-0.5 rounded">Active</span>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-300 text-right">{d.count}</td>
-                        <td className="px-4 py-3 text-sm text-sky-400 text-right">{d.filed}</td>
-                        <td className="px-4 py-3 text-sm text-white font-semibold text-right">{fmt(d.revenue)}</td>
-                        <td className="px-4 py-3 text-sm text-emerald-400 font-semibold text-right hidden sm:table-cell">{fmt(d.operating)}</td>
-                        <td className="px-4 py-3 text-sm text-amber-400 font-semibold text-right hidden sm:table-cell">{fmt(d.iolta)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700 text-right">{d.count}</td>
+                        <td className="px-4 py-3 text-sm text-sky-700 text-right">{d.filed}</td>
+                        <td className="px-4 py-3 text-sm text-slate-900 font-semibold text-right">{fmt(d.revenue)}</td>
+                        <td className="px-4 py-3 text-sm text-emerald-700 font-semibold text-right hidden sm:table-cell">{fmt(d.operating)}</td>
+                        <td className="px-4 py-3 text-sm text-amber-700 font-semibold text-right hidden sm:table-cell">{fmt(d.iolta)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -4555,22 +4555,22 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {section === "collection" && (
         <div className="space-y-6">
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Summary</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Summary</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {sc("Avg. Collection Rate", `${avgCollectionRate.toFixed(0)}%`, "Across filtered clients",
-                avgCollectionRate >= 75 ? "text-emerald-400" : "text-amber-400")}
+                avgCollectionRate >= 75 ? "text-emerald-700" : "text-amber-700")}
               {sc("Fully Paid", String(collectionRates.filter(r => r.rate >= 1).length),
-                "At or above 100%", "text-emerald-400")}
+                "At or above 100%", "text-emerald-700")}
               {sc("Partial (>50%)", String(collectionRates.filter(r => r.rate >= 0.5 && r.rate < 1).length),
-                "50–99% collected", "text-amber-400")}
+                "50–99% collected", "text-amber-700")}
               {sc("Under 50%", String(collectionRates.filter(r => r.rate < 0.5).length),
-                "Below 50%", "text-red-400")}
+                "Below 50%", "text-rose-700")}
             </div>
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Per-Client Collection Rate</p>
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Per-Client Collection Rate</p>
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               {collectionRates.length === 0
                 ? <p className="text-xs text-slate-600 text-center py-8">No clients match filters.</p>
                 : (
@@ -4579,19 +4579,19 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                     <div key={client.id} className="px-4 py-3 flex items-center gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-semibold text-white truncate">{client.full_name}</span>
+                          <span className="text-xs font-semibold text-slate-900 truncate">{client.full_name}</span>
                           {chapterBadge(client.chapter)}
                           {client.state && <span className="text-[10px] text-slate-600">{client.state}</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-1">
-                          <div className="flex-1 bg-slate-800 rounded-full h-1">
+                          <div className="flex-1 bg-slate-100 rounded-full h-1">
                             <div className={`h-1 rounded-full transition-all ${rate >= 1 ? "bg-emerald-500" : rate >= 0.5 ? "bg-amber-500" : "bg-red-500"}`}
                               style={{ width: `${Math.min(100, rate * 100)}%` }} />
                           </div>
                           <span className="text-[10px] text-slate-500 flex-shrink-0 w-28 text-right">{fmt(paid)} / {fmt(total)}</span>
                         </div>
                       </div>
-                      <span className={`text-sm font-bold flex-shrink-0 w-12 text-right ${rate >= 1 ? "text-emerald-400" : rate >= 0.5 ? "text-amber-400" : "text-red-400"}`}>
+                      <span className={`text-sm font-bold flex-shrink-0 w-12 text-right ${rate >= 1 ? "text-emerald-700" : rate >= 0.5 ? "text-amber-700" : "text-rose-700"}`}>
                         {(rate * 100).toFixed(0)}%
                       </span>
                     </div>
@@ -4607,30 +4607,30 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {section === "filing" && (
         <div className="space-y-6">
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Retention to Filing</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Retention to Filing</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {sc("Retained", String(retainedClients.length), "Total clients", "text-white")}
-              {sc("Filed", String(filedClients.length), `${filedRate.toFixed(0)}% of retained`, "text-sky-400")}
-              {sc("Closed", String(closedClients.length), "Completed cases", "text-slate-400")}
-              {sc("On Hold", String(onHoldClients.length), "Paused cases", "text-amber-400")}
+              {sc("Retained", String(retainedClients.length), "Total clients", "text-slate-900")}
+              {sc("Filed", String(filedClients.length), `${filedRate.toFixed(0)}% of retained`, "text-sky-700")}
+              {sc("Closed", String(closedClients.length), "Completed cases", "text-slate-600")}
+              {sc("On Hold", String(onHoldClients.length), "Paused cases", "text-amber-700")}
             </div>
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Retain → File Funnel</p>
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-5 space-y-4">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Retain → File Funnel</p>
+            <div className="bg-white border border-slate-200 rounded-2xl px-5 py-5 space-y-4">
               {([
-                { label: "Retained (All Clients)", count: retainedClients.length, color: "bg-slate-600", pct: 100 },
+                { label: "Retained (All Clients)", count: retainedClients.length, color: "bg-slate-300", pct: 100 },
                 { label: "Active", count: filteredClients.filter(c => c.status === "active").length, color: "bg-amber-500", pct: retainedClients.length > 0 ? filteredClients.filter(c => c.status === "active").length / retainedClients.length * 100 : 0 },
                 { label: "Filed / Case Active", count: filedClients.length, color: "bg-sky-500", pct: filedRate },
                 { label: "Closed / Discharged", count: closedClients.length, color: "bg-emerald-500", pct: retainedClients.length > 0 ? closedClients.length / retainedClients.length * 100 : 0 },
               ] as const).map(({ label, count, color, pct }) => (
                 <div key={label}>
                   <div className="flex justify-between items-center mb-1.5">
-                    <span className="text-xs text-slate-300">{label}</span>
-                    <span className="text-xs font-bold text-white">{count} <span className="text-slate-500 font-normal">({pct.toFixed(0)}%)</span></span>
+                    <span className="text-xs text-slate-700">{label}</span>
+                    <span className="text-xs font-bold text-slate-900">{count} <span className="text-slate-500 font-normal">({pct.toFixed(0)}%)</span></span>
                   </div>
-                  <div className="w-full bg-slate-800 rounded-full h-2">
+                  <div className="w-full bg-slate-100 rounded-full h-2">
                     <div className={`h-2 rounded-full ${color} transition-all`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
@@ -4639,16 +4639,16 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Avg. Payment by Status</p>
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Avg. Payment by Status</p>
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Status</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Clients</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Total Paid</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Avg. Paid</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Avg. Rate</th>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Status</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Clients</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Total Paid</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Avg. Paid</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Avg. Rate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4664,16 +4664,16 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                       return fs?.total_fee ? paid / fs.total_fee : 0;
                     }).reduce((s, v) => s + v, 0) / sts.length * 100;
                     const labels = { active: "Active", filed: "Filed", closed: "Closed", on_hold: "On Hold" };
-                    const colors = { active: "text-emerald-400", filed: "text-sky-400", closed: "text-slate-400", on_hold: "text-amber-400" };
+                    const colors = { active: "text-emerald-700", filed: "text-sky-700", closed: "text-slate-600", on_hold: "text-amber-700" };
                     return (
-                      <tr key={st} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
+                      <tr key={st} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
                         <td className="px-4 py-3">
                           <span className={`text-xs font-semibold ${colors[st]}`}>{labels[st]}</span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-slate-300 text-right">{sts.length}</td>
-                        <td className="px-4 py-3 text-sm text-white font-semibold text-right">{fmt(total)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-300 text-right">{fmt(avg)}</td>
-                        <td className={`px-4 py-3 text-sm font-semibold text-right ${avgRate >= 75 ? "text-emerald-400" : avgRate >= 40 ? "text-amber-400" : "text-red-400"}`}>
+                        <td className="px-4 py-3 text-sm text-slate-700 text-right">{sts.length}</td>
+                        <td className="px-4 py-3 text-sm text-slate-900 font-semibold text-right">{fmt(total)}</td>
+                        <td className="px-4 py-3 text-sm text-slate-700 text-right">{fmt(avg)}</td>
+                        <td className={`px-4 py-3 text-sm font-semibold text-right ${avgRate >= 75 ? "text-emerald-700" : avgRate >= 40 ? "text-amber-700" : "text-rose-700"}`}>
                           {avgRate.toFixed(0)}%
                         </td>
                       </tr>
@@ -4690,49 +4690,49 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {section === "nonpaying" && (
         <div className="space-y-6">
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Retained with No Payments</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Retained with No Payments</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {sc("Non-Paying Clients", String(nonPayingClients.length),
-                `${filteredClients.length > 0 ? (nonPayingClients.length / filteredClients.length * 100).toFixed(0) : 0}% of filtered`, "text-red-400")}
+                `${filteredClients.length > 0 ? (nonPayingClients.length / filteredClients.length * 100).toFixed(0) : 0}% of filtered`, "text-rose-700")}
               {sc("Outstanding Owed", fmt(nonPayingClients.reduce((s, c) => {
                 const fs = feeStructures.find(f => f.client_id === c.id);
                 return s + (fs?.total_fee ?? 0);
               }, 0)), "Total fees not yet paid", "text-orange-400")}
               {sc("Paying Clients", String(filteredClients.length - nonPayingClients.length),
-                "Have made at least 1 payment", "text-emerald-400")}
+                "Have made at least 1 payment", "text-emerald-700")}
             </div>
           </div>
 
           {nonPayingClients.length === 0 ? (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-10 text-center">
-              <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
-              <p className="text-sm font-semibold text-white">All clients have made at least one payment</p>
+            <div className="bg-white border border-slate-200 rounded-2xl px-5 py-10 text-center">
+              <CheckCircle2 className="w-8 h-8 text-emerald-700 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-900">All clients have made at least one payment</p>
               <p className="text-xs text-slate-500 mt-1">No non-paying clients found for the current filters.</p>
             </div>
           ) : (
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Client List</p>
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Client List</p>
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-slate-800">
-                      <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Client</th>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:table-cell">State</th>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:table-cell">Status</th>
-                      <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Fee Owed</th>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden md:table-cell">Intake</th>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Client</th>
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden sm:table-cell">State</th>
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden sm:table-cell">Status</th>
+                      <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Fee Owed</th>
+                      <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden md:table-cell">Intake</th>
                     </tr>
                   </thead>
                   <tbody>
                     {nonPayingClients.sort((a, b) => (a.intake_date ?? "").localeCompare(b.intake_date ?? "")).map(c => {
                       const fs = feeStructures.find(f => f.client_id === c.id);
                       return (
-                        <tr key={c.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
+                        <tr key={c.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <div className="w-1.5 h-1.5 rounded-full bg-red-400 flex-shrink-0" />
                               <div>
-                                <p className="text-sm font-semibold text-white">{c.full_name}</p>
+                                <p className="text-sm font-semibold text-slate-900">{c.full_name}</p>
                                 <div className="flex items-center gap-1.5 mt-0.5">
                                   {chapterBadge(c.chapter)}
                                   <span className="text-[10px] text-slate-600">{CASE_TYPE_LABELS[c.case_type]}</span>
@@ -4740,9 +4740,9 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-3 text-sm text-slate-400 hidden sm:table-cell">{c.state ?? "—"}</td>
+                          <td className="px-4 py-3 text-sm text-slate-600 hidden sm:table-cell">{c.state ?? "—"}</td>
                           <td className="px-4 py-3 hidden sm:table-cell">{statusBadge(c.status)}</td>
-                          <td className="px-4 py-3 text-sm font-bold text-red-400 text-right">{fmt(fs?.total_fee ?? 0)}</td>
+                          <td className="px-4 py-3 text-sm font-bold text-rose-700 text-right">{fmt(fs?.total_fee ?? 0)}</td>
                           <td className="px-4 py-3 text-xs text-slate-500 hidden md:table-cell">{fmtDate(c.intake_date)}</td>
                         </tr>
                       );
@@ -4759,16 +4759,16 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
       {section === "cancellations" && (
         <div className="space-y-6">
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Retention Performance</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Retention Performance</p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
-                { label: "Total Requests", value: String(cancelRequests.length), color: "text-white", sub: "All time" },
-                { label: "Clients Saved", value: String(savedCancels.length), color: "text-emerald-400", sub: "Retention wins" },
-                { label: "Confirmed Cancels", value: String(confirmedCancels.length), color: "text-red-400", sub: "Lost clients" },
-                { label: "Save Rate", value: `${cancelSaveRate}%`, color: cancelSaveRate >= 60 ? "text-emerald-400" : "text-amber-400", sub: "Saves vs cancels" },
+                { label: "Total Requests", value: String(cancelRequests.length), color: "text-slate-900", sub: "All time" },
+                { label: "Clients Saved", value: String(savedCancels.length), color: "text-emerald-700", sub: "Retention wins" },
+                { label: "Confirmed Cancels", value: String(confirmedCancels.length), color: "text-rose-700", sub: "Lost clients" },
+                { label: "Save Rate", value: `${cancelSaveRate}%`, color: cancelSaveRate >= 60 ? "text-emerald-700" : "text-amber-700", sub: "Saves vs cancels" },
               ].map(s => (
-                <div key={s.label} className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3.5">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+                <div key={s.label} className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{s.label}</p>
                   <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
                   <p className="text-[10px] text-slate-600 mt-0.5">{s.sub}</p>
                 </div>
@@ -4777,16 +4777,16 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Cancellations by Reason</p>
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Cancellations by Reason</p>
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Reason</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Requests</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Saved</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Cancelled</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Save Rate</th>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Reason</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Requests</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Saved</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Cancelled</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Save Rate</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4801,12 +4801,12 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                       circumstances_changed: "Changed Circumstances", other: "Other",
                     };
                     return (
-                      <tr key={cat} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20">
-                        <td className="px-4 py-3 text-sm text-white">{labels[cat]}</td>
-                        <td className="px-4 py-3 text-sm text-slate-400 text-right">{rows.length}</td>
-                        <td className="px-4 py-3 text-sm text-emerald-400 font-semibold text-right">{sv}</td>
-                        <td className="px-4 py-3 text-sm text-red-400 font-semibold text-right">{cn}</td>
-                        <td className={`px-4 py-3 text-sm font-bold text-right ${rate >= 60 ? "text-emerald-400" : rate >= 30 ? "text-amber-400" : "text-red-400"}`}>{rate}%</td>
+                      <tr key={cat} className="border-b border-slate-200 last:border-0 hover:bg-slate-50">
+                        <td className="px-4 py-3 text-sm text-slate-900">{labels[cat]}</td>
+                        <td className="px-4 py-3 text-sm text-slate-600 text-right">{rows.length}</td>
+                        <td className="px-4 py-3 text-sm text-emerald-700 font-semibold text-right">{sv}</td>
+                        <td className="px-4 py-3 text-sm text-rose-700 font-semibold text-right">{cn}</td>
+                        <td className={`px-4 py-3 text-sm font-bold text-right ${rate >= 60 ? "text-emerald-700" : rate >= 30 ? "text-amber-700" : "text-rose-700"}`}>{rate}%</td>
                       </tr>
                     );
                   })}
@@ -4816,15 +4816,15 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
           </div>
 
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">AI Retention Outcomes</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">AI Retention Outcomes</p>
             <div className="grid grid-cols-3 gap-3">
               {(["saved","escalated","irreversible"] as const).map(outcome => {
                 const count = cancelRequests.filter(r => r.ai_retention_outcome === outcome).length;
-                const colors = { saved: "text-emerald-400", escalated: "text-sky-400", irreversible: "text-red-400" };
+                const colors = { saved: "text-emerald-700", escalated: "text-sky-700", irreversible: "text-rose-700" };
                 const labels = { saved: "AI Saved", escalated: "Escalated to Staff", irreversible: "Irreversible" };
                 return (
-                  <div key={outcome} className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3.5">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{labels[outcome]}</p>
+                  <div key={outcome} className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
+                    <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{labels[outcome]}</p>
                     <p className={`text-2xl font-bold ${colors[outcome]}`}>{count}</p>
                   </div>
                 );
@@ -4901,20 +4901,20 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
         return (
           <div className="space-y-6">
             {/* Date + filter controls */}
-            <div className="flex flex-wrap items-center gap-3 bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
+            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-2xl px-5 py-4">
               <div className="flex items-center gap-2">
-                <Calendar className="w-4 h-4 text-amber-400" />
-                <span className="text-xs font-bold text-amber-300 uppercase tracking-widest">Daily Report</span>
+                <Calendar className="w-4 h-4 text-amber-700" />
+                <span className="text-xs font-bold text-amber-700 uppercase tracking-widest">Daily Report</span>
               </div>
               <input type="date" value={dailyDate} onChange={e => setDailyDate(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-amber-400" />
+                className="bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-amber-400" />
               <select value={dailyState} onChange={e => setDailyState(e.target.value)}
-                className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+                className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
                 <option value="all">All States</option>
                 {allStates.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
               <select value={dailyDest} onChange={e => setDailyDest(e.target.value as typeof dailyDest)}
-                className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
+                className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-lg px-2 py-1.5 focus:outline-none">
                 <option value="all">All Accounts</option>
                 <option value="operating">Operating Only</option>
                 <option value="iolta">IOLTA Only</option>
@@ -4924,43 +4924,43 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
             {/* Summary KPIs */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">
                 {new Date(dailyDate + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Total Collected</p>
-                  <p className="text-2xl font-bold text-white">{fmt(dayTotal)}</p>
+                <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">Total Collected</p>
+                  <p className="text-2xl font-bold text-slate-900">{fmt(dayTotal)}</p>
                   <div className="flex items-center gap-1 mt-1">
-                    <span className={`text-[10px] font-semibold ${dayDelta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <span className={`text-[10px] font-semibold ${dayDelta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                       {dayDelta >= 0 ? "+" : ""}{dayPct.toFixed(1)}% vs 30d prior
                     </span>
                   </div>
                 </div>
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Operating</p>
-                  <p className="text-2xl font-bold text-emerald-400">{fmt(dayOpTotal)}</p>
+                <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">Operating</p>
+                  <p className="text-2xl font-bold text-emerald-700">{fmt(dayOpTotal)}</p>
                   <p className="text-[11px] text-slate-500 mt-1">{dayOperating.length} payment{dayOperating.length !== 1 ? "s" : ""}</p>
                 </div>
-                <div className="bg-[#0d1221] border border-amber-400/20 rounded-2xl px-5 py-4">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">IOLTA / Trust</p>
-                  <p className="text-2xl font-bold text-amber-400">{fmt(dayIoltaTotal)}</p>
+                <div className="bg-white border border-amber-400/20 rounded-2xl px-5 py-4">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">IOLTA / Trust</p>
+                  <p className="text-2xl font-bold text-amber-700">{fmt(dayIoltaTotal)}</p>
                   <p className="text-[11px] text-slate-500 mt-1">{dayIolta.length} payment{dayIolta.length !== 1 ? "s" : ""}</p>
                 </div>
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Clients Paid</p>
-                  <p className="text-2xl font-bold text-sky-400">{Object.keys(dayByClient).length}</p>
+                <div className="bg-white border border-slate-200 rounded-2xl px-5 py-4">
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">Clients Paid</p>
+                  <p className="text-2xl font-bold text-sky-700">{Object.keys(dayByClient).length}</p>
                   <p className="text-[11px] text-slate-500 mt-1">{dayPayments.length} transactions</p>
                 </div>
               </div>
             </div>
 
             {/* 30-day prior comparison strip */}
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl px-5 py-3 flex items-center gap-6 flex-wrap text-xs">
+            <div className="bg-white/80 border border-slate-200 rounded-xl px-5 py-3 flex items-center gap-6 flex-wrap text-xs">
               <span className="text-slate-500 font-semibold">30-Day Prior ({prior30}):</span>
-              <span className="text-slate-300">{prior30Payments.length} payments · <span className="font-bold text-white">{fmt(prior30Total)}</span></span>
+              <span className="text-slate-700">{prior30Payments.length} payments · <span className="font-bold text-slate-900">{fmt(prior30Total)}</span></span>
               {prior30Total > 0 && (
-                <span className={`font-bold px-2 py-0.5 rounded-full border text-[11px] ${dayDelta >= 0 ? "text-emerald-400 bg-emerald-500/10 border-emerald-500/20" : "text-red-400 bg-red-500/10 border-red-500/20"}`}>
+                <span className={`font-bold px-2 py-0.5 rounded-full border text-[11px] ${dayDelta >= 0 ? "text-emerald-700 bg-emerald-50 border-emerald-500/20" : "text-rose-700 bg-rose-50 border-red-500/20"}`}>
                   {dayDelta >= 0 ? "+" : ""}{fmt(Math.abs(dayDelta))} ({dayDelta >= 0 ? "+" : ""}{dayPct.toFixed(1)}%)
                 </span>
               )}
@@ -4968,8 +4968,8 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
             {/* Individual payment list */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Individual Payments — {dailyDate}</p>
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Individual Payments — {dailyDate}</p>
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 {dayPayments.length === 0 ? (
                   <div className="px-5 py-10 text-center">
                     <DollarSign className="w-8 h-8 text-slate-700 mx-auto mb-2" />
@@ -4977,48 +4977,48 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                   </div>
                 ) : (
                   <table className="w-full text-xs">
-                    <thead className="border-b border-slate-800">
+                    <thead className="border-b border-slate-200">
                       <tr>
-                        <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Client</th>
-                        <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px] hidden sm:table-cell">State</th>
-                        <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Method</th>
-                        <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Type</th>
-                        <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Account</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Amount</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Client</th>
+                        <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs hidden sm:table-cell">State</th>
+                        <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Method</th>
+                        <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Type</th>
+                        <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Account</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Amount</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
                       {dayPayments.map(p => {
                         const cl = clients.find(c => c.id === p.client_id);
                         return (
-                          <tr key={p.id} className="hover:bg-slate-800/20 transition-colors">
+                          <tr key={p.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-4 py-2.5">
-                              <p className="font-semibold text-white">{cl?.full_name ?? "Unknown"}</p>
+                              <p className="font-semibold text-slate-900">{cl?.full_name ?? "Unknown"}</p>
                               <p className="text-[10px] text-slate-600">{p.id.slice(0, 8)}</p>
                             </td>
-                            <td className="px-3 py-2.5 text-slate-400 hidden sm:table-cell">{p.account_state ?? cl?.state ?? "—"}</td>
-                            <td className="px-3 py-2.5 capitalize text-slate-300">{(p.payment_method ?? "—").replace(/_/g, " ")}</td>
-                            <td className="px-3 py-2.5 capitalize text-slate-400">{(p.payment_type ?? "—").replace(/_/g, " ")}</td>
+                            <td className="px-3 py-2.5 text-slate-600 hidden sm:table-cell">{p.account_state ?? cl?.state ?? "—"}</td>
+                            <td className="px-3 py-2.5 capitalize text-slate-700">{(p.payment_method ?? "—").replace(/_/g, " ")}</td>
+                            <td className="px-3 py-2.5 capitalize text-slate-600">{(p.payment_type ?? "—").replace(/_/g, " ")}</td>
                             <td className="px-3 py-2.5">
                               {p.destination_account === "iolta"
-                                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-400 bg-amber-500/10 border-amber-500/20">IOLTA</span>
-                                : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Operating</span>}
+                                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-700 bg-amber-50 border-amber-500/20">IOLTA</span>
+                                : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-700 bg-emerald-50 border-emerald-500/20">Operating</span>}
                             </td>
-                            <td className="px-4 py-2.5 text-right font-bold text-white">{fmt(p.amount)}</td>
+                            <td className="px-4 py-2.5 text-right font-bold text-slate-900">{fmt(p.amount)}</td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    <tfoot className="border-t border-slate-700">
+                    <tfoot className="border-t border-slate-200">
                       <tr>
-                        <td colSpan={4} className="px-4 py-2.5 text-xs font-bold text-slate-400">Totals</td>
+                        <td colSpan={4} className="px-4 py-2.5 text-xs font-bold text-slate-600">Totals</td>
                         <td className="px-3 py-2.5">
                           <div className="space-y-0.5">
-                            <p className="text-[10px] text-emerald-400 font-semibold">Op: {fmt(dayOpTotal)}</p>
-                            <p className="text-[10px] text-amber-400 font-semibold">IOLTA: {fmt(dayIoltaTotal)}</p>
+                            <p className="text-[10px] text-emerald-700 font-semibold">Op: {fmt(dayOpTotal)}</p>
+                            <p className="text-[10px] text-amber-700 font-semibold">IOLTA: {fmt(dayIoltaTotal)}</p>
                           </div>
                         </td>
-                        <td className="px-4 py-2.5 text-right text-sm font-bold text-white">{fmt(dayTotal)}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-slate-900">{fmt(dayTotal)}</td>
                       </tr>
                     </tfoot>
                   </table>
@@ -5029,16 +5029,16 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
             {/* Monthly breakdown — Operating vs IOLTA */}
             {mKeys.length > 0 && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Monthly Collections — Operating vs IOLTA</p>
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+                <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Monthly Collections — Operating vs IOLTA</p>
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="border-b border-slate-800">
+                    <thead className="border-b border-slate-200">
                       <tr>
-                        <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Month</th>
-                        <th className="text-right px-3 py-2.5 font-semibold text-emerald-500 uppercase tracking-wide text-[10px]">Operating</th>
-                        <th className="text-right px-3 py-2.5 font-semibold text-amber-500 uppercase tracking-wide text-[10px]">IOLTA</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Total</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">vs Avg</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Month</th>
+                        <th className="text-right px-3 py-2.5 font-semibold text-emerald-700 uppercase tracking-wide text-xs">Operating</th>
+                        <th className="text-right px-3 py-2.5 font-semibold text-amber-700 uppercase tracking-wide text-xs">IOLTA</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Total</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">vs Avg</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
@@ -5046,25 +5046,25 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                         const m = monthlyMap[k];
                         const delta = m.total - avgMonthly;
                         return (
-                          <tr key={k} className="hover:bg-slate-800/20">
-                            <td className="px-4 py-2.5 text-white font-semibold">
+                          <tr key={k} className="hover:bg-slate-50">
+                            <td className="px-4 py-2.5 text-slate-900 font-semibold">
                               {new Date(k + "-01").toLocaleDateString("en-US", { month: "short", year: "numeric" })}
                             </td>
-                            <td className="px-3 py-2.5 text-right text-emerald-400 font-semibold">{fmt(m.operating)}</td>
-                            <td className="px-3 py-2.5 text-right text-amber-400 font-semibold">{fmt(m.iolta)}</td>
-                            <td className="px-4 py-2.5 text-right text-white font-bold">{fmt(m.total)}</td>
-                            <td className={`px-4 py-2.5 text-right text-[11px] font-semibold ${delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            <td className="px-3 py-2.5 text-right text-emerald-700 font-semibold">{fmt(m.operating)}</td>
+                            <td className="px-3 py-2.5 text-right text-amber-700 font-semibold">{fmt(m.iolta)}</td>
+                            <td className="px-4 py-2.5 text-right text-slate-900 font-bold">{fmt(m.total)}</td>
+                            <td className={`px-4 py-2.5 text-right text-[11px] font-semibold ${delta >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
                               {delta >= 0 ? "+" : ""}{fmt(delta)}
                             </td>
                           </tr>
                         );
                       })}
                     </tbody>
-                    <tfoot className="border-t border-slate-700 bg-slate-800/30">
+                    <tfoot className="border-t border-slate-200 bg-slate-100/30">
                       <tr>
-                        <td className="px-4 py-2.5 text-[10px] font-bold text-slate-400 uppercase">Avg / Month</td>
+                        <td className="px-4 py-2.5 text-sm font-bold text-slate-600 uppercase">Avg / Month</td>
                         <td colSpan={2} className="px-3 py-2.5" />
-                        <td className="px-4 py-2.5 text-right text-sm font-bold text-amber-400">{fmt(avgMonthly)}</td>
+                        <td className="px-4 py-2.5 text-right text-sm font-bold text-amber-700">{fmt(avgMonthly)}</td>
                         <td />
                       </tr>
                     </tfoot>
@@ -5076,33 +5076,33 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
             {/* YTD by state — split Operating / IOLTA */}
             {Object.keys(ytdByState).length > 0 && (
               <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Year-to-Date by State ({currentYear}) — Operating vs IOLTA</p>
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+                <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Year-to-Date by State ({currentYear}) — Operating vs IOLTA</p>
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                   <table className="w-full text-xs">
-                    <thead className="border-b border-slate-800">
+                    <thead className="border-b border-slate-200">
                       <tr>
-                        <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">State</th>
-                        <th className="text-right px-3 py-2.5 font-semibold text-emerald-500 uppercase tracking-wide text-[10px]">Operating</th>
-                        <th className="text-right px-3 py-2.5 font-semibold text-amber-500 uppercase tracking-wide text-[10px]">IOLTA</th>
-                        <th className="text-right px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Total</th>
+                        <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">State</th>
+                        <th className="text-right px-3 py-2.5 font-semibold text-emerald-700 uppercase tracking-wide text-xs">Operating</th>
+                        <th className="text-right px-3 py-2.5 font-semibold text-amber-700 uppercase tracking-wide text-xs">IOLTA</th>
+                        <th className="text-right px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
                       {Object.entries(ytdByState)
                         .sort((a, b) => (b[1].operating + b[1].iolta) - (a[1].operating + a[1].iolta))
                         .map(([state, v]) => (
-                          <tr key={state} className="hover:bg-slate-800/20">
+                          <tr key={state} className="hover:bg-slate-50">
                             <td className="px-4 py-2.5">
                               <div className="flex items-center gap-2">
-                                <span className="text-white font-semibold">{state}</span>
+                                <span className="text-slate-900 font-semibold">{state}</span>
                                 {(ACTIVE_STATES as readonly string[]).includes(state) && (
-                                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded">Active</span>
+                                  <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-500/20 px-1.5 py-0.5 rounded">Active</span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 text-right text-emerald-400 font-semibold">{fmt(v.operating)}</td>
-                            <td className="px-3 py-2.5 text-right text-amber-400 font-semibold">{fmt(v.iolta)}</td>
-                            <td className="px-4 py-2.5 text-right text-white font-bold">{fmt(v.operating + v.iolta)}</td>
+                            <td className="px-3 py-2.5 text-right text-emerald-700 font-semibold">{fmt(v.operating)}</td>
+                            <td className="px-3 py-2.5 text-right text-amber-700 font-semibold">{fmt(v.iolta)}</td>
+                            <td className="px-4 py-2.5 text-right text-slate-900 font-bold">{fmt(v.operating + v.iolta)}</td>
                           </tr>
                         ))}
                     </tbody>
@@ -5121,13 +5121,13 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
             <div className="flex gap-1">
               {(["all","pending_deposit","deposited","reconciled"] as const).map(f => (
                 <button key={f} onClick={() => setCheckFilter(f)}
-                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all capitalize ${checkFilter === f ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-300"}`}>
+                  className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all capitalize ${checkFilter === f ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-700"}`}>
                   {f === "all" ? "All" : f.replace(/_/g, " ")}
                 </button>
               ))}
             </div>
             <button onClick={() => setShowCheckForm(true)}
-              className="ml-auto flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-bold text-xs px-4 py-2 rounded-xl transition-all">
+              className="ml-auto flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-bold text-xs px-4 py-2 rounded-xl transition-all">
               <Plus className="w-3.5 h-3.5" /> Log Check Deposit
             </button>
           </div>
@@ -5142,19 +5142,19 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
               <>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: "Total Checks", value: String(checkDeposits.length), color: "text-white" },
-                    { label: "Pending Deposit", value: String(pending), color: pending > 0 ? "text-amber-400" : "text-slate-400" },
-                    { label: "Operating Total", value: fmt(opTotal), color: "text-emerald-400" },
-                    { label: "IOLTA Total",     value: fmt(ioTotal),  color: "text-amber-400" },
+                    { label: "Total Checks", value: String(checkDeposits.length), color: "text-slate-900" },
+                    { label: "Pending Deposit", value: String(pending), color: pending > 0 ? "text-amber-700" : "text-slate-600" },
+                    { label: "Operating Total", value: fmt(opTotal), color: "text-emerald-700" },
+                    { label: "IOLTA Total",     value: fmt(ioTotal),  color: "text-amber-700" },
                   ].map(s => (
-                    <div key={s.label} className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3.5">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+                    <div key={s.label} className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{s.label}</p>
                       <p className={`text-xl font-bold ${s.color}`}>{s.value}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+                <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                   {visible.length === 0 ? (
                     <div className="px-5 py-12 text-center">
                       <Receipt className="w-8 h-8 text-slate-700 mx-auto mb-2" />
@@ -5168,11 +5168,11 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
                           <div className="flex-shrink-0">
                             {dep.check_image_url ? (
                               <button onClick={() => setCheckViewImg(dep.check_image_url)}
-                                className="w-16 h-12 rounded-lg overflow-hidden border border-slate-700 hover:border-amber-400/50 transition-colors">
+                                className="w-16 h-12 rounded-lg overflow-hidden border border-slate-200 hover:border-amber-400/50 transition-colors">
                                 <img src={dep.check_image_url} alt="Check" className="w-full h-full object-cover" />
                               </button>
                             ) : (
-                              <div className="w-16 h-12 rounded-lg border border-dashed border-slate-700 flex items-center justify-center">
+                              <div className="w-16 h-12 rounded-lg border border-dashed border-slate-200 flex items-center justify-center">
                                 <FileText className="w-5 h-5 text-slate-600" />
                               </div>
                             )}
@@ -5180,30 +5180,30 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
 
                           <div className="flex-1 min-w-0">
                             <div className="flex flex-wrap items-center gap-2 mb-1">
-                              <span className="text-sm font-bold text-white">{dep.trustee_name}</span>
-                              {dep.trustee_state && <span className="text-[10px] font-bold text-slate-400 bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded">{dep.trustee_state}</span>}
+                              <span className="text-sm font-bold text-slate-900">{dep.trustee_name}</span>
+                              {dep.trustee_state && <span className="text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">{dep.trustee_state}</span>}
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                dep.status === "reconciled"     ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" :
-                                dep.status === "deposited"      ? "bg-sky-500/10 border-sky-500/25 text-sky-400" :
-                                dep.status === "pending_deposit"? "bg-amber-400/10 border-amber-400/25 text-amber-300" :
-                                "bg-red-500/10 border-red-500/25 text-red-400"
+                                dep.status === "reconciled"     ? "bg-emerald-50 border-emerald-500/25 text-emerald-700" :
+                                dep.status === "deposited"      ? "bg-sky-50 border-sky-500/25 text-sky-700" :
+                                dep.status === "pending_deposit"? "bg-amber-50 border-amber-400/25 text-amber-700" :
+                                "bg-rose-50 border-red-500/25 text-rose-700"
                               }`}>{dep.status.replace(/_/g, " ")}</span>
                               {dep.destination_account === "iolta"
-                                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-400 bg-amber-500/10 border-amber-500/20">IOLTA</span>
-                                : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-400 bg-emerald-500/10 border-emerald-500/20">Operating</span>}
+                                ? <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-amber-700 bg-amber-50 border-amber-500/20">IOLTA</span>
+                                : <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-emerald-700 bg-emerald-50 border-emerald-500/20">Operating</span>}
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] text-slate-500">
-                              {dep.client_name && <span>Client: <span className="text-slate-300">{dep.client_name}</span></span>}
-                              {dep.check_number && <span>Check #<span className="text-slate-300">{dep.check_number}</span></span>}
-                              {dep.check_date && <span>Dated: <span className="text-slate-300">{fmtDate(dep.check_date)}</span></span>}
-                              {dep.deposit_date && <span>Deposited: <span className="text-slate-300">{fmtDate(dep.deposit_date)}</span></span>}
-                              {dep.deposited_by && <span>By: <span className="text-slate-300">{dep.deposited_by}</span></span>}
+                              {dep.client_name && <span>Client: <span className="text-slate-700">{dep.client_name}</span></span>}
+                              {dep.check_number && <span>Check #<span className="text-slate-700">{dep.check_number}</span></span>}
+                              {dep.check_date && <span>Dated: <span className="text-slate-700">{fmtDate(dep.check_date)}</span></span>}
+                              {dep.deposit_date && <span>Deposited: <span className="text-slate-700">{fmtDate(dep.deposit_date)}</span></span>}
+                              {dep.deposited_by && <span>By: <span className="text-slate-700">{dep.deposited_by}</span></span>}
                             </div>
                             {dep.notes && <p className="text-[10px] text-slate-600 mt-1 truncate">{dep.notes}</p>}
                           </div>
 
                           <div className="flex-shrink-0 text-right">
-                            <p className="text-sm font-bold text-white">{fmt(dep.amount)}</p>
+                            <p className="text-sm font-bold text-slate-900">{fmt(dep.amount)}</p>
                             <p className="text-[10px] text-slate-500 capitalize mt-0.5">{dep.payment_type.replace(/_/g, " ")}</p>
                           </div>
                         </div>
@@ -5229,7 +5229,7 @@ function ReportsView({ clients, payments, feeStructures, cancelRequests, adminUs
           {checkViewImg && (
             <div className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-6" onClick={() => setCheckViewImg(null)}>
               <div className="relative max-w-2xl w-full">
-                <button onClick={() => setCheckViewImg(null)} className="absolute -top-10 right-0 text-white text-sm flex items-center gap-1.5">
+                <button onClick={() => setCheckViewImg(null)} className="absolute -top-10 right-0 text-slate-900 text-sm flex items-center gap-1.5">
                   <X className="w-4 h-4" /> Close
                 </button>
                 <img src={checkViewImg} alt="Check" className="w-full rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} />
@@ -5281,10 +5281,10 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
   const transferred     = filedRegistry.filter(r => r.transfer_status === "transferred").length;
 
   const statusConfig: Record<FiledCaseRegistry["transfer_status"], { label: string; color: string; bg: string }> = {
-    not_ready:       { label: "Not Ready",      color: "text-slate-500", bg: "bg-slate-700/30 border-slate-700" },
-    pending_signoff: { label: "Pending Signoff", color: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/25" },
-    signed_off:      { label: "Signed Off",      color: "text-sky-400",   bg: "bg-sky-500/10 border-sky-500/25" },
-    transferred:     { label: "Transferred",     color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/25" },
+    not_ready:       { label: "Not Ready",      color: "text-slate-500", bg: "bg-slate-200/30 border-slate-200" },
+    pending_signoff: { label: "Pending Signoff", color: "text-amber-700", bg: "bg-amber-50 border-amber-500/25" },
+    signed_off:      { label: "Signed Off",      color: "text-sky-700",   bg: "bg-sky-50 border-sky-500/25" },
+    transferred:     { label: "Transferred",     color: "text-emerald-700", bg: "bg-emerald-50 border-emerald-500/25" },
   };
 
   return (
@@ -5293,39 +5293,39 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
       {/* Stats bar */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Total Filed", value: filedRegistry.length, color: "text-white" },
-          { label: "Pending Signoff", value: pendingSignoff, color: "text-amber-400" },
-          { label: "Signed Off", value: signedOff, color: "text-sky-400" },
-          { label: "Transferred", value: transferred, color: "text-emerald-400" },
+          { label: "Total Filed", value: filedRegistry.length, color: "text-slate-900" },
+          { label: "Pending Signoff", value: pendingSignoff, color: "text-amber-700" },
+          { label: "Signed Off", value: signedOff, color: "text-sky-700" },
+          { label: "Transferred", value: transferred, color: "text-emerald-700" },
         ].map(s => (
-          <div key={s.label} className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3.5">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+          <div key={s.label} className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{s.label}</p>
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
       </div>
 
       {/* Filter + action bar */}
-      <div className="flex flex-wrap gap-2 items-center bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3">
+      <div className="flex flex-wrap gap-2 items-center bg-white border border-slate-200 rounded-2xl px-4 py-3">
         <div className="relative flex-1 min-w-40">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600" />
           <input value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name or case #…"
-            className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-3 py-2 placeholder-slate-600 focus:outline-none focus:border-slate-500" />
+            className="w-full bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl pl-9 pr-3 py-2 placeholder-slate-600 focus:outline-none focus:border-slate-300" />
         </div>
         <select value={filterState} onChange={e => setFilterState(e.target.value)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
           <option value="all">All States</option>
           {allStates.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
         <select value={filterChapter} onChange={e => setFilterChapter(e.target.value as typeof filterChapter)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
           <option value="all">All Chapters</option>
           <option value="7">Chapter 7</option>
           <option value="13">Chapter 13</option>
         </select>
         <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
-          className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
+          className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
           <option value="all">All Statuses</option>
           <option value="not_ready">Not Ready</option>
           <option value="pending_signoff">Pending Signoff</option>
@@ -5339,7 +5339,7 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
       </div>
 
       {/* Case list */}
-      <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         {filtered.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <FileText className="w-8 h-8 text-slate-700 mx-auto mb-3" />
@@ -5358,21 +5358,21 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
               const lastSignoff = history.length > 0 ? history.sort((a, b) => new Date(b.signed_at).getTime() - new Date(a.signed_at).getTime())[0] : null;
 
               return (
-                <div key={r.id} className="px-4 py-4 hover:bg-slate-800/20 transition-colors">
+                <div key={r.id} className="px-4 py-4 hover:bg-slate-50 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2.5 flex-wrap">
-                        <span className="text-sm font-bold text-white">{client?.full_name ?? "Unknown Client"}</span>
+                        <span className="text-sm font-bold text-slate-900">{client?.full_name ?? "Unknown Client"}</span>
                         {client && chapterBadge(client.chapter)}
                         {client?.state && <span className="text-[10px] text-slate-600 font-medium">{client.state}</span>}
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${sc.bg} ${sc.color}`}>{sc.label}</span>
                         {client?.case_type === "bifurcated" && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-sky-500/10 border-sky-500/25 text-sky-400" title="Bifurcated: filing fee included in attorney fee → Operating only">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-sky-50 border-sky-500/25 text-sky-700" title="Bifurcated: filing fee included in attorney fee → Operating only">
                             BIFURCATED · Filing Fee → Operating
                           </span>
                         )}
                         {client && client.case_type !== "bifurcated" && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-500/10 border-amber-500/25 text-amber-400" title="Regular/Ch.13: filing fee transferred from IOLTA to filing fee transfer account">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 border-amber-500/25 text-amber-700" title="Regular/Ch.13: filing fee transferred from IOLTA to filing fee transfer account">
                             Filing Fee → IOLTA Transfer
                           </span>
                         )}
@@ -5382,13 +5382,13 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
                         {/* Case number */}
                         <div className="flex items-center gap-1.5">
                           <span className="text-[10px] text-slate-600">Case #</span>
-                          <span className={`text-xs font-mono font-semibold ${r.case_number ? "text-white" : "text-red-400"}`}>
+                          <span className={`text-xs font-mono font-semibold ${r.case_number ? "text-slate-900" : "text-rose-700"}`}>
                             {r.case_number || "Not entered"}
                           </span>
                           {r.case_number_verified
-                            ? <span title="Verified"><CheckCircle2 className="w-3 h-3 text-emerald-400" /></span>
+                            ? <span title="Verified"><CheckCircle2 className="w-3 h-3 text-emerald-700" /></span>
                             : r.case_number
-                              ? <span title="Unverified"><AlertTriangle className="w-3 h-3 text-amber-400" /></span>
+                              ? <span title="Unverified"><AlertTriangle className="w-3 h-3 text-amber-700" /></span>
                               : null}
                         </div>
                         <span className="text-slate-700">·</span>
@@ -5406,15 +5406,15 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
                       {/* IOLTA / payment summary */}
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
                         <span className="text-[10px] text-slate-600">
-                          Paid: <span className="text-slate-300">{fmt(paid)}</span>
+                          Paid: <span className="text-slate-700">{fmt(paid)}</span>
                         </span>
                         {ioltaPaid > 0 && (
-                          <span className="text-[10px] text-amber-400">
+                          <span className="text-[10px] text-amber-700">
                             IOLTA: {fmt(ioltaPaid)}
                           </span>
                         )}
                         {fs && <span className="text-[10px] text-slate-600">
-                          Total fee: <span className="text-slate-400">{fmt(fs.total_fee)}</span>
+                          Total fee: <span className="text-slate-600">{fmt(fs.total_fee)}</span>
                         </span>}
                       </div>
 
@@ -5422,8 +5422,8 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
                         <div className="mt-1.5 flex items-center gap-1.5">
                           <Shield className="w-2.5 h-2.5 text-slate-600" />
                           <span className="text-[10px] text-slate-600">
-                            Last signoff: <span className="text-slate-400">{lastSignoff.attorney_name}</span>
-                            {" · "}<span className={lastSignoff.action === "rejected" ? "text-red-400" : "text-emerald-400"}>
+                            Last signoff: <span className="text-slate-600">{lastSignoff.attorney_name}</span>
+                            {" · "}<span className={lastSignoff.action === "rejected" ? "text-rose-700" : "text-emerald-700"}>
                               {lastSignoff.action === "verified" ? "Verified" : lastSignoff.action === "transfer_approved" ? "Approved Transfer" : "Rejected"}
                             </span>
                             {" · "}{fmtDate(lastSignoff.signed_at)}
@@ -5436,24 +5436,24 @@ function FiledCasesView({ clients, payments, feeStructures, filedRegistry, iolta
                     <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap justify-end">
                       {!r.case_number_verified && r.case_number && (
                         <button onClick={() => setVerifyModal(r)}
-                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-400 hover:bg-amber-500/20 transition-colors whitespace-nowrap">
+                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-amber-50 border border-amber-500/25 text-amber-700 hover:bg-amber-100 transition-colors whitespace-nowrap">
                           Verify #
                         </button>
                       )}
                       {r.case_number_verified && !r.iolta_balance_verified && ioltaPaid > 0 && (
                         <button onClick={() => { if (!adminUser) { onRequestAdmin(); return; } setSignoffModal(r); }}
-                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/25 text-sky-400 hover:bg-sky-500/20 transition-colors whitespace-nowrap">
+                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-sky-50 border border-sky-500/25 text-sky-700 hover:bg-sky-100 transition-colors whitespace-nowrap">
                           <Shield className="w-3 h-3 inline mr-1" />IOLTA Sign-Off
                         </button>
                       )}
                       {r.transfer_status === "signed_off" && (
                         <button onClick={() => { if (!adminUser) { onRequestAdmin(); return; } setTransferModal(r); }}
-                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20 transition-colors whitespace-nowrap">
+                          className="text-[11px] font-semibold px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-500/25 text-emerald-700 hover:bg-emerald-100 transition-colors whitespace-nowrap">
                           <ArrowLeftRight className="w-3 h-3 inline mr-1" />Execute Transfer
                         </button>
                       )}
                       {r.transfer_status === "transferred" && (
-                        <span className="text-[11px] text-emerald-400 flex items-center gap-1">
+                        <span className="text-[11px] text-emerald-700 flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3" /> Transferred {fmtDate(r.transferred_at)}
                         </span>
                       )}
@@ -5525,8 +5525,8 @@ function VerifyCaseModal({ registry, client, onClose, onSaved }: {
   const [verifiedBy, setVerifiedBy]   = useState("");
   const [notes, setNotes]             = useState(registry.verification_notes ?? "");
   const [saving, setSaving]           = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   async function save() {
     if (!caseNumber.trim() || !verifiedBy.trim()) return;
@@ -5550,16 +5550,16 @@ function VerifyCaseModal({ registry, client, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-            <CheckCircle2 className="w-4 h-4 text-amber-400" />
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-amber-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Verify Case Number</h3>
+            <h3 className="text-sm font-bold text-slate-900">Verify Case Number</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{client?.full_name ?? "Client"}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>
@@ -5579,12 +5579,12 @@ function VerifyCaseModal({ registry, client, onClose, onSaved }: {
               className={`${inp} resize-none`} />
           </div>
           <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-3.5 py-2.5">
-            <p className="text-[11px] text-amber-300 font-semibold">After verification</p>
+            <p className="text-[11px] text-amber-700 font-semibold">After verification</p>
             <p className="text-[10px] text-slate-500 mt-0.5">Case will move to "Pending Signoff" — attorney IOLTA review required before transfer.</p>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={!caseNumber.trim() || !verifiedBy.trim() || saving}
             className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <CheckCircle2 className="w-4 h-4" />{saving ? "Saving…" : "Confirm Verification"}
@@ -5617,8 +5617,8 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
   const [action, setAction]   = useState<"verified" | "rejected">("verified");
   const [notes, setNotes]     = useState("");
   const [saving, setSaving]   = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   async function save() {
     setSaving(true);
@@ -5648,49 +5648,49 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-sky-400/15 flex items-center justify-center flex-shrink-0">
-            <Shield className="w-4 h-4 text-sky-400" />
+            <Shield className="w-4 h-4 text-sky-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Attorney IOLTA Sign-Off</h3>
+            <h3 className="text-sm font-bold text-slate-900">Attorney IOLTA Sign-Off</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{client?.full_name ?? "Client"} — Case #{registry.case_number}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           {/* Case type routing notice */}
           {isBifurcated ? (
-            <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 space-y-1">
+            <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-4 py-3 space-y-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/25 text-sky-400">Bifurcated Ch. 7</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 border border-sky-500/25 text-sky-700">Bifurcated Ch. 7</span>
               </div>
               <p className="text-xs text-sky-300 font-semibold">Filing fee is included in attorney fee — Operating account only.</p>
               <p className="text-[10px] text-slate-500 mt-0.5">Bifurcated cases: the court filing fee is bundled into the attorney fee and deposited directly into the firm's Operating account. No IOLTA → filing fee transfer is required for the filing fee.</p>
             </div>
           ) : (
             <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 space-y-2">
-              <p className="text-xs font-bold text-amber-300 mb-2">Court Filing Fee — IOLTA → Filing Fee Transfer Account</p>
+              <p className="text-xs font-bold text-amber-700 mb-2">Court Filing Fee — IOLTA → Filing Fee Transfer Account</p>
               <p className="text-[10px] text-slate-500 mb-2">Regular Ch. 7 and Ch. 13: court filing fee held in IOLTA is transferred to the designated filing fee transfer account after case is filed and verified.</p>
               {filingFeePayments.length > 0 ? (
                 <>
                   {filingFeePayments.map(p => (
                     <div key={p.id} className="flex justify-between text-[11px]">
-                      <span className="text-slate-400 capitalize">{p.payment_type.replace(/_/g, " ")} — {fmtDate(p.payment_date)}</span>
-                      <span className="text-amber-300 font-semibold">{fmt(p.amount)}</span>
+                      <span className="text-slate-600 capitalize">{p.payment_type.replace(/_/g, " ")} — {fmtDate(p.payment_date)}</span>
+                      <span className="text-amber-700 font-semibold">{fmt(p.amount)}</span>
                     </div>
                   ))}
                   <div className="border-t border-amber-500/20 pt-2 flex justify-between text-xs font-bold">
-                    <span className="text-amber-300">Transfer Amount</span>
-                    <span className="text-amber-300">{fmt(ioltaTotal)}</span>
+                    <span className="text-amber-700">Transfer Amount</span>
+                    <span className="text-amber-700">{fmt(ioltaTotal)}</span>
                   </div>
                 </>
               ) : feeStructure?.court_filing_fee ? (
                 <div className="flex justify-between text-[11px]">
-                  <span className="text-slate-400">Court filing fee (from fee structure)</span>
-                  <span className="text-amber-300 font-semibold">{fmt(feeStructure.court_filing_fee)}</span>
+                  <span className="text-slate-600">Court filing fee (from fee structure)</span>
+                  <span className="text-amber-700 font-semibold">{fmt(feeStructure.court_filing_fee)}</span>
                 </div>
               ) : (
                 <p className="text-xs text-slate-500">No court filing fee payment found for this client.</p>
@@ -5700,17 +5700,17 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
 
           {feeStructure && (
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="bg-slate-800/40 rounded-xl p-2.5">
+              <div className="bg-slate-50 rounded-xl p-2.5">
                 <p className="text-[10px] text-slate-500 mb-0.5">Total Fee</p>
-                <p className="text-sm font-bold text-white">{fmt(feeStructure.total_fee)}</p>
+                <p className="text-sm font-bold text-slate-900">{fmt(feeStructure.total_fee)}</p>
               </div>
-              <div className="bg-slate-800/40 rounded-xl p-2.5">
+              <div className="bg-slate-50 rounded-xl p-2.5">
                 <p className="text-[10px] text-slate-500 mb-0.5">IOLTA Held</p>
-                <p className="text-sm font-bold text-amber-400">{fmt(ioltaTotal)}</p>
+                <p className="text-sm font-bold text-amber-700">{fmt(ioltaTotal)}</p>
               </div>
-              <div className="bg-slate-800/40 rounded-xl p-2.5">
+              <div className="bg-slate-50 rounded-xl p-2.5">
                 <p className="text-[10px] text-slate-500 mb-0.5">Chapter</p>
-                <p className="text-sm font-bold text-white">Ch. {client?.chapter}</p>
+                <p className="text-sm font-bold text-slate-900">Ch. {client?.chapter}</p>
               </div>
             </div>
           )}
@@ -5722,8 +5722,8 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
                 <button key={opt} onClick={() => setAction(opt)}
                   className={`flex-1 text-xs font-bold py-2.5 rounded-xl border transition-all ${
                     action === opt
-                      ? opt === "verified" ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400" : "bg-red-500/15 border-red-500/40 text-red-400"
-                      : "bg-slate-800 border-slate-700 text-slate-500 hover:border-slate-600"
+                      ? opt === "verified" ? "bg-emerald-100 border-emerald-500/40 text-emerald-700" : "bg-rose-100 border-red-500/40 text-rose-700"
+                      : "bg-slate-100 border-slate-200 text-slate-500 hover:border-slate-300"
                   }`}>
                   {opt === "verified" ? "Verify & Approve" : "Reject / Flag Issue"}
                 </button>
@@ -5738,8 +5738,8 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
               rows={3} className={`${inp} resize-none`} />
           </div>
 
-          <div className={`rounded-xl px-3.5 py-2.5 border ${action === "verified" ? "bg-emerald-500/8 border-emerald-500/20" : "bg-red-500/8 border-red-500/20"}`}>
-            <p className={`text-[11px] font-semibold ${action === "verified" ? "text-emerald-300" : "text-red-300"}`}>
+          <div className={`rounded-xl px-3.5 py-2.5 border ${action === "verified" ? "bg-emerald-50 border-emerald-500/20" : "bg-red-500/8 border-red-500/20"}`}>
+            <p className={`text-[11px] font-semibold ${action === "verified" ? "text-emerald-700" : "text-rose-700"}`}>
               {action === "verified" ? "Signing off as: " : "Flagging issue — signed by: "}<span className="font-bold">{adminUser}</span>
             </p>
             <p className="text-[10px] text-slate-500 mt-0.5">
@@ -5750,11 +5750,11 @@ function IoltaSignoffModal({ registry, client, payments, feeStructure, adminUser
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={saving || (action === "rejected" && !notes.trim())}
             className={`flex items-center gap-2 disabled:opacity-40 font-bold px-5 py-2 rounded-xl text-sm transition-all ${
-              action === "verified" ? "bg-emerald-500 hover:bg-emerald-400 text-white" : "bg-red-500 hover:bg-red-400 text-white"
+              action === "verified" ? "bg-emerald-500 hover:bg-emerald-400 text-slate-900" : "bg-red-500 hover:bg-red-400 text-slate-900"
             }`}>
             <Shield className="w-4 h-4" />{saving ? "Saving…" : action === "verified" ? "Sign Off & Approve" : "Submit Rejection"}
           </button>
@@ -5776,8 +5776,8 @@ function ExecuteTransferModal({ registry, client, adminUser, onClose, onSaved }:
   const isBifurcated = client?.case_type === "bifurcated";
   const [transferNotes, setTransferNotes] = useState("");
   const [saving, setSaving]               = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   async function execute() {
     setSaving(true);
@@ -5804,47 +5804,47 @@ function ExecuteTransferModal({ registry, client, adminUser, onClose, onSaved }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
           <div className="w-8 h-8 rounded-xl bg-emerald-400/15 flex items-center justify-center flex-shrink-0">
-            <ArrowLeftRight className="w-4 h-4 text-emerald-400" />
+            <ArrowLeftRight className="w-4 h-4 text-emerald-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Execute IOLTA Transfer</h3>
+            <h3 className="text-sm font-bold text-slate-900">Execute IOLTA Transfer</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{client?.full_name} — Case #{registry.case_number}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
           {/* Routing indicator */}
           {isBifurcated ? (
-            <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-2.5">
+            <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-4 py-2.5">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-500/25 text-sky-400">Bifurcated Ch. 7</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-100 border border-sky-500/25 text-sky-700">Bifurcated Ch. 7</span>
               </div>
               <p className="text-[11px] text-sky-300 font-semibold">Filing fee included in attorney fee → Firm Operating Account only.</p>
               <p className="text-[10px] text-slate-500 mt-0.5">No IOLTA filing fee transfer required. This action closes the registry entry.</p>
             </div>
           ) : (
-            <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-4 py-2.5">
-              <p className="text-[11px] text-amber-300 font-semibold">
+            <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-4 py-2.5">
+              <p className="text-[11px] text-amber-700 font-semibold">
                 {client?.chapter === 13 ? "Ch. 13" : "Regular Ch. 7"}: Court filing fee — IOLTA → Filing Fee Transfer Account
               </p>
               <p className="text-[10px] text-slate-500 mt-0.5">Transfer verified amount from IOLTA to the designated filing fee transfer account for this state.</p>
             </div>
           )}
-          <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3 space-y-1.5">
+          <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-4 py-3 space-y-1.5">
             <div className="flex justify-between text-xs">
-              <span className="text-slate-400">Attorney Sign-Off By</span>
-              <span className="text-emerald-300 font-semibold">{registry.iolta_verified_by}</span>
+              <span className="text-slate-600">Attorney Sign-Off By</span>
+              <span className="text-emerald-700 font-semibold">{registry.iolta_verified_by}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-400">Verified {isBifurcated ? "Amount" : "IOLTA"} Amount</span>
-              <span className="text-emerald-300 font-semibold">{fmt(registry.iolta_verified_amount ?? 0)}</span>
+              <span className="text-slate-600">Verified {isBifurcated ? "Amount" : "IOLTA"} Amount</span>
+              <span className="text-emerald-700 font-semibold">{fmt(registry.iolta_verified_amount ?? 0)}</span>
             </div>
             <div className="flex justify-between text-xs">
-              <span className="text-slate-400">Verified At</span>
-              <span className="text-slate-300">{fmtDateTime(registry.iolta_verified_at)}</span>
+              <span className="text-slate-600">Verified At</span>
+              <span className="text-slate-700">{fmtDateTime(registry.iolta_verified_at)}</span>
             </div>
           </div>
           <div>
@@ -5853,8 +5853,8 @@ function ExecuteTransferModal({ registry, client, adminUser, onClose, onSaved }:
               placeholder="Reference #, bank confirmation, etc…" rows={2}
               className={`${inp} resize-none`} />
           </div>
-          <div className="bg-slate-800/40 rounded-xl px-3.5 py-2.5">
-            <p className="text-[11px] text-slate-400">Executing as: <span className="text-white font-bold">{adminUser}</span></p>
+          <div className="bg-slate-50 rounded-xl px-3.5 py-2.5">
+            <p className="text-[11px] text-slate-600">Executing as: <span className="text-slate-900 font-bold">{adminUser}</span></p>
             <p className="text-[10px] text-slate-600 mt-0.5">
               {isBifurcated
                 ? "This action marks the bifurcated case fee as processed (Operating account) and closes this case in the registry."
@@ -5862,10 +5862,10 @@ function ExecuteTransferModal({ registry, client, adminUser, onClose, onSaved }:
             </p>
           </div>
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={execute} disabled={saving}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <ArrowLeftRight className="w-4 h-4" />{saving ? "Processing…" : "Confirm Transfer"}
           </button>
         </div>
@@ -5890,8 +5890,8 @@ function AddFiledCaseModal({ clients, existingRegistry, onClose, onSaved }: {
   const [caseNumber, setCaseNumber]   = useState("");
   const [filedDate, setFiledDate]     = useState(new Date().toISOString().slice(0, 10));
   const [saving, setSaving]           = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   const selectedClient = clients.find(c => c.id === clientId);
 
@@ -5912,13 +5912,13 @@ function AddFiledCaseModal({ clients, existingRegistry, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-bold text-white">Add Filed Case</h3>
+            <h3 className="text-sm font-bold text-slate-900">Add Filed Case</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Register a new filed case in the transfer registry</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-3">
           {eligible.length === 0 ? (
@@ -5945,8 +5945,8 @@ function AddFiledCaseModal({ clients, existingRegistry, onClose, onSaved }: {
             </>
           )}
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           {eligible.length > 0 && (
             <button onClick={save} disabled={!clientId || !caseNumber.trim() || saving}
               className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
@@ -6001,8 +6001,8 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
   const [err, setErr]               = useState("");
 
   const activeRetries = retries.filter(r => r.status === "retrying");
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors";
-  const lbl = "text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors";
+  const lbl = "text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1.5 block";
 
   const last4 = cardNumber.replace(/\s/g, "").slice(-4);
 
@@ -6139,24 +6139,24 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
   }
 
   const APPROVAL_STATUS_CFG: Record<string, { label: string; color: string }> = {
-    pending:    { label: "Pending",    color: "text-slate-400" },
-    sent:       { label: "Sent — Awaiting Response", color: "text-amber-400" },
-    approved:   { label: "Client Approved", color: "text-emerald-400" },
-    declined:   { label: "Client Declined", color: "text-red-400" },
-    overridden: { label: "Staff Override (verbal auth)", color: "text-sky-400" },
+    pending:    { label: "Pending",    color: "text-slate-600" },
+    sent:       { label: "Sent — Awaiting Response", color: "text-amber-700" },
+    approved:   { label: "Client Approved", color: "text-emerald-700" },
+    declined:   { label: "Client Declined", color: "text-rose-700" },
+    overridden: { label: "Staff Override (verbal auth)", color: "text-sky-700" },
   };
 
   return (
     <div className="space-y-5">
       {/* Enrollment status card */}
-      <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-5">
+      <div className="bg-white border border-slate-200 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Zap className="w-4 h-4 text-amber-400" />
-            <p className="text-xs font-bold text-white uppercase tracking-wide">Autopay Enrollment</p>
+            <Zap className="w-4 h-4 text-amber-700" />
+            <p className="text-xs font-bold text-slate-900 uppercase tracking-wide">Autopay Enrollment</p>
           </div>
           {enrollment?.is_active && (
-            <button onClick={deactivate} className="text-[10px] text-red-400 hover:text-red-300 border border-red-500/20 rounded-lg px-2 py-1 transition-colors">
+            <button onClick={deactivate} className="text-[10px] text-rose-700 hover:text-rose-700 border border-red-500/20 rounded-lg px-2 py-1 transition-colors">
               Deactivate
             </button>
           )}
@@ -6166,12 +6166,12 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
           <div className="space-y-4">
             {/* Status row */}
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${enrollment.is_active ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
-              <span className={`text-sm font-semibold ${enrollment.is_active ? "text-emerald-400" : "text-slate-400"}`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${enrollment.is_active ? "bg-emerald-400 animate-pulse" : "bg-slate-300"}`} />
+              <span className={`text-sm font-semibold ${enrollment.is_active ? "text-emerald-700" : "text-slate-600"}`}>
                 {enrollment.is_active ? "Active" : "Inactive"}
               </span>
               {enrollment.approval_status && (
-                <span className={`text-[10px] font-bold ml-1 ${APPROVAL_STATUS_CFG[enrollment.approval_status]?.color ?? "text-slate-400"}`}>
+                <span className={`text-[10px] font-bold ml-1 ${APPROVAL_STATUS_CFG[enrollment.approval_status]?.color ?? "text-slate-600"}`}>
                   · {APPROVAL_STATUS_CFG[enrollment.approval_status]?.label}
                 </span>
               )}
@@ -6180,12 +6180,12 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
             {/* Awaiting approval banner */}
             {enrollment.approval_status === "sent" && !enrollment.is_active && (
               <div className="flex items-center gap-3 bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3">
-                <Clock className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                <Clock className="w-4 h-4 text-amber-700 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-white">Awaiting client approval via {enrollment.approval_sent_via?.toUpperCase()}</p>
-                  <p className="text-[10px] text-slate-400">Sent {fmtDate(enrollment.approval_sent_at)}. Autopay will activate once approved.</p>
+                  <p className="text-xs font-semibold text-slate-900">Awaiting client approval via {enrollment.approval_sent_via?.toUpperCase()}</p>
+                  <p className="text-[10px] text-slate-600">Sent {fmtDate(enrollment.approval_sent_at)}. Autopay will activate once approved.</p>
                 </div>
-                <button onClick={markApproved} className="flex-shrink-0 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl transition-colors">
+                <button onClick={markApproved} className="flex-shrink-0 text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-slate-900 px-3 py-1.5 rounded-xl transition-colors">
                   Mark Approved
                 </button>
               </div>
@@ -6193,54 +6193,54 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
 
             {/* Payment info grid */}
             <div className="grid grid-cols-2 gap-2 text-xs">
-              <div><span className="text-slate-500">Processor: </span><span className="text-white">{PROCESSOR_LABELS[enrollment.processor] ?? enrollment.processor}</span></div>
-              <div><span className="text-slate-500">Method: </span><span className="text-white capitalize">{enrollment.payment_method_type ?? "—"} {enrollment.payment_method_last4 ? `····${enrollment.payment_method_last4}` : ""}{enrollment.card_brand ? ` · ${enrollment.card_brand}` : ""}</span></div>
-              {enrollment.card_expiry && <div><span className="text-slate-500">Expires: </span><span className="text-white">{enrollment.card_expiry}</span></div>}
-              {enrollment.billing_address_zip && <div><span className="text-slate-500">Billing ZIP: </span><span className="text-white">{enrollment.billing_address_zip}</span></div>}
-              <div><span className="text-slate-500">Enrolled by: </span><span className="text-white">{enrollment.enrolled_by ?? "—"}</span></div>
-              <div><span className="text-slate-500">Date: </span><span className="text-white">{fmtDate(enrollment.enrolled_at)}</span></div>
-              {enrollment.approval_override && <div className="col-span-2 text-sky-400 text-[10px]">Staff override: {enrollment.approval_override_reason}</div>}
+              <div><span className="text-slate-500">Processor: </span><span className="text-slate-900">{PROCESSOR_LABELS[enrollment.processor] ?? enrollment.processor}</span></div>
+              <div><span className="text-slate-500">Method: </span><span className="text-slate-900 capitalize">{enrollment.payment_method_type ?? "—"} {enrollment.payment_method_last4 ? `····${enrollment.payment_method_last4}` : ""}{enrollment.card_brand ? ` · ${enrollment.card_brand}` : ""}</span></div>
+              {enrollment.card_expiry && <div><span className="text-slate-500">Expires: </span><span className="text-slate-900">{enrollment.card_expiry}</span></div>}
+              {enrollment.billing_address_zip && <div><span className="text-slate-500">Billing ZIP: </span><span className="text-slate-900">{enrollment.billing_address_zip}</span></div>}
+              <div><span className="text-slate-500">Enrolled by: </span><span className="text-slate-900">{enrollment.enrolled_by ?? "—"}</span></div>
+              <div><span className="text-slate-500">Date: </span><span className="text-slate-900">{fmtDate(enrollment.enrolled_at)}</span></div>
+              {enrollment.approval_override && <div className="col-span-2 text-sky-700 text-[10px]">Staff override: {enrollment.approval_override_reason}</div>}
             </div>
 
             {/* 3rd party info */}
             {enrollment.is_third_party && (
-              <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 space-y-1">
-                <p className="text-[10px] font-bold text-sky-400 uppercase tracking-widest">3rd Party Payee</p>
-                <p className="text-xs text-white">{enrollment.third_party_name}</p>
-                <div className="text-[10px] text-slate-400 flex gap-3 flex-wrap">
+              <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-4 py-3 space-y-1">
+                <p className="text-[10px] font-bold text-sky-700 uppercase tracking-widest">3rd Party Payee</p>
+                <p className="text-xs text-slate-900">{enrollment.third_party_name}</p>
+                <div className="text-[10px] text-slate-600 flex gap-3 flex-wrap">
                   {enrollment.third_party_email && <span>{enrollment.third_party_email}</span>}
                   {enrollment.third_party_phone && <span>{enrollment.third_party_phone}</span>}
                   <span className="capitalize">{enrollment.third_party_method?.replace("_", " ") ?? ""}</span>
-                  {enrollment.third_party_paid_at && <span className="text-emerald-400">Paid {fmtDate(enrollment.third_party_paid_at)}</span>}
+                  {enrollment.third_party_paid_at && <span className="text-emerald-700">Paid {fmtDate(enrollment.third_party_paid_at)}</span>}
                 </div>
                 <div className="flex gap-3 text-[10px]">
-                  <span className={enrollment.third_party_client_signed ? "text-emerald-400" : "text-slate-500"}>
+                  <span className={enrollment.third_party_client_signed ? "text-emerald-700" : "text-slate-500"}>
                     {enrollment.third_party_client_signed ? "✓ Client signed" : "Client signature pending"}
                   </span>
-                  <span className={enrollment.third_party_payee_signed ? "text-emerald-400" : "text-slate-500"}>
+                  <span className={enrollment.third_party_payee_signed ? "text-emerald-700" : "text-slate-500"}>
                     {enrollment.third_party_payee_signed ? "✓ 3rd party signed" : "3rd party signature pending"}
                   </span>
                 </div>
               </div>
             )}
 
-            <button onClick={() => { setEnrolling(true); setStep("method"); }} className="text-xs text-slate-500 hover:text-white transition-colors underline underline-offset-2">
+            <button onClick={() => { setEnrolling(true); setStep("method"); }} className="text-xs text-slate-500 hover:text-slate-900 transition-colors underline underline-offset-2">
               Edit enrollment
             </button>
           </div>
         ) : (
           <div>
             <div className="flex items-center gap-2 mb-4">
-              <div className="w-2 h-2 rounded-full bg-slate-600" />
+              <div className="w-2 h-2 rounded-full bg-slate-300" />
               <span className="text-sm text-slate-500">Not enrolled in autopay</span>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button onClick={() => { setIsThirdParty(false); setEnrolling(true); setStep("method"); }}
-                className="flex items-center gap-2 bg-amber-400/15 border border-amber-400/30 hover:bg-amber-400/25 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
+                className="flex items-center gap-2 bg-amber-100 border border-amber-400/30 hover:bg-amber-400/25 text-amber-700 text-xs font-bold px-3 py-2 rounded-xl transition-all">
                 <Plus className="w-3.5 h-3.5" /> Enroll Client
               </button>
               <button onClick={() => { setIsThirdParty(true); setEnrolling(true); setStep("third_party"); }}
-                className="flex items-center gap-2 bg-sky-500/10 border border-sky-500/20 hover:bg-sky-500/20 text-sky-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
+                className="flex items-center gap-2 bg-sky-50 border border-sky-500/20 hover:bg-sky-100 text-sky-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
                 <Users className="w-3.5 h-3.5" /> 3rd Party Payee
               </button>
             </div>
@@ -6250,21 +6250,21 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
 
       {/* ── Enrollment wizard ── */}
       {enrolling && (
-        <div className="bg-[#0d1221] border border-amber-400/20 rounded-2xl overflow-hidden">
+        <div className="bg-white border border-amber-400/20 rounded-2xl overflow-hidden">
           {/* Step progress */}
-          <div className="px-5 py-3 border-b border-slate-800 flex items-center gap-2">
+          <div className="px-5 py-3 border-b border-slate-200 flex items-center gap-2">
             {STEPS.map((s, i) => (
               <div key={s} className="flex items-center gap-1.5">
-                {i > 0 && <div className="w-4 h-px bg-slate-700" />}
-                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-all ${s === step ? "bg-amber-400/20 text-amber-300 border border-amber-400/30" : i < stepIdx ? "text-emerald-400" : "text-slate-600"}`}>
+                {i > 0 && <div className="w-4 h-px bg-slate-200" />}
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full transition-all ${s === step ? "bg-amber-400/20 text-amber-700 border border-amber-400/30" : i < stepIdx ? "text-emerald-700" : "text-slate-600"}`}>
                   {i < stepIdx ? "✓ " : ""}{s === "method" ? "Payment Method" : s === "card_info" ? "Card Info" : s === "billing_addr" ? "Billing Address" : s === "approval" ? "Approval" : "3rd Party"}
                 </span>
               </div>
             ))}
-            <button onClick={resetForm} className="ml-auto text-slate-500 hover:text-white transition-colors"><X className="w-3.5 h-3.5" /></button>
+            <button onClick={resetForm} className="ml-auto text-slate-500 hover:text-slate-900 transition-colors"><X className="w-3.5 h-3.5" /></button>
           </div>
 
-          {err && <div className="mx-5 mt-4 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{err}</div>}
+          {err && <div className="mx-5 mt-4 text-xs text-rose-700 bg-rose-50 border border-red-500/20 rounded-xl px-3 py-2">{err}</div>}
 
           <div className="p-5 space-y-4">
 
@@ -6297,8 +6297,8 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
             {/* ── Step: Card Info ── */}
             {step === "card_info" && (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 bg-slate-800/40 border border-slate-700/60 rounded-xl px-4 py-3 text-[10px] text-slate-400">
-                  <Shield className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-[10px] text-slate-600">
+                  <Shield className="w-3.5 h-3.5 text-emerald-700 flex-shrink-0 mt-0.5" />
                   Full card details are collected and stored encrypted. Client approval will be requested before autopay activates.
                 </div>
                 <div className="grid grid-cols-2 gap-3">
@@ -6352,13 +6352,13 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
             {/* ── Step: 3rd Party ── */}
             {step === "third_party" && (
               <div className="space-y-3">
-                <div className="flex items-start gap-2 bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 text-[10px] text-slate-400">
-                  <Users className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
+                <div className="flex items-start gap-2 bg-sky-50 border border-sky-500/20 rounded-xl px-4 py-3 text-[10px] text-slate-600">
+                  <Users className="w-3.5 h-3.5 text-sky-700 flex-shrink-0 mt-0.5" />
                   A third party will assist with fees. Provide at least a name plus either email or phone. Both the client and the third party must sign the authorization before the card is run.
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="col-span-2">
-                    <label className={lbl}>Third Party Name <span className="text-red-400">*</span></label>
+                    <label className={lbl}>Third Party Name <span className="text-rose-700">*</span></label>
                     <input value={tpName} onChange={e => setTpName(e.target.value)} placeholder="Full name" className={inp} />
                   </div>
                   <div>
@@ -6374,8 +6374,8 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
                     <div className="grid grid-cols-2 gap-2">
                       {([["pay_link", "Send Payment Link", "We send a payment link — they pay and system records it automatically."], ["card_auth", "Card Authorization", "Collect their card info. Both must sign authorization form before charging."]] as const).map(([val, label, desc]) => (
                         <button key={val} type="button" onClick={() => setTpMethod(val)}
-                          className={`text-left p-3 rounded-xl border transition-all ${tpMethod === val ? "border-sky-500/40 bg-sky-500/8" : "border-slate-700/60 bg-slate-800/40 hover:border-slate-600"}`}>
-                          <p className={`text-xs font-bold mb-0.5 ${tpMethod === val ? "text-sky-300" : "text-slate-300"}`}>{label}</p>
+                          className={`text-left p-3 rounded-xl border transition-all ${tpMethod === val ? "border-sky-500/40 bg-sky-50" : "border-slate-200 bg-slate-50 hover:border-slate-300"}`}>
+                          <p className={`text-xs font-bold mb-0.5 ${tpMethod === val ? "text-sky-300" : "text-slate-700"}`}>{label}</p>
                           <p className="text-[10px] text-slate-500 leading-relaxed">{desc}</p>
                         </button>
                       ))}
@@ -6388,9 +6388,9 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
             {/* ── Step: Approval ── */}
             {step === "approval" && (
               <div className="space-y-4">
-                <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4 space-y-3">
-                  <p className="text-xs font-bold text-white">Client Approval</p>
-                  <p className="text-[11px] text-slate-400 leading-relaxed">
+                <div className="bg-slate-100/50 border border-slate-200 rounded-xl p-4 space-y-3">
+                  <p className="text-xs font-bold text-slate-900">Client Approval</p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
                     By default, we send the client a confirmation request before activating autopay.
                     If the client has already verbally authorized (per our retainer agreement), you may override.
                   </p>
@@ -6398,11 +6398,11 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
                   {/* Send approval toggle */}
                   <label className="flex items-center gap-3 cursor-pointer">
                     <div onClick={() => { setSendApproval(v => !v); if (!sendApproval) setOverrideApproval(false); }}
-                      className={`w-9 h-5 rounded-full transition-all flex items-center px-0.5 ${sendApproval ? "bg-emerald-500" : "bg-slate-700"}`}>
+                      className={`w-9 h-5 rounded-full transition-all flex items-center px-0.5 ${sendApproval ? "bg-emerald-500" : "bg-slate-200"}`}>
                       <div className={`w-4 h-4 rounded-full bg-white transition-all ${sendApproval ? "translate-x-4" : ""}`} />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-white">Send approval request to client</p>
+                      <p className="text-xs font-semibold text-slate-900">Send approval request to client</p>
                       <p className="text-[10px] text-slate-500">Default — recommended</p>
                     </div>
                   </label>
@@ -6413,7 +6413,7 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
                       <div className="flex gap-2">
                         {(["sms", "email"] as const).map(v => (
                           <button key={v} type="button" onClick={() => setApprovalVia(v)}
-                            className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${approvalVia === v ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300" : "border-slate-700 text-slate-400 hover:border-slate-500"}`}>
+                            className={`flex-1 py-2 text-xs font-bold rounded-xl border transition-all ${approvalVia === v ? "border-emerald-500/40 bg-emerald-50 text-emerald-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
                             {v === "sms" ? "Text Message" : "Email"}
                           </button>
                         ))}
@@ -6423,14 +6423,14 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
                 </div>
 
                 {/* Override section */}
-                <div className="border border-slate-700/60 rounded-xl p-4 space-y-3">
+                <div className="border border-slate-200 rounded-xl p-4 space-y-3">
                   <label className="flex items-center gap-3 cursor-pointer">
                     <div onClick={() => { setOverrideApproval(v => !v); if (!overrideApproval) setSendApproval(false); }}
-                      className={`w-9 h-5 rounded-full transition-all flex items-center px-0.5 ${overrideApproval ? "bg-sky-500" : "bg-slate-700"}`}>
+                      className={`w-9 h-5 rounded-full transition-all flex items-center px-0.5 ${overrideApproval ? "bg-sky-500" : "bg-slate-200"}`}>
                       <div className={`w-4 h-4 rounded-full bg-white transition-all ${overrideApproval ? "translate-x-4" : ""}`} />
                     </div>
                     <div>
-                      <p className="text-xs font-semibold text-white">Staff override — verbal authorization</p>
+                      <p className="text-xs font-semibold text-slate-900">Staff override — verbal authorization</p>
                       <p className="text-[10px] text-slate-500">Client authorized over the phone per retainer agreement</p>
                     </div>
                   </label>
@@ -6446,7 +6446,7 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
 
             {/* Nav buttons */}
             <div className="flex justify-between gap-2 pt-1">
-              <button onClick={() => stepIdx > 0 ? setStep(STEPS[stepIdx - 1]) : resetForm()} className="text-xs text-slate-400 hover:text-white px-3 py-2 transition-colors">
+              <button onClick={() => stepIdx > 0 ? setStep(STEPS[stepIdx - 1]) : resetForm()} className="text-xs text-slate-600 hover:text-slate-900 px-3 py-2 transition-colors">
                 {stepIdx === 0 ? "Cancel" : "← Back"}
               </button>
               {isLastStep ? (
@@ -6457,7 +6457,7 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
                 </button>
               ) : (
                 <button onClick={() => setStep(STEPS[stepIdx + 1])}
-                  className="flex items-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-5 py-2 rounded-xl transition-all">
+                  className="flex items-center gap-1.5 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold text-xs px-5 py-2 rounded-xl transition-all">
                   Next →
                 </button>
               )}
@@ -6467,16 +6467,16 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
       )}
 
       {/* Processor → Account routing reference */}
-      <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4">
+      <div className="bg-white border border-slate-200 rounded-2xl p-4">
         <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Processor → Account Routing</p>
         <div className="space-y-1.5">
           {merchantAccounts.filter(m => m.is_active).map(m => (
             <div key={m.id} className="flex items-center justify-between text-xs">
               <div className="flex items-center gap-2">
-                <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${m.processor === "lawpay" ? "bg-sky-500/15 text-sky-400" : "bg-orange-500/15 text-orange-400"}`}>
+                <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${m.processor === "lawpay" ? "bg-sky-100 text-sky-700" : "bg-orange-500/15 text-orange-400"}`}>
                   {m.processor === "lawpay" ? "LawPay" : "PayCompass"}
                 </span>
-                <span className="text-slate-400">{m.account_label}</span>
+                <span className="text-slate-600">{m.account_label}</span>
               </div>
               <span className="text-slate-600">{m.bank_name}</span>
             </div>
@@ -6486,48 +6486,48 @@ function AutopayPanel({ client, enrollment, retries, merchantAccounts, onRefresh
 
       {/* Active declined retries */}
       {activeRetries.length > 0 && (
-        <div className="bg-[#0d1221] border border-red-500/25 rounded-2xl p-4">
+        <div className="bg-white border border-red-500/25 rounded-2xl p-4">
           <div className="flex items-center gap-2 mb-3">
-            <WifiOff className="w-4 h-4 text-red-400" />
-            <p className="text-xs font-bold text-red-400 uppercase tracking-wide">Declined Payments — Active Retries</p>
+            <WifiOff className="w-4 h-4 text-rose-700" />
+            <p className="text-xs font-bold text-rose-700 uppercase tracking-wide">Declined Payments — Active Retries</p>
           </div>
           <div className="space-y-3">
             {activeRetries.map(retry => {
               const maxDate = new Date(retry.max_retry_date);
               const daysLeft = Math.ceil((maxDate.getTime() - Date.now()) / 86400000);
               return (
-                <div key={retry.id} className="bg-slate-900/60 border border-slate-800 rounded-xl p-3">
+                <div key={retry.id} className="bg-white/80 border border-slate-200 rounded-xl p-3">
                   <div className="flex items-start justify-between gap-2 mb-2">
                     <div>
-                      <p className="text-sm font-bold text-white">{fmt(retry.amount)}</p>
+                      <p className="text-sm font-bold text-slate-900">{fmt(retry.amount)}</p>
                       <p className="text-[10px] text-slate-500">
                         Original due: {fmtDate(retry.original_due_date)} · Attempt #{retry.attempt_count}
                         {retry.rescheduled_due_date && ` · Rescheduled to: ${fmtDate(retry.rescheduled_due_date)}`}
                       </p>
-                      {retry.decline_reason && <p className="text-[10px] text-red-400 mt-0.5">{retry.decline_reason}</p>}
+                      {retry.decline_reason && <p className="text-[10px] text-rose-700 mt-0.5">{retry.decline_reason}</p>}
                     </div>
-                    <div className={`text-[10px] font-bold px-2 py-1 rounded-lg ${daysLeft <= 3 ? "bg-red-500/15 text-red-400" : "bg-amber-400/10 text-amber-300"}`}>
+                    <div className={`text-[10px] font-bold px-2 py-1 rounded-lg ${daysLeft <= 3 ? "bg-rose-100 text-rose-700" : "bg-amber-50 text-amber-700"}`}>
                       {daysLeft > 0 ? `${daysLeft}d left` : "Expired"}
                     </div>
                   </div>
-                  <div className="text-[10px] text-amber-300 mb-2">
+                  <div className="text-[10px] text-amber-700 mb-2">
                     <AlertTriangle className="w-3 h-3 inline mr-1" />
                     Hard deadline: {fmtDate(retry.max_retry_date)} (14 days from original due date — cannot be extended)
                   </div>
                   <div className="flex flex-wrap gap-1.5">
-                    <button onClick={() => reschedule(retry, 3)} className="text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                    <button onClick={() => reschedule(retry, 3)} className="text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
                       <Calendar className="w-3 h-3" /> +3 days
                     </button>
-                    <button onClick={() => reschedule(retry, 7)} className="text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                    <button onClick={() => reschedule(retry, 7)} className="text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
                       <Calendar className="w-3 h-3" /> +7 days
                     </button>
-                    <button onClick={() => reschedule(retry, 14)} className="text-[10px] font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                    <button onClick={() => reschedule(retry, 14)} className="text-[10px] font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
                       <Calendar className="w-3 h-3" /> Max (14d)
                     </button>
-                    <button onClick={() => markCollected(retry)} className="text-[10px] font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-400 border border-emerald-500/25 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                    <button onClick={() => markCollected(retry)} className="text-[10px] font-semibold bg-emerald-100 hover:bg-emerald-100 text-emerald-700 border border-emerald-500/25 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
                       <Check className="w-3 h-3" /> Mark Collected
                     </button>
-                    <button onClick={() => cancelRetry(retry)} className="text-[10px] font-semibold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                    <button onClick={() => cancelRetry(retry)} className="text-[10px] font-semibold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-red-500/20 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
                       <Ban className="w-3 h-3" /> Cancel
                     </button>
                   </div>
@@ -6623,9 +6623,9 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
   const savedRate = cancelRequests.length > 0 ? Math.round(saved / (saved + cancelled || 1) * 100) : 0;
 
   const STATUS_STYLES = {
-    pending:   "bg-amber-400/10 border-amber-400/25 text-amber-300",
-    saved:     "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
-    cancelled: "bg-red-500/10 border-red-500/25 text-red-400",
+    pending:   "bg-amber-50 border-amber-400/25 text-amber-700",
+    saved:     "bg-emerald-50 border-emerald-500/25 text-emerald-700",
+    cancelled: "bg-rose-50 border-red-500/25 text-rose-700",
   };
 
   return (
@@ -6633,13 +6633,13 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Pending Review", value: pending, color: "text-amber-400" },
-          { label: "Clients Saved", value: saved, color: "text-emerald-400" },
-          { label: "Cancelled", value: cancelled, color: "text-red-400" },
-          { label: "Save Rate", value: `${savedRate}%`, color: savedRate >= 60 ? "text-emerald-400" : "text-amber-400" },
+          { label: "Pending Review", value: pending, color: "text-amber-700" },
+          { label: "Clients Saved", value: saved, color: "text-emerald-700" },
+          { label: "Cancelled", value: cancelled, color: "text-rose-700" },
+          { label: "Save Rate", value: `${savedRate}%`, color: savedRate >= 60 ? "text-emerald-700" : "text-amber-700" },
         ].map(s => (
-          <div key={s.label} className="bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3.5">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">{s.label}</p>
+          <div key={s.label} className="bg-white border border-slate-200 rounded-2xl px-4 py-3.5">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">{s.label}</p>
             <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
           </div>
         ))}
@@ -6647,31 +6647,31 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
 
       {/* Pending cancel tasks */}
       {pendingTasks.length > 0 && (
-        <div className="bg-[#0d1221] border border-amber-400/20 rounded-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800/60 flex items-center gap-2">
-            <ClipboardList className="w-4 h-4 text-amber-400" />
-            <span className="text-xs font-bold text-amber-300">Pending Action Items ({pendingTasks.length})</span>
+        <div className="bg-white border border-amber-400/20 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+            <ClipboardList className="w-4 h-4 text-amber-700" />
+            <span className="text-xs font-bold text-amber-700">Pending Action Items ({pendingTasks.length})</span>
           </div>
           <div className="divide-y divide-slate-800/40">
             {pendingTasks.map(task => {
               const client = clients.find(c => c.id === task.client_id);
               return (
                 <div key={task.id} className="px-4 py-3 flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${task.task_type === "pause_payments" ? "bg-amber-400/10" : task.task_type === "attorney_outreach" ? "bg-sky-500/10" : "bg-red-500/10"}`}>
-                    {task.task_type === "pause_payments" ? <PauseCircle className="w-3.5 h-3.5 text-amber-400" /> :
-                     task.task_type === "attorney_outreach" ? <UserCheck className="w-3.5 h-3.5 text-sky-400" /> :
-                     <BadgeDollarSign className="w-3.5 h-3.5 text-red-400" />}
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 ${task.task_type === "pause_payments" ? "bg-amber-50" : task.task_type === "attorney_outreach" ? "bg-sky-50" : "bg-rose-50"}`}>
+                    {task.task_type === "pause_payments" ? <PauseCircle className="w-3.5 h-3.5 text-amber-700" /> :
+                     task.task_type === "attorney_outreach" ? <UserCheck className="w-3.5 h-3.5 text-sky-700" /> :
+                     <BadgeDollarSign className="w-3.5 h-3.5 text-rose-700" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold text-white">{task.title}</p>
+                    <p className="text-xs font-semibold text-slate-900">{task.title}</p>
                     <p className="text-[11px] text-slate-500 mt-0.5">{client?.full_name ?? "Unknown"} · {task.assigned_role.replace(/_/g, " ")}</p>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${task.status === "pending" ? "bg-amber-400/10 border-amber-400/25 text-amber-300" : "bg-sky-500/10 border-sky-500/25 text-sky-400"}`}>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0 ${task.status === "pending" ? "bg-amber-50 border-amber-400/25 text-amber-700" : "bg-sky-50 border-sky-500/25 text-sky-700"}`}>
                     {task.status}
                   </span>
                   {(role === "accounting_super_admin" || role === "super_admin") && (
                     <button onClick={() => completeTask(task.id)} disabled={completingTask === task.id}
-                      className="flex-shrink-0 flex items-center gap-1 text-[11px] bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 font-semibold px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40">
+                      className="flex-shrink-0 flex items-center gap-1 text-[11px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-500/25 text-emerald-700 font-semibold px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40">
                       <Check className="w-3 h-3" /> Done
                     </button>
                   )}
@@ -6684,30 +6684,30 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
 
       {/* Pending refunds */}
       {pendingRefundItems.length > 0 && (
-        <div className="bg-[#0d1221] border border-red-500/20 rounded-2xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-slate-800/60 flex items-center gap-2">
-            <BadgeDollarSign className="w-4 h-4 text-red-400" />
-            <span className="text-xs font-bold text-red-300">Unearned Fee Refunds ({pendingRefundItems.length})</span>
+        <div className="bg-white border border-red-500/20 rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+            <BadgeDollarSign className="w-4 h-4 text-rose-700" />
+            <span className="text-xs font-bold text-rose-700">Unearned Fee Refunds ({pendingRefundItems.length})</span>
           </div>
           <div className="divide-y divide-slate-800/40">
             {pendingRefundItems.map(notice => (
               <div key={notice.id} className="px-4 py-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-white">{notice.client_name}</p>
+                  <p className="text-xs font-semibold text-slate-900">{notice.client_name}</p>
                   <p className="text-[11px] text-slate-500 mt-0.5">{notice.client_email ?? "No email"}</p>
                   <div className="flex gap-3 mt-1.5 text-[11px]">
-                    <span className="text-slate-400">Total Paid: <span className="text-white font-medium">{fmt(notice.total_paid)}</span></span>
-                    <span className="text-slate-400">Earned: <span className="text-emerald-400 font-medium">{fmt(notice.earned_fees)}</span></span>
-                    <span className="text-slate-400">Refund: <span className="text-red-400 font-bold">{fmt(notice.refund_amount)}</span></span>
+                    <span className="text-slate-600">Total Paid: <span className="text-slate-900 font-medium">{fmt(notice.total_paid)}</span></span>
+                    <span className="text-slate-600">Earned: <span className="text-emerald-700 font-medium">{fmt(notice.earned_fees)}</span></span>
+                    <span className="text-slate-600">Refund: <span className="text-rose-700 font-bold">{fmt(notice.refund_amount)}</span></span>
                   </div>
                 </div>
                 <div className="flex-shrink-0 text-right">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block mb-2 ${notice.refund_status === "approved" ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400" : "bg-amber-400/10 border-amber-400/25 text-amber-300"}`}>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block mb-2 ${notice.refund_status === "approved" ? "bg-emerald-50 border-emerald-500/25 text-emerald-700" : "bg-amber-50 border-amber-400/25 text-amber-700"}`}>
                     {notice.refund_status}
                   </span>
                   {role === "accounting_super_admin" && notice.refund_status !== "issued" && (
                     <button onClick={() => markRefundIssued(notice.id)} disabled={issuingRefund === notice.id}
-                      className="flex items-center gap-1 text-[11px] bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/25 text-emerald-400 font-semibold px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40">
+                      className="flex items-center gap-1 text-[11px] bg-emerald-50 hover:bg-emerald-100 border border-emerald-500/25 text-emerald-700 font-semibold px-2.5 py-1.5 rounded-lg transition-all disabled:opacity-40">
                       <Check className="w-3 h-3" /> Mark Issued
                     </button>
                   )}
@@ -6719,11 +6719,11 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
       )}
 
       {/* Filter + add */}
-      <div className="flex flex-wrap items-center gap-2 bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3">
         <div className="flex gap-1">
           {(["all","pending","saved","cancelled"] as const).map(f => (
             <button key={f} onClick={() => setFilter(f)}
-              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all capitalize ${filter === f ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-300"}`}>
+              className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all capitalize ${filter === f ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-700"}`}>
               {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}
             </button>
           ))}
@@ -6735,7 +6735,7 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
       </div>
 
       {/* Request list */}
-      <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
         {filtered.length === 0 ? (
           <div className="px-6 py-12 text-center">
             <CheckCircle2 className="w-8 h-8 text-slate-700 mx-auto mb-3" />
@@ -6747,20 +6747,20 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
               const client = clients.find(c => c.id === req.client_id);
               return (
                 <div key={req.id}
-                  className="px-4 py-4 hover:bg-slate-800/20 transition-colors cursor-pointer"
+                  className="px-4 py-4 hover:bg-slate-50 transition-colors cursor-pointer"
                   onClick={() => setSelected(req)}>
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-sm font-bold text-white">{client?.full_name ?? "Unknown"}</span>
+                        <span className="text-sm font-bold text-slate-900">{client?.full_name ?? "Unknown"}</span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLES[req.status]}`}>
                           {req.status.charAt(0).toUpperCase() + req.status.slice(1)}
                         </span>
                         {req.ai_retention_outcome && (
                           <span className={`text-[10px] px-2 py-0.5 rounded-full border font-semibold ${
-                            req.ai_retention_outcome === "saved" ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" :
-                            req.ai_retention_outcome === "irreversible" ? "bg-red-500/10 border-red-500/20 text-red-400" :
-                            "bg-sky-500/10 border-sky-500/20 text-sky-400"
+                            req.ai_retention_outcome === "saved" ? "bg-emerald-50 border-emerald-500/20 text-emerald-700" :
+                            req.ai_retention_outcome === "irreversible" ? "bg-rose-50 border-red-500/20 text-rose-700" :
+                            "bg-sky-50 border-sky-500/20 text-sky-700"
                           }`}>
                             {req.ai_retention_outcome === "saved" ? "Retained" : req.ai_retention_outcome === "irreversible" ? "Irreversible" : "AI: Escalated"}
                           </span>
@@ -6771,7 +6771,7 @@ function CancellationsView({ clients, cancelRequests, cancelTasks, disengagement
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-slate-600">
                         {req.reason_category ? req.reason_category.replace(/_/g, " ") : "No reason"} ·{" "}
                         {req.request_channel} · {fmtDate(req.created_at)}
                       </p>
@@ -6836,8 +6836,8 @@ function FeeAdjustmentModal({ client, feeStructure, adminUser, onClose, onSaved 
   const [saving,      setSaving]      = useState(false);
   const [err,         setErr]         = useState("");
 
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   const isSuperAdmin = role === "super_admin" || role === "accounting_super_admin";
 
@@ -6912,46 +6912,46 @@ function FeeAdjustmentModal({ client, feeStructure, adminUser, onClose, onSaved 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-            <Pencil className="w-4 h-4 text-amber-400" />
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+            <Pencil className="w-4 h-4 text-amber-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Fee / Payment Adjustment</h3>
+            <h3 className="text-sm font-bold text-slate-900">Fee / Payment Adjustment</h3>
             <p className="text-[11px] text-slate-500">{client.full_name} · {client.client_id}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {!isSuperAdmin && (
-            <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
-              <p className="text-[11px] text-amber-300 font-semibold">Requires Super Admin Attorney Approval</p>
+            <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
+              <p className="text-[11px] text-amber-700 font-semibold">Requires Super Admin Attorney Approval</p>
               <p className="text-[10px] text-slate-500 mt-0.5">Attorney fee and court filing fee changes must be reviewed and approved. Your request will be queued.</p>
             </div>
           )}
           {isSuperAdmin && (
-            <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3.5 py-2.5">
-              <p className="text-[11px] text-emerald-400 font-semibold">Super Admin — Changes Applied Immediately</p>
+            <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-3.5 py-2.5">
+              <p className="text-[11px] text-emerald-700 font-semibold">Super Admin — Changes Applied Immediately</p>
               <p className="text-[10px] text-slate-500 mt-0.5">As super admin, fee adjustments will be applied to the fee structure immediately.</p>
             </div>
           )}
 
-          {err && <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{err}</p>}
+          {err && <p className="text-xs text-rose-700 bg-rose-50 border border-red-500/20 rounded-xl px-3 py-2">{err}</p>}
 
           {/* Current values */}
-          <div className="bg-slate-800/40 rounded-xl px-4 py-3 text-xs space-y-1.5">
-            <p className="font-semibold text-slate-300 mb-2">Current Fee Structure</p>
+          <div className="bg-slate-50 rounded-xl px-4 py-3 text-xs space-y-1.5">
+            <p className="font-semibold text-slate-700 mb-2">Current Fee Structure</p>
             <div className="grid grid-cols-3 gap-2">
-              <div><p className="text-slate-500">Attorney Fee</p><p className="text-white font-semibold">{fmt(origAttyFee)}</p></div>
-              <div><p className="text-slate-500">Court Filing Fee</p><p className="text-amber-400 font-semibold">{fmt(origCFF)}</p></div>
-              <div><p className="text-slate-500">Total Fee</p><p className="text-white font-semibold">{fmt(origTotal)}</p></div>
+              <div><p className="text-slate-500">Attorney Fee</p><p className="text-slate-900 font-semibold">{fmt(origAttyFee)}</p></div>
+              <div><p className="text-slate-500">Court Filing Fee</p><p className="text-amber-700 font-semibold">{fmt(origCFF)}</p></div>
+              <div><p className="text-slate-500">Total Fee</p><p className="text-slate-900 font-semibold">{fmt(origTotal)}</p></div>
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-700/50 mt-1">
-              <div><p className="text-slate-500">Payment Amt</p><p className="text-white font-semibold">{fmt(origPayAmt)}</p></div>
-              <div><p className="text-slate-500">Plan Months</p><p className="text-white font-semibold">{origMonths || "—"}</p></div>
-              <div><p className="text-slate-500">Frequency</p><p className="text-white font-semibold capitalize">{(origFreq ?? "—").replace(/_/g, " ")}</p></div>
+            <div className="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-200/50 mt-1">
+              <div><p className="text-slate-500">Payment Amt</p><p className="text-slate-900 font-semibold">{fmt(origPayAmt)}</p></div>
+              <div><p className="text-slate-500">Plan Months</p><p className="text-slate-900 font-semibold">{origMonths || "—"}</p></div>
+              <div><p className="text-slate-500">Frequency</p><p className="text-slate-900 font-semibold capitalize">{(origFreq ?? "—").replace(/_/g, " ")}</p></div>
             </div>
           </div>
 
@@ -6975,7 +6975,7 @@ function FeeAdjustmentModal({ client, feeStructure, adminUser, onClose, onSaved 
                   <input readOnly value={fmt(origAttyFee)} className={inp + " text-slate-500 cursor-default"} />
                 </div>
                 <div>
-                  <label className={lbl}>Proposed Attorney Fee <span className="text-amber-400">*</span></label>
+                  <label className={lbl}>Proposed Attorney Fee <span className="text-amber-700">*</span></label>
                   <input type="number" value={propAttyFee} onChange={e => setPropAttyFee(e.target.value)} placeholder="e.g. 1500" className={inp} />
                 </div>
               </div>
@@ -6987,7 +6987,7 @@ function FeeAdjustmentModal({ client, feeStructure, adminUser, onClose, onSaved 
                   <input readOnly value={fmt(origCFF)} className={inp + " text-slate-500 cursor-default"} />
                 </div>
                 <div>
-                  <label className={lbl}>Proposed Court Filing Fee <span className="text-amber-400">*</span></label>
+                  <label className={lbl}>Proposed Court Filing Fee <span className="text-amber-700">*</span></label>
                   <input type="number" value={propCFF} onChange={e => setPropCFF(e.target.value)} placeholder="e.g. 338" className={inp} />
                 </div>
               </div>
@@ -7035,21 +7035,21 @@ function FeeAdjustmentModal({ client, feeStructure, adminUser, onClose, onSaved 
 
             {/* New total preview */}
             {(showAttyFee || showCFF) && (
-              <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 text-xs flex items-center justify-between">
-                <span className="text-slate-400">New Total Fee</span>
+              <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-4 py-3 text-xs flex items-center justify-between">
+                <span className="text-slate-600">New Total Fee</span>
                 <span className="text-sky-300 font-bold text-base">{fmt(newTotal)}</span>
               </div>
             )}
           </div>
 
           <div>
-            <label className={lbl}>Reason for Adjustment <span className="text-amber-400">*</span></label>
+            <label className={lbl}>Reason for Adjustment <span className="text-amber-700">*</span></label>
             <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} placeholder="Explain the reason for this adjustment…" className={inp + " resize-none"} />
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={submit} disabled={saving || !reason.trim()}
             className="flex items-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 text-slate-950 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <Check className="w-4 h-4" />
@@ -7073,7 +7073,7 @@ function NewCancelRequestModal({ clients, onClose, onSaved }: {
   const [category, setCategory] = useState("");
   const [detail, setDetail] = useState("");
   const [saving, setSaving] = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
 
   async function save() {
     if (!clientId || !category) return;
@@ -7117,20 +7117,20 @@ function NewCancelRequestModal({ clients, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-            <Ban className="w-4 h-4 text-red-400" />
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+            <Ban className="w-4 h-4 text-rose-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">New Cancellation Request</h3>
+            <h3 className="text-sm font-bold text-slate-900">New Cancellation Request</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">AI retention bot will be loaded with appropriate scripts</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
         <div className="px-5 py-4 space-y-4">
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Client *</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Client *</label>
             <select value={clientId} onChange={e => setClientId(e.target.value)} className={inp}>
               <option value="">Select client</option>
               {clients.filter(c => c.status === "active").map(c => (
@@ -7140,7 +7140,7 @@ function NewCancelRequestModal({ clients, onClose, onSaved }: {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Channel</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Channel</label>
               <select value={channel} onChange={e => setChannel(e.target.value)} className={inp}>
                 <option value="phone">Phone</option>
                 <option value="email">Email</option>
@@ -7149,7 +7149,7 @@ function NewCancelRequestModal({ clients, onClose, onSaved }: {
               </select>
             </div>
             <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Reason Category *</label>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Reason Category *</label>
               <select value={category} onChange={e => setCategory(e.target.value)} className={inp}>
                 <option value="">Select reason</option>
                 <option value="cannot_afford">Cannot Afford Payments</option>
@@ -7160,22 +7160,22 @@ function NewCancelRequestModal({ clients, onClose, onSaved }: {
             </div>
           </div>
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Client's Stated Reason</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Client's Stated Reason</label>
             <textarea value={detail} onChange={e => setDetail(e.target.value)} rows={3}
               placeholder="What did the client say?"
               className={`${inp} resize-none`} />
           </div>
           {category === "circumstances_changed" && (
-            <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-3.5 py-2.5">
+            <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-3.5 py-2.5">
               <p className="text-[11px] text-sky-300 font-semibold">Change in Circumstances</p>
               <p className="text-[10px] text-slate-500 mt-0.5">This category will be flagged as potentially irreversible. Attorney review will be recommended before final cancellation.</p>
             </div>
           )}
         </div>
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={save} disabled={!clientId || !category || saving}
-            className="flex items-center gap-2 bg-red-500/80 hover:bg-red-500 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+            className="flex items-center gap-2 bg-red-500/80 hover:bg-red-500 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             <Ban className="w-4 h-4" />{saving ? "Creating…" : "Create Request"}
           </button>
         </div>
@@ -7201,7 +7201,7 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
   const [chatLog, setChatLog] = useState<{ role: "ai" | "client"; message: string; ts: string }[]>(
     request.ai_chat_log ?? []
   );
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
 
   useEffect(() => {
     api.get(`cancel_retention_adjustments?cancel_request_id=eq.${request.id}&order=applied_at.asc`)
@@ -7261,51 +7261,51 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
     onSaved();
   }
 
-  const STATUS_COLOR = { pending: "text-amber-300", saved: "text-emerald-400", cancelled: "text-red-400" };
+  const STATUS_COLOR = { pending: "text-amber-700", saved: "text-emerald-700", cancelled: "text-rose-700" };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-2xl bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-            <Ban className="w-4 h-4 text-red-400" />
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3 flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+            <Ban className="w-4 h-4 text-rose-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">{client?.full_name ?? "Unknown"} — Cancellation Request</h3>
+            <h3 className="text-sm font-bold text-slate-900">{client?.full_name ?? "Unknown"} — Cancellation Request</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">
               {request.reason_category?.replace(/_/g, " ")} · {request.request_channel} · {fmtDate(request.created_at)}
               {" · "}<span className={`font-semibold ${STATUS_COLOR[request.status]}`}>{request.status}</span>
             </p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Client's stated reason */}
           {request.reason_detail && (
-            <div className="bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-3">
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Client's Stated Reason</p>
-              <p className="text-sm text-slate-300">{request.reason_detail}</p>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+              <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-1">Client's Stated Reason</p>
+              <p className="text-sm text-slate-700">{request.reason_detail}</p>
             </div>
           )}
 
           {/* AI Retention Chat */}
           <div>
             <div className="flex items-center gap-2 mb-3">
-              <Bot className="w-4 h-4 text-amber-400" />
-              <p className="text-xs font-bold text-amber-400 uppercase tracking-wide">AI Retention Conversation</p>
+              <Bot className="w-4 h-4 text-amber-700" />
+              <p className="text-xs font-bold text-amber-700 uppercase tracking-wide">AI Retention Conversation</p>
             </div>
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-3 space-y-2.5 max-h-64 overflow-y-auto">
+            <div className="bg-white/80 border border-slate-200 rounded-xl p-3 space-y-2.5 max-h-64 overflow-y-auto">
               {chatLog.length === 0 && (
                 <p className="text-xs text-slate-600 text-center py-4">No messages yet</p>
               )}
               {chatLog.map((msg, i) => (
                 <div key={i} className={`flex gap-2.5 ${msg.role === "client" ? "flex-row-reverse" : ""}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === "ai" ? "bg-amber-400/20" : "bg-sky-500/20"}`}>
-                    {msg.role === "ai" ? <Bot className="w-3 h-3 text-amber-400" /> : <Users className="w-3 h-3 text-sky-400" />}
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === "ai" ? "bg-amber-400/20" : "bg-sky-100"}`}>
+                    {msg.role === "ai" ? <Bot className="w-3 h-3 text-amber-700" /> : <Users className="w-3 h-3 text-sky-700" />}
                   </div>
-                  <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed ${msg.role === "ai" ? "bg-slate-800 text-slate-300" : "bg-sky-500/15 border border-sky-500/20 text-sky-200"}`}>
+                  <div className={`max-w-[80%] px-3 py-2 rounded-xl text-xs leading-relaxed ${msg.role === "ai" ? "bg-slate-100 text-slate-700" : "bg-sky-100 border border-sky-500/20 text-sky-200"}`}>
                     {msg.message}
                   </div>
                 </div>
@@ -7316,9 +7316,9 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
                 <input value={clientMsg} onChange={e => setClientMsg(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && sendClientMessage()}
                   placeholder="Enter client's response to continue the conversation…"
-                  className="flex-1 bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/60" />
+                  className="flex-1 bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/60" />
                 <button onClick={sendClientMessage} disabled={!clientMsg.trim()}
-                  className="flex items-center gap-1.5 bg-amber-400/15 border border-amber-400/30 hover:bg-amber-400/25 text-amber-300 text-xs font-bold px-3 py-2 rounded-xl transition-all disabled:opacity-40">
+                  className="flex items-center gap-1.5 bg-amber-100 border border-amber-400/30 hover:bg-amber-400/25 text-amber-700 text-xs font-bold px-3 py-2 rounded-xl transition-all disabled:opacity-40">
                   <MessageSquare className="w-3.5 h-3.5" /> Send
                 </button>
               </div>
@@ -7329,15 +7329,15 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
           {adjustments.length > 0 && (
             <div>
               <div className="flex items-center gap-2 mb-3">
-                <TrendingDown className="w-4 h-4 text-emerald-400" />
-                <p className="text-xs font-bold text-emerald-400 uppercase tracking-wide">Retention Adjustments Offered</p>
+                <TrendingDown className="w-4 h-4 text-emerald-700" />
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">Retention Adjustments Offered</p>
               </div>
               <div className="space-y-2">
                 {adjustments.map(adj => (
-                  <div key={adj.id} className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-3 py-2.5">
+                  <div key={adj.id} className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white">{adj.description}</p>
+                        <p className="text-xs font-semibold text-slate-900">{adj.description}</p>
                         <p className="text-[10px] text-slate-500 capitalize mt-0.5">{adj.adjustment_type.replace(/_/g, " ")}
                           {adj.original_value != null && adj.new_value != null && ` — ${fmt(adj.original_value)} → ${fmt(adj.new_value)}`}
                           {adj.original_date && adj.new_date && ` — ${adj.original_date} → ${adj.new_date}`}
@@ -7355,23 +7355,23 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
 
           {/* Staff resolution */}
           {request.status === "pending" && (
-            <div className="border-t border-slate-800 pt-4 space-y-3">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Staff Resolution</p>
+            <div className="border-t border-slate-200 pt-4 space-y-3">
+              <p className="text-xs font-bold text-slate-600 uppercase tracking-widest">Staff Resolution</p>
               <div>
-                <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Staff Notes</label>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Staff Notes</label>
                 <textarea value={staffNotes} onChange={e => setStaffNotes(e.target.value)} rows={2}
                   placeholder="Internal notes — outcome, arrangement made, reason for cancellation…"
                   className={`${inp} resize-none text-xs`} />
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-400 mb-2 block">Resolution</label>
+                <label className="text-xs font-semibold text-slate-600 mb-2 block">Resolution</label>
                 <div className="flex gap-2">
                   <button onClick={() => setOutcome("saved")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${outcome === "saved" ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400" : "bg-slate-800/40 border-slate-700 text-slate-500 hover:border-slate-600"}`}>
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${outcome === "saved" ? "bg-emerald-100 border-emerald-500/40 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                     <CheckCircle2 className="w-4 h-4" /> Client Saved
                   </button>
                   <button onClick={() => setOutcome("cancelled")}
-                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${outcome === "cancelled" ? "bg-red-500/15 border-red-500/40 text-red-400" : "bg-slate-800/40 border-slate-700 text-slate-500 hover:border-slate-600"}`}>
+                    className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${outcome === "cancelled" ? "bg-rose-100 border-red-500/40 text-rose-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                     <Ban className="w-4 h-4" /> Confirm Cancellation
                   </button>
                 </div>
@@ -7382,11 +7382,11 @@ function CancelRequestModal({ request, client, adminUser, onClose, onSaved }: {
 
         {/* Footer */}
         {request.status === "pending" && (
-          <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2 flex-shrink-0">
-            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Close</button>
+          <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 flex-shrink-0">
+            <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Close</button>
             <button onClick={resolve} disabled={saving}
               className={`flex items-center gap-2 font-bold px-5 py-2 rounded-xl text-sm transition-all disabled:opacity-40 ${
-                outcome === "saved" ? "bg-emerald-500 hover:bg-emerald-400 text-white" : "bg-red-500/80 hover:bg-red-500 text-white"
+                outcome === "saved" ? "bg-emerald-500 hover:bg-emerald-400 text-slate-900" : "bg-red-500/80 hover:bg-red-500 text-slate-900"
               }`}>
               {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : outcome === "saved" ? <CheckCircle2 className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
               {saving ? "Saving…" : outcome === "saved" ? "Save Client" : "Process Cancellation"}
@@ -7680,10 +7680,10 @@ function TrustTransferHub({
   }));
 
   const STATUS_STYLES: Record<string, string> = {
-    pending_approval: "bg-amber-400/10 border-amber-400/25 text-amber-300",
-    approved:         "bg-sky-500/10 border-sky-500/25 text-sky-400",
-    rejected:         "bg-red-500/10 border-red-500/25 text-red-400",
-    executed:         "bg-emerald-500/10 border-emerald-500/25 text-emerald-400",
+    pending_approval: "bg-amber-50 border-amber-400/25 text-amber-700",
+    approved:         "bg-sky-50 border-sky-500/25 text-sky-700",
+    rejected:         "bg-rose-50 border-red-500/25 text-rose-700",
+    executed:         "bg-emerald-50 border-emerald-500/25 text-emerald-700",
   };
   const STATUS_LABELS: Record<string, string> = {
     pending_approval: "Pending Attorney Approval",
@@ -7716,24 +7716,24 @@ function TrustTransferHub({
 
       {/* Live IOLTA balances by state */}
       <div>
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Live Trust Account Balances</p>
+        <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-3">Live Trust Account Balances</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {ioltaByState.map(({ state: st, iolta, operating }) => (
-            <div key={st} className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4">
+            <div key={st} className="bg-white border border-slate-200 rounded-2xl p-4">
               <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-lg bg-amber-400/15 flex items-center justify-center">
-                  <Vault className="w-3.5 h-3.5 text-amber-400" />
+                <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Vault className="w-3.5 h-3.5 text-amber-700" />
                 </div>
-                <span className="text-sm font-bold text-white">{st}</span>
+                <span className="text-sm font-bold text-slate-900">{st}</span>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wide">IOLTA / Trust</span>
-                  <span className="text-sm font-bold text-amber-400">{fmt(iolta?.current_balance ?? 0)}</span>
+                  <span className="text-sm font-bold text-amber-700">{fmt(iolta?.current_balance ?? 0)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] text-slate-500 uppercase tracking-wide">Operating</span>
-                  <span className="text-sm font-bold text-emerald-400">{fmt(operating?.current_balance ?? 0)}</span>
+                  <span className="text-sm font-bold text-emerald-700">{fmt(operating?.current_balance ?? 0)}</span>
                 </div>
                 {iolta && <p className="text-[9px] text-slate-700 mt-1">{iolta.bank_name} · ····{iolta.account_number_last4 ?? "—"}</p>}
               </div>
@@ -7743,16 +7743,16 @@ function TrustTransferHub({
       </div>
 
       {/* Sub-tabs */}
-      <div className="flex gap-1 bg-slate-900/60 border border-slate-800 rounded-xl p-1 w-fit">
+      <div className="flex gap-1 bg-white/80 border border-slate-200 rounded-xl p-1 w-fit">
         {HUB_TABS.map(t => (
           <button key={t.id} onClick={() => setHubTab(t.id)}
             className={`relative flex items-center gap-1.5 text-xs font-semibold px-4 py-1.5 rounded-lg transition-all ${
-              hubTab === t.id ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-300"
+              hubTab === t.id ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-700"
             }`}>
             {t.label}
             {t.badge ? (
               <span className={`absolute -top-1 -right-1 w-4 h-4 flex items-center justify-center text-[9px] font-bold rounded-full ${
-                hubTab === t.id ? "bg-slate-950 text-amber-400" : "bg-amber-400 text-slate-950"
+                hubTab === t.id ? "bg-slate-50 text-amber-700" : "bg-amber-400 text-slate-950"
               }`}>{t.badge}</span>
             ) : null}
           </button>
@@ -7764,26 +7764,26 @@ function TrustTransferHub({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-xs text-slate-500">Cases that have been filed but trust funds have not yet been transferred out.</p>
-            <span className="text-[10px] font-bold text-amber-400 bg-amber-400/10 border border-amber-400/20 rounded-lg px-2.5 py-1">{pendingTransferEntries.length} case{pendingTransferEntries.length !== 1 ? "s" : ""}</span>
+            <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-400/20 rounded-lg px-2.5 py-1">{pendingTransferEntries.length} case{pendingTransferEntries.length !== 1 ? "s" : ""}</span>
           </div>
           {pendingTransferEntries.length === 0 ? (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-6 py-12 text-center">
+            <div className="bg-white border border-slate-200 rounded-2xl px-6 py-12 text-center">
               <CheckCircle2 className="w-8 h-8 text-slate-700 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-500">No pending transfers</p>
               <p className="text-xs text-slate-700 mt-1">All filed cases have completed trust account transfers.</p>
             </div>
           ) : (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Client</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Case #</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Filed</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">State</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Chapter</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Transfer Status</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">IOLTA Amount</th>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Client</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Case #</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Filed</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">State</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Chapter</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Transfer Status</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">IOLTA Amount</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/40">
@@ -7791,24 +7791,24 @@ function TrustTransferHub({
                     const client = clients.find(c => c.id === r.client_id);
                     const statusColor =
                       r.transfer_status === "not_ready" ? "text-yellow-400" :
-                      r.transfer_status === "pending_signoff" ? "text-sky-400" :
-                      r.transfer_status === "signed_off" ? "text-emerald-400" : "text-slate-500";
+                      r.transfer_status === "pending_signoff" ? "text-sky-700" :
+                      r.transfer_status === "signed_off" ? "text-emerald-700" : "text-slate-500";
                     const statusLabel =
                       r.transfer_status === "not_ready" ? "Pending Review" :
                       r.transfer_status === "pending_signoff" ? "IOLTA Verified" :
                       r.transfer_status === "signed_off" ? "Attorney Signed Off" :
                       r.transfer_status ?? "Unknown";
                     return (
-                      <tr key={r.id} className="hover:bg-slate-800/20 transition-colors">
-                        <td className="px-4 py-3 text-sm font-semibold text-white">{client?.full_name ?? "Unknown"}</td>
-                        <td className="px-4 py-3 text-[11px] font-mono text-slate-400">{r.case_number ?? "—"}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(r.filed_date)}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400">{r.state ?? "—"}</td>
+                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-900">{client?.full_name ?? "Unknown"}</td>
+                        <td className="px-4 py-3 text-[11px] font-mono text-slate-600">{r.case_number ?? "—"}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{fmtDate(r.filed_date)}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600">{r.state ?? "—"}</td>
                         <td className="px-4 py-3">{chapterBadge(r.chapter)}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-semibold ${statusColor}`}>{statusLabel}</span>
                         </td>
-                        <td className="px-4 py-3 text-right text-sm font-bold text-amber-400">
+                        <td className="px-4 py-3 text-right text-sm font-bold text-amber-700">
                           {r.iolta_verified_amount ? fmt(r.iolta_verified_amount) : <span className="text-slate-600 font-normal text-xs">Not set</span>}
                         </td>
                       </tr>
@@ -7832,18 +7832,18 @@ function TrustTransferHub({
           <div className="space-y-4">
             {/* Account info banner */}
             {(ioltaAcct || operAcct) && (
-              <div className="flex flex-wrap items-center gap-4 bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3">
+              <div className="flex flex-wrap items-center gap-4 bg-white border border-slate-200 rounded-2xl px-4 py-3">
                 {ioltaAcct && (
                   <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-                      <Vault className="w-3.5 h-3.5 text-amber-400" />
+                    <div className="w-6 h-6 rounded-lg bg-amber-100 flex items-center justify-center flex-shrink-0">
+                      <Vault className="w-3.5 h-3.5 text-amber-700" />
                     </div>
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">IOLTA / Trust</p>
-                      <p className="text-xs font-bold text-white">{ioltaAcct.account_name}</p>
+                      <p className="text-xs font-bold text-slate-900">{ioltaAcct.account_name}</p>
                       <p className="text-[10px] text-slate-600">{ioltaAcct.bank_name} · ····{ioltaAcct.account_number_last4 ?? "—"}</p>
                     </div>
-                    <span className="text-sm font-bold text-amber-400 ml-4">{fmt(ioltaAcct.current_balance ?? 0)}</span>
+                    <span className="text-sm font-bold text-amber-700 ml-4">{fmt(ioltaAcct.current_balance ?? 0)}</span>
                   </div>
                 )}
                 {operAcct && (
@@ -7851,31 +7851,31 @@ function TrustTransferHub({
                     <ArrowRightLeft className="w-4 h-4 text-slate-600" />
                     <div>
                       <p className="text-[10px] text-slate-500 uppercase tracking-wide">Operating</p>
-                      <p className="text-xs font-bold text-white">{operAcct.account_name}</p>
+                      <p className="text-xs font-bold text-slate-900">{operAcct.account_name}</p>
                       <p className="text-[10px] text-slate-600">{operAcct.bank_name} · ····{operAcct.account_number_last4 ?? "—"}</p>
                     </div>
-                    <span className="text-sm font-bold text-emerald-400 ml-4">{fmt(operAcct.current_balance ?? 0)}</span>
+                    <span className="text-sm font-bold text-emerald-700 ml-4">{fmt(operAcct.current_balance ?? 0)}</span>
                   </div>
                 )}
               </div>
             )}
 
             {/* Selection toolbar */}
-            <div className="flex flex-wrap items-center gap-3 bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3">
+            <div className="flex flex-wrap items-center gap-3 bg-white border border-slate-200 rounded-2xl px-4 py-3">
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => allSelectedInState ? stateEntries.forEach(r => setSelected(p => { const n = new Set(p); n.delete(r.id); return n; })) : stateEntries.forEach(r => setSelected(p => new Set([...p, r.id])))}
-                  className="text-[10px] font-bold text-amber-400 hover:text-amber-300 bg-amber-400/10 border border-amber-400/20 rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1">
+                  className="text-[10px] font-bold text-amber-700 hover:text-amber-700 bg-amber-50 border border-amber-400/20 rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1">
                   <CheckSquare className="w-3 h-3" /> {allSelectedInState ? "Deselect All" : "Select All"}
                 </button>
-                <button onClick={selectNone} className="text-[10px] font-bold text-slate-400 hover:text-white bg-slate-800 border border-slate-700 rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1">
+                <button onClick={selectNone} className="text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-100 border border-slate-200 rounded-lg px-2.5 py-1.5 transition-colors flex items-center gap-1">
                   <Square className="w-3 h-3" /> None
                 </button>
               </div>
-              <div className="flex-1 text-xs text-slate-400">
+              <div className="flex-1 text-xs text-slate-600">
                 {selected.size > 0
-                  ? <span><span className="font-bold text-white">{selected.size}</span> selected · <span className="font-bold text-amber-400">{fmt(totalSelectedAmount)}</span></span>
-                  : <span className="text-slate-600">{stateEntries.length} {hubTab} entries ready for transfer · <span className="font-bold text-amber-400">{fmt(stateTotal)}</span> total</span>}
+                  ? <span><span className="font-bold text-slate-900">{selected.size}</span> selected · <span className="font-bold text-amber-700">{fmt(totalSelectedAmount)}</span></span>
+                  : <span className="text-slate-600">{stateEntries.length} {hubTab} entries ready for transfer · <span className="font-bold text-amber-700">{fmt(stateTotal)}</span> total</span>}
               </div>
               {selected.size > 0 && (
                 <div className="flex items-center gap-2">
@@ -7883,7 +7883,7 @@ function TrustTransferHub({
                     value={submittedBy}
                     onChange={e => setSubmittedBy(e.target.value)}
                     placeholder="Your name"
-                    className="bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 w-36"
+                    className="bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 w-36"
                   />
                   <button
                     onClick={submitBatch}
@@ -7897,13 +7897,13 @@ function TrustTransferHub({
             </div>
 
             {stateEntries.length === 0 ? (
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-6 py-12 text-center">
+              <div className="bg-white border border-slate-200 rounded-2xl px-6 py-12 text-center">
                 <CheckCircle2 className="w-8 h-8 text-slate-700 mx-auto mb-3" />
                 <p className="text-sm font-semibold text-slate-500">No {hubTab} clients ready for transfer</p>
                 <p className="text-xs text-slate-700 mt-1">Entries appear here once the attorney has signed off on the IOLTA balance.</p>
               </div>
             ) : (
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                 <div className="divide-y divide-slate-800/50">
                   {stateEntries.map(r => {
                     const client = clients.find(c => c.id === r.client_id);
@@ -7912,13 +7912,13 @@ function TrustTransferHub({
                     return (
                       <div key={r.id}
                         onClick={() => toggleSelect(r.id)}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isSel ? "bg-amber-400/5" : "hover:bg-slate-800/30"}`}>
-                        <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-all ${isSel ? "bg-amber-400 border-amber-400" : "border-slate-600"}`}>
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${isSel ? "bg-amber-400/5" : "hover:bg-slate-100/30"}`}>
+                        <div className={`w-5 h-5 rounded border flex-shrink-0 flex items-center justify-center transition-all ${isSel ? "bg-amber-400 border-amber-400" : "border-slate-300"}`}>
                           {isSel && <Check className="w-3 h-3 text-slate-950" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-semibold text-white">{client?.full_name ?? "Unknown"}</span>
+                            <span className="text-sm font-semibold text-slate-900">{client?.full_name ?? "Unknown"}</span>
                             {chapterBadge(r.chapter)}
                             <span className="text-[10px] text-slate-600 font-mono">{r.case_number}</span>
                             <span className="text-[10px] text-slate-600">Filed {fmtDate(r.filed_date)}</span>
@@ -7930,16 +7930,16 @@ function TrustTransferHub({
                           )}
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className="text-sm font-bold text-amber-400">{fmt(r.iolta_verified_amount ?? 0)}</p>
+                          <p className="text-sm font-bold text-amber-700">{fmt(r.iolta_verified_amount ?? 0)}</p>
                           <p className="text-[10px] text-slate-600">IOLTA verified</p>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/20 border-t border-slate-800">
+                <div className="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-t border-slate-200">
                   <span className="text-[10px] text-slate-500">{stateEntries.filter(r => selected.has(r.id)).length} of {stateEntries.length} selected</span>
-                  <span className="text-xs font-bold text-amber-400">{fmt(stateEntries.filter(r => selected.has(r.id)).reduce((s,r) => s + (r.iolta_verified_amount ?? 0), 0))} selected</span>
+                  <span className="text-xs font-bold text-amber-700">{fmt(stateEntries.filter(r => selected.has(r.id)).reduce((s,r) => s + (r.iolta_verified_amount ?? 0), 0))} selected</span>
                 </div>
               </div>
             )}
@@ -7951,7 +7951,7 @@ function TrustTransferHub({
       {hubTab === "batches" && (
         <div className="space-y-4">
           {batches.length === 0 ? (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-6 py-12 text-center">
+            <div className="bg-white border border-slate-200 rounded-2xl px-6 py-12 text-center">
               <ClipboardList className="w-8 h-8 text-slate-700 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-500">No batch requests yet</p>
               <p className="text-xs text-slate-700 mt-1">Select clients from the "Ready to Transfer" tab and submit for attorney approval.</p>
@@ -7963,32 +7963,32 @@ function TrustTransferHub({
                 const ioltaAcct = trustAccounts.find(a => a.id === batch.iolta_account_id);
                 const operAcct  = trustAccounts.find(a => a.id === batch.operating_account_id);
                 return (
-                  <div key={batch.id} className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+                  <div key={batch.id} className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
                     {/* Batch header */}
-                    <div className="px-4 py-3.5 border-b border-slate-800 flex items-start justify-between gap-3">
+                    <div className="px-4 py-3.5 border-b border-slate-200 flex items-start justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2.5 flex-wrap mb-1">
-                          <span className="text-sm font-bold text-white">{batch.state} — Batch Transfer</span>
+                          <span className="text-sm font-bold text-slate-900">{batch.state} — Batch Transfer</span>
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${STATUS_STYLES[batch.status]}`}>
                             {STATUS_LABELS[batch.status]}
                           </span>
                         </div>
                         <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
                           <span>{batch.client_count} client{batch.client_count !== 1 ? "s" : ""}</span>
-                          <span className="font-bold text-amber-400">{fmt(batch.total_amount)}</span>
+                          <span className="font-bold text-amber-700">{fmt(batch.total_amount)}</span>
                           <span>Submitted by {batch.submitted_by} on {fmtDate(batch.submitted_at)}</span>
                           {ioltaAcct && <span>From: {ioltaAcct.account_name}</span>}
                           {operAcct  && <span>To: {operAcct.account_name}</span>}
                         </div>
                         {batch.approved_by && (
-                          <p className="text-[10px] text-sky-400 mt-1">
+                          <p className="text-[10px] text-sky-700 mt-1">
                             {batch.status === "rejected" ? "Rejected" : "Approved"} by {batch.approved_by} · {fmtDate(batch.approved_at)}
                             {batch.approval_notes && <span className="text-slate-500"> — {batch.approval_notes}</span>}
-                            {batch.rejection_reason && <span className="text-red-400"> — {batch.rejection_reason}</span>}
+                            {batch.rejection_reason && <span className="text-rose-700"> — {batch.rejection_reason}</span>}
                           </p>
                         )}
                         {batch.executed_at && (
-                          <p className="text-[10px] text-emerald-400 mt-0.5">
+                          <p className="text-[10px] text-emerald-700 mt-0.5">
                             Executed by {batch.executed_by} on {fmtDateTime(batch.executed_at)}
                           </p>
                         )}
@@ -7996,13 +7996,13 @@ function TrustTransferHub({
                       <div className="flex gap-2 flex-shrink-0">
                         {batch.status === "pending_approval" && (
                           <button onClick={() => setApproveModal(batch)}
-                            className="flex items-center gap-1.5 bg-sky-500/15 border border-sky-500/30 hover:bg-sky-500/25 text-sky-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
+                            className="flex items-center gap-1.5 bg-sky-100 border border-sky-500/30 hover:bg-sky-500/25 text-sky-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
                             <Shield className="w-3.5 h-3.5" /> Review & Approve
                           </button>
                         )}
                         {batch.status === "approved" && (
                           <button onClick={() => setExecuteModal(batch)}
-                            className="flex items-center gap-1.5 bg-emerald-500/15 border border-emerald-500/30 hover:bg-emerald-500/25 text-emerald-300 text-xs font-bold px-3 py-2 rounded-xl transition-all">
+                            className="flex items-center gap-1.5 bg-emerald-100 border border-emerald-500/30 hover:bg-emerald-100 text-emerald-700 text-xs font-bold px-3 py-2 rounded-xl transition-all">
                             <ArrowRightLeft className="w-3.5 h-3.5" /> Execute Transfer
                           </button>
                         )}
@@ -8017,10 +8017,10 @@ function TrustTransferHub({
                         return (
                           <div key={item.id} className="flex items-center justify-between px-4 py-2.5">
                             <div>
-                              <span className="text-xs font-semibold text-white">{client?.full_name ?? "Unknown"}</span>
+                              <span className="text-xs font-semibold text-slate-900">{client?.full_name ?? "Unknown"}</span>
                               {reg && <span className="text-[10px] text-slate-600 ml-2 font-mono">{reg.case_number}</span>}
                             </div>
-                            <span className="text-xs font-bold text-amber-400">{fmt(item.iolta_amount)}</span>
+                            <span className="text-xs font-bold text-amber-700">{fmt(item.iolta_amount)}</span>
                           </div>
                         );
                       })}
@@ -8037,11 +8037,11 @@ function TrustTransferHub({
       {hubTab === "log" && (
         <div className="space-y-4">
           {/* Filter + live balances */}
-          <div className="flex flex-wrap items-center gap-2 bg-[#0d1221] border border-slate-800 rounded-2xl px-4 py-3">
-            <span className="text-xs font-semibold text-slate-400">Filter by state:</span>
+          <div className="flex flex-wrap items-center gap-2 bg-white border border-slate-200 rounded-2xl px-4 py-3">
+            <span className="text-xs font-semibold text-slate-600">Filter by state:</span>
             {["all", ...ACTIVE_STATES].map(s => (
               <button key={s} onClick={() => setLogFilter(s)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${logFilter === s ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-300"}`}>
+                className={`text-xs font-semibold px-3 py-1.5 rounded-lg transition-all ${logFilter === s ? "bg-amber-400 text-slate-950" : "text-slate-500 hover:text-slate-700"}`}>
                 {s === "all" ? "All" : s}
               </button>
             ))}
@@ -8049,33 +8049,33 @@ function TrustTransferHub({
           </div>
 
           {filteredLog.length === 0 ? (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-6 py-12 text-center">
+            <div className="bg-white border border-slate-200 rounded-2xl px-6 py-12 text-center">
               <History className="w-8 h-8 text-slate-700 mx-auto mb-3" />
               <p className="text-sm font-semibold text-slate-500">No IOLTA balance entries yet</p>
               <p className="text-xs text-slate-700 mt-1">Log entries are created when trust transfers are executed.</p>
             </div>
           ) : (
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-slate-800">
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Date</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">State</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Account</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Event</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Amount</th>
-                    <th className="text-right px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest">Balance After</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden md:table-cell">Description</th>
-                    <th className="text-left px-4 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-widest hidden sm:table-cell">By</th>
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">State</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Account</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Event</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Amount</th>
+                    <th className="text-right px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest">Balance After</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden md:table-cell">Description</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold text-slate-700 uppercase tracking-widest hidden sm:table-cell">By</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredLog.map(entry => {
                     const EVENT_COLORS: Record<string, string> = {
-                      transfer_out: "text-red-400",
-                      transfer_in:  "text-emerald-400",
-                      adjustment:   "text-amber-400",
-                      snapshot:     "text-slate-400",
+                      transfer_out: "text-rose-700",
+                      transfer_in:  "text-emerald-700",
+                      adjustment:   "text-amber-700",
+                      snapshot:     "text-slate-600",
                     };
                     const EVENT_LABELS: Record<string, string> = {
                       transfer_out: "Transfer Out",
@@ -8084,19 +8084,19 @@ function TrustTransferHub({
                       snapshot:     "Snapshot",
                     };
                     return (
-                      <tr key={entry.id} className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/20 transition-colors">
-                        <td className="px-4 py-3 text-xs text-slate-400 whitespace-nowrap">{fmtDateTime(entry.recorded_at)}</td>
-                        <td className="px-4 py-3 text-xs font-bold text-white">{entry.state}</td>
-                        <td className="px-4 py-3 text-xs text-slate-400 capitalize">{entry.account_type}</td>
+                      <tr key={entry.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
+                        <td className="px-4 py-3 text-xs text-slate-600 whitespace-nowrap">{fmtDateTime(entry.recorded_at)}</td>
+                        <td className="px-4 py-3 text-xs font-bold text-slate-900">{entry.state}</td>
+                        <td className="px-4 py-3 text-xs text-slate-600 capitalize">{entry.account_type}</td>
                         <td className="px-4 py-3">
                           <span className={`text-xs font-bold ${EVENT_COLORS[entry.event_type]}`}>
                             {EVENT_LABELS[entry.event_type]}
                           </span>
                         </td>
-                        <td className={`px-4 py-3 text-sm font-bold text-right ${entry.amount < 0 ? "text-red-400" : "text-emerald-400"}`}>
+                        <td className={`px-4 py-3 text-sm font-bold text-right ${entry.amount < 0 ? "text-rose-700" : "text-emerald-700"}`}>
                           {entry.amount < 0 ? "−" : "+"}{fmt(Math.abs(entry.amount))}
                         </td>
-                        <td className="px-4 py-3 text-sm font-bold text-white text-right">{fmt(entry.balance_after)}</td>
+                        <td className="px-4 py-3 text-sm font-bold text-slate-900 text-right">{fmt(entry.balance_after)}</td>
                         <td className="px-4 py-3 text-xs text-slate-500 hidden md:table-cell max-w-xs truncate">{entry.description ?? "—"}</td>
                         <td className="px-4 py-3 text-xs text-slate-500 hidden sm:table-cell">{entry.recorded_by ?? "—"}</td>
                       </tr>
@@ -8155,7 +8155,7 @@ function ApproveTransferModal({ batch, items, clients, filedRegistry, adminUser,
   const [decision, setDecision] = useState<"approve" | "reject">("approve");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
 
   async function confirm() {
     setSaving(true);
@@ -8165,68 +8165,68 @@ function ApproveTransferModal({ batch, items, clients, filedRegistry, adminUser,
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center flex-shrink-0">
-            <Shield className="w-4 h-4 text-sky-400" />
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3 flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+            <Shield className="w-4 h-4 text-sky-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Attorney Review — {batch.state} Batch Transfer</h3>
+            <h3 className="text-sm font-bold text-slate-900">Attorney Review — {batch.state} Batch Transfer</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{batch.client_count} client{batch.client_count !== 1 ? "s" : ""} · {fmt(batch.total_amount)} total · Submitted by {batch.submitted_by}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Client list */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Clients in This Batch</p>
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl divide-y divide-slate-800/50">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-2">Clients in This Batch</p>
+            <div className="bg-white/80 border border-slate-200 rounded-xl divide-y divide-slate-800/50">
               {items.map(item => {
                 const client = clients.find(c => c.id === item.client_id);
                 const reg    = filedRegistry.find(r => r.id === item.registry_id);
                 return (
                   <div key={item.id} className="flex items-center justify-between px-3 py-2.5">
                     <div>
-                      <p className="text-sm font-semibold text-white">{client?.full_name ?? "Unknown"}</p>
+                      <p className="text-sm font-semibold text-slate-900">{client?.full_name ?? "Unknown"}</p>
                       {reg && <p className="text-[10px] text-slate-500 font-mono">{reg.case_number} · Filed {fmtDate(reg.filed_date)}</p>}
                     </div>
-                    <span className="text-sm font-bold text-amber-400">{fmt(item.iolta_amount)}</span>
+                    <span className="text-sm font-bold text-amber-700">{fmt(item.iolta_amount)}</span>
                   </div>
                 );
               })}
-              <div className="flex items-center justify-between px-3 py-2.5 bg-slate-800/30">
-                <span className="text-xs font-bold text-slate-400">Total</span>
-                <span className="text-sm font-bold text-amber-400">{fmt(batch.total_amount)}</span>
+              <div className="flex items-center justify-between px-3 py-2.5 bg-slate-100/30">
+                <span className="text-xs font-bold text-slate-600">Total</span>
+                <span className="text-sm font-bold text-amber-700">{fmt(batch.total_amount)}</span>
               </div>
             </div>
           </div>
 
           {/* Decision */}
           <div>
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Attorney Decision</p>
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest mb-2">Attorney Decision</p>
             <div className="flex gap-2 mb-3">
               <button onClick={() => setDecision("approve")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${decision === "approve" ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400" : "bg-slate-800/40 border-slate-700 text-slate-500 hover:border-slate-600"}`}>
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${decision === "approve" ? "bg-emerald-100 border-emerald-500/40 text-emerald-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                 <CheckCircle2 className="w-4 h-4" /> Approve Transfer
               </button>
               <button onClick={() => setDecision("reject")}
-                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${decision === "reject" ? "bg-red-500/15 border-red-500/40 text-red-400" : "bg-slate-800/40 border-slate-700 text-slate-500 hover:border-slate-600"}`}>
+                className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl border text-sm font-bold transition-all ${decision === "reject" ? "bg-rose-100 border-red-500/40 text-rose-700" : "bg-slate-50 border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                 <X className="w-4 h-4" /> Reject
               </button>
             </div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">{decision === "approve" ? "Approval Notes (optional)" : "Rejection Reason *"}</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">{decision === "approve" ? "Approval Notes (optional)" : "Rejection Reason *"}</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
               placeholder={decision === "approve" ? "Authorization notes, reference number…" : "Why is this being rejected?"}
               className={`${inp} resize-none`} />
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={confirm} disabled={saving || (decision === "reject" && !notes.trim())}
             className={`flex items-center gap-2 font-bold px-5 py-2 rounded-xl text-sm transition-all disabled:opacity-40 ${
-              decision === "approve" ? "bg-emerald-500 hover:bg-emerald-400 text-white" : "bg-red-500/80 hover:bg-red-500 text-white"
+              decision === "approve" ? "bg-emerald-500 hover:bg-emerald-400 text-slate-900" : "bg-red-500/80 hover:bg-red-500 text-slate-900"
             }`}>
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : decision === "approve" ? <CheckCircle2 className="w-4 h-4" /> : <X className="w-4 h-4" />}
             {saving ? "Saving…" : decision === "approve" ? `Approve — ${fmt(batch.total_amount)}` : "Reject Batch"}
@@ -8253,82 +8253,82 @@ function ExecuteBatchModal({ batch, items, clients, filedRegistry, trustAccounts
   const [saving, setSaving] = useState(false);
   const ioltaAcct = trustAccounts.find(a => a.id === batch.iolta_account_id);
   const operAcct  = trustAccounts.find(a => a.id === batch.operating_account_id);
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3 flex-shrink-0">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 flex items-center justify-center flex-shrink-0">
-            <ArrowRightLeft className="w-4 h-4 text-emerald-400" />
+      <div className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3 flex-shrink-0">
+          <div className="w-8 h-8 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
+            <ArrowRightLeft className="w-4 h-4 text-emerald-700" />
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Execute Trust Transfer — {batch.state}</h3>
+            <h3 className="text-sm font-bold text-slate-900">Execute Trust Transfer — {batch.state}</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">Approved by {batch.approved_by} · {fmt(batch.total_amount)} · {batch.client_count} client{batch.client_count !== 1 ? "s" : ""}</p>
           </div>
-          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-white flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="ml-auto text-slate-500 hover:text-slate-900 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* Transfer summary */}
-          <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-4">
+          <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-4 py-4">
             <div className="flex items-center gap-3 mb-3">
               <div className="text-center flex-1">
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">From</p>
-                <p className="text-sm font-bold text-amber-400">{ioltaAcct?.account_name ?? "IOLTA Trust"}</p>
+                <p className="text-sm font-bold text-amber-700">{ioltaAcct?.account_name ?? "IOLTA Trust"}</p>
                 <p className="text-[10px] text-slate-600">{ioltaAcct?.bank_name}</p>
-                <p className="text-lg font-bold text-white mt-1">{fmt(ioltaAcct?.current_balance ?? 0)}</p>
+                <p className="text-lg font-bold text-slate-900 mt-1">{fmt(ioltaAcct?.current_balance ?? 0)}</p>
                 <p className="text-[10px] text-slate-600">current balance</p>
               </div>
-              <ArrowRightLeft className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+              <ArrowRightLeft className="w-5 h-5 text-emerald-700 flex-shrink-0" />
               <div className="text-center flex-1">
                 <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">To</p>
-                <p className="text-sm font-bold text-emerald-400">{operAcct?.account_name ?? "Operating"}</p>
+                <p className="text-sm font-bold text-emerald-700">{operAcct?.account_name ?? "Operating"}</p>
                 <p className="text-[10px] text-slate-600">{operAcct?.bank_name}</p>
-                <p className="text-lg font-bold text-white mt-1">{fmt(operAcct?.current_balance ?? 0)}</p>
+                <p className="text-lg font-bold text-slate-900 mt-1">{fmt(operAcct?.current_balance ?? 0)}</p>
                 <p className="text-[10px] text-slate-600">current balance</p>
               </div>
             </div>
             <div className="border-t border-emerald-500/15 pt-3 text-center">
               <p className="text-[10px] text-slate-500 mb-0.5">Transfer Amount</p>
-              <p className="text-2xl font-bold text-emerald-400">{fmt(batch.total_amount)}</p>
+              <p className="text-2xl font-bold text-emerald-700">{fmt(batch.total_amount)}</p>
             </div>
           </div>
 
           {/* Client list */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl divide-y divide-slate-800/50">
+          <div className="bg-white/80 border border-slate-200 rounded-xl divide-y divide-slate-800/50">
             {items.map(item => {
               const client = clients.find(c => c.id === item.client_id);
               const reg    = filedRegistry.find(r => r.id === item.registry_id);
               return (
                 <div key={item.id} className="flex items-center justify-between px-3 py-2.5">
                   <div>
-                    <p className="text-sm font-semibold text-white">{client?.full_name ?? "Unknown"}</p>
+                    <p className="text-sm font-semibold text-slate-900">{client?.full_name ?? "Unknown"}</p>
                     {reg && <p className="text-[10px] text-slate-500 font-mono">{reg.case_number}</p>}
                   </div>
-                  <span className="text-sm font-bold text-amber-400">{fmt(item.iolta_amount)}</span>
+                  <span className="text-sm font-bold text-amber-700">{fmt(item.iolta_amount)}</span>
                 </div>
               );
             })}
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Reference / Confirmation Notes (optional)</label>
+            <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Reference / Confirmation Notes (optional)</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
               placeholder="Bank wire reference number, confirmation code…"
               className={`${inp} resize-none`} />
           </div>
 
-          <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
-            <p className="text-[11px] text-amber-300 font-semibold">This action is final</p>
+          <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-3.5 py-2.5">
+            <p className="text-[11px] text-amber-700 font-semibold">This action is final</p>
             <p className="text-[10px] text-slate-500 mt-0.5">Executing will mark all {batch.client_count} client case(s) as Transferred, update trust account balances, and log the transaction. This cannot be undone.</p>
           </div>
         </div>
 
-        <div className="px-5 py-4 border-t border-slate-800 flex justify-end gap-2 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Cancel</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex justify-end gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Cancel</button>
           <button onClick={async () => { setSaving(true); onExecute(notes); }} disabled={saving}
-            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+            className="flex items-center gap-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <ArrowRightLeft className="w-4 h-4" />}
             {saving ? "Executing…" : `Execute — ${fmt(batch.total_amount)}`}
           </button>
@@ -8360,22 +8360,22 @@ const ACTIVITY_LABELS: Record<string, string> = {
 };
 
 const ACTIVITY_COLORS: Record<string, string> = {
-  file_open:        "text-slate-400 bg-slate-800/60 border-slate-700",
-  file_close:       "text-slate-400 bg-slate-800/60 border-slate-700",
-  manual_note:      "text-sky-400 bg-sky-500/10 border-sky-500/20",
-  payment_adjustment:"text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  cancel_request:   "text-red-400 bg-red-500/10 border-red-500/20",
-  hold_request:     "text-amber-400 bg-amber-400/10 border-amber-400/20",
+  file_open:        "text-slate-600 bg-slate-100 border-slate-200",
+  file_close:       "text-slate-600 bg-slate-100 border-slate-200",
+  manual_note:      "text-sky-700 bg-sky-50 border-sky-500/20",
+  payment_adjustment:"text-emerald-700 bg-emerald-50 border-emerald-500/20",
+  cancel_request:   "text-rose-700 bg-rose-50 border-red-500/20",
+  hold_request:     "text-amber-700 bg-amber-50 border-amber-400/20",
   paralegal_review: "text-teal-400 bg-teal-500/10 border-teal-500/20",
-  attorney_review:  "text-amber-400 bg-amber-500/10 border-amber-500/20",
-  client_call:      "text-sky-400 bg-sky-500/10 border-sky-500/20",
+  attorney_review:  "text-amber-700 bg-amber-50 border-amber-500/20",
+  client_call:      "text-sky-700 bg-sky-50 border-sky-500/20",
   creditor_call:    "text-orange-400 bg-orange-500/10 border-orange-500/20",
-  sms_thread:       "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  email:            "text-slate-300 bg-slate-800/60 border-slate-700",
-  video_call:       "text-sky-400 bg-sky-500/10 border-sky-500/20",
-  message:          "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+  sms_thread:       "text-emerald-700 bg-emerald-50 border-emerald-500/20",
+  email:            "text-slate-700 bg-slate-100 border-slate-200",
+  video_call:       "text-sky-700 bg-sky-50 border-sky-500/20",
+  message:          "text-emerald-700 bg-emerald-50 border-emerald-500/20",
   document_upload:  "text-teal-400 bg-teal-500/10 border-teal-500/20",
-  other:            "text-slate-400 bg-slate-800/60 border-slate-700",
+  other:            "text-slate-600 bg-slate-100 border-slate-200",
 };
 
 function fmtDuration(mins: number): string {
@@ -8417,14 +8417,14 @@ const SOURCE_TYPE_ICONS: Record<string, string> = {
 };
 
 const SOURCE_TYPE_COLORS: Record<string, string> = {
-  message:     "bg-sky-500/10 text-sky-400 border-sky-500/25",
+  message:     "bg-sky-50 text-sky-700 border-sky-500/25",
   email:       "bg-blue-500/10 text-blue-400 border-blue-500/25",
-  phone_call:  "bg-emerald-500/10 text-emerald-400 border-emerald-500/25",
-  file_open:   "bg-slate-600/20 text-slate-400 border-slate-600/30",
-  file_close:  "bg-slate-600/20 text-slate-400 border-slate-600/30",
-  manual:      "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  manual_note: "bg-amber-500/10 text-amber-400 border-amber-500/25",
-  auto:        "bg-slate-700/30 text-slate-500 border-slate-600/20",
+  phone_call:  "bg-emerald-50 text-emerald-700 border-emerald-500/25",
+  file_open:   "bg-slate-300/20 text-slate-600 border-slate-300/30",
+  file_close:  "bg-slate-300/20 text-slate-600 border-slate-300/30",
+  manual:      "bg-amber-50 text-amber-700 border-amber-500/25",
+  manual_note: "bg-amber-50 text-amber-700 border-amber-500/25",
+  auto:        "bg-slate-200/30 text-slate-500 border-slate-300/20",
 };
 
 function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: {
@@ -8546,36 +8546,36 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
     onRefresh();
   }
 
-  const inp = "w-full bg-slate-800/60 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/50 transition-colors";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-amber-400/50 transition-colors";
   const lbl = "text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block";
 
   return (
     <div className="space-y-4">
       {/* Summary bar */}
       <div className="grid grid-cols-4 gap-2">
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Entries</p>
-          <p className="text-base font-bold text-white mt-0.5">{entries.length}</p>
+          <p className="text-base font-bold text-slate-900 mt-0.5">{entries.length}</p>
         </div>
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[10px] text-slate-500 uppercase tracking-wide">Total Time</p>
-          <p className="text-base font-bold text-white mt-0.5">{fmtDuration(totalMins)}</p>
+          <p className="text-base font-bold text-slate-900 mt-0.5">{fmtDuration(totalMins)}</p>
         </div>
-        <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[10px] text-amber-500 uppercase tracking-wide">Billable Time</p>
-          <p className="text-base font-bold text-amber-400 mt-0.5">{fmtDuration(billableMins)}</p>
+          <p className="text-base font-bold text-amber-700 mt-0.5">{fmtDuration(billableMins)}</p>
         </div>
-        <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-3 py-2.5 text-center">
+        <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-3 py-2.5 text-center">
           <p className="text-[10px] text-emerald-500 uppercase tracking-wide">Billable $</p>
-          <p className="text-base font-bold text-emerald-400 mt-0.5">${totalBillableAmt.toFixed(2)}</p>
+          <p className="text-base font-bold text-emerald-700 mt-0.5">${totalBillableAmt.toFixed(2)}</p>
         </div>
       </div>
 
       {/* Staff time breakdown */}
       {Object.keys(staffSummary).length > 0 && (
-        <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl overflow-hidden">
-          <div className="px-3 py-2 border-b border-slate-700/40">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Time by Staff Member</p>
+        <div className="bg-slate-100/30 border border-slate-200/40 rounded-xl overflow-hidden">
+          <div className="px-3 py-2 border-b border-slate-200/40">
+            <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Time by Staff Member</p>
           </div>
           <div className="divide-y divide-slate-700/30">
             {Object.entries(staffSummary).map(([name, s]) => {
@@ -8584,26 +8584,26 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
               return (
                 <div key={name} className="flex items-center justify-between px-3 py-2">
                   <div className="flex items-center gap-2">
-                    <div className="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-[8px] font-bold text-slate-300">{name.charAt(0)}</div>
+                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-bold text-slate-700">{name.charAt(0)}</div>
                     <div>
-                      <p className="text-xs font-semibold text-slate-300">{name}</p>
+                      <p className="text-xs font-semibold text-slate-700">{name}</p>
                       <p className="text-[9px] text-slate-600 capitalize">{(s.role ?? "staff").replace("_"," ")} · ${hrRate}/hr</p>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 text-right">
                     <div>
-                      <p className="text-[10px] text-slate-400 font-semibold">{fmtDuration(s.mins)}</p>
+                      <p className="text-[10px] text-slate-600 font-semibold">{fmtDuration(s.mins)}</p>
                       <p className="text-[9px] text-slate-600">total</p>
                     </div>
                     {s.billable_mins > 0 && (
                       <div>
-                        <p className="text-[10px] text-amber-400 font-semibold">{fmtDuration(s.billable_mins)}</p>
+                        <p className="text-[10px] text-amber-700 font-semibold">{fmtDuration(s.billable_mins)}</p>
                         <p className="text-[9px] text-slate-600">billable</p>
                       </div>
                     )}
                     {s.billable_amt > 0 && (
                       <div>
-                        <p className="text-[10px] text-emerald-400 font-bold">${s.billable_amt.toFixed(2)}</p>
+                        <p className="text-[10px] text-emerald-700 font-bold">${s.billable_amt.toFixed(2)}</p>
                         <p className="text-[9px] text-slate-600">amount</p>
                       </div>
                     )}
@@ -8616,21 +8616,21 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
       )}
 
       {/* Rate reference */}
-      <div className="bg-slate-800/30 border border-slate-700/40 rounded-xl px-4 py-2.5 flex items-center gap-3 flex-wrap">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Default Rates:</p>
+      <div className="bg-slate-100/30 border border-slate-200/40 rounded-xl px-4 py-2.5 flex items-center gap-3 flex-wrap">
+        <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Default Rates:</p>
         {[["Attorney", 450], ["Paralegal", 225], ["Legal Admin", 175]].map(([r, v]) => (
-          <span key={r as string} className="text-[10px] text-slate-400"><span className="font-semibold text-slate-300">{r}</span> ${v}/hr</span>
+          <span key={r as string} className="text-[10px] text-slate-600"><span className="font-semibold text-slate-700">{r}</span> ${v}/hr</span>
         ))}
         <span className="text-[10px] text-slate-600 ml-auto">Min. 0.2 billing units per entry</span>
       </div>
 
       {/* Add entry */}
       {!showAdd ? (
-        <button onClick={() => setShowAdd(true)} className="w-full flex items-center justify-center gap-2 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 text-sky-400 font-bold text-xs py-2.5 rounded-xl transition-all">
+        <button onClick={() => setShowAdd(true)} className="w-full flex items-center justify-center gap-2 bg-sky-50 hover:bg-sky-100 border border-sky-500/20 text-sky-700 font-bold text-xs py-2.5 rounded-xl transition-all">
           <Plus className="w-3.5 h-3.5" /> Add Time Entry
         </button>
       ) : (
-        <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 space-y-3">
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className={lbl}>Activity Type</label>
@@ -8641,7 +8641,7 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
             <div>
               <label className={lbl}>Duration (minutes) <span className="text-slate-600 normal-case">min 12 = 0.2 units</span></label>
               <input type="number" min="1" step="1" value={form.duration_mins} onChange={e => setForm(f => ({ ...f, duration_mins: e.target.value }))} placeholder="12" className={inp} />
-              <p className="text-[9px] text-slate-600 mt-1">= <span className="text-amber-400 font-bold">{units} units</span> {form.billable && rate > 0 && <span className="text-emerald-400">· ${billableAmt.toFixed(2)}</span>}</p>
+              <p className="text-[9px] text-slate-600 mt-1">= <span className="text-amber-700 font-bold">{units} units</span> {form.billable && rate > 0 && <span className="text-emerald-700">· ${billableAmt.toFixed(2)}</span>}</p>
             </div>
             <div>
               <label className={lbl}>Staff Member</label>
@@ -8666,17 +8666,17 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
           <div className="flex items-center justify-between">
             <label className="flex items-center gap-2 cursor-pointer">
               <div onClick={() => setForm(f => ({ ...f, billable: !f.billable }))}
-                className={`w-8 h-4 rounded-full transition-all flex items-center ${form.billable ? "bg-amber-400" : "bg-slate-700"}`}>
+                className={`w-8 h-4 rounded-full transition-all flex items-center ${form.billable ? "bg-amber-400" : "bg-slate-200"}`}>
                 <div className={`w-3 h-3 rounded-full bg-white mx-0.5 transition-all ${form.billable ? "translate-x-4" : ""}`} />
               </div>
-              <span className="text-xs text-slate-400">Billable</span>
+              <span className="text-xs text-slate-600">Billable</span>
               {form.billable && billableAmt > 0 && (
-                <span className="text-xs font-bold text-emerald-400 ml-1">${billableAmt.toFixed(2)}</span>
+                <span className="text-xs font-bold text-emerald-700 ml-1">${billableAmt.toFixed(2)}</span>
               )}
             </label>
             <div className="flex gap-2">
-              <button onClick={() => setShowAdd(false)} className="text-xs text-slate-500 hover:text-white px-3 py-1.5">Cancel</button>
-              <button onClick={save} disabled={saving} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs px-4 py-1.5 rounded-xl transition-all disabled:opacity-50">
+              <button onClick={() => setShowAdd(false)} className="text-xs text-slate-500 hover:text-slate-900 px-3 py-1.5">Cancel</button>
+              <button onClick={save} disabled={saving} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs px-4 py-1.5 rounded-xl transition-all disabled:opacity-50">
                 {saving ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
               </button>
             </div>
@@ -8698,7 +8698,7 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
           const srcLabel   = SOURCE_TYPE_ICONS[srcType] ?? "NOTE";
           const srcColor   = SOURCE_TYPE_COLORS[srcType] ?? SOURCE_TYPE_COLORS.manual;
           return (
-            <div key={e.id} className={`rounded-xl border transition-colors ${isEditing ? "bg-slate-800/60 border-amber-500/30" : "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50"}`}>
+            <div key={e.id} className={`rounded-xl border transition-colors ${isEditing ? "bg-slate-100 border-amber-500/30" : "bg-slate-100/30 border-slate-200/50 hover:bg-slate-100/50"}`}>
               <div className="flex items-start gap-3 px-3.5 py-3">
                 {/* Source badge */}
                 <div className={`text-[8px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap flex-shrink-0 mt-0.5 ${srcColor}`}>
@@ -8709,7 +8709,7 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
                   {ACTIVITY_LABELS[e.activity_type] ?? e.activity_type}
                 </div>
                 <div className="flex-1 min-w-0">
-                  {e.notes && <p className="text-xs text-slate-300 leading-relaxed">{e.notes}</p>}
+                  {e.notes && <p className="text-xs text-slate-700 leading-relaxed">{e.notes}</p>}
                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                     <span className="text-[10px] text-slate-500 font-medium">{e.staff_name}</span>
                     {e.staff_role && <span className="text-[9px] text-slate-600 capitalize">{e.staff_role.replace("_"," ")}</span>}
@@ -8717,35 +8717,35 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
                     <span className="text-[10px] text-slate-500">{new Date(e.started_at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</span>
                     {(e.duration_minutes ?? 0) > 0 && <>
                       <span className="text-[10px] text-slate-700">·</span>
-                      <span className="text-[10px] text-slate-400 font-semibold">{fmtDuration(e.duration_minutes)}</span>
+                      <span className="text-[10px] text-slate-600 font-semibold">{fmtDuration(e.duration_minutes)}</span>
                       <span className="text-[10px] text-slate-600">({entryUnits} units)</span>
                     </>}
-                    {!isEditing && e.billable && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-400/10 text-amber-400 border-amber-400/20">Billable</span>}
+                    {!isEditing && e.billable && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-400/20">Billable</span>}
                     {!isEditing && e.billing_rate != null && <span className="text-[9px] text-slate-600">${Number(e.billing_rate)}/hr</span>}
-                    {!isEditing && entryAmt != null && <span className="text-[9px] font-bold text-emerald-400">${entryAmt.toFixed(2)}</span>}
+                    {!isEditing && entryAmt != null && <span className="text-[9px] font-bold text-emerald-700">${entryAmt.toFixed(2)}</span>}
                   </div>
                 </div>
                 {/* Edit toggle */}
                 {!isEditing ? (
-                  <button onClick={() => startEdit(e)} className="flex-shrink-0 text-[9px] text-slate-600 hover:text-amber-400 px-1.5 py-0.5 rounded border border-slate-700/50 hover:border-amber-500/30 transition-all mt-0.5">
+                  <button onClick={() => startEdit(e)} className="flex-shrink-0 text-[9px] text-slate-600 hover:text-amber-700 px-1.5 py-0.5 rounded border border-slate-200/50 hover:border-amber-500/30 transition-all mt-0.5">
                     Edit
                   </button>
                 ) : (
-                  <button onClick={() => setEditingId(null)} className="flex-shrink-0 text-[9px] text-slate-500 hover:text-white px-1.5 py-0.5 mt-0.5">✕</button>
+                  <button onClick={() => setEditingId(null)} className="flex-shrink-0 text-[9px] text-slate-500 hover:text-slate-900 px-1.5 py-0.5 mt-0.5">✕</button>
                 )}
               </div>
 
               {/* Inline edit panel */}
               {isEditing && (
-                <div className="px-3.5 pb-3 pt-0 border-t border-slate-700/40 mt-0">
+                <div className="px-3.5 pb-3 pt-0 border-t border-slate-200/40 mt-0">
                   <div className="flex items-center gap-3 mt-2.5 flex-wrap">
                     {/* Billable toggle */}
                     <label className="flex items-center gap-2 cursor-pointer">
                       <div onClick={() => setEditBillable(b => !b)}
-                        className={`w-8 h-4 rounded-full transition-all flex items-center ${editBillable ? "bg-amber-400" : "bg-slate-700"}`}>
+                        className={`w-8 h-4 rounded-full transition-all flex items-center ${editBillable ? "bg-amber-400" : "bg-slate-200"}`}>
                         <div className={`w-3 h-3 rounded-full bg-white mx-0.5 transition-all ${editBillable ? "translate-x-4" : ""}`} />
                       </div>
-                      <span className="text-xs text-slate-400">Billable</span>
+                      <span className="text-xs text-slate-600">Billable</span>
                     </label>
                     {/* Rate input */}
                     {editBillable && (
@@ -8754,15 +8754,15 @@ function CaseTimeLogPanel({ client, entries, adminUser, staffList, onRefresh }: 
                         <input
                           type="number" min="0" step="25" value={editRate}
                           onChange={e => setEditRate(e.target.value)}
-                          className="w-20 bg-slate-800/60 border border-slate-700 text-white text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-amber-400/50"
+                          className="w-20 bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-lg px-2 py-1 focus:outline-none focus:border-amber-400/50"
                         />
-                        {editAmt > 0 && <span className="text-[10px] font-bold text-emerald-400">${editAmt.toFixed(2)}</span>}
+                        {editAmt > 0 && <span className="text-[10px] font-bold text-emerald-700">${editAmt.toFixed(2)}</span>}
                       </div>
                     )}
                     <div className="flex gap-2 ml-auto">
-                      <button onClick={() => setEditingId(null)} className="text-xs text-slate-500 hover:text-white px-3 py-1.5">Cancel</button>
+                      <button onClick={() => setEditingId(null)} className="text-xs text-slate-500 hover:text-slate-900 px-3 py-1.5">Cancel</button>
                       <button onClick={() => saveEdit(e)} disabled={savingEdit}
-                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs px-3 py-1.5 rounded-lg transition-all disabled:opacity-50">
+                        className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold text-xs px-3 py-1.5 rounded-lg transition-all disabled:opacity-50">
                         {savingEdit ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />} Save
                       </button>
                     </div>
@@ -8806,29 +8806,29 @@ function FileOpenPrompt({ client, adminUser, onDismiss, onLogged }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center flex-shrink-0">
-            <Clock className="w-4 h-4 text-sky-400" />
+      <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center flex-shrink-0">
+            <Clock className="w-4 h-4 text-sky-700" />
           </div>
           <div>
-            <p className="text-sm font-bold text-white">Log Time Entry</p>
+            <p className="text-sm font-bold text-slate-900">Log Time Entry</p>
             <p className="text-[11px] text-slate-500 mt-0.5">{client.full_name} — leaving file</p>
           </div>
         </div>
         <div className="px-5 py-4 space-y-3">
           <div>
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Time Spent (minutes)</label>
-            <input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)} placeholder="e.g. 15" className="w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-sky-400/50" />
+            <input type="number" min="0" value={duration} onChange={e => setDuration(e.target.value)} placeholder="e.g. 15" className="w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-sky-400/50" />
           </div>
           <div>
             <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block">Notes (optional)</label>
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="What was reviewed or done…" className="w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-sky-400/50 resize-none" />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="What was reviewed or done…" className="w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-sky-400/50 resize-none" />
           </div>
         </div>
-        <div className="px-5 py-3.5 border-t border-slate-800 flex gap-2">
-          <button onClick={onDismiss} className="flex-1 text-xs text-slate-500 hover:text-white py-2.5 rounded-xl transition-colors">Skip</button>
-          <button onClick={logAndClose} disabled={saving} className="flex-1 flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs py-2.5 rounded-xl transition-all disabled:opacity-50">
+        <div className="px-5 py-3.5 border-t border-slate-200 flex gap-2">
+          <button onClick={onDismiss} className="flex-1 text-xs text-slate-500 hover:text-slate-900 py-2.5 rounded-xl transition-colors">Skip</button>
+          <button onClick={logAndClose} disabled={saving} className="flex-1 flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 text-slate-900 font-bold text-xs py-2.5 rounded-xl transition-all disabled:opacity-50">
             {saving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
             Log & Close
           </button>
@@ -8937,46 +8937,46 @@ function HoldRequestModal({
     setSubmitting(false);
   }
 
-  const inp = "w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${requestType === "hold" ? "bg-amber-400/15" : "bg-sky-500/15"}`}>
-            {requestType === "hold" ? <PauseCircle className="w-4 h-4 text-amber-400" /> : <Calendar className="w-4 h-4 text-sky-400" />}
+      <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className={`w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0 ${requestType === "hold" ? "bg-amber-100" : "bg-sky-100"}`}>
+            {requestType === "hold" ? <PauseCircle className="w-4 h-4 text-amber-700" /> : <Calendar className="w-4 h-4 text-sky-700" />}
           </div>
           <div className="flex-1">
-            <h3 className="text-sm font-bold text-white">
+            <h3 className="text-sm font-bold text-slate-900">
               {requestType === "hold" ? "Place Client On Hold" : "Push Out Payment"}
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{client.full_name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="px-5 py-4 space-y-4">
           {/* Show pending approval banner if one exists and user is a reviewer */}
           {pending && canApprove && !reviewAction && (
-            <div className="bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3 space-y-3">
+            <div className="bg-amber-50 border border-amber-400/25 rounded-xl px-4 py-3 space-y-3">
               <div className="flex items-start gap-2">
-                <Clock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <Clock className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-bold text-amber-300">Pending Approval</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Requested by <strong className="text-white">{pending.requested_by}</strong> on {new Date(pending.created_at).toLocaleDateString()}</p>
-                  <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">"{pending.reason}"</p>
-                  {pending.push_to_date && <p className="text-xs text-slate-400 mt-1">Defer to: <strong className="text-white">{pending.push_to_date}</strong></p>}
+                  <p className="text-xs font-bold text-amber-700">Pending Approval</p>
+                  <p className="text-xs text-slate-600 mt-0.5">Requested by <strong className="text-slate-900">{pending.requested_by}</strong> on {new Date(pending.created_at).toLocaleDateString()}</p>
+                  <p className="text-xs text-slate-700 mt-1.5 leading-relaxed">"{pending.reason}"</p>
+                  {pending.push_to_date && <p className="text-xs text-slate-600 mt-1">Defer to: <strong className="text-slate-900">{pending.push_to_date}</strong></p>}
                 </div>
               </div>
               <div>
-                <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Review Notes (optional)</label>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Review Notes (optional)</label>
                 <textarea value={reviewNotes} onChange={e => setReviewNotes(e.target.value)} rows={2} className={`${inp} resize-none`} placeholder="Notes for your decision…" />
               </div>
               <div className="flex gap-2">
-                <button onClick={() => reviewRequest("approved")} disabled={submitting} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl transition-all">
+                <button onClick={() => reviewRequest("approved")} disabled={submitting} className="flex-1 flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-900 font-bold text-xs py-2.5 rounded-xl transition-all">
                   <CheckCircle2 className="w-3.5 h-3.5" /> Approve
                 </button>
-                <button onClick={() => reviewRequest("denied")} disabled={submitting} className="flex-1 flex items-center justify-center gap-1.5 bg-red-500/80 hover:bg-red-500 disabled:opacity-50 text-white font-bold text-xs py-2.5 rounded-xl transition-all">
+                <button onClick={() => reviewRequest("denied")} disabled={submitting} className="flex-1 flex items-center justify-center gap-1.5 bg-red-500/80 hover:bg-red-500 disabled:opacity-50 text-slate-900 font-bold text-xs py-2.5 rounded-xl transition-all">
                   <X className="w-3.5 h-3.5" /> Deny
                 </button>
               </div>
@@ -8985,47 +8985,47 @@ function HoldRequestModal({
 
           {reviewAction && (
             <div className="flex flex-col items-center py-4 text-center">
-              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${reviewAction === "approved" ? "bg-emerald-500/15" : "bg-red-500/15"}`}>
-                {reviewAction === "approved" ? <CheckCircle2 className="w-6 h-6 text-emerald-400" /> : <X className="w-6 h-6 text-red-400" />}
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-3 ${reviewAction === "approved" ? "bg-emerald-100" : "bg-rose-100"}`}>
+                {reviewAction === "approved" ? <CheckCircle2 className="w-6 h-6 text-emerald-700" /> : <X className="w-6 h-6 text-rose-700" />}
               </div>
-              <p className="text-sm font-bold text-white">{reviewAction === "approved" ? "Request Approved" : "Request Denied"}</p>
-              <button onClick={onClose} className="mt-4 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-5 py-2 rounded-xl">Close</button>
+              <p className="text-sm font-bold text-slate-900">{reviewAction === "approved" ? "Request Approved" : "Request Denied"}</p>
+              <button onClick={onClose} className="mt-4 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold text-xs px-5 py-2 rounded-xl">Close</button>
             </div>
           )}
 
           {submitted && !reviewAction && (
             <div className="flex flex-col items-center py-4 text-center">
-              <div className="w-12 h-12 rounded-2xl bg-emerald-500/15 flex items-center justify-center mb-3">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 flex items-center justify-center mb-3">
+                <CheckCircle2 className="w-6 h-6 text-emerald-700" />
               </div>
-              <p className="text-sm font-bold text-white">{canApprove ? "Applied" : "Request Submitted"}</p>
-              <p className="text-xs text-slate-400 mt-1">{canApprove ? "The change has been applied immediately." : "Awaiting Accounting Super Admin approval."}</p>
-              <button onClick={onClose} className="mt-4 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-5 py-2 rounded-xl">Close</button>
+              <p className="text-sm font-bold text-slate-900">{canApprove ? "Applied" : "Request Submitted"}</p>
+              <p className="text-xs text-slate-600 mt-1">{canApprove ? "The change has been applied immediately." : "Awaiting Accounting Super Admin approval."}</p>
+              <button onClick={onClose} className="mt-4 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold text-xs px-5 py-2 rounded-xl">Close</button>
             </div>
           )}
 
           {!submitted && !pending && !reviewAction && (
             <>
               {!canApprove && (
-                <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-3 py-2.5 flex items-start gap-2">
-                  <Info className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-slate-400 leading-relaxed">This request requires <strong className="text-white">Accounting Super Admin</strong> approval before taking effect.</p>
+                <div className="bg-sky-50 border border-sky-500/20 rounded-xl px-3 py-2.5 flex items-start gap-2">
+                  <Info className="w-3.5 h-3.5 text-sky-700 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-slate-600 leading-relaxed">This request requires <strong className="text-slate-900">Accounting Super Admin</strong> approval before taking effect.</p>
                 </div>
               )}
               <div>
-                <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Reason <span className="text-red-400">*</span></label>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Reason <span className="text-rose-700">*</span></label>
                 <textarea value={reason} onChange={e => setReason(e.target.value)} rows={3} className={`${inp} resize-none`} placeholder={requestType === "hold" ? "Explain why this client should be placed on hold…" : "Explain why this payment should be deferred…"} />
               </div>
               {requestType === "push_payment" && (
                 <div>
-                  <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Defer Next Payment To <span className="text-red-400">*</span></label>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Defer Next Payment To <span className="text-rose-700">*</span></label>
                   <input type="date" value={pushDate} onChange={e => setPushDate(e.target.value)} className={inp} />
                 </div>
               )}
               <button
                 onClick={submitRequest}
                 disabled={submitting || !reason.trim() || (requestType === "push_payment" && !pushDate)}
-                className={`w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-all disabled:opacity-40 ${requestType === "hold" ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-sky-500 hover:bg-sky-400 text-white"}`}
+                className={`w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-all disabled:opacity-40 ${requestType === "hold" ? "bg-amber-400 hover:bg-amber-300 text-slate-950" : "bg-sky-500 hover:bg-sky-400 text-slate-900"}`}
               >
                 {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : requestType === "hold" ? <PauseCircle className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
                 {submitting ? "Submitting…" : canApprove ? (requestType === "hold" ? "Place On Hold" : "Push Payment") : "Submit for Approval"}
@@ -9089,8 +9089,8 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
     setAdjNewFreq("");
   }
 
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
-  const lbl = "text-xs font-semibold text-slate-400 mb-1.5 block";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
+  const lbl = "text-xs font-semibold text-slate-600 mb-1.5 block";
 
   const CATEGORIES = [
     { value: "financial_hardship",    label: "Financial Hardship" },
@@ -9232,36 +9232,36 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-xl bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-xl bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-start gap-3 flex-shrink-0">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-start gap-3 flex-shrink-0">
           <div className="w-8 h-8 rounded-xl bg-rose-500/15 flex items-center justify-center flex-shrink-0 mt-0.5">
-            <Ban className="w-4 h-4 text-rose-400" />
+            <Ban className="w-4 h-4 text-rose-700" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-bold text-white">Cancel Review</h3>
+            <h3 className="text-sm font-bold text-slate-900">Cancel Review</h3>
             <p className="text-xs text-slate-500 mt-0.5">{client.full_name} · {client.client_id}</p>
             <div className="flex items-center gap-2 mt-2">
               {(["review","adjust","confirm_cancel"] as Step[]).map((s, i) => (
                 <div key={s} className="flex items-center gap-1.5">
-                  {i > 0 && <div className="w-4 h-px bg-slate-700" />}
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border transition-colors ${step === s ? "bg-amber-400/15 border-amber-400/30 text-amber-300" : "border-slate-700 text-slate-600"}`}>
+                  {i > 0 && <div className="w-4 h-px bg-slate-200" />}
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border transition-colors ${step === s ? "bg-amber-100 border-amber-400/30 text-amber-700" : "border-slate-200 text-slate-600"}`}>
                     {s === "review" ? "Intake" : s === "adjust" ? "Retention" : "Cancel"}
                   </span>
                 </div>
               ))}
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1 flex-shrink-0"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 p-1 flex-shrink-0"><X className="w-4 h-4" /></button>
         </div>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
           {/* ── STEP 1: Intake ── */}
           {step === "review" && (
             <>
-              <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-4 py-3 text-xs text-amber-300">
+              <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-4 py-3 text-xs text-amber-700">
                 <p className="font-semibold mb-1">Before cancelling, explore retention options.</p>
-                <p className="text-slate-400">Capture the reason, then offer the client a fee reduction, payment push, or restructured plan. Only proceed to cancellation if all options are exhausted.</p>
+                <p className="text-slate-600">Capture the reason, then offer the client a fee reduction, payment push, or restructured plan. Only proceed to cancellation if all options are exhausted.</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -9293,18 +9293,18 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
           {/* ── STEP 2: Retention Adjustments ── */}
           {step === "adjust" && (
             <>
-              <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3 text-xs text-emerald-300">
+              <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-4 py-3 text-xs text-emerald-700">
                 <p className="font-semibold mb-1">Offer Retention Options</p>
-                <p className="text-slate-400">Add one or more adjustments offered to the client. If the client accepts, click "Client Saved". If no options work, proceed to cancellation.</p>
+                <p className="text-slate-600">Add one or more adjustments offered to the client. If the client accepts, click "Client Saved". If no options work, proceed to cancellation.</p>
               </div>
 
               {/* Adjustment form */}
-              <div className="bg-slate-800/40 border border-slate-700/60 rounded-xl p-4 space-y-3">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Add Adjustment</p>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                <p className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Add Adjustment</p>
                 <div className="grid grid-cols-3 gap-2">
                   {ADJ_TYPES.map(t => (
                     <button key={t.value} onClick={() => handleAdjTypeChange(t.value)}
-                      className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-[10px] font-semibold transition-all ${adjType === t.value ? "bg-sky-500/15 border-sky-500/30 text-sky-300" : "border-slate-700/60 text-slate-500 hover:border-slate-600 hover:text-slate-300"}`}>
+                      className={`flex flex-col items-center gap-1 px-2 py-2 rounded-xl border text-[10px] font-semibold transition-all ${adjType === t.value ? "bg-sky-100 border-sky-500/30 text-sky-300" : "border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700"}`}>
                       <span className="text-xs">{t.icon}</span>
                       {t.label}
                     </button>
@@ -9317,8 +9317,8 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
                     className={inp} />
                 </div>
                 {(adjType === "reduce_fee" || adjType === "waive_fee") && (
-                  <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2 mb-1">
-                    <p className="text-[10px] text-amber-300 font-semibold">Requires Super Admin Attorney Approval</p>
+                  <div className="bg-amber-50 border border-amber-400/20 rounded-xl px-3 py-2 mb-1">
+                    <p className="text-[10px] text-amber-700 font-semibold">Requires Super Admin Attorney Approval</p>
                     <p className="text-[10px] text-slate-500 mt-0.5">Attorney fee reductions must be approved by the super admin attorney. A fee adjustment request will be created automatically when this retention is saved.</p>
                   </div>
                 )}
@@ -9326,10 +9326,10 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className={lbl}>{adjType === "reduce_payments" ? "Original Payment ($)" : "Original Attorney Fee ($)"}</label>
-                      <input type="number" value={adjOrigVal} onChange={e => setAdjOrigVal(e.target.value)} placeholder="0.00" className={inp + " bg-slate-900/60 text-slate-400"} />
+                      <input type="number" value={adjOrigVal} onChange={e => setAdjOrigVal(e.target.value)} placeholder="0.00" className={inp + " bg-white/80 text-slate-600"} />
                     </div>
                     <div>
-                      <label className={lbl}>{adjType === "reduce_payments" ? "Proposed Payment ($)" : adjType === "waive_fee" ? "Waive Amount ($)" : "Proposed Reduced Fee ($)"} <span className="text-amber-400">*</span></label>
+                      <label className={lbl}>{adjType === "reduce_payments" ? "Proposed Payment ($)" : adjType === "waive_fee" ? "Waive Amount ($)" : "Proposed Reduced Fee ($)"} <span className="text-amber-700">*</span></label>
                       <input type="number" value={adjNewVal} onChange={e => setAdjNewVal(e.target.value)} placeholder="0.00" className={inp} />
                     </div>
                   </div>
@@ -9369,7 +9369,7 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
                   <input value={adjNotes} onChange={e => setAdjNotes(e.target.value)} placeholder="Optional notes…" className={inp} />
                 </div>
                 <button onClick={addAdjustment} disabled={!adjDesc.trim()}
-                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 disabled:opacity-40 rounded-xl transition-colors">
+                  className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-500/20 hover:bg-emerald-100 disabled:opacity-40 rounded-xl transition-colors">
                   <Plus className="w-3.5 h-3.5" /> Add to List
                 </button>
               </div>
@@ -9377,17 +9377,17 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
               {/* Adjustments applied */}
               {adjustments.length > 0 && (
                 <div className="space-y-2">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Adjustments Offered ({adjustments.length})</p>
+                  <p className="text-xs font-bold text-slate-700 uppercase tracking-widest">Adjustments Offered ({adjustments.length})</p>
                   {adjustments.map((adj, i) => (
-                    <div key={i} className="flex items-start justify-between gap-2 bg-slate-800/40 border border-slate-700/60 rounded-xl px-3 py-2.5">
+                    <div key={i} className="flex items-start justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5">
                       <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white">{adj.description}</p>
+                        <p className="text-xs font-semibold text-slate-900">{adj.description}</p>
                         <p className="text-[10px] text-slate-500 capitalize">{adj.adjustment_type.replace(/_/g, " ")}
                           {adj.original_value != null && adj.new_value != null && ` — ${fmt(adj.original_value)} → ${fmt(adj.new_value)}`}
                           {adj.original_date && adj.new_date && ` — ${adj.original_date} → ${adj.new_date}`}
                         </p>
                       </div>
-                      <button onClick={() => setAdjustments(p => p.filter((_, j) => j !== i))} className="text-slate-600 hover:text-red-400 flex-shrink-0 p-0.5">
+                      <button onClick={() => setAdjustments(p => p.filter((_, j) => j !== i))} className="text-slate-600 hover:text-rose-700 flex-shrink-0 p-0.5">
                         <X className="w-3 h-3" />
                       </button>
                     </div>
@@ -9400,52 +9400,52 @@ function QuickCancelModal({ client, feeStructure, adminUser, onClose, onSaved }:
           {/* ── STEP 3: Confirm Cancellation ── */}
           {step === "confirm_cancel" && (
             <>
-              <div className="bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3 text-xs text-red-400">
+              <div className="bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3 text-xs text-rose-700">
                 <p className="font-semibold mb-1">No retention options accepted.</p>
-                <p className="text-slate-400">This will permanently mark the case as <span className="font-bold text-red-400">Cancelled</span> and record a cancellation in the time log. This cannot be undone without a supervisor override.</p>
+                <p className="text-slate-600">This will permanently mark the case as <span className="font-bold text-rose-700">Cancelled</span> and record a cancellation in the time log. This cannot be undone without a supervisor override.</p>
               </div>
-              <div className="bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-3 space-y-1.5 text-xs">
-                <div className="flex justify-between"><span className="text-slate-500">Client</span><span className="text-white font-semibold">{client.full_name}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Channel</span><span className="text-slate-300 capitalize">{channel}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Reason</span><span className="text-slate-300 capitalize">{category.replace(/_/g, " ")}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Adjustments offered</span><span className={adjustments.length > 0 ? "text-amber-400" : "text-slate-500"}>{adjustments.length > 0 ? `${adjustments.length} (declined)` : "None"}</span></div>
-                <div className="flex justify-between"><span className="text-slate-500">Authorized by</span><span className="text-slate-300">{adminUser ?? "—"}</span></div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 space-y-1.5 text-xs">
+                <div className="flex justify-between"><span className="text-slate-500">Client</span><span className="text-slate-900 font-semibold">{client.full_name}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Channel</span><span className="text-slate-700 capitalize">{channel}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Reason</span><span className="text-slate-700 capitalize">{category.replace(/_/g, " ")}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Adjustments offered</span><span className={adjustments.length > 0 ? "text-amber-700" : "text-slate-500"}>{adjustments.length > 0 ? `${adjustments.length} (declined)` : "None"}</span></div>
+                <div className="flex justify-between"><span className="text-slate-500">Authorized by</span><span className="text-slate-700">{adminUser ?? "—"}</span></div>
               </div>
             </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-4 border-t border-slate-800 flex items-center justify-between gap-2 flex-shrink-0">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white">Close</button>
+        <div className="px-5 py-4 border-t border-slate-200 flex items-center justify-between gap-2 flex-shrink-0">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900">Close</button>
           <div className="flex items-center gap-2">
             {step === "review" && (
               <button onClick={() => setStep("adjust")}
-                className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+                className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
                 Next: Retention Options <ChevronRight className="w-4 h-4" />
               </button>
             )}
             {step === "adjust" && (
               <>
-                <button onClick={() => setStep("review")} className="px-3 py-2 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-xl">Back</button>
+                <button onClick={() => setStep("review")} className="px-3 py-2 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl">Back</button>
                 {adjustments.length > 0 && (
                   <button onClick={saveAsRetained} disabled={saving}
-                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-bold px-4 py-2 rounded-xl text-sm transition-all">
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-slate-900 font-bold px-4 py-2 rounded-xl text-sm transition-all">
                     {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                     Client Saved
                   </button>
                 )}
                 <button onClick={() => setStep("confirm_cancel")}
-                  className="flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white font-bold px-4 py-2 rounded-xl text-sm transition-all">
+                  className="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold px-4 py-2 rounded-xl text-sm transition-all">
                   Proceed to Cancel <ChevronRight className="w-4 h-4" />
                 </button>
               </>
             )}
             {step === "confirm_cancel" && (
               <>
-                <button onClick={() => setStep("adjust")} className="px-3 py-2 text-xs text-slate-400 hover:text-white border border-slate-700 rounded-xl">Back</button>
+                <button onClick={() => setStep("adjust")} className="px-3 py-2 text-xs text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl">Back</button>
                 <button onClick={saveAsCancelled} disabled={saving}
-                  className="flex items-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-bold px-5 py-2 rounded-xl text-sm transition-all">
+                  className="flex items-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-slate-900 font-bold px-5 py-2 rounded-xl text-sm transition-all">
                   {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                   {saving ? "Processing…" : "Confirm Cancellation"}
                 </button>
@@ -9478,7 +9478,7 @@ function DropClientModal({ client, adminUser, role, onClose, onSaved }: {
     ? Math.floor((Date.now() - new Date(client.last_contact_date).getTime()) / (1000 * 60 * 60 * 24))
     : null;
 
-  const inp = "w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-500";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-slate-300";
 
   async function submitDrop() {
     setSaving(true);
@@ -9519,44 +9519,44 @@ function DropClientModal({ client, adminUser, role, onClose, onSaved }: {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0d1221] border border-red-500/30 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+      <div className="w-full max-w-lg bg-white border border-red-500/30 rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
         {/* Header */}
-        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-red-500/15 flex items-center justify-center flex-shrink-0">
-            <UserX className="w-4.5 h-4.5 text-red-400" />
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-rose-100 flex items-center justify-center flex-shrink-0">
+            <UserX className="w-4.5 h-4.5 text-rose-700" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-bold text-white">Drop Client — No-Contact Policy</h3>
+            <h3 className="text-sm font-bold text-slate-900">Drop Client — No-Contact Policy</h3>
             <p className="text-[11px] text-slate-500 mt-0.5">{client.full_name} · {client.client_id}</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 p-1"><X className="w-4 h-4" /></button>
         </div>
 
         {(submitted || approved) ? (
           <div className="px-5 py-8 flex flex-col items-center text-center space-y-3">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${approved ? "bg-red-500/15" : "bg-amber-400/15"}`}>
-              {approved ? <XCircle className="w-7 h-7 text-red-400" /> : <Clock className="w-7 h-7 text-amber-400" />}
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${approved ? "bg-rose-100" : "bg-amber-100"}`}>
+              {approved ? <XCircle className="w-7 h-7 text-rose-700" /> : <Clock className="w-7 h-7 text-amber-700" />}
             </div>
-            <p className="text-base font-bold text-white">{approved ? "Client Dropped" : "Drop Request Submitted"}</p>
-            <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+            <p className="text-base font-bold text-slate-900">{approved ? "Client Dropped" : "Drop Request Submitted"}</p>
+            <p className="text-xs text-slate-600 max-w-sm leading-relaxed">
               {approved
                 ? "The drop email has been logged. The client's case has been marked cancelled."
                 : "A drop request has been submitted for Attorney Super Admin review. The client will be notified once approved."}
             </p>
-            <button onClick={() => { onSaved(); onClose(); }} className="mt-2 bg-slate-700 hover:bg-slate-600 text-white font-bold text-xs px-6 py-2.5 rounded-xl">Close</button>
+            <button onClick={() => { onSaved(); onClose(); }} className="mt-2 bg-slate-200 hover:bg-slate-300 text-slate-900 font-bold text-xs px-6 py-2.5 rounded-xl">Close</button>
           </div>
         ) : (
           <div className="px-5 py-4 space-y-4">
             {/* No-contact summary */}
             <div className="bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3 space-y-2">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                <p className="text-xs font-bold text-red-300">6-Month No-Contact Rule Triggered</p>
+                <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0" />
+                <p className="text-xs font-bold text-rose-700">6-Month No-Contact Rule Triggered</p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <p className="text-slate-500">Last Contact</p>
-                  <p className="text-white font-semibold">
+                  <p className="text-slate-900 font-semibold">
                     {client.last_contact_date
                       ? new Date(client.last_contact_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
                       : "Unknown"}
@@ -9564,17 +9564,17 @@ function DropClientModal({ client, adminUser, role, onClose, onSaved }: {
                 </div>
                 <div>
                   <p className="text-slate-500">Days Since Contact</p>
-                  <p className={`font-bold ${(daysSinceContact ?? 0) >= 180 ? "text-red-400" : "text-amber-400"}`}>
+                  <p className={`font-bold ${(daysSinceContact ?? 0) >= 180 ? "text-rose-700" : "text-amber-700"}`}>
                     {daysSinceContact !== null ? `${daysSinceContact} days` : "—"}
                   </p>
                 </div>
                 <div>
                   <p className="text-slate-500">Client Status</p>
-                  <p className="text-white font-semibold capitalize">{client.extended_status ?? client.status}</p>
+                  <p className="text-slate-900 font-semibold capitalize">{client.extended_status ?? client.status}</p>
                 </div>
                 <div>
                   <p className="text-slate-500">Intake Date</p>
-                  <p className="text-white font-semibold">
+                  <p className="text-slate-900 font-semibold">
                     {client.intake_date ? new Date(client.intake_date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—"}
                   </p>
                 </div>
@@ -9583,53 +9583,53 @@ function DropClientModal({ client, adminUser, role, onClose, onSaved }: {
 
             {/* Approval requirement */}
             {!isSuperAdmin && (
-              <div className="bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3 flex items-start gap-2.5">
-                <Shield className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="bg-amber-50 border border-amber-400/25 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                <Shield className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-xs font-bold text-amber-300">Attorney Super Admin Approval Required</p>
-                  <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+                  <p className="text-xs font-bold text-amber-700">Attorney Super Admin Approval Required</p>
+                  <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">
                     Submitting this drop request will notify the Attorney Super Admin. The drop email will be sent and the case closed only after their approval.
                   </p>
                 </div>
               </div>
             )}
             {isSuperAdmin && (
-              <div className="bg-emerald-500/8 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
-                <Shield className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                <p className="text-xs text-slate-300">You are logged in as <strong className="text-emerald-300">Attorney Super Admin</strong>. This drop will be approved immediately.</p>
+              <div className="bg-emerald-50 border border-emerald-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                <Shield className="w-4 h-4 text-emerald-700 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-700">You are logged in as <strong className="text-emerald-700">Attorney Super Admin</strong>. This drop will be approved immediately.</p>
               </div>
             )}
 
             {/* What happens */}
-            <div className="rounded-xl border border-slate-700 divide-y divide-slate-800 text-xs overflow-hidden">
-              <p className="px-4 py-2.5 font-bold text-slate-400 uppercase tracking-wider text-[10px] bg-slate-800/40">What This Does</p>
+            <div className="rounded-xl border border-slate-200 divide-y divide-slate-800 text-xs overflow-hidden">
+              <p className="px-4 py-2.5 font-bold text-slate-600 uppercase tracking-wider text-[10px] bg-slate-50">What This Does</p>
               {[
                 { icon: "📧", text: "Sends a formal drop/disengagement email to the client" },
                 { icon: "📋", text: "Logs a cancellation request under No-Contact Drop policy" },
                 { icon: "🔒", text: `Marks case as Cancelled once ${isSuperAdmin ? "confirmed" : "approved by Attorney Super Admin"}` },
                 { icon: "📝", text: "Creates a time log entry on this client's file" },
               ].map((item, i) => (
-                <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-[#0d1221]">
+                <div key={i} className="flex items-center gap-3 px-4 py-2.5 bg-white">
                   <span className="text-sm">{item.icon}</span>
-                  <p className="text-slate-400">{item.text}</p>
+                  <p className="text-slate-600">{item.text}</p>
                 </div>
               ))}
             </div>
 
             {/* Notes */}
             <div>
-              <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Additional Notes <span className="text-slate-600">(optional)</span></label>
+              <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Additional Notes <span className="text-slate-600">(optional)</span></label>
               <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
                 placeholder="Any additional context for the drop email or case record…"
                 className={`${inp} resize-none`} />
             </div>
 
             <div className="flex gap-2 pt-1">
-              <button onClick={onClose} className="flex-1 py-2.5 text-sm text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-colors">Cancel</button>
+              <button onClick={onClose} className="flex-1 py-2.5 text-sm text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl transition-colors">Cancel</button>
               <button
                 onClick={submitDrop}
                 disabled={saving}
-                className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-white font-bold text-sm py-2.5 rounded-xl transition-all"
+                className="flex-1 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-500 disabled:opacity-40 text-slate-900 font-bold text-sm py-2.5 rounded-xl transition-all"
               >
                 {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <UserX className="w-4 h-4" />}
                 {saving ? "Processing…" : isSuperAdmin ? "Confirm Drop" : "Submit Drop Request"}
@@ -9768,12 +9768,12 @@ function ClientsTableView({
     inactive: "Inactive", case_closed: "Case Closed", cancelled: "Cancelled",
   };
   const EXT_STATUS_COLORS: Record<ExtendedStatus, string> = {
-    active:     "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
-    on_hold:    "bg-amber-400/15 text-amber-400 border-amber-400/25",
-    completed:  "bg-sky-500/15 text-sky-400 border-sky-500/25",
-    inactive:   "bg-slate-700/60 text-slate-500 border-slate-700",
-    case_closed:"bg-slate-800/80 text-slate-400 border-slate-700",
-    cancelled:  "bg-red-500/15 text-red-400 border-red-500/25",
+    active:     "bg-emerald-100 text-emerald-700 border-emerald-500/25",
+    on_hold:    "bg-amber-100 text-amber-700 border-amber-400/25",
+    completed:  "bg-sky-100 text-sky-700 border-sky-500/25",
+    inactive:   "bg-slate-200/60 text-slate-500 border-slate-200",
+    case_closed:"bg-slate-100/80 text-slate-600 border-slate-200",
+    cancelled:  "bg-rose-100 text-rose-700 border-red-500/25",
   };
 
   const currentFilter = SUB_TABS.find(t => t.id === subTab)?.filter ?? (() => true);
@@ -9825,37 +9825,37 @@ function ClientsTableView({
     <div className="flex-1 flex flex-col overflow-hidden min-h-0">
       {/* Lifecycle Alerts Panel */}
       {openAlerts.length > 0 && (
-        <div className="flex-shrink-0 px-4 sm:px-6 py-3 border-b border-slate-800/60 space-y-2">
+        <div className="flex-shrink-0 px-4 sm:px-6 py-3 border-b border-slate-200 space-y-2">
           {dropTasks.map(alert => (
             <div key={alert.id} className="flex items-start gap-3 bg-red-500/8 border border-red-500/20 rounded-xl px-4 py-3">
-              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-rose-700 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-red-300">DROP / WITHDRAWAL REQUIRED: {alert.client_name}</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs font-bold text-rose-700">DROP / WITHDRAWAL REQUIRED: {alert.client_name}</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
                   60-day warning expired. Client paid in full {alert.paid_full_date ? `since ${fmtDate(alert.paid_full_date)}` : ""} and has not entered paralegal review.
                   {alert.billable_amount != null && alert.total_fee != null && ` Billable hours (${fmt(alert.billable_amount)}) exceed flat fee (${fmt(alert.total_fee)}).`}
                 </p>
               </div>
-              <button onClick={() => dismissAlert(alert.id)} className="text-[10px] font-bold text-slate-500 hover:text-white border border-slate-700 px-2 py-1 rounded-lg flex-shrink-0">Ack</button>
+              <button onClick={() => dismissAlert(alert.id)} className="text-[10px] font-bold text-slate-500 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded-lg flex-shrink-0">Ack</button>
             </div>
           ))}
           {warnAlerts.length > 0 && (
-            <div className="flex items-start gap-3 bg-amber-400/8 border border-amber-400/20 rounded-xl px-4 py-3">
-              <Clock className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-3 bg-amber-50 border border-amber-400/20 rounded-xl px-4 py-3">
+              <Clock className="w-4 h-4 text-amber-700 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-amber-300">{warnAlerts.length} Client{warnAlerts.length !== 1 ? "s" : ""} — 60-Day Document Deadline Active</p>
-                <p className="text-[11px] text-slate-400 mt-0.5">
+                <p className="text-xs font-bold text-amber-700">{warnAlerts.length} Client{warnAlerts.length !== 1 ? "s" : ""} — 60-Day Document Deadline Active</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">
                   These clients are paid in full (6+ months) with billable hours exceeding the flat fee. 60-day warning emails have been sent.{" "}
                   {warnAlerts.map(a => a.client_name).join(", ")}
                 </p>
               </div>
-              <button onClick={() => Promise.all(warnAlerts.map(a => dismissAlert(a.id)))} className="text-[10px] font-bold text-slate-500 hover:text-white border border-slate-700 px-2 py-1 rounded-lg flex-shrink-0">Ack All</button>
+              <button onClick={() => Promise.all(warnAlerts.map(a => dismissAlert(a.id)))} className="text-[10px] font-bold text-slate-500 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded-lg flex-shrink-0">Ack All</button>
             </div>
           )}
         </div>
       )}
       {/* Sub-tab bar */}
-      <div className="flex-shrink-0 border-b border-slate-800/60 bg-[#0d1221]/60">
+      <div className="flex-shrink-0 border-b border-slate-200 bg-white/60">
         <div className="px-4 sm:px-6 flex gap-1 overflow-x-auto">
           {SUB_TABS.map(t => {
             const count = t.id === "all" ? clients.length : clients.filter(t.filter).length;
@@ -9865,17 +9865,17 @@ function ClientsTableView({
             return (
               <button key={t.id} onClick={() => setSubTab(t.id)}
                 className={`relative flex items-center gap-1.5 py-3 px-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-all -mb-px flex-shrink-0 ${
-                  subTab === t.id ? "border-amber-400 text-amber-400" : "border-transparent text-slate-500 hover:text-slate-300"
+                  subTab === t.id ? "border-amber-400 text-amber-700" : "border-transparent text-slate-500 hover:text-slate-700"
                 }`}>
                 {t.label}
-                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${subTab === t.id ? "bg-amber-400/20 text-amber-400" : "bg-slate-800 text-slate-600"}`}>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${subTab === t.id ? "bg-amber-400/20 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
                   {count}
                 </span>
                 {t.id === "on_hold" && pendingHolds > 0 && (
                   <span className="w-4 h-4 flex items-center justify-center text-[9px] font-bold bg-amber-400 text-slate-950 rounded-full">{pendingHolds}</span>
                 )}
                 {noContactCount > 0 && (
-                  <span className="w-4 h-4 flex items-center justify-center text-[9px] font-bold bg-red-500 text-white rounded-full" title={`${noContactCount} client${noContactCount !== 1 ? "s" : ""} flagged for drop`}>{noContactCount}</span>
+                  <span className="w-4 h-4 flex items-center justify-center text-[9px] font-bold bg-red-500 text-slate-900 rounded-full" title={`${noContactCount} client${noContactCount !== 1 ? "s" : ""} flagged for drop`}>{noContactCount}</span>
                 )}
               </button>
             );
@@ -9884,12 +9884,12 @@ function ClientsTableView({
       </div>
 
       {/* Search + filter bar */}
-      <div className="flex-shrink-0 px-4 sm:px-6 py-3 border-b border-slate-800/40 flex flex-wrap items-center gap-2">
+      <div className="flex-shrink-0 px-4 sm:px-6 py-3 border-b border-slate-200 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-48">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-600" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or client ID…" className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl pl-9 pr-3 py-2 placeholder-slate-600 focus:outline-none focus:border-slate-500" />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by name or client ID…" className="w-full bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl pl-9 pr-3 py-2 placeholder-slate-600 focus:outline-none focus:border-slate-300" />
         </div>
-        <select value={filterChapter} onChange={e => setFilterChapter(e.target.value as typeof filterChapter)} className="bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
+        <select value={filterChapter} onChange={e => setFilterChapter(e.target.value as typeof filterChapter)} className="bg-slate-100 border border-slate-200 text-slate-700 text-xs rounded-xl px-2.5 py-2 focus:outline-none">
           <option value="all">All Chapters</option>
           <option value="7">Chapter 7</option>
           <option value="13">Chapter 13</option>
@@ -9903,12 +9903,12 @@ function ClientsTableView({
         if (flagged.length === 0) return null;
         return (
           <div className="flex-shrink-0 mx-4 sm:mx-6 mt-3 flex items-center gap-3 px-4 py-3 bg-red-500/8 border border-red-500/25 rounded-xl text-xs">
-            <UserX className="w-4 h-4 text-red-400 flex-shrink-0" />
+            <UserX className="w-4 h-4 text-rose-700 flex-shrink-0" />
             <div className="flex-1 min-w-0">
-              <span className="font-bold text-red-300">{flagged.length} client{flagged.length !== 1 ? "s" : ""} flagged under the 6-month no-contact rule.</span>
-              <span className="text-slate-400 ml-1.5">No contact in 180+ days. A drop email requires Attorney Super Admin approval.</span>
+              <span className="font-bold text-rose-700">{flagged.length} client{flagged.length !== 1 ? "s" : ""} flagged under the 6-month no-contact rule.</span>
+              <span className="text-slate-600 ml-1.5">No contact in 180+ days. A drop email requires Attorney Super Admin approval.</span>
             </div>
-            <button onClick={() => setSubTab("inactive")} className="flex-shrink-0 text-[10px] font-bold text-red-400 bg-red-500/10 border border-red-500/25 px-2.5 py-1 rounded-lg hover:bg-red-500/20 transition-colors">
+            <button onClick={() => setSubTab("inactive")} className="flex-shrink-0 text-[10px] font-bold text-rose-700 bg-rose-50 border border-red-500/25 px-2.5 py-1 rounded-lg hover:bg-rose-100 transition-colors">
               View {flagged.length} Client{flagged.length !== 1 ? "s" : ""}
             </button>
           </div>
@@ -9921,17 +9921,17 @@ function ClientsTableView({
         <div className={`${selectedClient ? "hidden sm:flex" : "flex"} flex-col flex-1 overflow-hidden`}>
           <div className="flex-1 overflow-auto">
             <table className="w-full text-xs min-w-[700px]">
-              <thead className="sticky top-0 bg-[#0a0e1a] border-b border-slate-800/60 z-10">
+              <thead className="sticky top-0 bg-slate-50 border-b border-slate-200 z-10">
                 <tr>
-                  <th className="text-left px-4 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px] w-48">Client Name</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">State</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Ch.</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Type</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Total Fee</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Balance</th>
-                  <th className="text-right px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Amt Due</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Status</th>
-                  <th className="text-left px-3 py-2.5 font-semibold text-slate-500 uppercase tracking-wide text-[10px]">Actions</th>
+                  <th className="text-left px-4 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs w-48">Client Name</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">State</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Ch.</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Type</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Total Fee</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Balance</th>
+                  <th className="text-right px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Amt Due</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Status</th>
+                  <th className="text-left px-3 py-2.5 font-semibold text-slate-700 uppercase tracking-wide text-xs">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/40">
@@ -9952,54 +9952,54 @@ function ClientsTableView({
                   return (
                     <tr key={c.id}
                       onClick={() => setSelectedClient(isSelected ? null : c)}
-                      className={`cursor-pointer transition-colors ${isSelected ? "bg-slate-800/60 border-l-2 border-amber-400" : noContact ? "bg-red-500/5 hover:bg-red-500/8 border-l-2 border-red-500/40" : isPastDue ? "bg-red-500/3 hover:bg-red-500/6" : "hover:bg-slate-800/25"}`}>
+                      className={`cursor-pointer transition-colors ${isSelected ? "bg-slate-100 border-l-2 border-amber-400" : noContact ? "bg-red-500/5 hover:bg-red-500/8 border-l-2 border-red-500/40" : isPastDue ? "bg-red-500/3 hover:bg-red-500/6" : "hover:bg-slate-100/25"}`}>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${noContact ? "bg-red-500/25 text-red-400" : isPastDue ? "bg-red-500/20 text-red-400" : "bg-slate-700 text-slate-400"}`}>
+                          <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${noContact ? "bg-rose-100 text-rose-700" : isPastDue ? "bg-rose-100 text-rose-700" : "bg-slate-200 text-slate-600"}`}>
                             {c.full_name.charAt(0)}
                           </div>
                           <div className="min-w-0">
-                            <p className="font-semibold text-white truncate">{c.full_name}</p>
+                            <p className="font-semibold text-slate-900 truncate">{c.full_name}</p>
                             <p className="text-[10px] text-slate-600 truncate">{c.client_id}</p>
                           </div>
                           {hasPendingHold && (
-                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-400/10 text-amber-400 border-amber-400/25">HOLD REQ</span>
+                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-amber-50 text-amber-700 border-amber-400/25">HOLD REQ</span>
                           )}
                           {noContact && !c.drop_requested_at && (
-                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-red-500/15 text-red-400 border-red-500/25">NO CONTACT {ncDays}d</span>
+                            <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-rose-100 text-rose-700 border-red-500/25">NO CONTACT {ncDays}d</span>
                           )}
                           {c.drop_requested_at && (
                             <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded border bg-orange-500/15 text-orange-400 border-orange-500/25">DROP PENDING</span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-slate-300">{c.state ?? "—"}</td>
+                      <td className="px-3 py-3 text-slate-700">{c.state ?? "—"}</td>
                       <td className="px-3 py-3">
-                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${c.chapter === 7 ? "bg-sky-500/10 text-sky-400 border-sky-500/20" : "bg-amber-400/10 text-amber-400 border-amber-400/20"}`}>
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${c.chapter === 7 ? "bg-sky-50 text-sky-700 border-sky-500/20" : "bg-amber-50 text-amber-700 border-amber-400/20"}`}>
                           Ch. {c.chapter}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-slate-400">{CASE_TYPE_LABELS[c.case_type]}</td>
+                      <td className="px-3 py-3 text-slate-600">{CASE_TYPE_LABELS[c.case_type]}</td>
                       <td className="px-3 py-3 text-right">
-                        <p className="text-white font-semibold">{fmt(total)}</p>
+                        <p className="text-slate-900 font-semibold">{fmt(total)}</p>
                         {total > 0 && (
-                          <div className="mt-1 w-16 ml-auto bg-slate-700/50 rounded-full h-1">
+                          <div className="mt-1 w-16 ml-auto bg-slate-200/50 rounded-full h-1">
                             <div className={`h-1 rounded-full ${isPastDue ? "bg-red-500" : "bg-emerald-500"}`} style={{ width: `${pct}%` }} />
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-3 text-right">
                         {balance === 0 ? (
-                          <span className="text-emerald-400 font-semibold">Paid</span>
+                          <span className="text-emerald-700 font-semibold">Paid</span>
                         ) : (
                           <div>
-                            <p className={`font-semibold ${isPastDue ? "text-red-400" : "text-white"}`}>{fmt(balance)}</p>
+                            <p className={`font-semibold ${isPastDue ? "text-rose-700" : "text-slate-900"}`}>{fmt(balance)}</p>
                             {isPastDue ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded px-1.5 py-0.5 mt-0.5">
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-50 border border-red-500/20 rounded px-1.5 py-0.5 mt-0.5">
                                 <AlertTriangle className="w-2 h-2" /> {overdueCount} PAST DUE · {fmt(pastDueAmount)}
                               </span>
                             ) : isCurrent ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 mt-0.5">
+                              <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-500/20 rounded px-1.5 py-0.5 mt-0.5">
                                 <CheckCircle2 className="w-2 h-2" /> Current
                               </span>
                             ) : null}
@@ -10009,7 +10009,7 @@ function ClientsTableView({
                       <td className="px-3 py-3 text-right">
                         {nextDue ? (
                           <div>
-                            <p className="text-white font-semibold">{fmt(nextDue.amount_due ?? 0)}</p>
+                            <p className="text-slate-900 font-semibold">{fmt(nextDue.amount_due ?? 0)}</p>
                             <p className="text-[10px] text-slate-600">{nextDue.due_date}</p>
                           </div>
                         ) : <span className="text-slate-600">—</span>}
@@ -10020,15 +10020,15 @@ function ClientsTableView({
                             {EXT_STATUS_LABELS[es]}
                           </span>
                           {balance === 0 ? (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-1.5 py-0.5">
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-500/20 rounded-full px-1.5 py-0.5">
                               <CheckCircle2 className="w-2 h-2" /> Paid in Full
                             </span>
                           ) : isPastDue ? (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-1.5 py-0.5">
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-rose-700 bg-rose-50 border border-red-500/20 rounded-full px-1.5 py-0.5">
                               <AlertTriangle className="w-2 h-2" /> Past Due
                             </span>
                           ) : isCurrent ? (
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 rounded-full px-1.5 py-0.5">
+                            <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-sky-700 bg-sky-50 border border-sky-500/20 rounded-full px-1.5 py-0.5">
                               <CheckCircle2 className="w-2 h-2" /> Current
                             </span>
                           ) : null}
@@ -10041,7 +10041,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setQuickPayClient(c)}
                               title="Record payment"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 bg-emerald-500/8 hover:bg-emerald-500/18 border border-emerald-500/20 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-emerald-700 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-500/18 border border-emerald-500/20 px-2 py-1 rounded-lg transition-all"
                             >
                               <DollarSign className="w-3 h-3" /> Pay
                             </button>
@@ -10051,7 +10051,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setHoldTarget({ client: c, type: "push_payment" })}
                               title="Push out next payment"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-sky-500 hover:text-sky-400 bg-sky-500/8 hover:bg-sky-500/15 border border-sky-500/20 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-sky-500 hover:text-sky-700 bg-sky-50 hover:bg-sky-100 border border-sky-500/20 px-2 py-1 rounded-lg transition-all"
                             >
                               <Calendar className="w-3 h-3" /> Push
                             </button>
@@ -10061,7 +10061,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setHoldTarget({ client: c, type: "hold" })}
                               title="Place on hold"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-500 hover:text-amber-400 bg-amber-400/8 hover:bg-amber-400/15 border border-amber-400/20 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-500 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-400/20 px-2 py-1 rounded-lg transition-all"
                             >
                               <PauseCircle className="w-3 h-3" /> Hold
                             </button>
@@ -10071,7 +10071,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setDropTarget(c)}
                               title="Drop client — 6-month no-contact rule"
-                              className="flex items-center gap-1 text-[10px] font-bold text-red-400 hover:text-red-300 bg-red-500/12 hover:bg-red-500/20 border border-red-500/30 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-bold text-rose-700 hover:text-rose-700 bg-red-500/12 hover:bg-rose-100 border border-red-500/30 px-2 py-1 rounded-lg transition-all"
                             >
                               <UserX className="w-3 h-3" /> Drop
                             </button>
@@ -10081,7 +10081,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setFeeAdjTarget(c)}
                               title="Adjust fees or payment plan"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-400 hover:text-amber-300 bg-amber-400/8 hover:bg-amber-400/15 border border-amber-400/20 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-amber-700 hover:text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-400/20 px-2 py-1 rounded-lg transition-all"
                             >
                               <Pencil className="w-3 h-3" /> Adjust
                             </button>
@@ -10091,7 +10091,7 @@ function ClientsTableView({
                             <button
                               onClick={() => setCxlTarget(c)}
                               title="Cancel Review — attempt retention before cancelling"
-                              className="flex items-center gap-1 text-[10px] font-semibold text-rose-400 hover:text-rose-300 bg-rose-500/8 hover:bg-rose-500/15 border border-rose-500/20 px-2 py-1 rounded-lg transition-all"
+                              className="flex items-center gap-1 text-[10px] font-semibold text-rose-700 hover:text-rose-300 bg-rose-500/8 hover:bg-rose-500/15 border border-rose-500/20 px-2 py-1 rounded-lg transition-all"
                             >
                               <Ban className="w-3 h-3" /> Cancel Review
                             </button>
@@ -10108,14 +10108,14 @@ function ClientsTableView({
 
         {/* Detail panel */}
         {selectedClient && (
-          <div className="w-full sm:w-[420px] lg:w-[480px] flex-shrink-0 border-l border-slate-800/60 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-800/60 flex-shrink-0">
-              <button onClick={() => openExitPrompt(selectedClient)} className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-white">
+          <div className="w-full sm:w-[420px] lg:w-[480px] flex-shrink-0 border-l border-slate-200 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-slate-200 flex-shrink-0">
+              <button onClick={() => openExitPrompt(selectedClient)} className="flex items-center gap-1.5 text-xs text-slate-600 hover:text-slate-900">
                 <ChevronRight className="w-3.5 h-3.5 rotate-180" /> Close
               </button>
               <button
                 onClick={() => openExitPrompt(selectedClient)}
-                className="flex items-center gap-1.5 text-[10px] font-semibold text-sky-400 hover:text-sky-300 bg-sky-500/10 hover:bg-sky-500/20 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
+                className="flex items-center gap-1.5 text-[10px] font-semibold text-sky-700 hover:text-sky-300 bg-sky-50 hover:bg-sky-100 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
                 title="Log time and close file"
               >
                 <Clock className="w-3 h-3" /> Log &amp; Close
@@ -10143,7 +10143,7 @@ function ClientsTableView({
 
       {/* Exit / Log-time prompt modal */}
       {exitPromptClient && (() => {
-        const inpE = "w-full bg-slate-800/60 border border-slate-700 text-white text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-sky-400/50 transition-colors";
+        const inpE = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-sky-400/50 transition-colors";
         const lblE = "text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-1.5 block";
         const matched = staffMembers?.find(s => s.name === (adminUser?.replace(/\*+$/, "") ?? ""));
         const defRate = matched?.hourly_rate ?? DEFAULT_HOURLY_RATES[matched?.role ?? "paralegal"] ?? 225;
@@ -10153,16 +10153,16 @@ function ClientsTableView({
         const bAmt    = exitForm.billable ? units * bRate : 0;
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-            <div className="w-full max-w-md bg-[#0d1221] border border-sky-500/20 rounded-2xl shadow-2xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-sky-500/10 flex items-center justify-center flex-shrink-0">
-                  <Clock className="w-4 h-4 text-sky-400" />
+            <div className="w-full max-w-md bg-white border border-sky-500/20 rounded-2xl shadow-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-sky-50 flex items-center justify-center flex-shrink-0">
+                  <Clock className="w-4 h-4 text-sky-700" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-bold text-white">Log Time Before Closing</h3>
+                  <h3 className="text-sm font-bold text-slate-900">Log Time Before Closing</h3>
                   <p className="text-[11px] text-slate-500 mt-0.5">{exitPromptClient.full_name} · {exitPromptClient.client_id}</p>
                 </div>
-                <button onClick={() => saveExitEntry(true)} className="text-slate-500 hover:text-white p-1"><X className="w-4 h-4" /></button>
+                <button onClick={() => saveExitEntry(true)} className="text-slate-500 hover:text-slate-900 p-1"><X className="w-4 h-4" /></button>
               </div>
               <div className="px-5 py-4 space-y-3">
                 <div className="grid grid-cols-2 gap-3">
@@ -10175,7 +10175,7 @@ function ClientsTableView({
                   <div>
                     <label className={lblE}>Duration (minutes)</label>
                     <input type="number" min="1" step="1" value={exitForm.duration_mins} onChange={e => setExitForm(f => ({ ...f, duration_mins: e.target.value }))} placeholder="12" className={inpE} />
-                    <p className="text-[9px] text-slate-600 mt-1">= <span className="text-amber-400 font-bold">{units} units</span></p>
+                    <p className="text-[9px] text-slate-600 mt-1">= <span className="text-amber-700 font-bold">{units} units</span></p>
                   </div>
                   <div>
                     <label className={lblE}>Staff Member</label>
@@ -10205,19 +10205,19 @@ function ClientsTableView({
                 </div>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <div onClick={() => setExitForm(f => ({ ...f, billable: !f.billable }))}
-                    className={`w-8 h-4 rounded-full transition-all flex items-center ${exitForm.billable ? "bg-amber-400" : "bg-slate-700"}`}>
+                    className={`w-8 h-4 rounded-full transition-all flex items-center ${exitForm.billable ? "bg-amber-400" : "bg-slate-200"}`}>
                     <div className={`w-3 h-3 rounded-full bg-white mx-0.5 transition-all ${exitForm.billable ? "translate-x-4" : ""}`} />
                   </div>
-                  <span className="text-xs text-slate-400">Billable</span>
-                  {exitForm.billable && bAmt > 0 && <span className="text-xs font-bold text-emerald-400 ml-1">${bAmt.toFixed(2)}</span>}
+                  <span className="text-xs text-slate-600">Billable</span>
+                  {exitForm.billable && bAmt > 0 && <span className="text-xs font-bold text-emerald-700 ml-1">${bAmt.toFixed(2)}</span>}
                 </label>
               </div>
-              <div className="px-5 pb-5 flex gap-2 justify-end border-t border-slate-800 pt-4">
-                <button onClick={() => saveExitEntry(true)} className="text-xs text-slate-500 hover:text-white px-4 py-2 rounded-xl border border-slate-700/50 hover:border-slate-600 transition-all">
+              <div className="px-5 pb-5 flex gap-2 justify-end border-t border-slate-200 pt-4">
+                <button onClick={() => saveExitEntry(true)} className="text-xs text-slate-500 hover:text-slate-900 px-4 py-2 rounded-xl border border-slate-200/50 hover:border-slate-300 transition-all">
                   Skip &amp; Close
                 </button>
                 <button onClick={() => saveExitEntry(false)} disabled={exitSaving}
-                  className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-white font-bold text-xs px-5 py-2 rounded-xl transition-all disabled:opacity-50">
+                  className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 text-slate-900 font-bold text-xs px-5 py-2 rounded-xl transition-all disabled:opacity-50">
                   {exitSaving ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />} Log &amp; Close
                 </button>
               </div>
@@ -10307,10 +10307,10 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
   useEffect(() => { load(); }, [load]);
 
   const urgencyColor = (days: number) => {
-    if (days >= 90) return { bg: "bg-red-500/10", text: "text-red-600 dark:text-red-400", border: "border-red-500/20", badge: "bg-red-500" };
+    if (days >= 90) return { bg: "bg-rose-50", text: "text-red-600 dark:text-rose-700", border: "border-red-500/20", badge: "bg-red-500" };
     if (days >= 60) return { bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", border: "border-orange-500/20", badge: "bg-orange-500" };
-    if (days >= 30) return { bg: "bg-amber-500/10", text: "text-amber-600 dark:text-amber-400", border: "border-amber-500/20", badge: "bg-amber-500" };
-    return { bg: "bg-slate-100 dark:bg-slate-800", text: "text-slate-500", border: "border-slate-200 dark:border-slate-700", badge: "bg-slate-400" };
+    if (days >= 30) return { bg: "bg-amber-50", text: "text-amber-600 dark:text-amber-700", border: "border-amber-500/20", badge: "bg-amber-500" };
+    return { bg: "bg-slate-100 dark:bg-slate-100", text: "text-slate-500", border: "border-slate-200 dark:border-slate-200", badge: "bg-slate-400" };
   };
 
   const previewFollowup = async (c: CollectionCase) => {
@@ -10398,10 +10398,10 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Active Collections", value: activeCases.length.toString(), sub: "90+ days past due", color: "text-red-400", icon: <AlertTriangle className="w-4 h-4" /> },
-          { label: "Outstanding Balance", value: fmt(totalOwed), sub: "active cases", color: "text-red-400", icon: <DollarSign className="w-4 h-4" /> },
-          { label: "Pending Withdrawal", value: pendingWithdrawal.length.toString(), sub: "awaiting decision", color: "text-amber-400", icon: <Clock className="w-4 h-4" /> },
-          { label: "Inactive / Resolved", value: inactiveCases.length.toString(), sub: "resolved or written off", color: "text-slate-400", icon: <TrendingDown className="w-4 h-4" /> },
+          { label: "Active Collections", value: activeCases.length.toString(), sub: "90+ days past due", color: "text-rose-700", icon: <AlertTriangle className="w-4 h-4" /> },
+          { label: "Outstanding Balance", value: fmt(totalOwed), sub: "active cases", color: "text-rose-700", icon: <DollarSign className="w-4 h-4" /> },
+          { label: "Pending Withdrawal", value: pendingWithdrawal.length.toString(), sub: "awaiting decision", color: "text-amber-700", icon: <Clock className="w-4 h-4" /> },
+          { label: "Inactive / Resolved", value: inactiveCases.length.toString(), sub: "resolved or written off", color: "text-slate-600", icon: <TrendingDown className="w-4 h-4" /> },
         ].map(s => (
           <div key={s.label} className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-xl p-3.5">
             <div className={`flex items-center gap-1.5 ${s.color} mb-1`}>{s.icon}<span className="text-[10px] font-semibold uppercase tracking-widest">{s.label}</span></div>
@@ -10412,7 +10412,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
       </div>
 
       {/* Tier tabs */}
-      <div className="flex items-center gap-1 bg-slate-800/40 border border-slate-700/50 rounded-xl p-1">
+      <div className="flex items-center gap-1 bg-slate-50 border border-slate-200/50 rounded-xl p-1">
         {([
           { id: "active" as const, label: "Active Collections", badge: activeCases.length, color: "bg-red-500" },
           { id: "pending_withdrawal" as const, label: "Pending Withdrawal", badge: pendingWithdrawal.length, color: "bg-amber-500" },
@@ -10421,27 +10421,27 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
           <button
             key={t.id}
             onClick={() => { setTierTab(t.id); setStatusFilter("all"); }}
-            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all ${tierTab === t.id ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold rounded-lg transition-all ${tierTab === t.id ? "bg-slate-200 text-slate-900" : "text-slate-500 hover:text-slate-700"}`}
           >
             {t.label}
-            {t.badge > 0 && <span className={`text-[9px] font-bold text-white px-1.5 py-0.5 rounded-full ${t.color}`}>{t.badge}</span>}
+            {t.badge > 0 && <span className={`text-[9px] font-bold text-slate-900 px-1.5 py-0.5 rounded-full ${t.color}`}>{t.badge}</span>}
           </button>
         ))}
       </div>
 
       {/* Tier descriptions */}
       {tierTab === "active" && (
-        <div className="bg-red-500/5 border border-red-500/15 rounded-xl px-4 py-2.5 text-xs text-red-400">
+        <div className="bg-red-500/5 border border-red-500/15 rounded-xl px-4 py-2.5 text-xs text-rose-700">
           <strong>Active Collections:</strong> Clients 90+ days past due. AI follow-up enabled. Cases that remain unresolved for 6 months from 90-day entry will move to <strong>Pending Withdrawal</strong>.
         </div>
       )}
       {tierTab === "pending_withdrawal" && (
-        <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-2.5 text-xs text-amber-400">
+        <div className="bg-amber-500/5 border border-amber-500/15 rounded-xl px-4 py-2.5 text-xs text-amber-700">
           <strong>Pending Withdrawal:</strong> Cases 6 months into active collections with no resolution. Staff must choose: <strong>Return to Collections</strong> (resume pursuit) or <strong>Process Withdrawal</strong> (close the case).
         </div>
       )}
       {tierTab === "inactive" && (
-        <div className="bg-slate-700/20 border border-slate-700/30 rounded-xl px-4 py-2.5 text-xs text-slate-400">
+        <div className="bg-slate-200/20 border border-slate-200/30 rounded-xl px-4 py-2.5 text-xs text-slate-600">
           <strong>Inactive:</strong> Clients who paid all fees without filing, resolved accounts, written-off cases, or no pay/contact in 6+ months after collection efforts. These are archived but visible.
         </div>
       )}
@@ -10462,7 +10462,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
             onClick={() => setStatusFilter(s)}
             className={`text-[10px] font-bold px-2.5 py-1.5 rounded-lg border transition-all ${
               statusFilter === s
-                ? "bg-amber-500 text-white border-amber-500"
+                ? "bg-amber-500 text-slate-900 border-amber-500"
                 : "bg-[var(--bg-surface)] border-[var(--border)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
             }`}
           >
@@ -10497,7 +10497,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-sm text-[var(--text-primary)]">{c.client_name}</span>
                       {escalated && (
-                        <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
+                        <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-rose-50 text-red-600 dark:text-rose-700 border border-red-500/20 px-1.5 py-0.5 rounded-full uppercase tracking-wide">
                           <AlertTriangle className="w-2.5 h-2.5" /> Escalate
                         </span>
                       )}
@@ -10516,10 +10516,10 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
 
                   {/* Status pill */}
                   <span className={`text-[10px] font-bold px-2 py-1 rounded-full border ${
-                    c.status === "resolved" ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" :
-                    c.status === "payment_arrangement" ? "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20" :
-                    c.status === "written_off" ? "bg-slate-500/10 text-slate-500 border-slate-500/20" :
-                    c.status === "on_hold" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" :
+                    c.status === "resolved" ? "bg-emerald-50 text-emerald-600 dark:text-emerald-700 border-emerald-500/20" :
+                    c.status === "payment_arrangement" ? "bg-sky-50 text-sky-600 dark:text-sky-700 border-sky-500/20" :
+                    c.status === "written_off" ? "bg-slate-500/10 text-slate-500 border-slate-300/20" :
+                    c.status === "on_hold" ? "bg-amber-50 text-amber-600 dark:text-amber-700 border-amber-500/20" :
                     `${col.bg} ${col.text} ${col.border}`
                   }`}>
                     {STATUS_LABELS[c.status]}
@@ -10533,7 +10533,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                         {c.status === "active" && c.ai_followup_enabled && (
                           <button
                             onClick={() => previewFollowup(c)}
-                            className="flex items-center gap-1.5 text-[10px] font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
+                            className="flex items-center gap-1.5 text-[10px] font-bold bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
                           >
                             <Bot className="w-3 h-3" /> AI Follow-up
                           </button>
@@ -10541,7 +10541,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                         {c.status === "active" && (
                           <button
                             onClick={() => updateStatus(c, "payment_arrangement")}
-                            className="text-[10px] font-bold text-slate-400 hover:text-sky-400 bg-slate-800/40 border border-slate-700 px-2 py-1.5 rounded-lg transition-all"
+                            className="text-[10px] font-bold text-slate-600 hover:text-sky-700 bg-slate-50 border border-slate-200 px-2 py-1.5 rounded-lg transition-all"
                             title="Mark payment arrangement"
                           >
                             <CheckSquare className="w-3 h-3" />
@@ -10550,7 +10550,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                         {(c.status === "active" || c.status === "payment_arrangement") && (
                           <button
                             onClick={() => updateStatus(c, "resolved")}
-                            className="text-[10px] font-bold text-slate-400 hover:text-emerald-400 bg-slate-800/40 border border-slate-700 px-2 py-1.5 rounded-lg transition-all"
+                            className="text-[10px] font-bold text-slate-600 hover:text-emerald-700 bg-slate-50 border border-slate-200 px-2 py-1.5 rounded-lg transition-all"
                             title="Mark resolved"
                           >
                             <CheckCircle2 className="w-3 h-3" />
@@ -10559,7 +10559,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                         {c.status === "active" && (
                           <button
                             onClick={() => updateTier(c, "pending_withdrawal")}
-                            className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1.5 rounded-lg transition-all hover:bg-amber-500/20"
+                            className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-500/20 px-2.5 py-1.5 rounded-lg transition-all hover:bg-amber-100"
                             title="Move to pending withdrawal"
                           >
                             Pending Withdrawal
@@ -10568,7 +10568,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                         {c.status === "active" && (
                           <button
                             onClick={() => updateStatus(c, "written_off")}
-                            className="text-[10px] font-bold text-slate-400 hover:text-red-400 bg-slate-800/40 border border-slate-700 px-2 py-1.5 rounded-lg transition-all"
+                            className="text-[10px] font-bold text-slate-600 hover:text-rose-700 bg-slate-50 border border-slate-200 px-2 py-1.5 rounded-lg transition-all"
                             title="Write off"
                           >
                             <Ban className="w-3 h-3" />
@@ -10582,13 +10582,13 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                       <>
                         <button
                           onClick={() => processWithdrawal(c, "returned_to_collections")}
-                          className="flex items-center gap-1.5 text-[10px] font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
+                          className="flex items-center gap-1.5 text-[10px] font-bold bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-500/20 px-2.5 py-1.5 rounded-lg transition-all"
                         >
                           <RotateCcw className="w-3 h-3" /> Return to Collections
                         </button>
                         <button
                           onClick={() => processWithdrawal(c, "processed_withdrawal")}
-                          className="flex items-center gap-1.5 text-[10px] font-bold bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all"
+                          className="flex items-center gap-1.5 text-[10px] font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-red-500/20 px-2.5 py-1.5 rounded-lg transition-all"
                         >
                           <Ban className="w-3 h-3" /> Process Withdrawal
                         </button>
@@ -10599,7 +10599,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
 
                     <button
                       onClick={() => setSelectedCase(isExpanded ? null : c)}
-                      className="flex items-center gap-1 text-[10px] font-bold text-slate-400 hover:text-slate-200 bg-slate-800/40 border border-slate-700 px-2.5 py-1.5 rounded-lg transition-all"
+                      className="flex items-center gap-1 text-[10px] font-bold text-slate-600 hover:text-slate-900 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-lg transition-all"
                     >
                       <History className="w-3 h-3" /> {isExpanded ? "Hide" : "History"}
                     </button>
@@ -10619,7 +10619,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                             <div className="flex-shrink-0 w-20 text-[var(--text-faint)]">{fmtDate(ct.sent_at)}</div>
                             <div className="flex-1">
                               <span className={`inline-block text-[9px] font-bold px-1.5 py-0.5 rounded-full mr-2 ${
-                                ct.contact_type === "escalated" ? "bg-red-500/10 text-red-600 dark:text-red-400" : "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                                ct.contact_type === "escalated" ? "bg-rose-50 text-red-600 dark:text-rose-700" : "bg-sky-50 text-sky-600 dark:text-sky-700"
                               }`}>
                                 {ct.contact_type === "ai_followup" ? "AI" : ct.contact_type === "escalated" ? "Escalated" : ct.contact_type}
                               </span>
@@ -10628,7 +10628,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
                                 <p className="text-[var(--text-faint)] mt-1 leading-relaxed text-[11px]">{ct.message_sent}</p>
                               )}
                               {ct.payment_made_after && ct.payment_amount_after && (
-                                <p className="text-emerald-600 dark:text-emerald-400 text-[10px] mt-0.5 font-semibold">Payment received: {fmt(ct.payment_amount_after)}</p>
+                                <p className="text-emerald-600 dark:text-emerald-700 text-[10px] mt-0.5 font-semibold">Payment received: {fmt(ct.payment_amount_after)}</p>
                               )}
                             </div>
                           </div>
@@ -10648,8 +10648,8 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--bg-surface)] border border-[var(--border)] rounded-2xl shadow-2xl max-w-lg w-full p-6">
             <div className="flex items-center gap-3 mb-4">
-              <div className="w-8 h-8 rounded-xl bg-sky-500/15 flex items-center justify-center">
-                <Bot className="w-4 h-4 text-sky-600 dark:text-sky-400" />
+              <div className="w-8 h-8 rounded-xl bg-sky-100 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-sky-600 dark:text-sky-700" />
               </div>
               <div>
                 <p className="font-bold text-sm text-[var(--text-primary)]">AI Follow-up Preview</p>
@@ -10685,7 +10685,7 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
               <button
                 onClick={() => sendFollowup(previewCase)}
                 disabled={previewMsg === null || sending === previewCase.id}
-                className="flex items-center gap-1.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white px-4 py-2 rounded-xl transition-all"
+                className="flex items-center gap-1.5 text-xs font-bold bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-slate-900 px-4 py-2 rounded-xl transition-all"
               >
                 {sending === previewCase.id ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <SendHorizonal className="w-3.5 h-3.5" />}
                 Send Message
@@ -10817,12 +10817,12 @@ export default function AccountingPortal() {
         {/* Top bar */}
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-amber-500 flex items-center justify-center flex-shrink-0 shadow-sm shadow-amber-500/30">
-              <Scale className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-xl bg-red-700 flex items-center justify-center flex-shrink-0 shadow-sm shadow-red-700/30">
+              <Scale className="w-4 h-4 text-slate-900" />
             </div>
             <div className="flex items-center gap-2">
               <span className="font-bold text-[var(--text-primary)] text-sm tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
-                bankruptcy<span className="text-amber-500">.ai</span>
+                bankruptcy<span className="text-red-700">.ai</span>
               </span>
               <span className="hidden sm:inline-flex items-center gap-1 bg-[var(--bg-surface-2)] border border-[var(--border-subtle)] text-[var(--text-muted)] text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded-full">
                 Accounting
@@ -10838,8 +10838,8 @@ export default function AccountingPortal() {
                 const ACTIVE_CLS: Record<string, string> = {
                   none: "bg-[var(--bg-surface-3)] text-[var(--text-secondary)]",
                   admin: "bg-[var(--bg-surface-3)] text-[var(--text-primary)]",
-                  accounting_super_admin: "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25",
-                  super_admin: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25",
+                  accounting_super_admin: "bg-red-700/10 text-red-700 dark:text-rose-700 border border-red-700/30",
+                  super_admin: "bg-emerald-100 text-emerald-600 dark:text-emerald-700 border border-emerald-500/25",
                 };
                 const INACTIVE_CLS = "text-[var(--text-muted)] hover:text-[var(--text-secondary)]";
                 const isActive = role === r;
@@ -10869,7 +10869,7 @@ export default function AccountingPortal() {
             )}
 
             {/* Add client */}
-            <button onClick={() => setShowAddClient(true)} className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-sm shadow-amber-500/20">
+            <button onClick={() => setShowAddClient(true)} className="flex items-center gap-1.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-sm shadow-red-700/20">
               <Plus className="w-3.5 h-3.5" /> Add Client
             </button>
           </div>
@@ -10883,13 +10883,13 @@ export default function AccountingPortal() {
               onClick={() => setTab(t.id)}
               className={`relative flex items-center gap-1.5 py-2.5 px-1 mr-5 text-xs font-semibold border-b-2 transition-all -mb-px ${
                 tab === t.id
-                  ? "border-amber-500 text-amber-600 dark:text-amber-400"
+                  ? "border-red-700 text-red-700 dark:text-rose-700"
                   : "border-transparent text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               }`}
             >
               {t.icon}{t.label}
               {t.badge ? (
-                <span className="absolute -top-0.5 -right-2 min-w-[1rem] h-4 flex items-center justify-center text-[9px] font-bold bg-amber-500 text-white rounded-full px-1">{t.badge}</span>
+                <span className="absolute -top-0.5 -right-2 min-w-[1rem] h-4 flex items-center justify-center text-[9px] font-bold bg-red-700 text-white rounded-full px-1">{t.badge}</span>
               ) : null}
             </button>
           ))}

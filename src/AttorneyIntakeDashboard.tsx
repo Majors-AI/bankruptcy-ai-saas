@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "./lib/supabase";
+import { sendSmsEmail, sendVia } from "./lib/sendGate";
 import { getCourtsForState } from "./data/courts";
 import { Scale, FileText, CheckCircle, XCircle, Clock, ChevronRight, DollarSign, MapPin, Send, AlertTriangle, Phone, Mail, Home, CreditCard, MessageSquare, TrendingUp, Briefcase, RefreshCw, ArrowUp, ArrowDown, AlertCircle, ArrowLeft, Package, Building, Car, Gem, Shield, Calendar, PhoneCall, Ligature as FileSignature, X, ClipboardList, ListChecks, ArrowRightLeft, Sun, Sunset, Moon } from "lucide-react";
 import AttorneyTaskPanel from "./components/attorney/AttorneyTaskPanel";
@@ -422,6 +423,24 @@ interface EligibilityResult {
   warnings: string[];
 }
 
+/**
+ * Derive the § 1325(b)(4) applicable commitment period from the debtor's
+ * current monthly income compared to the state median for household size.
+ *   - Above the applicable median → 60 months
+ *   - At or below the applicable median → 36 months
+ *
+ * NB: This is independent of § 707(b)(2)'s means-test multiplier, which is
+ * statutorily 60 months regardless of the debtor's ACP. Do not conflate.
+ */
+function deriveAcp(fd: Record<string, unknown>): 36 | 60 {
+  const annualGross = calcTotalGrossIncome(fd) * 12;
+  const numDeps = parseInt((fd.numDependents as string) ?? "0") || 0;
+  const isJoint = fd.filingType === "joint" || fd.filingType === "individual-nonfiling-spouse";
+  const hs = numDeps + (isJoint ? 2 : 1);
+  const state = (fd.state as string) ?? "TX";
+  return annualGross > getStateMedian(state, hs) ? 60 : 36;
+}
+
 function calcTotalBusinessDebt(fd: Record<string, unknown>): number {
   return (
     (parseFloat((fd.supplyVendorDebt as string) ?? "0") || 0) +
@@ -590,7 +609,7 @@ function analyzeChapter7(fd: Record<string, unknown>): EligibilityResult {
   };
 }
 
-function analyzeChapter13(fd: Record<string, unknown>): EligibilityResult {
+function analyzeChapter13(fd: Record<string, unknown>, acp: 36 | 60): EligibilityResult {
   const income = calcTotalIncome(fd);
   const expenses = calcTotalExpenses(fd);
   const disposable = income - expenses;
@@ -640,7 +659,7 @@ function analyzeChapter13(fd: Record<string, unknown>): EligibilityResult {
   } else if (disposable < 100) {
     warnings.push(`Low DMI (${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(disposable)}/mo) — plan feasibility requires careful review`);
   } else {
-    reasons.push(`DMI ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(disposable)}/mo — est. 60-mo plan: ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(disposable * 60)}`);
+    reasons.push(`DMI ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(disposable)}/mo — est. ${acp}-mo plan: ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(disposable * acp)}`);
   }
 
   if (hasPrior) {
@@ -655,7 +674,7 @@ function analyzeChapter13(fd: Record<string, unknown>): EligibilityResult {
   }
 
   if (totalArrears > 0) {
-    reasons.push(`Mortgage arrears ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(totalArrears)} can be cured over 60-month plan`);
+    reasons.push(`Mortgage arrears ${new Intl.NumberFormat("en-US",{style:"currency",currency:"USD",maximumFractionDigits:0}).format(totalArrears)} can be cured over ${acp}-month plan`);
   }
 
   if (vehicles.length > 0) {
@@ -692,7 +711,7 @@ interface GoodFaithResult {
   isGoodCandidate: boolean;
 }
 
-function analyzeGoodFaith13(fd: Record<string, unknown>): GoodFaithResult {
+function analyzeGoodFaith13(fd: Record<string, unknown>, acp: 36 | 60): GoodFaithResult {
   const grossIncome = calcTotalIncome(fd);
   const totalExpenses = calcTotalExpenses(fd);
   const mortgages = (fd.properties as Array<Record<string, unknown>>) ?? [];
@@ -729,7 +748,7 @@ function analyzeGoodFaith13(fd: Record<string, unknown>): GoodFaithResult {
   const adjustedExpenses = hasMortgageArrears ? totalExpenses - rentMortgageExpense : totalExpenses;
   const dmi = grossIncome - adjustedExpenses;
   const planBase = Math.max(dmi, 0);
-  const planTerm = 60;
+  const planTerm = acp;
 
   const conduitPayments = totalMortgageMonthly * planTerm;
   const arrearsCure = totalMortgageArrears;
@@ -2314,7 +2333,8 @@ function CaseRow({ sub, onSelect, isSelected }: { sub: Submission; onSelect: () 
   const daysAgo = Math.floor((Date.now() - new Date(sub.submitted_at).getTime()) / 86400000);
 
   const ch7 = analyzeChapter7(fd);
-  const goodFaith13 = analyzeGoodFaith13(fd);
+  const acp = deriveAcp(fd);
+  const goodFaith13 = analyzeGoodFaith13(fd, acp);
   const noCase = !ch7.eligible && !(goodFaith13?.isGoodCandidate);
 
   const statusColors: Record<string, string> = {
@@ -2370,7 +2390,15 @@ function CaseRow({ sub, onSelect, isSelected }: { sub: Submission; onSelect: () 
   );
 }
 
-export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { onSwitchToCaseManagement?: () => void } = {}) {
+export default function AttorneyIntakeDashboard({
+  onSwitchToCaseManagement,
+  preselectLeadId,
+  onPreselectConsumed,
+}: {
+  onSwitchToCaseManagement?: () => void;
+  preselectLeadId?: string | null;
+  onPreselectConsumed?: () => void;
+} = {}) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selected, setSelected] = useState<Submission | null>(null);
   // Detail-panel tab — Overview / Eligibility (with Ch.7/Ch.13 sub-tabs) /
@@ -2452,6 +2480,17 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
 
   useEffect(() => { loadSubmissions(); fetchGridPrimeRate(); }, []);
 
+  // Auto-select the submission matching preselectLeadId once submissions load
+  // (set when the user clicks a case in LegalAdminPortal's Pending Your Review).
+  useEffect(() => {
+    if (!preselectLeadId || submissions.length === 0) return;
+    const match = submissions.find(s => s.lead_id === preselectLeadId);
+    if (match) {
+      selectCase(match);
+      onPreselectConsumed?.();
+    }
+  }, [preselectLeadId, submissions]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function loadSubmissions() {
     setLoading(true);
     await supabase.rpc("refresh_intake_stale_flags").maybeSingle();
@@ -2518,22 +2557,13 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
     const name = `${fd?.firstName ?? ""} ${fd?.lastName ?? ""}`.trim();
     setRequestInfoSending(true);
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
       const message = `Hi ${name || "there"}, your bankruptcy case requires additional income and payment verification to complete the means test analysis. Please submit: (1) last 6 months of pay stubs or proof of income, (2) most recent mortgage statement, (3) most recent vehicle loan statement(s). Please upload these documents at your earliest convenience or reply to this message. Thank you.`;
+      const gateCtx = { recipientType: "client" as const, submissionId: selected.id, leadId: (selected as Submission & { lead_id?: string | null }).lead_id ?? null, actor: "Attorney" };
       if (phone) {
-        await fetch(`${supabaseUrl}/functions/v1/send-sms-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ type: "sms", to: phone, message }),
-        });
+        await sendSmsEmail({ ...gateCtx, payload: { type: "sms", to: phone, message }, summary: "Income verification request (SMS)" });
       }
       if (email) {
-        await fetch(`${supabaseUrl}/functions/v1/send-sms-email`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ type: "email", to: email, subject: "Action Required: Income Verification for Your Bankruptcy Case", message }),
-        });
+        await sendSmsEmail({ ...gateCtx, payload: { type: "email", to: email, subject: "Action Required: Income Verification for Your Bankruptcy Case", message }, summary: "Income verification request (email)" });
       }
       setRequestInfoSent(selected.id);
       await supabase.from("case_activity_logs").insert({
@@ -2749,15 +2779,29 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
     }
 
     try {
-      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-confirmation`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ to: email, clientName, referenceNumber: selected.reference_number, chapter: form.chapter, courtDistrict: form.courtDistrict, quotedFee: parseFloat(form.quotedFee) || 0, attorneyNotes: form.attorneyNotes }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to send email");
-      await supabase.from("attorney_intake_reviews").update({ confirmation_sent: true }).eq("submission_id", selected.id);
-      setEmailSent(true);
+      const result = await sendVia(
+        "send-confirmation",
+        { to: email, clientName, referenceNumber: selected.reference_number, chapter: form.chapter, courtDistrict: form.courtDistrict, quotedFee: parseFloat(form.quotedFee) || 0, attorneyNotes: form.attorneyNotes },
+        {
+          recipientType: "lead",
+          leadId: selected.lead_id ?? null,
+          submissionId: selected.id,
+          actor: "Attorney",
+          summary: "Case decision confirmation email",
+        },
+      );
+      if (!result.sent) {
+        // Surface the gate's reason so the attorney knows nothing was sent.
+        const msg =
+          result.reason === "no_consent" ? "Email not sent — client did not consent to messaging at intake." :
+          result.reason === "opted_out"  ? "Email not sent — client opted out of messaging." :
+          result.reason === "no_recipient_row" ? "Email not sent — no consent record found for this client." :
+          `Email not sent — ${result.reason ?? "provider error"}.`;
+        setEmailError(msg);
+      } else {
+        await supabase.from("attorney_intake_reviews").update({ confirmation_sent: true }).eq("submission_id", selected.id);
+        setEmailSent(true);
+      }
     } catch (err) {
       setEmailError(String(err));
     }
@@ -2792,8 +2836,9 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
   const availableCourts = selected?.form_data ? getCourtsForState((selected.form_data as Record<string, unknown>).state as string ?? "") : [];
   const selectedIssues = fd ? detectIssues(fd) : [];
   const selectedChapter = fd ? suggestChapter(fd) : "either";
+  const acp: 36 | 60 = fd ? deriveAcp(fd) : 60;
   const ch7Analysis = fd ? analyzeChapter7(fd) : null;
-  const ch13Analysis = fd ? analyzeChapter13(fd) : null;
+  const ch13Analysis = fd ? analyzeChapter13(fd, acp) : null;
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -3052,14 +3097,18 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                 setSmsSending(true);
                                 setSmsResult(null);
                                 try {
-                                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-sms-email`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-                                    body: JSON.stringify({ to: fd?.phone, message: smsText, type: "sms" }),
+                                  if (!selected) { setSmsResult("error"); setSmsSending(false); return; }
+                                  const result = await sendSmsEmail({
+                                    recipientType: "client",
+                                    submissionId: selected.id,
+                                    leadId: (selected as Submission & { lead_id?: string | null }).lead_id ?? null,
+                                    actor: "Attorney",
+                                    summary: `Manual SMS: "${smsText.slice(0, 80)}${smsText.length > 80 ? "..." : ""}"`,
+                                    payload: { to: fd?.phone, message: smsText, type: "sms" },
                                   });
-                                  const ok = res.ok;
+                                  const ok = result.sent;
                                   setSmsResult(ok ? "sent" : "error");
-                                  if (ok && selected) {
+                                  if (ok) {
                                     await supabase.from("case_activity_logs").insert({
                                       submission_id: selected.id,
                                       activity_type: "sms",
@@ -3133,18 +3182,29 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                 setBoldSignSending(true);
                                 setBoldSignResult(null);
                                 try {
-                                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-boldsign`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-                                    body: JSON.stringify({
+                                  const result = await sendVia(
+                                    "send-boldsign",
+                                    {
                                       email: fd?.email,
                                       name: `${fd?.firstName ?? ""} ${fd?.lastName ?? ""}`.trim(),
                                       chapter: form.chapter,
                                       notes: boldSignNote,
                                       intakeId: selected?.id,
-                                    }),
-                                  });
-                                  setBoldSignResult(res.ok ? "sent" : "error");
+                                    },
+                                    {
+                                      recipientType: "lead",
+                                      leadId: selected?.lead_id ?? null,
+                                      submissionId: selected?.id ?? null,
+                                      actor: "Attorney",
+                                      summary: "Fee agreement signing request",
+                                    },
+                                  );
+                                  // Toast both 'sent' and 'error' via existing boldSignResult state;
+                                  // gate-skipped sends surface as 'error' with a console reason.
+                                  if (!result.sent && result.reason !== "provider_error") {
+                                    console.warn("[send-boldsign] gate skipped:", result.reason);
+                                  }
+                                  setBoldSignResult(result.sent ? "sent" : "error");
                                 } catch { setBoldSignResult("error"); }
                                 setBoldSignSending(false);
                               }}
@@ -3260,7 +3320,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                     )}
 
                     {activeTab === 'eligibility' && ch7Analysis && ch13Analysis && (() => {
-                      const goodFaith = fd ? analyzeGoodFaith13(fd) : null;
+                      const goodFaith = fd ? analyzeGoodFaith13(fd, acp) : null;
                       const dmiVal = calcTotalIncome(fd ?? {}) - calcTotalExpenses(fd ?? {});
 
                       // --- Intake-synced field names (match BankruptcyIntake schema) ---
@@ -3273,16 +3333,18 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                       const hasMortArrears = keptPropsInline.some(p => parseFloat((p.arrearsAmount as string) ?? "0") > 0);
                       const rentExp = parseFloat((fd?.expRentMortgage as string) ?? "0") || 0;
                       const adjExpenses = hasMortArrears ? calcTotalExpenses(fd ?? {}) - rentExp : calcTotalExpenses(fd ?? {});
-                      const dmi60 = Math.max(calcTotalIncome(fd ?? {}) - adjExpenses, 0) * 60;
+                      const dmiPool = Math.max(calcTotalIncome(fd ?? {}) - adjExpenses, 0) * acp;
+                      // Always-60 pool for "extend past ACP to § 1322(d) cap" branch (item-5 logic)
+                      const dmiPoolAt60 = Math.max(calcTotalIncome(fd ?? {}) - adjExpenses, 0) * 60;
 
                       const mortArrears = keptPropsInline.reduce((a, p) => a + (parseFloat((p.arrearsAmount as string) ?? "0") || 0), 0);
-                      const conduit60 = keptPropsInline.reduce((a, p) => a + (parseFloat((p.monthlyPayment as string) ?? "0") || 0), 0) * 60;
+                      const conduitTotal = keptPropsInline.reduce((a, p) => a + (parseFloat((p.monthlyPayment as string) ?? "0") || 0), 0) * acp;
                       const vehiclePayoff = keptVehsInline.reduce((a, v) => {
                         const lien = parseFloat((v.loanBalance as string) ?? "0") || 0;
                         const { rate } = effectiveVehRate(v, gridTillRate);
-                        return a + (rate != null ? calcAmortizedTotal(lien, rate, 60) : lien);
+                        return a + (rate != null ? calcAmortizedTotal(lien, rate, acp) : lien);
                       }, 0);
-                      const securedObligations = conduit60 + mortArrears + vehiclePayoff;
+                      const securedObligations = conduitTotal + mortArrears + vehiclePayoff;
 
                       const taxDebt = parseFloat((fd?.taxDebt as string) ?? "0") || 0;
                       const childSup = parseFloat((fd?.dChildSupport as string) ?? "0") || 0;
@@ -3292,7 +3354,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                       const inlineDSOArrears = inlineCSArrears + inlineAlimonyArrears || parseFloat((fd?.domesticSupportArrears as string) ?? "0") || 0;
                       const inlinePriorityDebts = (fd?.priorityDebts as Array<Record<string, unknown>>) ?? [];
                       const inlinePriorityDebtsBal = inlinePriorityDebts.reduce((a, d) => a + (parseFloat((d.balance as string) ?? "0") || 0), 0);
-                      const priorityTotal = taxDebt + inlinePriorityDebtsBal + inlineDSOArrears + (childSup * 60) + (alimonyAmt * 60);
+                      const priorityTotal = taxDebt + inlinePriorityDebtsBal + inlineDSOArrears + (childSup * acp) + (alimonyAmt * acp);
 
                       const unsecuredNonPriority = (parseFloat((fd?.creditCardDebt as string) ?? "0") || 0)
                         + (parseFloat((fd?.medicalDebt as string) ?? "0") || 0)
@@ -3314,8 +3376,8 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                       const inlineIsJoint = fd?.filingType === "joint";
                       const liquidVal = fd ? calcNonExemptEquity(fd) : 0;
 
-                      const trusteeFee = dmi60 * 0.10;
-                      const availForUnsecured = Math.max(dmi60 - securedObligations - priorityTotal - trusteeFee, 0);
+                      const trusteeFee = dmiPool * 0.10;
+                      const availForUnsecured = Math.max(dmiPool - securedObligations - priorityTotal - trusteeFee, 0);
 
                       const barTotal = securedObligations + priorityTotal + Math.max(unsecuredNonPriority, liquidVal);
                       const securedPct = barTotal > 0 ? (securedObligations / barTotal) * 100 : 0;
@@ -3383,7 +3445,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                           : `Ch. 7: Eligible — income below ${hsRec}-person ${stateRec} median (${fmt(annualIncRec)}/yr vs. ${fmt(medianRec)})`;
 
                       const ch13EligSummary = goodFaith?.isGoodCandidate
-                        ? `Ch. 13: Eligible — DMI of ${fmt(dmiVal)}/mo supports a ${fmt(dmiVal * 60)} 60-month plan`
+                        ? `Ch. 13: Eligible — DMI of ${fmt(dmiVal)}/mo supports a ${fmt(dmiVal * acp)} ${acp}-month plan`
                         : dmiVal <= 0
                           ? `Ch. 13: Does not qualify — DMI of ${fmt(dmiVal)}/mo cannot fund a plan`
                           : `Ch. 13: Not a good candidate — DMI of ${fmt(dmiVal)}/mo is insufficient to fund a confirmable plan`;
@@ -3416,7 +3478,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                       } else if (!ch7EligibleForRec && goodFaith?.isGoodCandidate) {
                         recommendation = "ch13";
                         recTitle = "Recommend Chapter 13";
-                        recDetail = `Client is over the ${hsRec}-person ${stateRec} median (${fmt(annualIncRec)}/yr vs. ${fmt(medianRec)} median) and does not pass the means test for Ch. 7. Request the long-form 122A-2 with actual YTD figures and IRS allowable deductions to confirm whether Ch. 7 is possible — otherwise Ch. 13 is the appropriate path. DMI of ${fmt(dmiVal)}/mo supports a 60-month plan.`;
+                        recDetail = `Client is over the ${hsRec}-person ${stateRec} median (${fmt(annualIncRec)}/yr vs. ${fmt(medianRec)} median) and does not pass the means test for Ch. 7. Request the long-form 122A-2 with actual YTD figures and IRS allowable deductions to confirm whether Ch. 7 is possible — otherwise Ch. 13 is the appropriate path. DMI of ${fmt(dmiVal)}/mo supports a ${acp}-month plan.`;
                         recColor = "border-green-500/40 bg-green-500/5";
                       } else if (ch7EligibleForRec && goodFaith?.isGoodCandidate) {
                         recommendation = "either";
@@ -3426,7 +3488,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                       } else if (overMedianRec && goodFaith?.isGoodCandidate) {
                         recommendation = "ch13";
                         recTitle = "Recommend Chapter 13 — Over Median";
-                        recDetail = `Client is over the ${hsRec}-person ${stateRec} median (${fmt(annualIncRec)}/yr vs. ${fmt(medianRec)} median). Request the long-form 122A-2 using actual YTD income and IRS allowable deductions — if the means test clears, Ch. 7 may also be an option. In the meantime, DMI of ${fmt(dmiVal)}/mo supports a 60-month Ch. 13 plan.`;
+                        recDetail = `Client is over the ${hsRec}-person ${stateRec} median (${fmt(annualIncRec)}/yr vs. ${fmt(medianRec)} median). Request the long-form 122A-2 using actual YTD income and IRS allowable deductions — if the means test clears, Ch. 7 may also be an option. In the meantime, DMI of ${fmt(dmiVal)}/mo supports a ${acp}-month Ch. 13 plan.`;
                         recColor = "border-green-500/40 bg-green-500/5";
                       } else if (overMedianRec && !goodFaith?.isGoodCandidate) {
                         recTitle = "Over Median — Neither Chapter Currently Viable";
@@ -3493,7 +3555,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                 <p className="text-sm font-bold text-white mb-1">{recTitle}</p>
                                 <p className="text-[11px] text-slate-300 leading-relaxed mb-2">{recDetail}</p>
                                 {(() => {
-                                  const minMonthly = (securedObligations + priorityTotal + trusteeFee + Math.max(liquidVal, unsecuredNonPriority)) / 60;
+                                  const minMonthly = (securedObligations + priorityTotal + trusteeFee + Math.max(liquidVal, unsecuredNonPriority)) / acp;
                                   const shortfall = minMonthly - Math.max(dmiVal, 0);
                                   if (shortfall <= 0 || dmiVal >= minMonthly) return null;
                                   return (
@@ -4055,14 +4117,14 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                               // Secured breakdown — exclude surrendered assets
                               const keptProps = props.filter(p => (p.intent as string) !== "surrender");
                               const keptVehs = vehs.filter(v => (v.intent as string) !== "surrender");
-                              const mortConduit60 = keptProps.reduce((a, p) => a + (parseFloat((p.monthlyPayment as string) ?? "0") || 0), 0) * 60;
+                              const mortConduitTotal = keptProps.reduce((a, p) => a + (parseFloat((p.monthlyPayment as string) ?? "0") || 0), 0) * acp;
                               const mortArrearsAmt = keptProps.reduce((a, p) => a + (parseFloat((p.arrearsAmount as string) ?? "0") || 0), 0);
                               const vehPayoff = keptVehs.reduce((a, v) => {
                                 const lien = parseFloat((v.loanBalance as string) ?? "0") || 0;
                                 const { rate } = effectiveVehRate(v, gridTillRate);
-                                return a + (rate != null ? calcAmortizedTotal(lien, rate, 60) : lien);
+                                return a + (rate != null ? calcAmortizedTotal(lien, rate, acp) : lien);
                               }, 0);
-                              const totalSecObl = mortConduit60 + mortArrearsAmt + vehPayoff;
+                              const totalSecObl = mortConduitTotal + mortArrearsAmt + vehPayoff;
 
                               // For Ch. 13 DMI: mortgage payment is backed out when debtor has arrears (paid through plan as conduit).
                               // Vehicle payments are ALWAYS paid through the plan and removed from monthly budget.
@@ -4075,21 +4137,23 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                               const ch13DMI = ch13NetIncome - totalExp13;
                               const ch13DMIBoosted = ch13NetIncomeBoosted - totalExp13;
                               const ch13EffDMI = includeNonCMICh13 ? ch13DMIBoosted : ch13DMI;
-                              const ch13Pool60 = Math.max(ch13EffDMI, 0) * 60;
+                              const ch13Pool = Math.max(ch13EffDMI, 0) * acp;
+                              // Always-60 pool for the "extend past ACP up to § 1322(d) cap" branch (item-5 logic)
+                              const ch13PoolAt60 = Math.max(ch13EffDMI, 0) * 60;
 
                               const ch7LiqFloor = liquidVal;
                               const attyFees13 = 3000;
                               const planSubtotal = totalSecObl + priorityTotal + ch7LiqFloor + attyFees13;
                               const trusteeFee13 = planSubtotal * 0.10;
                               const totalPlanNeeded = planSubtotal + trusteeFee13;
-                              const remainAfterSec = ch13Pool60 - totalSecObl;
+                              const remainAfterSec = ch13Pool - totalSecObl;
                               const remainAfterPri = remainAfterSec - priorityTotal;
                               const remainAfterLiq = remainAfterPri - ch7LiqFloor;
                               const remainAfterAtty = remainAfterLiq - attyFees13;
                               const remainAfterTrustee = remainAfterAtty - trusteeFee13;
 
-                              const planFunds = ch13Pool60 >= totalPlanNeeded;
-                              const fundsSec = ch13Pool60 >= totalSecObl;
+                              const planFunds = ch13Pool >= totalPlanNeeded;
+                              const fundsSec = ch13Pool >= totalSecObl;
                               const fundsPri = remainAfterSec >= priorityTotal;
                               const fundsLiq = remainAfterPri >= ch7LiqFloor;
                               const fundsAtty = remainAfterLiq >= attyFees13;
@@ -4102,7 +4166,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                               const overSecLimit = totalSecured13 > 1_580_125;
                               const debtLimitIssue = overUnsecLimit || overSecLimit;
 
-                              const barMax = Math.max(totalPlanNeeded, ch13Pool60, 1);
+                              const barMax = Math.max(totalPlanNeeded, ch13Pool, 1);
 
                               const ch13Border = debtLimitIssue ? "border-red-500/40 bg-red-500/5"
                                 : goodFaith?.isGoodCandidate ? "border-green-500/40 bg-green-500/5"
@@ -4118,7 +4182,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                         <span className="text-[10px] font-bold text-white">13</span>
                                       </div>
                                       <span className="text-xs font-bold text-white">Ch. 13 Eligibility</span>
-                                      <span className="text-[10px] text-slate-500">(60-mo plan)</span>
+                                      <span className="text-[10px] text-slate-500">({acp}-mo plan)</span>
                                     </div>
                                   </div>
                                   {/* Verdict pill */}
@@ -4514,8 +4578,8 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                               </div>
                                             )}
                                             <div className="flex justify-between text-[10px] pl-3">
-                                              <span className="text-slate-500">× 60 months</span>
-                                              <span className={`font-bold tabular-nums ${ch13Pool60 > 0 ? "text-green-400" : "text-red-400"}`}>{fmt(ch13Pool60)} pool</span>
+                                              <span className="text-slate-500">× {acp} months</span>
+                                              <span className={`font-bold tabular-nums ${ch13Pool > 0 ? "text-green-400" : "text-red-400"}`}>{fmt(ch13Pool)} pool</span>
                                             </div>
                                           </div>
                                         </div>
@@ -4592,11 +4656,11 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                     </button>
                                     {expandedSecured && (
                                       <div className="pl-3 mb-0.5 border-l border-blue-500/20 ml-1">
-                                        {mortConduit60 > 0 && (
+                                        {mortConduitTotal > 0 && (
                                           <>
                                             <div className="flex justify-between text-[10px] text-slate-400 py-0.5">
-                                              <span>Home conduit (60 mo)</span>
-                                              <span className="tabular-nums">{fmt(mortConduit60)}</span>
+                                              <span>Home conduit ({acp} mo)</span>
+                                              <span className="tabular-nums">{fmt(mortConduitTotal)}</span>
                                             </div>
                                             {keptPropsInline.map((p, i) => {
                                               const monthly = parseFloat((p.monthlyPayment as string) ?? "0") || 0;
@@ -4604,10 +4668,10 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                               return monthly > 0 ? (
                                                 <div key={i} className="pl-3 pb-0.5">
                                                   <div className="flex justify-between text-[9px] text-slate-500">
-                                                    <span>{addr} — {fmt(monthly)}/mo × 60</span>
-                                                    <span className="tabular-nums">{fmt(monthly * 60)}</span>
+                                                    <span>{addr} — {fmt(monthly)}/mo × {acp}</span>
+                                                    <span className="tabular-nums">{fmt(monthly * acp)}</span>
                                                   </div>
-                                                  <div className="text-[9px] text-slate-600">60 mos of regular mortgage pmt</div>
+                                                  <div className="text-[9px] text-slate-600">{acp} mos of regular mortgage pmt</div>
                                                 </div>
                                               ) : null;
                                             })}
@@ -4629,7 +4693,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                             {keptVehsInline.map((v, i) => {
                                               const lien = parseFloat((v.loanBalance as string) ?? "0") || 0;
                                               const { rate, source } = effectiveVehRate(v, gridTillRate);
-                                              const amort = rate != null ? calcAmortizedTotal(lien, rate, 60) : lien;
+                                              const amort = rate != null ? calcAmortizedTotal(lien, rate, acp) : lien;
                                               const label = `${(v.year as string) ?? ""} ${(v.make as string) ?? ""} ${(v.model as string) ?? ""}`.trim() || `Vehicle ${i + 1}`;
                                               const rateLabel = source === "contract" ? ` — @ ${rate!.toFixed(2)}% contract (lower than Till)` : source === "till" ? ` — @ ${rate!.toFixed(2)}% Till` : " — principal only (no rate)";
                                               return lien > 0 ? (
@@ -4669,7 +4733,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                             {taxDebt > 0 && <div className="flex justify-between text-[10px] text-slate-400 py-0.5"><span>Tax debt (IRS / State)</span><span className="tabular-nums">{fmt(taxDebt)}</span></div>}
                                             {inlineDSOArrears > 0 && <div className="flex justify-between text-[10px] text-slate-400 py-0.5"><span>DSO arrears (child support / alimony)</span><span className="tabular-nums">{fmt(inlineDSOArrears)}</span></div>}
                                             {inlinePriorityDebtsBal > 0 && <div className="flex justify-between text-[10px] text-slate-400 py-0.5"><span>Other priority debts ({inlinePriorityDebts.length} claim{inlinePriorityDebts.length !== 1 ? "s" : ""})</span><span className="tabular-nums">{fmt(inlinePriorityDebtsBal)}</span></div>}
-                                            {(childSup > 0 || alimonyAmt > 0) && <div className="flex justify-between text-[10px] text-slate-400 py-0.5"><span>Ongoing domestic support (60 mo)</span><span className="tabular-nums">{fmt((childSup + alimonyAmt) * 60)}</span></div>}
+                                            {(childSup > 0 || alimonyAmt > 0) && <div className="flex justify-between text-[10px] text-slate-400 py-0.5"><span>Ongoing domestic support ({acp} mo)</span><span className="tabular-nums">{fmt((childSup + alimonyAmt) * acp)}</span></div>}
                                           </div>
                                         )}
                                       </>
@@ -4778,16 +4842,16 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                     </div>
 
                                     <div className="flex justify-between text-[11px] font-semibold text-slate-300 pt-1 mt-0.5">
-                                      <span>Debtor(s) DMI x 60</span>
-                                      <span className="tabular-nums">{fmt(ch13Pool60)}</span>
+                                      <span>Debtor(s) DMI x {acp}</span>
+                                      <span className="tabular-nums">{fmt(ch13Pool)}</span>
                                     </div>
 
                                     {(() => {
-                                      const shortfall = totalPlanNeeded - ch13Pool60;
+                                      const shortfall = totalPlanNeeded - ch13Pool;
                                       const unsecuredWithTrustee = unsecuredNonPriority * 1.10;
                                       const total100PlanNeeded = totalPlanNeeded + unsecuredWithTrustee;
-                                      const can100Percent = ch13Pool60 >= total100PlanNeeded;
-                                      const monthly100Plan = total100PlanNeeded / 60;
+                                      const can100Percent = ch13Pool >= total100PlanNeeded;
+                                      const monthly100Plan = total100PlanNeeded / acp;
 
                                       if (shortfall > 0) {
                                         return (
@@ -4830,9 +4894,9 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                         <div className="w-4 h-4 rounded bg-slate-600 flex items-center justify-center">
                                           <span className="text-[8px] font-bold text-white">$</span>
                                         </div>
-                                        <span className="text-[11px] font-bold text-slate-200">60-Month DMI Pool Available</span>
+                                        <span className="text-[11px] font-bold text-slate-200">{acp}-Month DMI Pool Available</span>
                                       </div>
-                                      <span className={`text-[12px] font-bold tabular-nums ${ch13Pool60 > 0 ? "text-green-400" : "text-red-400"}`}>{fmt(ch13Pool60)}</span>
+                                      <span className={`text-[12px] font-bold tabular-nums ${ch13Pool > 0 ? "text-green-400" : "text-red-400"}`}>{fmt(ch13Pool)}</span>
                                     </div>
 
                                     {/* Element 1 — Pay All Secured Creditors */}
@@ -4854,11 +4918,11 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                           <p className="text-[10px] text-slate-500 pb-0.5">Conduit payments + mortgage arrears cure + vehicle lien payoffs (11 U.S.C. § 1325(a)(5))</p>
                                           {totalSecObl > 0 && (
                                             <div className="space-y-0.5">
-                                              {mortConduit60 > 0 && (
+                                              {mortConduitTotal > 0 && (
                                                 <>
                                                   <div className="flex justify-between text-[10px]">
-                                                    <span className="text-slate-500">Home conduit (60 mo)</span>
-                                                    <span className="text-slate-400 tabular-nums">{fmt(mortConduit60)}</span>
+                                                    <span className="text-slate-500">Home conduit ({acp} mo)</span>
+                                                    <span className="text-slate-400 tabular-nums">{fmt(mortConduitTotal)}</span>
                                                   </div>
                                                   {keptProps.map((p, i) => {
                                                     const monthly = parseFloat((p.monthlyPayment as string) ?? "0") || 0;
@@ -4866,10 +4930,10 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                                     return monthly > 0 ? (
                                                       <div key={i} className="pl-3">
                                                         <div className="flex justify-between text-[9px] text-slate-500">
-                                                          <span>{addr} — {fmt(monthly)}/mo × 60</span>
-                                                          <span className="tabular-nums">{fmt(monthly * 60)}</span>
+                                                          <span>{addr} — {fmt(monthly)}/mo × {acp}</span>
+                                                          <span className="tabular-nums">{fmt(monthly * acp)}</span>
                                                         </div>
-                                                        <div className="text-[9px] text-slate-600">60 mos of regular mortgage pmt</div>
+                                                        <div className="text-[9px] text-slate-600">{acp} mos of regular mortgage pmt</div>
                                                       </div>
                                                     ) : null;
                                                   })}
@@ -4891,7 +4955,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                                   {keptVehs.map((v, i) => {
                                                     const lien = parseFloat((v.loanBalance as string) ?? "0") || 0;
                                                     const { rate, source } = effectiveVehRate(v, gridTillRate);
-                                                    const amort = rate != null ? calcAmortizedTotal(lien, rate, 60) : lien;
+                                                    const amort = rate != null ? calcAmortizedTotal(lien, rate, acp) : lien;
                                                     const label = `${(v.year as string) ?? ""} ${(v.make as string) ?? ""} ${(v.model as string) ?? ""}`.trim() || `Vehicle ${i + 1}`;
                                                     const rateLabel = source === "contract" ? ` — @ ${rate!.toFixed(2)}% contract (lower than Till)` : source === "till" ? ` — @ ${rate!.toFixed(2)}% Till` : " — principal only (no rate)";
                                                     return lien > 0 ? (
@@ -4944,7 +5008,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                               {taxDebt > 0 && <div className="flex justify-between text-[10px]"><span className="text-slate-500">Priority tax debt</span><span className="text-slate-400 tabular-nums">{fmt(taxDebt)}</span></div>}
                                               {inlineDSOArrears > 0 && <div className="flex justify-between text-[10px]"><span className="text-slate-500">DSO arrears (child support / alimony)</span><span className="text-slate-400 tabular-nums">{fmt(inlineDSOArrears)}</span></div>}
                                               {inlinePriorityDebtsBal > 0 && <div className="flex justify-between text-[10px]"><span className="text-slate-500">Other priority debts ({inlinePriorityDebts.length} claim{inlinePriorityDebts.length !== 1 ? "s" : ""})</span><span className="text-slate-400 tabular-nums">{fmt(inlinePriorityDebtsBal)}</span></div>}
-                                              {(childSup + alimonyAmt) > 0 && <div className="flex justify-between text-[10px]"><span className="text-slate-500">Ongoing domestic support (outside plan)</span><span className="text-slate-400 tabular-nums">{fmt((childSup + alimonyAmt) * 60)} over 60 mo</span></div>}
+                                              {(childSup + alimonyAmt) > 0 && <div className="flex justify-between text-[10px]"><span className="text-slate-500">Ongoing domestic support (outside plan)</span><span className="text-slate-400 tabular-nums">{fmt((childSup + alimonyAmt) * acp)} over {acp} mo</span></div>}
                                             </div>
                                           )}
                                           {priorityTotal > 0 && (
@@ -4995,7 +5059,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                     {/* Element 4 — Debtor Pays All DMI */}
                                     {(() => {
                                       const dmiPositive = ch13DMI > 0;
-                                      const dmiCoversAll = ch13Pool60 >= totalPlanNeeded;
+                                      const dmiCoversAll = ch13Pool >= totalPlanNeeded;
                                       const dmiEl4Passes = dmiPositive && dmiCoversAll;
                                       return (
                                         <div className={`border-b border-slate-700/40 ${dmiEl4Passes ? "bg-green-500/5" : "bg-red-500/5"}`}>
@@ -5021,12 +5085,12 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                                   <span className={dmiEl4Passes ? "text-teal-300" : "text-red-400"}>Disposable Monthly Income (DMI)</span>
                                                   <span className={`tabular-nums ${dmiEl4Passes ? "text-teal-300" : "text-red-400"}`}>{fmt(ch13DMI)}</span>
                                                 </div>
-                                                <div className="flex justify-between text-[10px]"><span className="text-slate-500">60-month DMI pool</span><span className="text-slate-400 tabular-nums">{fmt(ch13Pool60)}</span></div>
+                                                <div className="flex justify-between text-[10px]"><span className="text-slate-500">{acp}-month DMI pool</span><span className="text-slate-400 tabular-nums">{fmt(ch13Pool)}</span></div>
                                                 <div className="flex justify-between text-[10px]"><span className="text-slate-500">Total plan required</span><span className="text-slate-400 tabular-nums">{fmt(totalPlanNeeded)}</span></div>
                                               </div>
                                               <div className={`px-2 py-1 rounded text-[10px] flex justify-between mt-1 ${dmiEl4Passes ? "bg-green-500/10 text-green-400" : "bg-red-500/10 text-red-400"}`}>
                                                 <span>{dmiEl4Passes ? "DMI fully funds plan" : "DMI insufficient to fund plan"}</span>
-                                                <span className="font-semibold tabular-nums">{ch13Pool60 >= totalPlanNeeded ? `+${fmt(ch13Pool60 - totalPlanNeeded)} surplus` : `(${fmt(totalPlanNeeded - ch13Pool60)} shortfall)`}</span>
+                                                <span className="font-semibold tabular-nums">{ch13Pool >= totalPlanNeeded ? `+${fmt(ch13Pool - totalPlanNeeded)} surplus` : `(${fmt(totalPlanNeeded - ch13Pool)} shortfall)`}</span>
                                               </div>
                                             </div>
                                           )}
@@ -5064,7 +5128,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                                   {!fundsSec && <div className="flex items-center gap-1.5"><XCircle size={9} className="flex-shrink-0" /><span>Element 1 not satisfied — secured creditors not fully funded</span></div>}
                                                   {priorityTotal > 0 && !fundsPri && <div className="flex items-center gap-1.5"><XCircle size={9} className="flex-shrink-0" /><span>Element 2 not satisfied — priority debts not fully funded</span></div>}
                                                   {ch7LiqFloor > 0 && !fundsLiq && <div className="flex items-center gap-1.5"><XCircle size={9} className="flex-shrink-0" /><span>Element 3 not satisfied — liquidation floor not met</span></div>}
-                                                  {!planFunds && <div className="flex items-center gap-1.5"><XCircle size={9} className="flex-shrink-0" /><span>Element 4 not satisfied — DMI pool ({fmt(ch13Pool60)}) does not cover total plan minimum ({fmt(totalPlanNeeded)})</span></div>}
+                                                  {!planFunds && <div className="flex items-center gap-1.5"><XCircle size={9} className="flex-shrink-0" /><span>Element 4 not satisfied — DMI pool ({fmt(ch13Pool)}) does not cover total plan minimum ({fmt(totalPlanNeeded)})</span></div>}
                                                 </div>
                                               )}
                                             </div>
@@ -5076,7 +5140,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                     {/* ── PLAN FUNDING VISUAL ── */}
                                     {(() => {
                                       const planNeededVal = totalPlanNeeded;
-                                      const debtorCanPayVal = ch13Pool60;
+                                      const debtorCanPayVal = ch13Pool;
                                       const vizMax = Math.max(planNeededVal, debtorCanPayVal, 1);
 
                                       const secPct = Math.min((totalSecObl / vizMax) * 100, 100);
@@ -5141,7 +5205,7 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                           {/* Bar 2 — Debtor Can Pay */}
                                           <div className="space-y-1">
                                             <div className="flex items-center justify-between mb-0.5">
-                                              <span className="text-[10px] text-slate-400 font-medium">Debtor(s) Can Pay (DMI × 60)</span>
+                                              <span className="text-[10px] text-slate-400 font-medium">Debtor(s) Can Pay (DMI × {acp})</span>
                                               <span className={`text-[10px] font-bold tabular-nums ${debtorCanPayVal >= planNeededVal ? "text-green-400" : "text-red-400"}`}>{fmt(debtorCanPayVal)}</span>
                                             </div>
                                             <div className="h-5 w-full bg-slate-800 rounded-md overflow-hidden">
@@ -5229,15 +5293,47 @@ export default function AttorneyIntakeDashboard({ onSwitchToCaseManagement }: { 
                                       );
                                     })()}
 
-                                    {/* Final verdict */}
-                                    <div className={`px-3 py-2 flex items-center gap-2 text-[11px] font-semibold border-t ${planFunds ? "border-green-500/30 bg-green-500/10 text-green-300" : "border-red-500/30 bg-red-500/10 text-red-300"}`}>
-                                      {planFunds
-                                        ? <><CheckCircle size={11} className="flex-shrink-0" /> All confirmation elements satisfied — plan can be confirmed.</>
-                                        : (() => {
-                                            const shortfall = totalPlanNeeded - ch13Pool60;
-                                            return <><XCircle size={11} className="flex-shrink-0" /> Plan cannot be confirmed — {fmt(shortfall)} funding shortfall over 60 months at current income/expense levels.</>;
-                                          })()}
-                                    </div>
+                                    {/* Final verdict — item-5 branch logic.
+                                        Branches on total plan need vs. the pool at ACP and the pool at 60 months
+                                        (the § 1322(d) statutory cap). For arrears-heavy cases the total plan need
+                                        includes secured + priority + arrears + the unsecured-or-floor max, so the
+                                        comparison must be totalPlanNeeded vs. the relevant pool, NOT just liquidation
+                                        floor vs. pool.
+                                    */}
+                                    {(() => {
+                                      const shortfallAtAcp = totalPlanNeeded - ch13Pool;
+                                      const shortfallAt60  = totalPlanNeeded - ch13PoolAt60;
+                                      if (planFunds) {
+                                        return (
+                                          <div className="px-3 py-2 flex items-center gap-2 text-[11px] font-semibold border-t border-green-500/30 bg-green-500/10 text-green-300">
+                                            <CheckCircle size={11} className="flex-shrink-0" /> All confirmation elements satisfied — plan can be confirmed at {acp}-month commitment period.
+                                          </div>
+                                        );
+                                      }
+                                      // Below-median case where ACP is 36 but plan fits within the § 1322(d) 60-mo cap
+                                      if (!overMedianRec && shortfallAtAcp > 0 && shortfallAt60 <= 0) {
+                                        return (
+                                          <div className="px-3 py-2 flex items-center gap-2 text-[11px] font-semibold border-t border-amber-500/30 bg-amber-500/10 text-amber-300">
+                                            <AlertTriangle size={11} className="flex-shrink-0" />
+                                            <span>
+                                              Plan exceeds the {acp}-month commitment period by {fmt(shortfallAtAcp)}, but fits within the § 1322(d) 60-month cap.
+                                              Extend the plan past the ACP — ACP under § 1325(b)(4) is a floor on committed income, not a ceiling on plan length.
+                                            </span>
+                                          </div>
+                                        );
+                                      }
+                                      // Either above-median (already at 60) OR below-median where even 60 mo can't cover.
+                                      // In either case the plan can't be funded from disposable income → reconsider Ch.7.
+                                      return (
+                                        <div className="px-3 py-2 flex items-center gap-2 text-[11px] font-semibold border-t border-red-500/30 bg-red-500/10 text-red-300">
+                                          <XCircle size={11} className="flex-shrink-0" />
+                                          <span>
+                                            Plan cannot be confirmed from disposable income — {fmt(shortfallAt60)} shortfall even over the § 1322(d) 60-month cap
+                                            ({fmt(totalPlanNeeded)} needed vs. {fmt(ch13PoolAt60)} available). Reconsider Ch.7 conversion or restructure assumptions.
+                                          </span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   </>)}

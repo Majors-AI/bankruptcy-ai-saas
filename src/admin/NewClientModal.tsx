@@ -27,6 +27,7 @@ import {
 import { supabase } from '../lib/supabase';
 import { generateAccessToken, buildPortalUrl } from '../lib/clientAccess';
 import { getScript } from '../lib/scriptLibrary';
+import { sendVia } from '../lib/sendGate';
 
 const MLG_FIRM_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -177,59 +178,70 @@ export default function NewClientModal({
       const emailBody = await getScript('v1_manual_onboarding_welcome', variables);
       const smsBody   = await getScript('v1_manual_onboarding_welcome_sms', variables);
 
-      const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL as string;
-      const SUPABASE_ANON    = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-      const fnUrl            = `${SUPABASE_URL}/functions/v1/send-client-message`;
-      const fnHeaders        = {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${SUPABASE_ANON}`,
-      };
       const senderName       = attorney?.name ?? firmName;
 
       let emailQueued = false;
       let smsQueued   = false;
+      const skipNotes: string[] = [];
+
       if (clientEmail.trim() && emailBody) {
-        try {
-          await fetch(fnUrl, {
-            method: 'POST',
-            headers: fnHeaders,
-            body: JSON.stringify({
-              messageId: crypto.randomUUID(),
-              clientId,
-              clientName: fullName,
-              clientEmail: clientEmail.trim(),
-              senderName,
-              senderRole: 'attorney',
-              subject: `Welcome to ${firmName} — start your bankruptcy file`,
-              body: emailBody,
-              channel: 'email',
-            }),
-          });
+        const result = await sendVia(
+          'send-client-message',
+          {
+            messageId: crypto.randomUUID(),
+            clientId,
+            clientName: fullName,
+            clientEmail: clientEmail.trim(),
+            senderName,
+            senderRole: 'attorney',
+            subject: `Welcome to ${firmName} — start your bankruptcy file`,
+            body: emailBody,
+            channel: 'email',
+          },
+          {
+            recipientType: 'client',
+            clientId,
+            actor: senderName,
+            summary: 'Manual onboarding welcome email',
+          },
+        );
+        if (result.sent) {
           emailQueued = true;
-        } catch (e) {
-          console.error('[NewClientModal] email dispatch failed', e);
+        } else {
+          skipNotes.push(`Email skipped: ${result.reason ?? 'unknown'}`);
         }
       }
       if (clientPhone.trim() && smsBody) {
-        try {
-          await fetch(fnUrl, {
-            method: 'POST',
-            headers: fnHeaders,
-            body: JSON.stringify({
-              messageId: crypto.randomUUID(),
-              clientId,
-              clientName: fullName,
-              clientPhone: clientPhone.trim(),
-              senderName,
-              senderRole: 'attorney',
-              body: smsBody,
-              channel: 'sms',
-            }),
-          });
+        // SMS goes through the gate as 'client' — STRICT consent required (TCPA).
+        const result = await sendVia(
+          'send-client-message',
+          {
+            messageId: crypto.randomUUID(),
+            clientId,
+            clientName: fullName,
+            clientPhone: clientPhone.trim(),
+            senderName,
+            senderRole: 'attorney',
+            body: smsBody,
+            channel: 'sms',
+          },
+          {
+            recipientType: 'client',
+            clientId,
+            actor: senderName,
+            summary: 'Manual onboarding welcome SMS',
+          },
+        );
+        if (result.sent) {
           smsQueued = true;
-        } catch (e) {
-          console.error('[NewClientModal] sms dispatch failed', e);
+        } else {
+          skipNotes.push(`SMS skipped: ${result.reason ?? 'unknown'}`);
         }
+      }
+      if (skipNotes.length > 0) {
+        // Non-blocking notice on the result UI — the modal renders {emailQueued, smsQueued}
+        // booleans already; this surfaces the WHY when one is false.
+        console.warn('[NewClientModal] gate decisions:', skipNotes.join(' / '));
       }
 
       const res: NewClientResult = { clientId, token, portalUrl, emailQueued, smsQueued };

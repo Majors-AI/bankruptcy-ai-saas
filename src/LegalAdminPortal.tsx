@@ -6,6 +6,11 @@ import { CASE_TYPES, CHAPTER_FILING_FEES, ATTORNEY_FEES, CREDIT_COUNSELING_FEE }
 import { mapIntakePortalRoleToPlatformRole, canAcceptCase } from "./lib/auth";
 import { getFirmFeatures } from "./lib/featureFlags";
 import NewClientModal from "./admin/NewClientModal";
+import { supabase } from "./lib/supabase";
+import { sendVia } from "./lib/sendGate";
+import IntakeDashboard from "./components/intake-dashboard/IntakeDashboard";
+import StaffGuidedIntake from "./components/intake-script/StaffGuidedIntake";
+import NewLeadInline from "./components/intake-new-lead/NewLeadInline";
 
 // V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
 // firms get the same feature-flag config per Section 6 of the V1 migration,
@@ -408,12 +413,6 @@ function IntakeAttorneyReviewModal({
   const [limitedDesc, setLimitedDesc] = useState("");
   const [decisionNotes, setDecisionNotes] = useState("");
   const [showAddIssue, setShowAddIssue] = useState(false);
-
-  // 4-tab attorney case review — consolidated from the retired
-  // AttorneyIntakeDashboard. Reset to Overview when the selected lead changes.
-  const [activeReviewTab, setActiveReviewTab] = useState<'overview' | 'eligibility' | 'issues' | 'decision'>('overview');
-  const [elgSubTab, setElgSubTab] = useState<'ch7' | 'ch13'>('ch7');
-  useEffect(() => { setActiveReviewTab('overview'); setElgSubTab('ch7'); }, [lead.id]);
 
   // ── Computed eligibility from submission ──
   const cmi = submission ? computeCMI(submission) : (lead.income_estimate ?? 0);
@@ -1973,6 +1972,7 @@ function LeadDetailPanel({
   onBack,
   onRefresh,
   onLaunchPresentation,
+  onLaunchGuidedIntake,
 }: {
   lead: Lead;
   acceptance: Acceptance | null;
@@ -1980,6 +1980,9 @@ function LeadDetailPanel({
   onBack: () => void;
   onRefresh: () => void;
   onLaunchPresentation: (lead: Lead, acceptance: Acceptance, submission: Record<string, unknown> | null) => void;
+  /** Launch the staff-guided intake wrapper for this lead. Replaces the
+   *  former ConsultIntakeModal launch path. Wired in IntakePortalInner. */
+  onLaunchGuidedIntake: (lead: Lead) => void;
 }) {
   const panelRole    = session.role;
   const panelIsAtty  = isAttorney(panelRole);
@@ -1987,7 +1990,9 @@ function LeadDetailPanel({
   const canDoIntake  = !panelIsAtty || panelIsSuperAdmin;  // legal_admin, super_admin, attorney_super_admin
   const canReview    = panelIsAtty || panelIsSuperAdmin;   // attorneys + super admins
   const [showAcceptanceModal, setShowAcceptanceModal]   = useState(false);
-  const [showConsult, setShowConsult]                   = useState(false);
+  // showConsult state removed — ConsultIntakeModal is no longer launched.
+  // The new staff-guided intake flow (StaffGuidedIntake) is launched via
+  // `onLaunchGuidedIntake(lead)` callback from IntakePortalInner.
   const [showSchedule, setShowSchedule]                 = useState(false);
   const [showLogContact, setShowLogContact]             = useState(false);
   const [markingFeeQuoted, setMarkingFeeQuoted]         = useState(false);
@@ -2184,7 +2189,7 @@ function LeadDetailPanel({
             border: "border-red-500/25",
             cta: (
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setShowConsult(true)}
+                <button onClick={() => onLaunchGuidedIntake(lead)}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-red-500 hover:bg-red-400 text-white rounded-xl transition-colors shadow-lg shadow-red-500/20">
                   <Mic className="w-4 h-4" /> Start Intake Now
                 </button>
@@ -2212,7 +2217,7 @@ function LeadDetailPanel({
             border: "border-amber-500/25",
             cta: (
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setShowConsult(true)}
+                <button onClick={() => onLaunchGuidedIntake(lead)}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-amber-500 hover:bg-amber-400 text-white rounded-xl transition-colors shadow-lg shadow-amber-500/20">
                   <Mic className="w-4 h-4" /> Complete Intake
                 </button>
@@ -2237,7 +2242,7 @@ function LeadDetailPanel({
             border: "border-blue-500/25",
             cta: (
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setShowConsult(true)}
+                <button onClick={() => onLaunchGuidedIntake(lead)}
                   className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold bg-blue-500 hover:bg-blue-400 text-white rounded-xl transition-colors shadow-lg shadow-blue-500/20">
                   <Mic className="w-4 h-4" /> Complete Intake
                 </button>
@@ -2362,607 +2367,6 @@ function LeadDetailPanel({
                 <p className="text-xs text-slate-400 mb-4">{stage.desc}</p>
                 {stage.cta}
               </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* ── Attorney Case Review — 4-tab redesign ──────────────────────── */}
-      {submission && (() => {
-        // ── Local derivations for the four tabs (use existing helpers above) ──
-        const fd = submission;
-        const sourcesRaw = (fd.income_sources_json as Array<Record<string, unknown>>) ?? [];
-        const properties = (fd.real_properties_json as Array<Record<string, unknown>>) ?? [];
-        const ssExcluded = new Set([
-          "Social Security – Retirement", "Social Security – Disability (SSDI)",
-          "Supplemental Security Income (SSI)", "VA Benefits",
-          "social_security", "ssdi", "ssi", "va_benefits",
-        ]);
-
-        const stateCode = ((fd.state as string) ?? lead.state ?? "").toUpperCase().slice(0, 2);
-        const county = (fd.county as string) ?? "";
-        const hasRealProp = properties.length > 0
-          || (fd.owns_real_estate === true)
-          || (fd.real_prop_value != null && Number(fd.real_prop_value) > 0);
-
-        // Homestead — null when WA inputs missing per "never compute against missing inputs" rule.
-        const homeAcquired = fd.home_acquired_date as string | undefined;
-        const isOccupied = fd.is_occupied_primary as string | undefined;
-        let homesteadExemption: number | null = null;
-        let homesteadIncomplete = false;
-        try {
-          const stEx = getApplicableExemptions(stateCode, undefined, hasRealProp);
-          if (stateCode === "CA" && hasRealProp) {
-            homesteadExemption = getCaHomesteadByCounty(county);
-          } else if (stateCode === "WA" && hasRealProp) {
-            if (!homeAcquired || !isOccupied) {
-              homesteadIncomplete = true;
-              homesteadExemption = null;
-            } else {
-              const waH = getWaHomesteadEligibility(homeAcquired, isOccupied, county);
-              homesteadExemption = waH.eligible ? waH.amount : 0;
-            }
-          } else {
-            homesteadExemption = stEx.homestead === "unlimited" || stEx.homestead === -1
-              ? Infinity : (stEx.homestead as number);
-          }
-        } catch { homesteadExemption = null; }
-
-        const vehExemption = (() => {
-          try { return getApplicableExemptions(stateCode, undefined, hasRealProp).vehicle ?? 0; }
-          catch { return 0; }
-        })();
-
-        // ── Schedule C build — per-asset equity, exemption applied, non-exempt ──
-        type ExRow = { label: string; equity: number; exemption: number | null; nonExempt: number; cite?: string; incomplete?: boolean };
-        const exRows: ExRow[] = [];
-
-        properties.forEach((p, i) => {
-          const fmv = Number(p.propertyValue ?? p.fmv ?? 0);
-          const lien = Number(p.loanBalance ?? p.mortgageBalance ?? 0);
-          const equity = Math.max(0, fmv - lien);
-          if (fmv === 0 && lien === 0) return;
-          const isPrimary = i === 0; // first property treated as homestead-eligible
-          if (isPrimary) {
-            if (homesteadIncomplete) {
-              exRows.push({ label: `Real property — ${p.address ?? "primary"}`, equity, exemption: null, nonExempt: equity, incomplete: true, cite: `${stateCode} homestead — incomplete data` });
-            } else {
-              const cap = homesteadExemption ?? 0;
-              const exempt = cap === Infinity ? equity : Math.min(equity, cap);
-              exRows.push({ label: `Real property — ${p.address ?? "primary"}`, equity, exemption: exempt, nonExempt: Math.max(0, equity - exempt), cite: `${stateCode} homestead` });
-            }
-          } else {
-            // non-primary properties get no homestead protection
-            exRows.push({ label: `Real property — ${p.address ?? `property ${i+1}`}`, equity, exemption: 0, nonExempt: equity, cite: "No homestead (non-primary)" });
-          }
-        });
-
-        vehicles.forEach(v => {
-          const equity = Math.max(0, Number(v.value ?? 0) - Number(v.loanBalance ?? 0));
-          if (equity === 0) return;
-          const exempt = Math.min(equity, vehExemption);
-          exRows.push({ label: `Vehicle — ${v.year} ${v.make} ${v.model}`, equity, exemption: exempt, nonExempt: Math.max(0, equity - exempt), cite: `${stateCode} vehicle exemption` });
-        });
-
-        // Brokerage / stocks (non-exempt in most states; wildcard limited)
-        const stocksVal = Number(fd.stocks_value ?? 0);
-        if (stocksVal > 0) exRows.push({ label: "Brokerage / stocks", equity: stocksVal, exemption: 0, nonExempt: stocksVal, cite: "Non-exempt — wildcard limited" });
-        const cryptoVal = Number(fd.crypto_value ?? 0);
-        if (cryptoVal > 0) exRows.push({ label: "Crypto", equity: cryptoVal, exemption: 0, nonExempt: cryptoVal, cite: "Non-exempt" });
-        const bankVal = Number(fd.bank_balance ?? 0);
-        if (bankVal > 0) exRows.push({ label: "Bank balances", equity: bankVal, exemption: 0, nonExempt: bankVal, cite: "State-specific bank exemption" });
-        const retVal = Number(fd.retirement_balance ?? 0);
-        if (retVal > 0) exRows.push({ label: "Retirement (401k/IRA)", equity: retVal, exemption: retVal, nonExempt: 0, cite: "ERISA / § 522(b)(3)(C)" });
-
-        const totalEquity = exRows.reduce((s, r) => s + r.equity, 0);
-        const totalNonExempt = exRows.reduce((s, r) => s + r.nonExempt, 0);
-        const liquidationFloor = totalNonExempt;
-
-        // ── Income split (CMI vs Schedule I) — flag SS as excluded from CMI ──
-        type IncomeRow = { who: string; type: string; label: string; monthly: number; excluded: boolean };
-        const incomeRows: IncomeRow[] = [];
-        const periodFactor: Record<string, number> = { Weekly: 4.333, "Bi-Weekly": 2.167, "Semi-Monthly": 2, Monthly: 1 };
-        for (const s of sourcesRaw) {
-          const owner = String(s.owner ?? "debtor");
-          const sourceType = String(s.sourceType ?? "");
-          const isSE = sourceType === "selfEmployment";
-          const grossPerPeriod = Number(s.grossPerPeriod ?? 0);
-          const pf = periodFactor[String(s.payFrequency ?? "Monthly")] ?? 1;
-          const monthly = isSE
-            ? Number(s.businessGrossIncome ?? 0)
-            : grossPerPeriod * pf;
-          const label = isSE
-            ? String(s.businessName ?? s.employerName ?? "Self-employment")
-            : String(s.employerName ?? sourceType ?? "Employment");
-          incomeRows.push({
-            who: owner.charAt(0).toUpperCase() + owner.slice(1),
-            type: sourceType || "wages",
-            label,
-            monthly,
-            excluded: ssExcluded.has(sourceType) || ssExcluded.has(label),
-          });
-        }
-        const totalIncomeAll = incomeRows.reduce((s, r) => s + r.monthly, 0);  // Schedule I (includes SS)
-        const cmiPerStatute = incomeRows.filter(r => !r.excluded).reduce((s, r) => s + r.monthly, 0);
-
-        // ── ACP and Ch.13 plan math ──
-        const acp = aboveMedian ? 60 : 36;
-        const pdiTimesAcp = Math.max(0, disposableIncome) * acp;
-        const taxDebtP = Number(fd.tax_debt ?? 0);
-        const dsoArrears = Number(fd.dso_arrears_amount ?? 0);
-        const priorityTotal = taxDebtP + dsoArrears;
-        const mortgageArrears = properties.reduce((s, p) => s + Number(p.arrearsAmount ?? 0), 0);
-        const arrearsCure = mortgageArrears;
-        const minPlanFunding = Math.max(pdiTimesAcp, liquidationFloor + priorityTotal + arrearsCure);
-        const planExtendsPastAcp = liquidationFloor > pdiTimesAcp && pdiTimesAcp > 0;
-
-        // ── Primarily-consumer check (skip means test if business > 50%) ──
-        const businessDebt = Number(fd.business_credit_card_debt ?? 0)
-          + Number(fd.business_mortgage_debt ?? 0)
-          + Number(fd.business_equipment_debt ?? 0)
-          + Number(fd.other_business_debt ?? 0)
-          + Number(fd.supply_vendor_debt ?? 0);
-        const totalDebtAll = Number(fd.secured_debt ?? 0) + Number(fd.credit_card_debt ?? 0)
-          + Number(fd.medical_debt ?? 0) + Number(fd.student_loan_debt ?? 0)
-          + Number(fd.tax_debt ?? 0) + Number(fd.personal_loan_debt ?? 0)
-          + Number(fd.other_unsecured ?? 0) + businessDebt;
-        const primarilyBusiness = totalDebtAll > 0 && (businessDebt / totalDebtAll) > 0.5;
-
-        // ── § 707(b)(2) presumption (above-median only) ──
-        const presumption252 = disposableIncome * 60 >= 15150;  // ≈$252.50/mo × 60
-        const presumption151 = disposableIncome * 60 >= 9075;   // ≈$151.25/mo × 60
-        const unsecuredTotal = Number(fd.credit_card_debt ?? 0) + Number(fd.medical_debt ?? 0)
-          + Number(fd.student_loan_debt ?? 0) + Number(fd.personal_loan_debt ?? 0) + Number(fd.other_unsecured ?? 0);
-        const meets25pctUnsec = presumption151 && unsecuredTotal > 0 && (disposableIncome * 60) >= unsecuredTotal * 0.25;
-        const sevenB2Triggers = aboveMedian && !primarilyBusiness && (presumption252 || meets25pctUnsec);
-
-        // ── Issues (statute-tagged) ──
-        type Issue = { statute: string; severity: 'critical' | 'warning' | 'info'; title: string; detail: string };
-        const issues: Issue[] = [];
-        if (liquidationFloor > 0) issues.push({ statute: "§ 522 / § 1325(a)(4)", severity: "warning", title: "Non-exempt asset equity", detail: `Non-exempt equity totals ${fmt(liquidationFloor)}. In Ch.7 exposed to trustee; in Ch.13 sets the § 1325(a)(4) liquidation floor.` });
-
-        const priorState = (fd.prior_state as string) ?? "";
-        const addrYears = parseInt((fd.address_years as string) ?? "0") || 0;
-        if (priorState && priorState !== stateCode && addrYears < 2) {
-          issues.push({ statute: "§ 1408 / § 522(b)(3)", severity: "warning", title: "Domicile under 730 days", detail: `In ${stateCode} only ${addrYears}y. Prior-state exemption (${priorState}) may apply if it held domicile the greater portion of the 730-day window.` });
-        }
-
-        const priorBKs = (fd.prior_bankruptcies_json as Array<Record<string, unknown>>) ?? [];
-        for (const pb of priorBKs) {
-          const ch = String(pb.chapter ?? "");
-          const dDate = pb.dischargeDate as string | undefined;
-          if (pb.discharged && dDate) {
-            const months = Math.floor((Date.now() - new Date(dDate).getTime()) / (1000*60*60*24*30));
-            if (ch === "7" && months < 96) {
-              issues.push({ statute: "§ 727(a)(8)", severity: "critical", title: "Prior Ch.7 discharge within 8 years", detail: `Discharged ${months} months ago — Ch.7 discharge barred for 8 years from prior filing.` });
-              if (months < 48) {
-                issues.push({ statute: "§ 1328(f)(1)", severity: "critical", title: "Ch.13 discharge barred (Ch.7→Ch.13 4-year)", detail: `Ch.7 discharged ${Math.floor(months/12)}y ${months%12}m ago. Ch.13 discharge barred; case may file for plan relief only.` });
-              }
-            }
-          }
-        }
-
-        if (aboveMedian && !primarilyBusiness) {
-          issues.push({ statute: "§ 707(b)(2)", severity: "warning", title: "Above-median income — presumption of abuse", detail: `CMI ${fmt(cmi)}/mo exceeds median ${fmt(medianMonthly)}/mo. Long-form Form 122A-2 required.` });
-        }
-
-        if (prefPayFlagged) {
-          issues.push({ statute: insiderPrefTotal > 0 ? "§ 547(b) + § 101(31)" : "§ 547(b)", severity: "warning", title: insiderPrefTotal > 0 ? "Insider preferential payment" : "Preferential payment", detail: `${fmt(prefPays.reduce((s,p)=>s+Number(p.amount),0))} total. ${insiderPrefTotal > 0 ? "1-year insider lookback." : "90-day lookback."} Trustee may avoid.` });
-        }
-
-        if (fd.transferred_property === true || fd.has_transfers === true) {
-          issues.push({ statute: "§ 548 / state UVTA", severity: "warning", title: "Transfer within reach-back", detail: "Disclosed transfer(s) within § 548 2-year reach-back. Trustee may avoid as fraud if insolvent at transfer." });
-        }
-
-        if (taxDebtP > 0) issues.push({ statute: "§ 523(a)(1) / § 507(a)(8)", severity: "info", title: `Recent income tax debt: ${fmt(taxDebtP)}`, detail: "Likely non-dischargeable; plan should treat appropriately." });
-        if (Number(fd.student_loan_debt ?? 0) > 0) issues.push({ statute: "§ 523(a)(8)", severity: "info", title: `Student loan debt: ${fmt(Number(fd.student_loan_debt))}`, detail: "Presumptively non-dischargeable absent undue hardship adversary." });
-        if (dsoArrears > 0) issues.push({ statute: "§ 523(a)(5)", severity: "info", title: `Domestic support arrears: ${fmt(dsoArrears)}`, detail: "Non-dischargeable; § 507(a)(1) first priority." });
-
-        if (fd.recent_luxury === true || (fd as Record<string, unknown>).recentCashAdvance === "yes") {
-          issues.push({ statute: "§ 523(a)(2)(C)", severity: "warning", title: "Recent luxury / cash advance", detail: "Presumption of nondischargeability: luxury > $1,000 in 90 days, or cash advance > $1,100 in 70 days pre-petition." });
-        }
-
-        if (homesteadIncomplete) {
-          issues.push({ statute: "§ 522(p)", severity: "warning", title: "Homestead acquisition date missing", detail: "Cannot verify § 522(p) 1215-day cap on state homestead. Collect homeAcquiredDate + isOccupiedPrimary on intake." });
-        }
-
-        // DMI chapter-aware flag (Overview)
-        const dmiFlag = disposableIncome > 500
-          ? aboveMedian
-            ? { color: 'red', text: `Positive DMI ${fmt(disposableIncome)}/mo — above-median household, evaluate § 707(b)(2) presumption (≈$252.50/mo over 60mo, or ≈$151.25/mo if ≥ 25% of unsecured).` }
-            : { color: 'amber', text: `Positive DMI ${fmt(disposableIncome)}/mo — Ch.13 funding capacity. Not an abuse signal for below-median debtors.` }
-          : null;
-
-        return (
-          <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
-            {/* Tab bar */}
-            <div className="px-5 pt-4 border-b border-slate-800 flex gap-1">
-              {([
-                { id: 'overview' as const,    label: 'Overview' },
-                { id: 'eligibility' as const, label: 'Eligibility' },
-                { id: 'issues' as const,      label: `Issues${issues.length > 0 ? ` (${issues.length})` : ''}` },
-                { id: 'decision' as const,    label: 'Decision & fees' },
-              ]).map(t => (
-                <button key={t.id} onClick={() => setActiveReviewTab(t.id)}
-                  className={`px-4 py-2 text-xs font-semibold rounded-t-lg border-b-2 transition-all ${
-                    activeReviewTab === t.id
-                      ? 'border-amber-400 text-amber-400 bg-amber-500/5'
-                      : 'border-transparent text-slate-500 hover:text-slate-300'
-                  }`}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="p-5 space-y-5">
-              {/* ── OVERVIEW TAB ── */}
-              {activeReviewTab === 'overview' && (
-                <>
-                  {/* Assets (Schedule A/B) */}
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Assets — Schedule A/B</p>
-                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 divide-y divide-slate-800/60">
-                      {exRows.length === 0 ? (
-                        <p className="px-3 py-3 text-xs text-slate-500">No assets disclosed.</p>
-                      ) : exRows.map((r, i) => (
-                        <div key={i} className="flex items-center justify-between px-3 py-2 text-xs">
-                          <span className="text-slate-300">{r.label}</span>
-                          <span className="text-white font-mono">{fmt(r.equity)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Schedule C — exempt property */}
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Exempt Property — Schedule C</p>
-                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 overflow-hidden">
-                      <table className="w-full text-xs">
-                        <thead className="bg-slate-800/60 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                          <tr>
-                            <th className="text-left px-3 py-2">Asset</th>
-                            <th className="text-right px-3 py-2">Equity</th>
-                            <th className="text-right px-3 py-2">Exemption</th>
-                            <th className="text-right px-3 py-2">Non-exempt</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/60">
-                          {exRows.map((r, i) => (
-                            <tr key={i}>
-                              <td className="px-3 py-2 text-slate-300">
-                                {r.label}
-                                {r.cite && <span className="block text-[9px] text-slate-600">{r.cite}</span>}
-                              </td>
-                              <td className="px-3 py-2 text-right text-slate-300 font-mono">{fmt(r.equity)}</td>
-                              <td className="px-3 py-2 text-right text-green-400 font-mono">
-                                {r.incomplete ? <span className="text-amber-400 font-semibold">Incomplete</span> : fmt(r.exemption ?? 0)}
-                              </td>
-                              <td className={`px-3 py-2 text-right font-mono font-bold ${r.nonExempt > 0 ? 'text-red-400' : 'text-slate-500'}`}>
-                                {fmt(r.nonExempt)}
-                              </td>
-                            </tr>
-                          ))}
-                          <tr className="bg-slate-800/40 font-bold">
-                            <td className="px-3 py-2 text-slate-200">Total</td>
-                            <td className="px-3 py-2 text-right text-white font-mono">{fmt(totalEquity)}</td>
-                            <td className="px-3 py-2 text-right text-green-400 font-mono">{fmt(totalEquity - totalNonExempt)}</td>
-                            <td className={`px-3 py-2 text-right font-mono ${totalNonExempt > 0 ? 'text-red-400' : 'text-slate-500'}`}>{fmt(totalNonExempt)}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {/* Income — Schedule I (with SS tagged "excluded from CMI") */}
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Income — Schedule I (CMI excludes SS-Act / VA per § 101(10A))</p>
-                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 divide-y divide-slate-800/60">
-                      {incomeRows.length === 0 ? (
-                        <p className="px-3 py-3 text-xs text-slate-500">No income sources disclosed.</p>
-                      ) : incomeRows.map((r, i) => (
-                        <div key={i} className="flex items-center justify-between px-3 py-2 text-xs gap-2">
-                          <div className="min-w-0">
-                            <span className="text-slate-300">{r.label}</span>
-                            <span className="ml-2 text-[9px] text-slate-600">({r.who})</span>
-                            {r.excluded && <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300">excluded from CMI</span>}
-                          </div>
-                          <span className="text-white font-mono">{fmt(r.monthly)}/mo</span>
-                        </div>
-                      ))}
-                      <div className="flex items-center justify-between px-3 py-2 text-xs bg-slate-800/40">
-                        <span className="text-slate-300 font-bold">Schedule I total (incl. SS)</span>
-                        <span className="text-white font-mono font-bold">{fmt(totalIncomeAll)}/mo</span>
-                      </div>
-                      <div className="flex items-center justify-between px-3 py-2 text-xs bg-slate-800/40">
-                        <span className="text-amber-300 font-bold">CMI (per § 101(10A), excl. SS / VA)</span>
-                        <span className="text-amber-300 font-mono font-bold">{fmt(cmiPerStatute)}/mo</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Schedule J total + DMI flag */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-slate-800/30 rounded-xl border border-slate-700/40 p-3">
-                      <p className="text-[10px] text-slate-500 mb-1">Total Monthly Expenses — Schedule J</p>
-                      <p className="text-base font-bold text-white">{fmt(totalExpenses)}/mo</p>
-                    </div>
-                    <div className={`rounded-xl border p-3 ${disposableIncome >= 0 ? 'bg-green-500/5 border-green-500/30' : 'bg-red-500/5 border-red-500/30'}`}>
-                      <p className="text-[10px] text-slate-500 mb-1">Disposable Monthly Income (DMI)</p>
-                      <p className={`text-base font-bold ${disposableIncome >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmt(disposableIncome)}/mo</p>
-                    </div>
-                  </div>
-
-                  {dmiFlag && (
-                    <div className={`rounded-xl border p-3 ${dmiFlag.color === 'red' ? 'bg-red-500/8 border-red-500/30 text-red-200' : 'bg-amber-500/8 border-amber-500/30 text-amber-200'}`}>
-                      <div className="flex items-start gap-2">
-                        <AlertTriangle className={`w-3.5 h-3.5 flex-shrink-0 mt-0.5 ${dmiFlag.color === 'red' ? 'text-red-400' : 'text-amber-400'}`} />
-                        <p className="text-xs leading-relaxed">{dmiFlag.text}</p>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ── ELIGIBILITY TAB (Ch.7 / Ch.13 sub-tabs) ── */}
-              {activeReviewTab === 'eligibility' && (
-                <>
-                  <div className="flex gap-1 border-b border-slate-800 -mt-2">
-                    {([{ id: 'ch7' as const, label: 'Chapter 7' }, { id: 'ch13' as const, label: 'Chapter 13' }]).map(t => (
-                      <button key={t.id} onClick={() => setElgSubTab(t.id)}
-                        className={`px-3 py-1.5 text-xs font-semibold border-b-2 transition-all ${
-                          elgSubTab === t.id ? 'border-amber-400 text-amber-400' : 'border-transparent text-slate-500 hover:text-slate-300'
-                        }`}>{t.label}</button>
-                    ))}
-                  </div>
-
-                  {elgSubTab === 'ch7' && (
-                    <div className="space-y-4">
-                      {primarilyBusiness ? (
-                        <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 p-4">
-                          <p className="text-sm font-bold text-blue-300 mb-1">Means test skipped — primarily business debt</p>
-                          <p className="text-xs text-blue-200/80">Business debt {fmt(businessDebt)} is {((businessDebt/totalDebtAll)*100).toFixed(0)}% of total — exceeds 50%. § 707(b) means test applies only when "primarily consumer debts"; not applicable here.</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div>
-                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">CMI vs. {stateCode || lead.state} {houseSize}-Person Median</p>
-                            <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
-                              <div className="flex items-center justify-between mb-2 text-xs">
-                                <span className="text-slate-400">CMI</span>
-                                <span className="text-white font-bold tabular-nums">{fmt(cmi)}/mo</span>
-                              </div>
-                              <div className="relative h-2 rounded-full bg-slate-700/50 mb-2">
-                                <div className="absolute inset-y-0 left-0 rounded-full bg-amber-400" style={{ width: `${Math.min(100, (cmi / Math.max(medianMonthly, 1)) * 100)}%` }} />
-                                <div className="absolute top-[-2px] bottom-[-2px] w-0.5 bg-white" style={{ left: '100%' }} />
-                              </div>
-                              <div className="flex items-center justify-between text-[10px] text-slate-500">
-                                <span>$0</span>
-                                <span>Median {fmt(medianMonthly)}/mo</span>
-                              </div>
-                              <div className="mt-3 text-xs">
-                                {aboveMedian
-                                  ? <p className="text-red-300"><span className="font-bold">Above median</span> by {fmt(cmi - medianMonthly)}/mo — § 707(b)(2) presumption test required.</p>
-                                  : <p className="text-green-300"><span className="font-bold">Below median</span> — presumed Ch.7 eligible (no abuse presumption).</p>}
-                              </div>
-                            </div>
-                          </div>
-
-                          {aboveMedian && (
-                            <div className="rounded-xl border border-red-500/30 bg-red-500/5 p-4">
-                              <p className="text-xs font-bold text-red-300 mb-2">§ 707(b)(2) Presumption Test</p>
-                              <div className="space-y-1.5 text-xs">
-                                <div className="flex justify-between"><span className="text-slate-400">Monthly disposable income</span><span className="font-mono text-white">{fmt(disposableIncome)}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-400">× 60 months</span><span className="font-mono text-white">{fmt(disposableIncome * 60)}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-400">Total unsecured debt</span><span className="font-mono text-white">{fmt(unsecuredTotal)}</span></div>
-                                <div className="border-t border-red-500/20 mt-1 pt-1 space-y-1">
-                                  <div className="flex items-center gap-2"><span className={`w-1.5 h-1.5 rounded-full ${presumption252 ? 'bg-red-400' : 'bg-slate-600'}`} /><span className="text-slate-300">≥ $15,150 over 60mo (≈$252.50/mo) — {presumption252 ? <span className="text-red-400 font-bold">PRESUMED</span> : <span className="text-slate-500">no</span>}</span></div>
-                                  <div className="flex items-center gap-2"><span className={`w-1.5 h-1.5 rounded-full ${meets25pctUnsec ? 'bg-red-400' : 'bg-slate-600'}`} /><span className="text-slate-300">≥ $9,075 over 60mo AND ≥ 25% of unsecured — {meets25pctUnsec ? <span className="text-red-400 font-bold">PRESUMED</span> : <span className="text-slate-500">no</span>}</span></div>
-                                </div>
-                                <p className={`mt-2 font-bold text-xs ${sevenB2Triggers ? 'text-red-400' : 'text-amber-400'}`}>
-                                  {sevenB2Triggers ? "Presumption of abuse arises — Ch.13 conversion likely." : "Presumption does not arise (but means test still required)."}
-                                </p>
-                              </div>
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
-
-                  {elgSubTab === 'ch13' && (
-                    <div className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
-                          <p className="text-[10px] text-slate-500 mb-1">Applicable Commitment Period (§ 1325(b)(4))</p>
-                          <p className="text-base font-bold text-white">{acp} months</p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">{aboveMedian ? "Above median → 60-month ACP" : "Below median → 36-month ACP"}</p>
-                        </div>
-                        <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 p-3">
-                          <p className="text-[10px] text-slate-500 mb-1">Projected Disposable Income × ACP</p>
-                          <p className="text-base font-bold text-white">{fmt(pdiTimesAcp)}</p>
-                          <p className="text-[10px] text-slate-500 mt-0.5">{fmt(disposableIncome)}/mo × {acp}mo</p>
-                        </div>
-                      </div>
-
-                      <div className="bg-slate-800/40 rounded-xl border border-slate-700/40 overflow-hidden">
-                        <table className="w-full text-xs">
-                          <tbody className="divide-y divide-slate-800/60">
-                            <tr>
-                              <td className="px-3 py-2 text-slate-400">Liquidation floor (§ 1325(a)(4))</td>
-                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(liquidationFloor)}</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-2 text-slate-400">Priority debts (taxes + DSO arrears)</td>
-                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(priorityTotal)}</td>
-                            </tr>
-                            <tr>
-                              <td className="px-3 py-2 text-slate-400">Secured arrears cure</td>
-                              <td className="px-3 py-2 text-right font-mono text-white">{fmt(arrearsCure)}</td>
-                            </tr>
-                            <tr className="bg-amber-500/5 border-t border-amber-500/20">
-                              <td className="px-3 py-2 font-bold text-amber-300">Minimum plan funding required</td>
-                              <td className="px-3 py-2 text-right font-mono font-bold text-amber-300">{fmt(minPlanFunding)}</td>
-                            </tr>
-                          </tbody>
-                        </table>
-                      </div>
-
-                      {planExtendsPastAcp && (
-                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
-                          <p className="text-xs text-amber-200 leading-relaxed">
-                            <span className="font-bold">Liquidation floor exceeds PDI×ACP.</span> Plan must satisfy the floor; ACP is only a floor on committed income, not the plan length. Plan length capped at 60 months under § 1322(d).
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* ── ISSUES TAB ── */}
-              {activeReviewTab === 'issues' && (
-                issues.length === 0 ? (
-                  <div className="text-center py-10">
-                    <CheckCircle2 className="w-7 h-7 text-emerald-500/50 mx-auto mb-2" />
-                    <p className="text-slate-400 text-sm">No flagged issues detected.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {issues.map((i, idx) => {
-                      const sev = i.severity === 'critical' ? 'bg-red-500/8 border-red-500/30 text-red-200'
-                        : i.severity === 'warning' ? 'bg-amber-500/8 border-amber-500/30 text-amber-200'
-                        : 'bg-slate-800/40 border-slate-700/40 text-slate-300';
-                      const dot = i.severity === 'critical' ? 'bg-red-400' : i.severity === 'warning' ? 'bg-amber-400' : 'bg-slate-500';
-                      return (
-                        <div key={idx} className={`rounded-xl border p-3 ${sev}`}>
-                          <div className="flex items-center gap-2 mb-1 flex-wrap">
-                            <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
-                            <span className="text-xs font-bold text-white">{i.title}</span>
-                            <span className="ml-auto text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700/50 text-slate-400">{i.statute}</span>
-                          </div>
-                          {i.detail && <p className="text-[11px] leading-relaxed opacity-90 pl-3">{i.detail}</p>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )
-              )}
-
-              {/* ── DECISION & FEES TAB (READ-ONLY) ── */}
-              {activeReviewTab === 'decision' && (
-                <div className="space-y-4">
-                  {/* Recommendation */}
-                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Recommendation</p>
-                    {(() => {
-                      let recChapter = "Ch.13";
-                      let recAction: 'accept' | 'decline' | 'review' = 'review';
-                      const rationale: string[] = [];
-                      const priorBkBars = issues.some(i => i.statute.includes("§ 1328(f)") || i.statute.includes("§ 727(a)(8)"));
-                      if (priorBkBars) {
-                        recAction = 'review';
-                        rationale.push("Prior bankruptcy bar — discharge restricted; may file Ch.13 for plan relief only.");
-                      }
-                      if (primarilyBusiness) {
-                        recChapter = "Ch.7";
-                        recAction = 'accept';
-                        rationale.push("Primarily business debt — § 707(b) means test inapplicable; Ch.7 available.");
-                      } else if (aboveMedian && sevenB2Triggers) {
-                        recChapter = "Ch.13";
-                        recAction = 'accept';
-                        rationale.push("Above-median + § 707(b)(2) presumption — Ch.7 abuse presumed; Ch.13 plan recommended.");
-                      } else if (!aboveMedian && disposableIncome <= 100) {
-                        recChapter = "Ch.7";
-                        recAction = 'accept';
-                        rationale.push("Below median + low DMI — Ch.7 fresh start fits.");
-                      } else if (liquidationFloor > pdiTimesAcp) {
-                        recChapter = "Ch.13";
-                        recAction = 'review';
-                        rationale.push("Liquidation floor exceeds PDI×ACP — plan must extend payments and may pinch feasibility.");
-                      }
-                      const badgeColor = recAction === 'accept' ? 'bg-green-500/15 border-green-500/40 text-green-300'
-                        : recAction === 'decline' ? 'bg-red-500/15 border-red-500/40 text-red-300'
-                        : 'bg-amber-500/15 border-amber-500/40 text-amber-300';
-                      return (
-                        <>
-                          <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <span className="text-base font-bold text-white">{recChapter}</span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeColor}`}>
-                              {recAction === 'accept' ? 'ACCEPT' : recAction === 'decline' ? 'DECLINE' : 'REVIEW REQUIRED'}
-                            </span>
-                          </div>
-                          <ul className="space-y-1 text-xs text-slate-400">
-                            {rationale.length === 0 ? <li>Insufficient signal for confident recommendation — attorney judgment required.</li> : rationale.map((r, i) => <li key={i}>• {r}</li>)}
-                          </ul>
-                        </>
-                      );
-                    })()}
-                  </div>
-
-                  {/* Recommended attorney fees */}
-                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Recommended Attorney Fees</p>
-                    <div className="grid grid-cols-3 gap-3 text-xs">
-                      <div>
-                        <p className="text-[10px] text-slate-500">Ch.7 attorney fee</p>
-                        <p className="text-sm font-bold text-white">$1,800</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-slate-500">Ch.13 attorney fee</p>
-                        <p className="text-sm font-bold text-white">$4,200</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] text-slate-500">Court filing fee</p>
-                        <p className="text-sm font-bold text-white">{lead.chapter_interest === 13 ? "$313" : "$338"}</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-500 mt-2">Standard fee schedule. Attorney may adjust per case complexity; actual fees set at decision.</p>
-                  </div>
-
-                  {/* Payment terms (READ-ONLY from intake) */}
-                  <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-4">
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Payment Terms — captured at intake</p>
-                    {(() => {
-                      const dp = (fd as Record<string, unknown>).downPayment ?? (fd as Record<string, unknown>).down_payment;
-                      const pamt = (fd as Record<string, unknown>).paymentAmount ?? (fd as Record<string, unknown>).payment_amount;
-                      const pfreq = (fd as Record<string, unknown>).paymentFrequency ?? (fd as Record<string, unknown>).payment_frequency;
-                      const any = dp != null || pamt != null || pfreq != null;
-                      if (!any) {
-                        return <p className="text-xs text-slate-500 italic">Payment terms not captured at intake yet. Intake form needs down-payment / payment-schedule fields wired up.</p>;
-                      }
-                      return (
-                        <div className="grid grid-cols-3 gap-3 text-xs">
-                          <div>
-                            <p className="text-[10px] text-slate-500">Down payment</p>
-                            <p className="text-sm font-semibold text-white">{dp != null ? fmt(Number(dp)) : '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-slate-500">Payment amount</p>
-                            <p className="text-sm font-semibold text-white">{pamt != null ? fmt(Number(pamt)) : '—'}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] text-slate-500">Frequency</p>
-                            <p className="text-sm font-semibold text-white">{pfreq != null ? String(pfreq) : '—'}</p>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                    <p className="text-[9px] text-slate-600 mt-2 italic">
-                      Note: existing "Record Decision &amp; Set Fees" modal still captures down_payment as an attorney input — flagged for reconciliation; pending intake form adding the field.
-                    </p>
-                  </div>
-
-                  {/* Capture button — opens existing modal (decision write is unchanged) */}
-                  {canReview && (
-                    <div className="flex justify-end">
-                      <button onClick={() => setShowAcceptanceModal(true)}
-                        className="px-4 py-2 text-sm font-bold bg-amber-500 hover:bg-amber-400 text-white rounded-xl transition-colors shadow-lg shadow-amber-500/20">
-                        {acceptance ? "Update Decision" : "Record Decision & Set Fees"}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         );
@@ -3375,13 +2779,13 @@ function LeadDetailPanel({
           onSaved={() => { setShowSchedule(false); onRefresh(); }}
         />
       )}
-      {showConsult && (
-        <ConsultIntakeModal
-          lead={lead}
-          onClose={() => setShowConsult(false)}
-          onSaved={() => { setShowConsult(false); onRefresh(); }}
-        />
-      )}
+      {/* ConsultIntakeModal render branch removed — superseded by
+          StaffGuidedIntake wrapper around BankruptcyIntake. The function body
+          below is marked @deprecated and retained as dead code; it will be
+          deleted in the follow-up cleanup pass once the guided flow is
+          field-tested. CONSULT_SCRIPTS was copied (not moved) into
+          src/components/intake-script/scripts.ts so this dead code still
+          type-checks until removal. */}
     </div>
   );
 }
@@ -3991,17 +3395,53 @@ function SuperAdminSickPanel({ onRefresh }: { onRefresh: () => void }) {
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-function CalendarTab({ events, leads, timeOff, onRefresh }: {
+type OpenSlot = { staff_id: string; staff_name: string; slot_start: string; slot_end: string; available: boolean; reason: string | null };
+
+// Monday-of-week helper: returns the Date for Monday of the week containing d.
+function mondayOf(d: Date): Date {
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const diffFromMon = (day === 0 ? -6 : 1 - day); // Mon = 1
+  const r = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffFromMon);
+  return r;
+}
+function addDays(d: Date, n: number): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+}
+function ymd(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
+function CalendarTab({ events, leads, timeOff, availability, staffMembers, onRefresh }: {
   events: CalEvent[];
   leads: Lead[];
   timeOff: TimeOff[];
+  availability: StaffAvailability[];
+  staffMembers: Array<{ id: string; name: string }>;
   onRefresh: () => void;
 }) {
   const today = new Date();
+  const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
+  const [weekAnchor, setWeekAnchor] = useState<Date>(mondayOf(today));
   const [selectedDay, setSelectedDay] = useState<Date | null>(today);
   const [showBookModal, setShowBookModal] = useState(false);
   const [bookDate, setBookDate] = useState<string>("");
+  // Open slots for the selected day — fetched from get_open_slots RPC so the
+  // UI shows exactly what book_consultation will accept (same rules).
+  const [openSlots, setOpenSlots] = useState<OpenSlot[]>([]);
+  const [slotsLoading, setSlotsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedDay) { setOpenSlots([]); return; }
+    setSlotsLoading(true);
+    const dateStr = `${selectedDay.getFullYear()}-${String(selectedDay.getMonth()+1).padStart(2,"0")}-${String(selectedDay.getDate()).padStart(2,"0")}`;
+    supabase.rpc("get_open_slots", { p_staff_id: null, p_date: dateStr, p_slot_minutes: 45 })
+      .then(({ data, error }) => {
+        if (error) { setOpenSlots([]); }
+        else { setOpenSlots((data as OpenSlot[]) ?? []); }
+        setSlotsLoading(false);
+      });
+  }, [selectedDay?.toISOString().slice(0,10)]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const year = viewDate.getFullYear();
   const month = viewDate.getMonth();
@@ -4038,19 +3478,167 @@ function CalendarTab({ events, leads, timeOff, onRefresh }: {
     rescheduled: "bg-amber-500",
   };
 
+  // ── Weekly view data prep ────────────────────────────────────────────────
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekAnchor, i)); // Mon..Sun
+  // Working-hours range — union across all availability rows in the current week.
+  const workingHourRange = (() => {
+    let minH = 24, maxH = 0;
+    for (const a of availability) {
+      if (!a.is_available) continue;
+      const sh = parseInt(String(a.start_time).slice(0,2)) || 9;
+      const eh = parseInt(String(a.end_time).slice(0,2)) || 17;
+      if (sh < minH) minH = sh;
+      if (eh > maxH) maxH = eh;
+    }
+    if (minH === 24) { minH = 9; maxH = 17; }
+    return { startHour: Math.min(minH, 8), endHour: Math.max(maxH, 17) };
+  })();
+  const weekHours = Array.from({ length: workingHourRange.endHour - workingHourRange.startHour }, (_, i) => workingHourRange.startHour + i);
+
+  function eventsOnDate(dateStr: string) {
+    return events.filter(e => e.start_time?.slice(0,10) === dateStr);
+  }
+  function timeOffOnDate(dateStr: string) {
+    return timeOff.filter(t => t.date === dateStr);
+  }
+  function capacityForDow(dow: number): number {
+    // Sum max_consultations_per_day across all is_available rows for that weekday.
+    return availability
+      .filter(a => a.day_of_week === dow && a.is_available)
+      .reduce((s, a) => s + (a.max_consultations_per_day ?? 8), 0);
+  }
+  function staffName(staffId: string | null | undefined): string {
+    if (!staffId) return "—";
+    return staffMembers.find(s => s.id === staffId)?.name ?? "staff";
+  }
+
+  function prevWeek() { setWeekAnchor(addDays(weekAnchor, -7)); }
+  function nextWeek() { setWeekAnchor(addDays(weekAnchor,  7)); }
+  function goThisWeek() { const m = mondayOf(today); setWeekAnchor(m); setSelectedDay(today); }
+
+  const weekLabel = (() => {
+    const sat = addDays(weekAnchor, 6);
+    if (weekAnchor.getMonth() === sat.getMonth()) {
+      return `${MONTHS[weekAnchor.getMonth()]} ${weekAnchor.getDate()}–${sat.getDate()}, ${sat.getFullYear()}`;
+    }
+    return `${MONTHS[weekAnchor.getMonth()].slice(0,3)} ${weekAnchor.getDate()} – ${MONTHS[sat.getMonth()].slice(0,3)} ${sat.getDate()}, ${sat.getFullYear()}`;
+  })();
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      {/* Month calendar */}
+      {/* Calendar (Week or Month) */}
       <div className="lg:col-span-2 bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
-        {/* Month nav */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
-          <button onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><ChevronRight className="w-4 h-4 rotate-180" /></button>
-          <div className="flex items-center gap-3">
-            <h2 className="text-base font-bold text-white">{MONTHS[month]} {year}</h2>
-            <button onClick={goToday} className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-lg hover:bg-sky-500/20 transition-colors">Today</button>
+        {/* Calendar nav + Week/Month toggle */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 gap-3">
+          <button
+            onClick={viewMode === 'week' ? prevWeek : prevMonth}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+            <ChevronRight className="w-4 h-4 rotate-180" />
+          </button>
+          <div className="flex items-center gap-2 flex-1 justify-center">
+            <h2 className="text-base font-bold text-white">
+              {viewMode === 'week' ? weekLabel : `${MONTHS[month]} ${year}`}
+            </h2>
+            <button
+              onClick={viewMode === 'week' ? goThisWeek : goToday}
+              className="text-[10px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2 py-0.5 rounded-lg hover:bg-sky-500/20 transition-colors">
+              {viewMode === 'week' ? 'This week' : 'Today'}
+            </button>
+            <div className="ml-3 flex items-center gap-0.5 bg-slate-800/60 border border-slate-700/60 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('week')}
+                className={`text-[10px] font-semibold px-2.5 py-1 rounded ${viewMode === 'week' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-500 hover:text-slate-300'}`}>
+                Week
+              </button>
+              <button
+                onClick={() => setViewMode('month')}
+                className={`text-[10px] font-semibold px-2.5 py-1 rounded ${viewMode === 'month' ? 'bg-sky-500/20 text-sky-300' : 'text-slate-500 hover:text-slate-300'}`}>
+                Month
+              </button>
+            </div>
           </div>
-          <button onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors"><ChevronRight className="w-4 h-4" /></button>
+          <button
+            onClick={viewMode === 'week' ? nextWeek : nextMonth}
+            className="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-white transition-colors">
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
+
+        {/* WEEKLY GRID */}
+        {viewMode === 'week' && (
+          <div className="overflow-x-auto">
+            {/* Day headers — show date + booked/capacity */}
+            <div className="grid grid-cols-[60px_repeat(7,minmax(120px,1fr))] border-b border-slate-800">
+              <div className="py-2 text-center text-[9px] font-bold text-slate-700 uppercase tracking-widest border-r border-slate-800/40">PT</div>
+              {weekDays.map(d => {
+                const dateStr = ymd(d);
+                const isTodayCol = dateStr === ymd(today);
+                const isSelectedCol = selectedDay && dateStr === ymd(selectedDay);
+                const consults = eventsOnDate(dateStr).filter(e => e.event_subtype === 'consultation' && !['cancelled','no_show','rescheduled'].includes(e.status));
+                const cap = capacityForDow(d.getDay());
+                const dow = d.getDay();
+                const load = cap > 0 ? consults.length / cap : 0;
+                const loadCls = load >= 1 ? 'text-red-400' : load >= 0.75 ? 'text-amber-400' : 'text-slate-500';
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => setSelectedDay(d)}
+                    className={`py-2 text-center border-r border-slate-800/40 cursor-pointer transition-colors ${
+                      isSelectedCol ? 'bg-sky-500/10' : isTodayCol ? 'bg-slate-800/40' : 'hover:bg-slate-800/20'
+                    }`}>
+                    <div className={`text-[10px] font-bold uppercase tracking-widest ${isTodayCol ? 'text-sky-400' : 'text-slate-500'}`}>
+                      {DAYS[dow === 0 ? 6 : dow - 1]}
+                    </div>
+                    <div className={`text-sm font-bold ${isTodayCol ? 'text-white' : 'text-slate-300'}`}>{d.getDate()}</div>
+                    <div className={`text-[10px] font-mono ${loadCls}`}>{consults.length}/{cap > 0 ? cap : '–'}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Hour rows */}
+            <div className="relative">
+              {weekHours.map(hour => (
+                <div key={hour} className="grid grid-cols-[60px_repeat(7,minmax(120px,1fr))] border-b border-slate-800/30">
+                  <div className="py-1.5 text-right pr-2 text-[10px] font-mono text-slate-600 border-r border-slate-800/40">
+                    {hour === 12 ? '12 PM' : hour > 12 ? `${hour - 12} PM` : `${hour} AM`}
+                  </div>
+                  {weekDays.map(d => {
+                    const dateStr = ymd(d);
+                    const hourEvents = eventsOnDate(dateStr).filter(e => {
+                      if (!e.start_time) return false;
+                      const eh = new Date(e.start_time).toLocaleString('en-US', { hour: 'numeric', hour12: false, timeZone: 'America/Los_Angeles' });
+                      return parseInt(eh) === hour;
+                    });
+                    return (
+                      <div key={dateStr + hour} className="min-h-[40px] p-0.5 border-r border-slate-800/30 space-y-0.5">
+                        {hourEvents.map(e => {
+                          const tLocal = e.start_time ? new Date(e.start_time).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'America/Los_Angeles' }) : '';
+                          const cls = EVENT_STATUS_COLOR[e.status] ?? 'bg-slate-500';
+                          return (
+                            <div
+                              key={e.id}
+                              onClick={() => setSelectedDay(d)}
+                              title={`${tLocal} · ${e.client_name ?? '—'} · ${staffName(e.staff_id)} · ${e.status}`}
+                              className={`text-[9px] leading-tight px-1.5 py-1 rounded cursor-pointer text-white/95 ${cls.replace('bg-','bg-').replace('-500', '-500/85')} hover:opacity-90`}
+                            >
+                              <div className="font-bold truncate">{tLocal} {e.client_name ?? '—'}</div>
+                              <div className="opacity-80 truncate">{staffName(e.staff_id)} · {e.status}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* MONTHLY GRID — unchanged below, gated on viewMode */}
+        {viewMode === 'month' && (<>
+
 
         {/* Day headers */}
         <div className="grid grid-cols-7 border-b border-slate-800">
@@ -4101,6 +3689,7 @@ function CalendarTab({ events, leads, timeOff, onRefresh }: {
             );
           })}
         </div>
+        </>)}
       </div>
 
       {/* Day detail panel */}
@@ -4132,6 +3721,53 @@ function CalendarTab({ events, leads, timeOff, onRefresh }: {
                   {!t.approved && <span className="text-orange-600 text-[10px]">(pending)</span>}
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Open slots — hourly grid from get_open_slots, same rules as book_consultation */}
+          {selectedDay && (
+            <div className="px-4 py-3 border-b border-slate-800/40">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Open slots ({slotsLoading ? "loading…" : `${openSlots.filter(s => s.available).length} available`})</p>
+              {slotsLoading ? (
+                <p className="text-[11px] text-slate-600">Loading slots…</p>
+              ) : openSlots.length === 0 ? (
+                <p className="text-[11px] text-slate-600">No staff configured for this day.</p>
+              ) : (
+                <div className="space-y-2">
+                  {/* Group by staffer */}
+                  {Array.from(new Set(openSlots.map(s => s.staff_id))).map(staffId => {
+                    const rows = openSlots.filter(s => s.staff_id === staffId);
+                    const name = rows[0]?.staff_name ?? "—";
+                    return (
+                      <div key={staffId}>
+                        <p className="text-[10px] font-semibold text-slate-400 mb-1">{name}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {rows.map((s, i) => {
+                            const t = new Date(s.slot_start).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: "America/Los_Angeles" });
+                            const cls = s.available
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20 cursor-pointer"
+                              : s.reason === "lunch" ? "bg-amber-500/10 border-amber-500/30 text-amber-400 cursor-not-allowed"
+                              : s.reason === "time_off" ? "bg-orange-500/10 border-orange-500/30 text-orange-400 cursor-not-allowed"
+                              : s.reason === "daily_capacity_reached" ? "bg-slate-700/30 border-slate-600 text-slate-500 cursor-not-allowed"
+                              : "bg-slate-700/30 border-slate-600 text-slate-500 cursor-not-allowed";
+                            return (
+                              <button
+                                key={`${staffId}-${i}`}
+                                disabled={!s.available}
+                                onClick={() => { if (s.available && selectedDay) { setBookDate(selectedDay.toISOString().slice(0,10)); setShowBookModal(true); } }}
+                                title={s.reason ? `Unavailable — ${s.reason}` : `Book ${t}`}
+                                className={`text-[10px] font-semibold px-2 py-1 rounded border ${cls}`}
+                              >
+                                {t}{!s.available && s.reason ? ` · ${s.reason}` : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
@@ -4248,38 +3884,45 @@ function BookConsultModal({ defaultDate, leads, onClose, onSaved }: {
 
   const selectedLead = leads.find(l => l.id === leadId);
 
+  const [bookError, setBookError] = useState<string | null>(null);
   async function save() {
     if (!date || (!leadId && !isWalkIn)) return;
     setSaving(true);
-    const [h, m] = startTime.split(":").map(Number);
+    setBookError(null);
     const startDt = new Date(`${date}T${startTime}:00`);
     const endDt   = new Date(startDt.getTime() + parseInt(duration) * 60000);
     const clientName = isWalkIn ? walkInName : (selectedLead?.full_name ?? "");
     const phone      = isWalkIn ? walkInPhone : (selectedLead?.phone ?? null);
 
-    await sbPost("calendar_events", {
-      title: `Consultation — ${clientName}`,
-      calendar_type: "intake",
-      event_subtype: "consultation",
-      department: "intake",
-      client_name: clientName,
-      phone,
-      client_email: isWalkIn ? null : (selectedLead?.email ?? null),
-      lead_id: leadId || null,
-      start_time: startDt.toISOString(),
-      end_time: endDt.toISOString(),
-      status: "scheduled",
-      is_walk_in: isWalkIn,
-      cal_notes: notes || null,
-      spacing_buffer_minutes: 20,
+    // Route through book_consultation RPC — capacity, lunch, gap, time-off,
+    // sick, collision all enforced server-side atomically.
+    const { data, error } = await supabase.rpc("book_consultation", {
+      p_staff_id: null,              // least-loaded staffer chosen by RPC
+      p_lead_id: leadId || null,
+      p_start_time: startDt.toISOString(),
+      p_end_time: endDt.toISOString(),
+      p_client_name: clientName,
+      p_client_phone: phone,
+      p_client_email: isWalkIn ? null : (selectedLead?.email ?? null),
+      p_is_walk_in: isWalkIn,
+      p_event_subtype: "consultation",
+      p_calendar_type: "intake",
+      p_department: "intake",
+      p_notes: notes || null,
+      p_created_by: "admin",
     });
 
-    if (leadId) {
-      await sbPatch("intake_leads", leadId, {
-        status: "consultation_scheduled",
-        consultation_date: date,
-      });
+    const result = data as { ok: boolean; reason: string | null } | null;
+    if (error || !result?.ok) {
+      setBookError(result?.reason ?? error?.message ?? "Booking failed");
+      setSaving(false);
+      return;
     }
+
+    // Lead-link update happens atomically inside book_consultation —
+    // no separate sbPatch needed here. The lead's consultation_event_id,
+    // consultation_date, status, and last_contact_at are all set in the
+    // same transaction as the calendar_events INSERT.
     setSaving(false);
     onSaved();
   }
@@ -4355,6 +3998,11 @@ function BookConsultModal({ defaultDate, leads, onClose, onSaved }: {
               className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2 placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none transition-colors" />
           </div>
         </div>
+        {bookError && (
+          <div className="mx-5 mb-3 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs">
+            <span className="font-semibold">Cannot book this slot:</span> {bookError}
+          </div>
+        )}
         <div className="px-5 py-4 border-t border-slate-800 flex gap-2">
           <button onClick={onClose} className="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
           <button
@@ -4375,12 +4023,13 @@ function BookConsultModal({ defaultDate, leads, onClose, onSaved }: {
 
 const DAY_NAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
 
-function AvailabilityTab({ availability, onRefresh }: { availability: StaffAvailability[]; onRefresh: () => void; }) {
+function AvailabilityTab({ availability, onRefresh, canEdit }: { availability: StaffAvailability[]; onRefresh: () => void; canEdit: boolean; }) {
   const [editing, setEditing] = useState<number | null>(null);
   const [saving, setSaving]   = useState(false);
   const [form, setForm]       = useState<Partial<StaffAvailability>>({});
 
   function startEdit(a: StaffAvailability) {
+    if (!canEdit) return; // Server-side enforcement is a Phase 1A.5 follow-up — see plan doc.
     setEditing(a.day_of_week);
     setForm({ ...a });
   }
@@ -5215,50 +4864,48 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
     ? new Date(date + "T12:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })
     : "";
 
+  const [bookError, setBookError] = useState<string | null>(null);
   async function save() {
     if (!date) return;
     setSaving(true);
+    setBookError(null);
 
-    const [h, m] = time.split(":").map(Number);
     const startDt = new Date(`${date}T${time}:00`);
     const endDt   = new Date(startDt.getTime() + parseInt(duration) * 60000);
 
-    // Book calendar event
-    await sbPost("calendar_events", {
-      title:                  `Consultation — ${lead.full_name}`,
-      calendar_type:          "intake",
-      event_subtype:          "consultation",
-      department:             "intake",
-      client_name:            lead.full_name,
-      phone:                  lead.phone ?? null,
-      client_email:           lead.email ?? null,
-      lead_id:                lead.id,
-      start_time:             startDt.toISOString(),
-      end_time:               endDt.toISOString(),
-      status:                 "scheduled",
-      is_walk_in:             false,
-      cal_notes:              notes || null,
-      spacing_buffer_minutes: 20,
+    // Route through book_consultation RPC for atomic capacity/lunch/gap checks.
+    const { data, error } = await supabase.rpc("book_consultation", {
+      p_staff_id:      null,            // least-loaded staffer
+      p_lead_id:       lead.id,
+      p_start_time:    startDt.toISOString(),
+      p_end_time:      endDt.toISOString(),
+      p_client_name:   lead.full_name,
+      p_client_phone:  lead.phone ?? null,
+      p_client_email:  lead.email ?? null,
+      p_is_walk_in:    false,
+      p_event_subtype: "consultation",
+      p_calendar_type: "intake",
+      p_department:    "intake",
+      p_notes:         notes || null,
+      p_created_by:    "admin",
     });
 
-    // Update lead status
-    await sbPatch("intake_leads", lead.id, {
-      status:            "consultation_scheduled",
-      consultation_date: date,
-      last_contact_at:   new Date().toISOString(),
-    });
+    const result = data as { ok: boolean; reason: string | null } | null;
+    if (error || !result?.ok) {
+      setBookError(result?.reason ?? error?.message ?? "Booking failed");
+      setSaving(false);
+      return;
+    }
 
-    // Send invitation email with intake form link
+    // Lead status + consultation_event_id + consultation_date + last_contact_at
+    // are now updated atomically inside book_consultation. No separate sbPatch.
+
+    // Send invitation email with intake form link — routes through consent gate.
     if (sendEmail && lead.email) {
       const intakeFormUrl = `${window.location.origin}/?intake_lead=${lead.id}`;
-      await fetch(`${SUPABASE_URL}/functions/v1/send-intake-invite`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${ANON_KEY}`,
-          "apikey":        ANON_KEY,
-        },
-        body: JSON.stringify({
+      const result = await sendVia(
+        "send-intake-invite",
+        {
           leadId:          lead.id,
           leadName:        lead.full_name,
           email:           lead.email,
@@ -5269,9 +4916,24 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
           staffName:       "bankruptcy.ai Intake Team",
           chapterInterest: lead.chapter_interest ?? 7,
           intakeFormUrl,
-        }),
-      });
-      setEmailSent(true);
+        },
+        {
+          recipientType: "lead",
+          leadId: lead.id,
+          actor: "Intake admin",
+          summary: "Consultation invitation email",
+        },
+      );
+      if (result.sent) {
+        setEmailSent(true);
+      } else {
+        const msg =
+          result.reason === "no_consent" ? "Invitation email skipped — lead did not consent to messaging at intake." :
+          result.reason === "opted_out"  ? "Invitation email skipped — lead opted out of messaging." :
+          result.reason === "no_recipient_row" ? "Invitation email skipped — no consent record found for this lead." :
+          `Invitation email not sent — ${result.reason ?? "provider error"}.`;
+        if (typeof window !== "undefined") setTimeout(() => window.alert(msg), 0);
+      }
     }
 
     setSaving(false);
@@ -5373,6 +5035,11 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
 
         </div>
 
+        {bookError && (
+          <div className="mx-6 mb-3 px-3 py-2 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs">
+            <span className="font-semibold">Cannot book this slot:</span> {bookError}
+          </div>
+        )}
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-800 flex items-center justify-between">
           <button onClick={onClose} className="text-sm text-slate-500 hover:text-white transition-colors">Cancel</button>
@@ -5388,6 +5055,12 @@ function ScheduleConsultModal({ lead, onClose, onSaved }: {
 }
 
 // ─── Consult Intake Modal ─────────────────────────────────────────────────────
+// @deprecated Superseded by `StaffGuidedIntake` (src/components/intake-script/
+// StaffGuidedIntake.tsx), which wraps the rich BankruptcyIntake form with the
+// same scripted call flow this modal pioneered. All launchers in this file
+// have been repointed to the new wrapper; this function is retained as dead
+// code so the file still type-checks until the follow-up cleanup deletes it.
+//
 // Walks intake staff through a scripted consultation with the client, filling
 // the intake form step by step. Opens with a required legal disclosure.
 
@@ -6320,7 +5993,7 @@ function ConsultIntakeModal({ lead, onClose, onSaved }: {
 
 // ─── Main Portal ──────────────────────────────────────────────────────────────
 
-function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLogout: () => void }) {
+function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView }: { session: PortalSession; onLogout: () => void; onOpenAttorneyReview?: (leadId: string) => void; onOpenView?: (view: 'messages' | 'staff_comms') => void }) {
   const role      = session.role;
   const isAtty    = isAttorney(role);
   const isSuperAdmin = isSuperAdminRole(role);
@@ -6333,17 +6006,34 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   const [calEvents, setCalEvents]     = useState<CalEvent[]>([]);
   const [availability, setAvailability] = useState<StaffAvailability[]>([]);
   const [timeOff, setTimeOff]         = useState<TimeOff[]>([]);
+  const [staffMembers, setStaffMembers] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading]         = useState(true);
   const [search, setSearch]           = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  // showNewLead + NewLeadModal kept as DEAD CODE intentionally (Phase A spec).
+  // All launchers now route to setNewLeadWindow(true) for the full-window flow.
   const [showNewLead, setShowNewLead] = useState(false);
+  const [newLeadWindow, setNewLeadWindow] = useState(false);
   const [presentationContext, setPresentationContext] = useState<{ lead: Lead; acceptance: Acceptance; submission: Record<string, unknown> | null } | null>(null);
+  // Staff-guided intake takeover — when set, renders <StaffGuidedIntake> full-screen.
+  // Set from (a) the dashboard's To-do "Do intake now" action and (b) the lead detail
+  // panel's "Start Intake Now" / "Complete Intake" buttons (previously launched
+  // ConsultIntakeModal). On submit the wrapper advances the lead and bounces back.
+  const [guidedIntakeLead, setGuidedIntakeLead] = useState<Lead | null>(null);
 
-  // Default tab by role: attorneys land on attorney review queue; legal admins on leads
-  const defaultTab = isAtty && !isSuperAdmin ? "followup" : "leads";
-  const [activeTab, setActiveTab]     = useState<"leads" | "followup" | "calendar" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+  // Default tab by role: attorneys land on attorney review queue (unchanged);
+  // legal admins + super admins land on the new dashboard. Pure attorneys
+  // never see the dashboard tab — gated below in TABS.
+  const defaultTab = isAtty && !isSuperAdmin ? "followup" : "dashboard";
+  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+
+  // Layer 1 (Up Next): skipped task ids live here so they persist across
+  // sidebar tab switches for the session. Resets on portal refresh / logout
+  // (component unmount) and on next-day rollover (the engine only acts on
+  // today's queue anyway). Layer 2 will persist this server-side.
+  const [dashboardSkippedIds, setDashboardSkippedIds] = useState<Set<string>>(() => new Set());
 
   // V1: firm feature flags drive nav visibility (Leads hidden when intake_bot
   // is off; Manual Clients always visible). NewClientModal is gated to roles
@@ -6362,18 +6052,20 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [ls, acs, evts, avail, toff] = await Promise.all([
+    const [ls, acs, evts, avail, toff, staff] = await Promise.all([
       sbGet<Lead>("intake_leads?order=created_at.desc&limit=200"),
       sbGet<Acceptance>("attorney_case_acceptances?order=created_at.desc&limit=200"),
       sbGet<CalEvent>("calendar_events?department=eq.intake&order=start_time.asc&limit=300"),
       sbGet<StaffAvailability>("staff_availability?department=eq.intake&order=day_of_week.asc"),
       sbGet<TimeOff>("intake_staff_time_off?order=date.asc&limit=100"),
+      sbGet<{ id: string; name: string }>("staff_members?is_active=eq.true&select=id,name&order=name.asc"),
     ]);
     setLeads(ls);
     setAcceptances(acs);
     setCalEvents(evts);
     setAvailability(avail);
     setTimeOff(toff);
+    setStaffMembers(staff);
     setLoading(false);
   }, []);
 
@@ -6478,6 +6170,47 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
     );
   }
 
+  // New-lead logging window — full-screen. Pre-empts the lead detail panel
+  // and the leads table for the duration of the new-caller capture.
+  if (newLeadWindow) {
+    return (
+      <NewLeadInline
+        session={session}
+        calEvents={calEvents}
+        onExit={() => setNewLeadWindow(false)}
+        onSaved={async (leadId) => {
+          setNewLeadWindow(false);
+          // Fetch the just-created lead row directly (load() runs in parallel,
+          // but its leads array won't be in scope synchronously) so we can
+          // bounce into the lead detail panel for the next action.
+          const { data } = await supabase.from("intake_leads").select("*").eq("id", leadId).single();
+          if (data) setSelectedLead(data as Lead);
+          load();
+        }}
+      />
+    );
+  }
+
+  // Staff-guided intake takeover — full-screen. Renders before selectedLead so
+  // it pre-empts the lead detail panel for the duration of the intake call.
+  if (guidedIntakeLead) {
+    return (
+      <StaffGuidedIntake
+        lead={guidedIntakeLead}
+        session={session}
+        onExit={() => setGuidedIntakeLead(null)}
+        onSubmitted={(_submissionId) => {
+          // Drop into the lead detail panel for the same lead so the staffer
+          // can take the next action (send for review, schedule, mark fee
+          // quoted, etc.) without re-finding the lead in the queue.
+          setSelectedLead(guidedIntakeLead);
+          setGuidedIntakeLead(null);
+          load();
+        }}
+      />
+    );
+  }
+
   if (selectedLead) {
     return (
       <div className="min-h-screen bg-[#090e1a] text-white">
@@ -6504,6 +6237,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
             session={session}
             onBack={() => setSelectedLead(null)}
             onRefresh={load}
+            onLaunchGuidedIntake={(l) => { setSelectedLead(null); setGuidedIntakeLead(l); }}
             onLaunchPresentation={(lead, acc, sub) => setPresentationContext({ lead, acceptance: acc, submission: sub })}
           />
         </div>
@@ -6527,6 +6261,8 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
   // attorney: Follow-Up (review queue), Calendar
   // attorney_super_admin / super_admin: all tabs
   const TABS = [
+    // Dashboard — legal_admin / super_admin only. Pure attorneys never see this tab.
+    ...( canManageLeads ? [{ id: "dashboard" as const, label: "Dashboard", icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }] : []),
     ...( (canManageLeads || isSuperAdmin) && showLeadsTab ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }] : []),
     // V1 — Manual Clients tab (always visible; replaces Leads when intake_bot is off)
     { id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null },
@@ -6567,7 +6303,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
             <IAmSickButton onMarked={load} session={session} />
             {canManageLeads && activeTab === "leads" && (
               <button
-                onClick={() => setShowNewLead(true)}
+                onClick={() => setNewLeadWindow(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#111111', color: '#FAFAF7', border: 'none', borderRadius: 4, padding: '8px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'background 150ms ease-out' }}
                 onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A2F'; }}
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
@@ -6660,6 +6396,24 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
             </button>
           ))}
         </div>
+
+        {/* ── DASHBOARD TAB (legal_admin / super_admin only — attorneys never see this) ── */}
+        {activeTab === "dashboard" && (
+          <IntakeDashboard
+            session={session}
+            leads={leads}
+            calEvents={calEvents}
+            onOpenLead={(l) => setSelectedLead(l)}
+            onChangeTab={(t) => setActiveTab(t)}
+            onOpenView={onOpenView ?? (() => {})}
+            onScheduleConsult={(l) => setSelectedLead(l)}
+            onDoIntakeNow={(l) => setGuidedIntakeLead(l)}
+            onLogNewLead={() => setNewLeadWindow(true)}
+            onRefresh={load}
+            skippedIds={dashboardSkippedIds}
+            setSkippedIds={setDashboardSkippedIds}
+          />
+        )}
 
         {/* ── LEADS TAB ── */}
         {activeTab === "leads" && (
@@ -6765,7 +6519,7 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
               <div className="bg-[#0d1221] border border-slate-800 rounded-2xl text-center py-20">
                 <Users className="w-10 h-10 text-slate-700 mx-auto mb-3" />
                 <p className="text-slate-500">No leads found</p>
-                <button onClick={() => setShowNewLead(true)} className="mt-4 flex items-center gap-2 mx-auto text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl transition-colors">
+                <button onClick={() => setNewLeadWindow(true)} className="mt-4 flex items-center gap-2 mx-auto text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl transition-colors">
                   <Plus className="w-3.5 h-3.5" /> Add First Lead
                 </button>
               </div>
@@ -6825,18 +6579,34 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
         {/* ── FOLLOW-UP TAB ── */}
         {activeTab === "followup" && (
           isAtty && !isSuperAdmin
-            ? <AttorneyReviewQueue leads={leads} acceptances={acceptances} onSelect={l => setSelectedLead(l)} />
-            : <FollowUpQueue leads={leads} onSelect={l => setSelectedLead(l)} />
+            ? <AttorneyReviewQueue leads={leads} acceptances={acceptances} onSelect={l => {
+                // Sent for attorney review + has linked submission → route to
+                // AttorneyIntakeDashboard (canonical attorney review surface).
+                // Leads without a submission_id fall back to LegalAdminPortal's
+                // LeadDetailPanel — interim until paired-row seeding is fixed.
+                if (l.status === 'sent_for_attorney_review' && l.submission_id && onOpenAttorneyReview) {
+                  onOpenAttorneyReview(l.id);
+                } else {
+                  setSelectedLead(l);
+                }
+              }} />
+            : <FollowUpQueue leads={leads} onSelect={l => {
+                if (l.status === 'sent_for_attorney_review' && l.submission_id && onOpenAttorneyReview) {
+                  onOpenAttorneyReview(l.id);
+                } else {
+                  setSelectedLead(l);
+                }
+              }} />
         )}
 
         {/* ── CALENDAR TAB ── */}
         {activeTab === "calendar" && (
-          <CalendarTab events={calEvents} leads={leads} timeOff={timeOff} onRefresh={load} />
+          <CalendarTab events={calEvents} leads={leads} timeOff={timeOff} availability={availability} staffMembers={staffMembers} onRefresh={load} />
         )}
 
         {/* ── AVAILABILITY TAB ── */}
         {activeTab === "availability" && (
-          <AvailabilityTab availability={availability} onRefresh={load} />
+          <AvailabilityTab availability={availability} onRefresh={load} canEdit={isSuperAdmin} />
         )}
 
         {/* ── TIME OFF TAB ── */}
@@ -6980,7 +6750,13 @@ function IntakePortalInner({ session, onLogout }: { session: PortalSession; onLo
 
 // ─── Export with login gate ───────────────────────────────────────────────────
 
-export default function LegalAdminPortal() {
+export default function LegalAdminPortal({
+  onOpenAttorneyReview,
+  onOpenView,
+}: {
+  onOpenAttorneyReview?: (leadId: string) => void;
+  onOpenView?: (view: 'messages' | 'staff_comms') => void;
+} = {}) {
   const [session, setSession] = useState<PortalSession | null>(null);
 
   if (!session) {
@@ -6991,6 +6767,8 @@ export default function LegalAdminPortal() {
     <IntakePortalInner
       session={session}
       onLogout={() => setSession(null)}
+      onOpenAttorneyReview={onOpenAttorneyReview}
+      onOpenView={onOpenView}
     />
   );
 }

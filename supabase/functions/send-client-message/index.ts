@@ -7,6 +7,118 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
 };
 
+// ─── Consent gate (TCPA / CAN-SPAM) — mirrors src/lib/sendGate.ts ───────────
+// Multi-channel: channel is read from payload.channel. SMS/voice are STRICT
+// regardless of recipientType (transactional bypass is email-only per TCPA).
+type GateChannel = "sms" | "voice" | "email" | "unknown";
+interface GateResult { allowed: boolean; reason?: string; }
+
+async function checkConsentGate(
+  payload: Record<string, unknown>,
+  channel: GateChannel,
+  functionName: string,
+): Promise<GateResult> {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  if (!url || !key) return { allowed: false, reason: "gate_env_missing" };
+
+  const gateLeadId = (payload._gate_lead_id as string | null) ?? null;
+  const gateSubmissionId = (payload._gate_submission_id as string | null) ?? null;
+  const gateClientId =
+    (payload._gate_client_id as string | null) ??
+    (payload.clientId as string | null) ?? null;
+  const recipientType = (payload._gate_recipient_type as string | null) ?? null;
+  const actor = (payload._gate_actor as string | null) ?? functionName;
+
+  if (recipientType === "staff") return { allowed: true };
+  // Transactional self-initiated is EMAIL ONLY. SMS/voice fall through to strict.
+  if (recipientType === "transactional_self_initiated" && channel === "email") {
+    return { allowed: true };
+  }
+
+  if (!gateLeadId && !gateSubmissionId && !gateClientId) {
+    return { allowed: false, reason: "no_recipient_row" };
+  }
+
+  const sb = createClient(url, key);
+  let consent: boolean | null = null;
+  let resolvedLeadId: string | null = gateLeadId;
+  let resolvedSubmissionId: string | null = gateSubmissionId;
+
+  if (gateSubmissionId) {
+    const { data } = await sb.from("intake_submissions")
+      .select("id, sms_email_consent, lead_id")
+      .eq("id", gateSubmissionId).maybeSingle();
+    if (data) {
+      consent = data.sms_email_consent === true;
+      resolvedLeadId = resolvedLeadId ?? ((data.lead_id as string | null) ?? null);
+    }
+  }
+  if (consent === null && gateLeadId) {
+    const { data } = await sb.from("intake_submissions")
+      .select("id, sms_email_consent")
+      .eq("lead_id", gateLeadId)
+      .order("submitted_at", { ascending: false }).limit(1).maybeSingle();
+    if (data) {
+      consent = data.sms_email_consent === true;
+      resolvedSubmissionId = resolvedSubmissionId ?? ((data.id as string | null) ?? null);
+    }
+  }
+  if (consent === null && gateClientId) {
+    const { data: client } = await sb.from("clients")
+      .select("intake_id, lead_id").eq("id", gateClientId).maybeSingle();
+    if (client?.intake_id) {
+      const { data: sub } = await sb.from("intake_submissions")
+        .select("sms_email_consent, lead_id").eq("id", client.intake_id).maybeSingle();
+      if (sub) {
+        consent = sub.sms_email_consent === true;
+        resolvedLeadId = resolvedLeadId ?? ((sub.lead_id as string | null) ?? (client.lead_id as string | null) ?? null);
+        resolvedSubmissionId = resolvedSubmissionId ?? (client.intake_id as string);
+      }
+    }
+    if (consent === null && client?.lead_id) {
+      const { data: sub } = await sb.from("intake_submissions")
+        .select("id, sms_email_consent")
+        .eq("lead_id", client.lead_id)
+        .order("submitted_at", { ascending: false }).limit(1).maybeSingle();
+      if (sub) {
+        consent = sub.sms_email_consent === true;
+        resolvedSubmissionId = resolvedSubmissionId ?? ((sub.id as string | null) ?? null);
+        resolvedLeadId = resolvedLeadId ?? ((client.lead_id as string | null) ?? null);
+      }
+    }
+  }
+
+  const logSkip = async (outcome: string, notes: string) => {
+    try {
+      await sb.from("intake_contact_log").insert({
+        lead_id: resolvedLeadId, submission_id: resolvedSubmissionId,
+        channel, direction: "outbound", outcome, notes,
+        contacted_by: actor, is_bot: true,
+      });
+    } catch { /* best-effort */ }
+  };
+
+  if (consent === null) {
+    await logSkip("skipped_no_recipient_row", `${functionName}: no consent row resolved`);
+    return { allowed: false, reason: "no_recipient_row" };
+  }
+  if (consent !== true) {
+    await logSkip("skipped_no_consent", `${functionName}: sms_email_consent !== true`);
+    return { allowed: false, reason: "no_consent" };
+  }
+  if (resolvedLeadId) {
+    const { data: fus } = await sb.from("follow_up_sequences")
+      .select("opted_out").eq("lead_id", resolvedLeadId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle();
+    if (fus?.opted_out === true) {
+      await logSkip("skipped_opt_out", `${functionName}: follow_up_sequences.opted_out`);
+      return { allowed: false, reason: "opted_out" };
+    }
+  }
+  return { allowed: true };
+}
+
 interface MessagePayload {
   messageId: string;
   clientId: string;
@@ -31,7 +143,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const payload: MessagePayload = await req.json();
+    const payload: MessagePayload & Record<string, unknown> = await req.json();
     const {
       messageId,
       clientId,
@@ -48,6 +160,21 @@ Deno.serve(async (req: Request) => {
       template_key,
       variables,
     } = payload;
+
+    // ─── Gate ──────────────────────────────────────────────────────────────
+    // Channel-aware: SMS/voice are strict regardless of recipientType.
+    const gateChannel: GateChannel =
+      channel === "sms" ? "sms" :
+      channel === "voice" ? "voice" :
+      channel === "email" || channel === "google_meet" ? "email" :
+      "unknown";
+    const gate = await checkConsentGate(payload, gateChannel, "send-client-message");
+    if (!gate.allowed) {
+      return new Response(JSON.stringify({ skipped: true, reason: gate.reason }), {
+        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SUPABASE_SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;

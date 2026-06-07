@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "../lib/supabase";
+import { sendVia } from "../lib/sendGate";
 import {
   Scale, CheckCircle, ChevronRight, DollarSign, Calendar,
   Clock, FileText, AlertCircle, Phone, X, ArrowLeft,
@@ -329,16 +330,10 @@ export default function CaseAcceptanceFlow({ clientId, clientName, acceptanceDat
       last_payment_amount: lastPayment,
     }).eq("client_id", clientId);
 
-    const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-    const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
     try {
-      await fetch(`${SUPABASE_URL}/functions/v1/send-boldsign`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
+      const result = await sendVia(
+        "send-boldsign",
+        {
           clientId,
           clientName,
           chapter,
@@ -353,8 +348,21 @@ export default function CaseAcceptanceFlow({ clientId, clientName, acceptanceDat
           last_payment_amount: lastPayment,
           payment_frequency: client_pay_frequency,
           plan_months: planMonths,
-        }),
-      });
+        },
+        {
+          recipientType: "client",
+          clientId,
+          actor: "CaseAcceptanceFlow",
+          summary: "Retainer signing request (welcome-call request flow)",
+        },
+      );
+      if (!result.sent) {
+        // Existing flow silently continued on BoldSign send failure; the gate
+        // skip is now recorded in intake_contact_log + browser console so it's
+        // auditable post-hoc. A visible UI toast in this presentation flow
+        // would be disruptive — punch-list follow-up if needed.
+        console.warn("[send-boldsign] gate skipped:", result.reason);
+      }
     } catch {
       // BoldSign send attempted; continue regardless
     }

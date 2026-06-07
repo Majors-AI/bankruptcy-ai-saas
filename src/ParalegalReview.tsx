@@ -1567,12 +1567,13 @@ function SectionCard({ section, docs, confirmations, sectionConf, onDocUpdate, o
 
 // ─── Start Review Modal ───────────────────────────────────────────────────────
 
-function StartReviewModal({ onStart, onClose }: {
+function StartReviewModal({ initialClientId, onStart, onClose }: {
+  initialClientId: string;
   onStart: (name: string, clientId: string) => void;
   onClose: () => void;
 }) {
   const [name, setName]         = useState("");
-  const [clientId, setClientId] = useState(CLIENT_ID);
+  const [clientId, setClientId] = useState(initialClientId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
@@ -1620,7 +1621,26 @@ function StartReviewModal({ onStart, onClose }: {
 
 type ReviewTab = "petition_data" | "document_review";
 
-export default function ParalegalReview() {
+interface ParalegalReviewProps {
+  /**
+   * 'full' (default): full-screen page (min-h-screen + #0a0e1a bg + Trebuchet font).
+   * 'embedded': renders into parent flow — no chrome ownership. Used by LegalDepartmentPortal.
+   */
+  layout?: 'full' | 'embedded';
+  /**
+   * The client whose review session this is. Defaults to 'client-demo' so
+   * existing standalone-route + demo behavior is preserved. Real callers
+   * should pass an actual clients.id (UUID) sourced from App.tsx's
+   * impersonateClient or a future session/selection context.
+   */
+  clientId?: string;
+}
+
+export default function ParalegalReview(
+  { layout = 'full', clientId = 'client-demo' }: ParalegalReviewProps = {},
+) {
+  const fullChrome = layout !== 'embedded';
+  const fontStyle = fullChrome ? { fontFamily: "'Trebuchet MS', sans-serif" } : undefined;
   const [review, setReview]                 = useState<ParalegalReview | null>(null);
   const [docs, setDocs]                     = useState<ClientDocument[]>([]);
   const [confirmations, setConfirmations]   = useState<DocConfirmation[]>([]);
@@ -1869,15 +1889,21 @@ export default function ParalegalReview() {
 
   if (showStart) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a]" style={{ fontFamily: "'Trebuchet MS', sans-serif" }}>
-        <StartReviewModal onStart={startReview} onClose={() => {}} />
+      <div
+        className={fullChrome ? "min-h-screen bg-[#0a0e1a]" : ""}
+        style={fontStyle}
+      >
+        <StartReviewModal initialClientId={clientId} onStart={startReview} onClose={() => {}} />
       </div>
     );
   }
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0e1a] flex items-center justify-center" style={{ fontFamily: "'Trebuchet MS', sans-serif" }}>
+      <div
+        className={`flex items-center justify-center ${fullChrome ? "min-h-screen bg-[#0a0e1a]" : "py-24"}`}
+        style={fontStyle}
+      >
         <div className="flex items-center gap-3 text-slate-500">
           <Loader2 className="w-5 h-5 animate-spin" />
           <span className="text-sm">Loading review session…</span>
@@ -1887,7 +1913,10 @@ export default function ParalegalReview() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] text-white" style={{ fontFamily: "'Trebuchet MS', sans-serif" }}>
+    <div
+      className={`text-white ${fullChrome ? "min-h-screen bg-[#0a0e1a]" : ""}`}
+      style={fontStyle}
+    >
 
       {/* Header */}
       <header className="bg-[#0d1221]/95 border-b border-slate-800/60 sticky top-0 z-30 backdrop-blur">

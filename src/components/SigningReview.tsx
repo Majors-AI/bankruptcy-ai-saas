@@ -146,9 +146,12 @@ function formatDuration(seconds: number): string {
 
 // ── Access denied screen ──────────────────────────────────────────────────────
 
-function AccessDenied() {
+function AccessDenied({ layout = 'full' }: { layout?: 'full' | 'embedded' }) {
+  const fullChrome = layout !== 'embedded';
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-8">
+    <div className={fullChrome
+      ? "min-h-screen bg-slate-950 flex items-center justify-center p-8"
+      : "flex items-center justify-center py-16"}>
       <div className="max-w-sm text-center space-y-4">
         <div className="w-12 h-12 rounded-2xl bg-red-900/30 border border-red-700/40 flex items-center justify-center mx-auto">
           <Shield className="w-6 h-6 text-red-400" />
@@ -235,12 +238,31 @@ function CompleteModal({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
-export default function SigningReview() {
+interface SigningReviewProps {
+  /**
+   * 'full' (default): full-screen page (min-h-screen + bg-slate-950).
+   * 'embedded': renders into parent flow — no chrome ownership. Used by LegalDepartmentPortal.
+   * Role-gate denial respects layout too: contained panel when embedded.
+   */
+  layout?: 'full' | 'embedded';
+  /**
+   * The client whose signing review this is. Defaults to 'client-demo' so
+   * existing standalone-route + demo behavior is preserved. Real callers
+   * should pass an actual clients.id (UUID) sourced from App.tsx's
+   * impersonateClient or a future session/selection context.
+   */
+  clientId?: string;
+}
+
+export default function SigningReview(
+  { layout = 'full', clientId = 'client-demo' }: SigningReviewProps = {},
+) {
   const role = (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) ?? 'legal_admin';
 
   if (role && !ALLOWED_ROLES.includes(role)) {
-    return <AccessDenied />;
+    return <AccessDenied layout={layout} />;
   }
+  const fullChrome = layout !== 'embedded';
 
   const [reviewRow, setReviewRow] = useState<SigningReviewRow | null>(null);
   const [items, setItems] = useState<Record<string, ReviewItem>>(buildDefaultItems());
@@ -275,7 +297,7 @@ export default function SigningReview() {
     setLoading(true);
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/signing_reviews?client_id=eq.${CLIENT_ID}&status=in.in_progress,paused&order=created_at.desc&limit=1`,
+        `${SUPABASE_URL}/rest/v1/signing_reviews?client_id=eq.${clientId}&status=in.in_progress,paused&order=created_at.desc&limit=1`,
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       const rows: SigningReviewRow[] = await res.json();
@@ -292,7 +314,7 @@ export default function SigningReview() {
 
   async function createReview() {
     const body = {
-      client_id: CLIENT_ID,
+      client_id: clientId,
       firm_id: FIRM_ID,
       reviewer_role: role,
       status: 'in_progress',
@@ -387,7 +409,7 @@ export default function SigningReview() {
   // ── Loading state ─────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+      <div className={`flex items-center justify-center ${fullChrome ? "min-h-screen bg-slate-950" : "py-24"}`}>
         <div className="flex items-center gap-3 text-slate-400">
           <RefreshCw className="w-5 h-5 animate-spin" />
           <span className="text-sm">Loading signing review…</span>
@@ -400,7 +422,7 @@ export default function SigningReview() {
   const circumference = 2 * Math.PI * 26;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className={`text-slate-100 ${fullChrome ? "min-h-screen bg-slate-950" : ""}`}>
       {showCompleteModal && (
         <CompleteModal
           items={items}
@@ -418,7 +440,7 @@ export default function SigningReview() {
               <FileText className="w-4 h-4 text-sky-400" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white leading-tight">7.5 — Signing Review</p>
+              <p className="text-sm font-semibold text-white leading-tight">Signing Review Portal</p>
               <p className="text-xs text-slate-500">{REVIEWER_NAME}</p>
             </div>
           </div>

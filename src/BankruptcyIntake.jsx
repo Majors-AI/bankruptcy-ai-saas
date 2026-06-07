@@ -1067,10 +1067,34 @@ function GovIncomeRow({ label, fieldKey, value, onChange, isNA, onToggleNA }) {
   );
 }
 
-export default function BankruptcyIntake({ clientId, clientName, clientEmail, clientPhone, staffMode } = {}) {
+export default function BankruptcyIntake({
+  clientId,
+  clientName,
+  clientEmail,
+  clientPhone,
+  staffMode,
+  // ── Additive props for the staff-guided wrapper (StaffGuidedIntake). All
+  //    optional; the public route at view='intake_questionnaire' calls this
+  //    with no props and the behavior is unchanged.
+  leadId = null,
+  initialData,
+  onStepChange,
+  onSubmitted,
+} = {}) {
   const isStaffSession = !!staffMode;
   const isTakeover = staffMode?.mode === 'takeover';
   const [step, setStep] = useState(0);
+  // Emit step transitions to the wrapper so its script panel can track us.
+  useEffect(() => { if (typeof onStepChange === 'function') onStepChange(step); }, [step, onStepChange]);
+  // Merge any wrapper-supplied initial values (name/email/phone/state/etc.)
+  // on top of the default data state, once on mount. Defaults are populated
+  // by the giant useState below; this merge runs after so initialData wins.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (initialData && typeof initialData === 'object' && Object.keys(initialData).length > 0) {
+      setData(prev => ({ ...prev, ...initialData }));
+    }
+  }, []);
   const [started, setStarted] = useState(isStaffSession);
   const [errors, setErrors] = useState({});
   const [notApplicable, setNotApplicable] = useState({});
@@ -1205,6 +1229,7 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
     foreclosureDate:"",
     confirmedAccurate: false,
     readInfoSheet: false,
+    smsEmailConsent: false,
     piHasClaim: "",
     piDateOfLoss: "",
     piIncidentDescription: "",
@@ -1792,6 +1817,7 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
     if (s===9) {
       if (!data.readInfoSheet) errs["readInfoSheet"]="You must read and acknowledge the Official Bankruptcy Information Sheet.";
       if (!data.confirmedAccurate) errs["confirmedAccurate"]="You must confirm the information is accurate before proceeding.";
+      if (!data.smsEmailConsent) errs["smsEmailConsent"]="You must agree to be contacted before submitting your intake.";
     }
     return errs;
   };
@@ -2022,6 +2048,15 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
         refund_amount:    data.expectedRefund === "yes" && data.refundAmount ? n(data.refundAmount) : null,
         recent_luxury:    data.recentLuxury === "yes",
         luxury_details:   data.luxuryDetails || null,
+
+        // SMS / email consent — captured at submit time, never auto-set.
+        // Form validation prevents submission unless data.smsEmailConsent === true.
+        sms_email_consent: data.smsEmailConsent === true,
+        sms_email_consent_at: data.smsEmailConsent === true ? new Date().toISOString() : null,
+
+        // Lead linkage — set by the staff-guided wrapper when this intake
+        // is being run on behalf of a tracked lead. Public route passes null.
+        lead_id: leadId ?? null,
       }).select("id").single();
       if (clientId && submission?.id) {
         await supabase.from("clients").update({
@@ -2064,10 +2099,14 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
       }
       setSubmitRef(ref);
       setSubmitted(true);
+      // Notify wrapper (StaffGuidedIntake) that submission completed so it
+      // can advance the lead row. No-op for the public route.
+      if (typeof onSubmitted === 'function') onSubmitted(submission?.id ?? null);
     } catch(err) {
       const ref = "BAI-" + Date.now().toString(36).toUpperCase();
       setSubmitRef(ref);
       setSubmitted(true);
+      if (typeof onSubmitted === 'function') onSubmitted(null);
     }
     setSubmitting(false);
   };
@@ -5034,10 +5073,22 @@ export default function BankruptcyIntake({ clientId, clientName, clientEmail, cl
                   <span className="text-sm font-semibold leading-snug">I certify that all information is true, correct, and complete. I understand this does not constitute legal advice or create an attorney-client relationship.</span>
                 </button>
                 {e("confirmedAccurate") && <p className="text-xs text-red-400 mt-2">⚠ {e("confirmedAccurate")}</p>}
+
+                {/* SMS / email consent — TCPA-aligned; required for submission. */}
+                <button onClick={()=>u("smsEmailConsent",!data.smsEmailConsent)}
+                  className={`mt-3 w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all ${data.smsEmailConsent?"bg-amber-400/10 border-amber-400 text-amber-200":"bg-slate-800 border-slate-600 text-slate-300 hover:border-amber-400/60"}`}>
+                  <span className={`w-6 h-6 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 ${data.smsEmailConsent?"bg-amber-400 border-amber-400":"border-slate-500"}`}>
+                    {data.smsEmailConsent && <span className="text-slate-900 text-xs font-black">✓</span>}
+                  </span>
+                  <span className="text-xs font-medium leading-snug">
+                    By submitting this form, I agree that Majors Law and its staff may contact me by phone call, text message (including automated and AI-assisted texts), and email at the phone number and email address I provide, to schedule and handle my intake. Message and data rates may apply. I can reply STOP at any time to opt out of texts. Consent is not a condition of receiving legal services.
+                  </span>
+                </button>
+                {e("smsEmailConsent") && <p className="text-xs text-red-400 mt-2">⚠ {e("smsEmailConsent")}</p>}
               </SectionCard>
               <div className="mb-4">
-                <button onClick={submitIntake} disabled={submitting || !data.confirmedAccurate || !data.readInfoSheet}
-                  className={`w-full font-bold py-4 px-4 rounded-xl transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 ${submitting?"bg-slate-600 text-slate-400 cursor-not-allowed":(!data.confirmedAccurate || !data.readInfoSheet)?"bg-slate-700 text-slate-500 cursor-not-allowed":"bg-amber-400 hover:bg-amber-300 text-slate-900"}`}>
+                <button onClick={submitIntake} disabled={submitting || !data.confirmedAccurate || !data.readInfoSheet || !data.smsEmailConsent}
+                  className={`w-full font-bold py-4 px-4 rounded-xl transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 ${submitting?"bg-slate-600 text-slate-400 cursor-not-allowed":(!data.confirmedAccurate || !data.readInfoSheet || !data.smsEmailConsent)?"bg-slate-700 text-slate-500 cursor-not-allowed":"bg-amber-400 hover:bg-amber-300 text-slate-900"}`}>
                   {submitting ? <><span className="animate-pulse">⏳</span> Submitting…</> : <><span>📬</span> Submit to Our Office for Review</>}
                 </button>
               </div>

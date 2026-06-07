@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { sendVia } from "./lib/sendGate";
 import {
   Send, MessageSquare, Phone, Mail, Video, ChevronDown, ChevronRight,
   CheckCheck, Clock, AlertTriangle, X, Plus, User, FileText, RefreshCw,
@@ -316,42 +317,58 @@ export default function MessagePortal({
         updated_at: new Date().toISOString(),
       });
 
-      // Call edge function for external delivery
-      const edgeRes = await fetch(
-        `${SUPABASE_URL}/functions/v1/send-client-message`,
+      // Route through the consent gate. SMS/voice channels require recorded
+      // consent (sms_email_consent === true); the gate will skip + audit-log
+      // if no consent or if the lead/client opted out.
+      const gateResult = await sendVia(
+        "send-client-message",
         {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            messageId: msgRecord.id,
-            clientId: selectedClientId,
-            clientName: selectedClient?.full_name ?? "",
-            clientPhone: selectedClient?.phone,
-            clientEmail: selectedClient?.email,
-            senderName,
-            senderRole,
-            subject: subject.trim() || undefined,
-            body: body.trim(),
-            channel,
-            meetLink: channel === "google_meet" ? (meetLink.trim() || undefined) : undefined,
-            relatedDocument: relatedDoc.trim() || undefined,
-          }),
-        }
+          messageId: msgRecord.id,
+          clientId: selectedClientId,
+          clientName: selectedClient?.full_name ?? "",
+          clientPhone: selectedClient?.phone,
+          clientEmail: selectedClient?.email,
+          senderName,
+          senderRole,
+          subject: subject.trim() || undefined,
+          body: body.trim(),
+          channel,
+          meetLink: channel === "google_meet" ? (meetLink.trim() || undefined) : undefined,
+          relatedDocument: relatedDoc.trim() || undefined,
+        },
+        {
+          recipientType: "client",
+          clientId: selectedClientId,
+          actor: senderName,
+          summary: `Staff-to-client ${channel} via MessagePortal`,
+        },
       );
 
-      const edgeData = edgeRes.ok ? await edgeRes.json() : null;
+      // Reflect the gate result on the local message record so the UI shows
+      // whether the send actually went out, was skipped, or failed.
+      const skipReasonLabel =
+        gateResult.reason === "no_consent" ? "skipped_no_consent" :
+        gateResult.reason === "opted_out"  ? "skipped_opt_out" :
+        gateResult.reason === "no_recipient_row" ? "skipped_no_recipient" :
+        gateResult.reason === "provider_error" ? "failed" :
+        null;
 
-      // Update local message with delivery result
       const updatedMsg: Message = {
         ...msgRecord,
-        delivery_status: edgeData?.deliveryStatus ?? "sent",
-        external_id: edgeData?.externalId ?? null,
-        meet_link: edgeData?.meetLink ?? msgRecord.meet_link,
+        delivery_status: gateResult.sent ? "sent" : (skipReasonLabel ?? "failed"),
         sent_at: new Date().toISOString(),
       };
+
+      if (!gateResult.sent) {
+        // Fail-loud, non-blocking toast/alert.
+        const msg =
+          gateResult.reason === "no_consent" ? "Message not sent — client did not consent to messaging at intake." :
+          gateResult.reason === "opted_out"  ? "Message not sent — client opted out of messaging." :
+          gateResult.reason === "no_recipient_row" ? "Message not sent — no consent record found for this client." :
+          `Message not sent — ${gateResult.reason ?? "provider error"}.`;
+        // Non-blocking notification via window.alert (until a proper toast lands).
+        if (typeof window !== "undefined") setTimeout(() => window.alert(msg), 0);
+      }
 
       setMessages(prev => {
         const without = prev.filter(m => m.id !== msgRecord.id);
