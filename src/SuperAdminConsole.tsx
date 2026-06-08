@@ -31,6 +31,7 @@ import { useState } from "react";
 import {
   Shield, Building2, ToggleLeft, Users, ChevronDown, ChevronUp, Info,
   MessageSquare, Sparkles, BookOpen, Mail, Pencil,
+  Target, BarChart2, Plus, Save, Calendar,
 } from "lucide-react";
 import SuperAdminPortal from "./SuperAdminPortal";
 
@@ -400,8 +401,344 @@ export default function SuperAdminConsole({ isFirmSuperAdmin }: SuperAdminConsol
 
           </div>
         </Subsection>
+
+        <Subsection
+          icon={<Target className="w-4 h-4 text-[#B8945F]" />}
+          title="Performance Goals"
+          subtitle="Custom metrics, per-person quarterly goals, history. Department supervisors + super admins can set/adjust; everyone else view-only."
+        >
+          {/* Static scaffold only. NO fabricated numbers, NO persisted data,
+              NO backend calls. The role gate, metric storage, goal storage,
+              and history charting all need a backend that isn't wired.
+
+              Where the user-facing copy below references "you" or "your
+              department," the runtime gate (TODO) is:
+                - Department supervisor (any department) → can set goals for
+                  employees within that department only
+                - Super admin / firm owner → can set goals for any employee
+                - All other roles → view-only
+
+              The SuperAdminConsole page itself is gated to firm super-admin
+              by App.tsx; this subsection's "set/adjust" UI is what flips on
+              for supervisors elsewhere (or for super admins here). View-only
+              consumers see the chart + goal table from the productivity
+              reporting surface (SuperAdminPortal). */}
+          <div className="space-y-4">
+
+            {/* Role-gate scaffold notice */}
+            <div className="rounded-lg border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-2">
+              <div className="flex items-start gap-2">
+                <Shield className="w-3.5 h-3.5 text-[#B8945F] mt-0.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-semibold text-[#FAFAF7] leading-snug">
+                    Access scaffold — supervisors set their own department; super admins set anyone.
+                  </p>
+                  <p className="text-[10px] text-[#6B6B66] mt-0.5 leading-relaxed">
+                    {/* TODO Phase B — role gate enforcement:
+                        - read viewer.role + viewer.department_id at the controller level
+                        - filter the per-person form's employee picker to viewer's
+                          department when role === "department_supervisor"
+                        - server-side INSERT guard: reject goal writes whose
+                          target_staff_id sits outside the supervisor's department
+                        - view-only role variants of every block below render the
+                          same chrome with all inputs disabled + a "View only" chip */}
+                    Viewers without set-permission see the same chrome with disabled inputs
+                    and a "View only" chip. Wiring lives in the planned staff-setup model.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── 1) Custom metrics ──────────────────────────────────────── */}
+            <div className="rounded-lg border border-dashed border-[#2A2A28] bg-[#0F0F0E] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Pencil className="w-3.5 h-3.5 text-[#B8945F]" />
+                <p className="text-xs font-semibold text-[#FAFAF7] uppercase tracking-widest">
+                  Custom metrics
+                </p>
+                <span className="ml-auto text-[9px] uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+                  Coming soon — reminder to design
+                </span>
+              </div>
+              <p className="text-[11px] text-[#6B6B66] leading-relaxed mb-3">
+                Define the metrics a firm tracks against. Each metric ties to a measurable
+                task outcome (the same outcomes the dashboard's intake_contact_log /
+                intake_leads.status already emit). Below are illustrative starters —
+                firms add, edit, and retire metrics from this list.
+              </p>
+
+              <ul className="space-y-2">
+                <MetricDefinitionPlaceholder
+                  name="Calls made"
+                  description="Outbound calls logged in intake_contact_log (any outcome)."
+                  source="intake_contact_log · direction='outbound'"
+                />
+                <MetricDefinitionPlaceholder
+                  name="Appointments set"
+                  description="Leads transitioned to status='consultation_scheduled' by this staffer."
+                  source="intake_leads.status transitions"
+                />
+                <MetricDefinitionPlaceholder
+                  name="Presented"
+                  description="Cases presented after attorney acceptance (status='attorney_accepted' → 'fee_quoted' transitions)."
+                  source="intake_leads.status transitions"
+                />
+                <MetricDefinitionPlaceholder
+                  name="Retained"
+                  description="Leads that reached status='retained' attributed to this staffer."
+                  source="intake_leads.status='retained' + retained_at"
+                />
+              </ul>
+
+              <button
+                disabled
+                title="Add metric — storage not wired"
+                className="mt-3 inline-flex items-center gap-1 text-[10px] font-semibold text-[#6B6B66] border border-dashed border-[#3A3A36] px-2 py-1 rounded cursor-not-allowed opacity-70"
+              >
+                <Plus className="w-3 h-3" /> Add metric
+              </button>
+
+              <p className="text-[10px] text-[#6B6B66] italic mt-3 leading-snug">
+                {/* TODO Phase B — metric storage:
+                    - new table `firm_perf_metrics (id, firm_id, key, label,
+                      description, source_query, unit, created_by, created_at)`
+                    - per-firm CRUD UI replaces this static list
+                    - validation: source_query must reference an allow-listed
+                      table/column set (intake_leads, intake_contact_log,
+                      calendar_events) to prevent arbitrary SQL
+                    - retirement instead of deletion (preserve historical
+                      goal records that reference the metric) */}
+                Reference only. Metric definitions land with the
+                <code className="font-mono text-[#FAFAF7]"> firm_perf_metrics </code>
+                table + allow-listed source_query validator.
+              </p>
+            </div>
+
+            {/* ── 2) Per-person quarterly goals ──────────────────────────── */}
+            <div className="rounded-lg border border-dashed border-[#2A2A28] bg-[#0F0F0E] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar className="w-3.5 h-3.5 text-[#B8945F]" />
+                <p className="text-xs font-semibold text-[#FAFAF7] uppercase tracking-widest">
+                  Per-person quarterly goals
+                </p>
+                <span className="ml-auto text-[9px] uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+                  Coming soon — reminder to design
+                </span>
+              </div>
+              <p className="text-[11px] text-[#6B6B66] leading-relaxed mb-3">
+                Set one goal per (employee × metric × quarter). Supervisors set goals for
+                their own department; super admins for anyone. Goals are immutable once the
+                quarter ends — historical records keep the original target value alongside
+                the actual.
+              </p>
+
+              {/* Disabled scaffold form — illustrative, no submit handler. */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+                <ScaffoldField label="Employee">
+                  <select
+                    disabled
+                    className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— pick employee —</option>
+                  </select>
+                </ScaffoldField>
+                <ScaffoldField label="Metric">
+                  <select
+                    disabled
+                    className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— pick metric —</option>
+                  </select>
+                </ScaffoldField>
+                <ScaffoldField label="Quarter">
+                  <select
+                    disabled
+                    className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— pick quarter —</option>
+                  </select>
+                </ScaffoldField>
+                <ScaffoldField label="Goal value">
+                  <input
+                    disabled
+                    type="text"
+                    placeholder="—"
+                    className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed placeholder-[#3A3A36]"
+                  />
+                </ScaffoldField>
+              </div>
+              <button
+                disabled
+                title="Save goal — persistence not wired"
+                className="inline-flex items-center gap-1 text-[10px] font-semibold text-[#6B6B66] border border-dashed border-[#3A3A36] px-2 py-1 rounded cursor-not-allowed opacity-70"
+              >
+                <Save className="w-3 h-3" /> Save goal
+              </button>
+
+              <p className="text-[10px] text-[#6B6B66] italic mt-3 leading-snug">
+                {/* TODO Phase B — goal storage + role-scoped writes:
+                    - new table `firm_perf_goals (id, firm_id, staff_id,
+                      metric_id, year, quarter (1-4), goal_value, set_by,
+                      set_at, locked boolean DEFAULT false)`
+                    - INSERT guard rejects goals targeting staff outside the
+                      supervisor's department (super admin bypasses)
+                    - quarter-close cron: flip locked=true on Q+1 day-1 so
+                      historical records remain immutable
+                    - achievement record: a parallel `firm_perf_goal_results
+                      (goal_id, actual_value, computed_at)` rolled up nightly
+                      from the metric's source_query */}
+                Reference only. Persistence + role-scoped INSERT guard + the
+                quarter-close lock land with
+                <code className="font-mono text-[#FAFAF7]"> firm_perf_goals</code>
+                {" "}and its companion results table.
+              </p>
+            </div>
+
+            {/* ── 3) History + bar chart ─────────────────────────────────── */}
+            <div className="rounded-lg border border-dashed border-[#2A2A28] bg-[#0F0F0E] p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <BarChart2 className="w-3.5 h-3.5 text-[#B8945F]" />
+                <p className="text-xs font-semibold text-[#FAFAF7] uppercase tracking-widest">
+                  History + chart
+                </p>
+                <span className="ml-auto text-[9px] uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+                  Coming soon — reminder to design
+                </span>
+              </div>
+              <p className="text-[11px] text-[#6B6B66] leading-relaxed mb-3">
+                Bar chart of goal vs. actual per quarter, filtered by year. Each retained
+                historical goal report stays accessible after the quarter closes.
+              </p>
+
+              {/* Filter row (disabled scaffold). */}
+              <div className="flex items-center gap-2 mb-3 flex-wrap">
+                <ScaffoldField label="Year">
+                  <select
+                    disabled
+                    className="bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— pick year —</option>
+                  </select>
+                </ScaffoldField>
+                <ScaffoldField label="Employee">
+                  <select
+                    disabled
+                    className="bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— all / pick —</option>
+                  </select>
+                </ScaffoldField>
+                <ScaffoldField label="Metric">
+                  <select
+                    disabled
+                    className="bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                  >
+                    <option>— pick metric —</option>
+                  </select>
+                </ScaffoldField>
+              </div>
+
+              {/* Chart frame — axes + Q1-Q4 column labels rendered statically,
+                  bar area is an explicit empty state. NO fake bars. */}
+              <div className="rounded border border-[#2A2A28] bg-[#1A1A18] overflow-hidden">
+                <div className="flex items-end px-4 pt-6 pb-3" style={{ height: 200 }}>
+                  {/* Y axis — labels only, no scale yet */}
+                  <div className="h-full flex flex-col justify-between pr-2">
+                    <span className="text-[9px] text-[#3A3A36]">—</span>
+                    <span className="text-[9px] text-[#3A3A36]">—</span>
+                    <span className="text-[9px] text-[#3A3A36]">—</span>
+                    <span className="text-[9px] text-[#3A3A36]">0</span>
+                  </div>
+                  {/* Chart body — explicit empty state */}
+                  <div className="flex-1 border-l border-b border-[#2A2A28] flex items-center justify-center relative">
+                    <div className="text-center">
+                      <BarChart2 className="w-6 h-6 text-[#3A3A36] mx-auto mb-1" />
+                      <p className="text-[11px] text-[#6B6B66] italic">
+                        No goal data yet.
+                      </p>
+                      <p className="text-[10px] text-[#6B6B66] mt-0.5 leading-snug max-w-xs">
+                        Wire the metrics backend + at least one closed quarter and bars appear here.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center px-4 pb-2 pl-10">
+                  {(["Q1", "Q2", "Q3", "Q4"] as const).map(q => (
+                    <span key={q} className="flex-1 text-center text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+                      {q}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Legend — kept so the chart "reads" as a goal-vs-actual chart
+                  even with the empty body. */}
+              <div className="flex items-center gap-3 mt-2 text-[10px] text-[#6B6B66]">
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-[#B8945F]/60 border border-[#B8945F]/40" />
+                  Goal
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-emerald-600/40 border border-emerald-700/60" />
+                  Actual — hit
+                </span>
+                <span className="inline-flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-red-700/40 border border-red-700/60" />
+                  Actual — missed
+                </span>
+              </div>
+
+              <p className="text-[10px] text-[#6B6B66] italic mt-3 leading-snug">
+                {/* TODO Phase B — history + chart data source:
+                    - read from `firm_perf_goals` joined with
+                      `firm_perf_goal_results` (the achievement record above)
+                    - year filter scopes the SELECT; default = current year
+                    - hit/miss boolean: result.actual_value >= goal.goal_value
+                    - retain historical goal reports indefinitely; quarter-
+                      close lock guarantees the original goal_value stays
+                      visible alongside actual
+                    - chart library: lightweight SVG bars rendered inline
+                      (no chart-lib dep) — same approach as ConsultScheduler's
+                      bubble grid */}
+                Reference only. Bars populate from the goals + results tables
+                once they exist.
+              </p>
+            </div>
+
+          </div>
+        </Subsection>
       </div>
     </div>
+  );
+}
+
+// Disabled scaffold form field with a small label above. No state.
+function ScaffoldField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block min-w-0">
+      <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1">
+        {label}
+      </span>
+      {children}
+    </label>
+  );
+}
+
+// Static placeholder card for a single metric definition. Disabled Edit chip.
+function MetricDefinitionPlaceholder({
+  name, description, source,
+}: { name: string; description: string; source: string }) {
+  return (
+    <li className="rounded border border-[#2A2A28] bg-[#1A1A18] p-3">
+      <div className="flex items-center gap-2 mb-1 flex-wrap">
+        <p className="text-[11px] font-semibold text-[#FAFAF7]">{name}</p>
+        <span className="ml-auto inline-flex items-center gap-1 text-[9px] uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded cursor-not-allowed opacity-70" title="Edit metric — storage not wired">
+          <Pencil className="w-2.5 h-2.5" /> Editable
+        </span>
+      </div>
+      <p className="text-[11px] text-[#6B6B66] leading-relaxed">{description}</p>
+      <p className="text-[10px] text-[#3A3A36] font-mono mt-1">{source}</p>
+    </li>
   );
 }
 

@@ -55,7 +55,7 @@ import {
   Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock,
   MessageCircle, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
   Users, Voicemail, ListChecks, Mail, Delete, PlayCircle, Play, Pause,
-  Coffee, TrendingUp, Trophy, MessageSquare, AtSign, Send,
+  Coffee, Target, MessageSquare, AtSign, Send,
   AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, X,
 } from "lucide-react";
 import ConsultSchedulerPanel, {
@@ -121,6 +121,7 @@ interface CalEvent {
 
 type TabId =
   | "dashboard" | "leads" | "followup" | "calendar"
+  | "messages" | "staff_tasks"
   | "my_schedule"
   | "availability" | "timeoff" | "sick_admin" | "manual_clients";
 
@@ -171,7 +172,9 @@ type NextTask =
   | { kind: "msg-unread";     threadId: string; clientName: string; preview: string; unreadCount: number }
   | { kind: "none" };
 
-interface ClientMessageThread {
+// Exported so LegalAdminPortal's MessagingTabView (the full-page Messages
+// nav surface) can fetch + pass the same shapes to ConsolidatedMessagingWidget.
+export interface ClientMessageThread {
   id: string;
   client_id: string;
   unread_count: number;
@@ -179,7 +182,7 @@ interface ClientMessageThread {
   updated_at: string;
 }
 
-interface ClientMessage {
+export interface ClientMessage {
   id: string;
   thread_id: string;
   body: string;
@@ -189,7 +192,7 @@ interface ClientMessage {
   created_at: string;
 }
 
-interface StaffMessage {
+export interface StaffMessage {
   id: string;
   sender_id: string;
   sender_name: string;
@@ -535,6 +538,7 @@ export default function IntakeDashboard({
   // ── Header popover / modal state ─────────────────────────────────────────
   const [phonePopoverOpen, setPhonePopoverOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
+  const [askForHelpOpen, setAskForHelpOpen] = useState(false);
 
   // ── Left column — Tasks vs. Schedule toggle ──────────────────────────────
   const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
@@ -1081,14 +1085,49 @@ export default function IntakeDashboard({
 
   return (
     <div className="space-y-4">
-      {/* Overdue reminder — only renders when at least one task in the shared
-          pool has a due timestamp in the past. Sits above everything else so
-          it can't be missed when reorganizing is genuinely needed. */}
-      <OverdueReminderBanner count={overdueCount} tasks={overdueTasks} />
+      {/*
+        TOPMOST — greeting line. Was previously inside the header-row beside
+        the comms pill + clock + action buttons; pulled out so the dashboard
+        opens with a quiet personalized line before the attention-needed
+        bubble. The date subtitle moves up with it.
+      */}
+      <div className="min-w-0">
+        <h2 className="text-lg font-medium text-[#FAFAF7]" style={{ fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>
+          {greeting}, {session.name.split(" ")[0]}.
+        </h2>
+        <p className="text-xs text-[#6B6B66] mt-0.5">
+          Your day at a glance — {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ })}
+        </p>
+      </div>
 
-      {/* Client search row — sits above the action buttons. Searches the
-          existing `leads` array in memory by name / phone / email and routes
-          a click into the lead detail panel via onOpenLead. */}
+      {/*
+        AttentionBubble — the red overdue bubble now consolidates:
+          - the "You have N overdue tasks" heading + overdue list (kept)
+          - "Ask for help" button (new scaffold; opens AskForHelpModal)
+          - the Employee Time Clock compact pill (MOVED from the header row)
+          - a compact unread-by-type messaging summary (MOVED from
+            OverviewBubble — Overview now shows priority breakdown instead)
+        Always renders (so the moved clock + messaging summary have a home
+        even when nothing is overdue). The heading + red tone toggle based
+        on overdueCount.
+      */}
+      <AttentionBubble
+        overdueCount={overdueCount}
+        overdueTasks={overdueTasks}
+        staffMsgs={staffMsgs}
+        clientThreads={clientThreads}
+        timeClock={timeClock}
+        timeClockActions={timeClockActions}
+        onOpenMessagingPanel={onOpenView}
+        onAskForHelp={() => setAskForHelpOpen(true)}
+        onRequestTimeOff={(_kind) => {
+          void _kind;
+          onChangeTab("my_schedule");
+        }}
+      />
+
+      {/* Client search row — searches the existing `leads` array by
+          name/phone/email and routes a click into the lead detail panel. */}
       <div className="flex items-center justify-end">
         <ClientSearchBar
           className="w-full sm:w-80 lg:w-96"
@@ -1104,19 +1143,10 @@ export default function IntakeDashboard({
 
       <div className="flex items-start gap-3 relative flex-wrap">
         <div className="flex-1 min-w-0 flex items-center gap-3">
-          <div className="min-w-0">
-            <h2 className="text-lg font-medium text-[#FAFAF7]" style={{ fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>
-              {greeting}, {session.name.split(" ")[0]}.
-            </h2>
-            <p className="text-xs text-[#6B6B66] mt-0.5">
-              Your day at a glance — {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ })}
-            </p>
-          </div>
-
-          {/* Comms pill bar — replaces the standalone phone icon. Phone lives
-              inside the pill now, alongside SMS / Email / Team / Direct /
-              Dept email + a Tasks-due indicator. Hooks into the SAME
-              staffMsgs + clientThreads data the Messaging panel uses. */}
+          {/* Comms pill bar (header) — quick-reply popovers per channel +
+              tasks-due indicator. Stays in the header; distinct from the
+              AttentionBubble's read-only messaging summary which just shows
+              unread counts by type. */}
           <CommsPillBar
             staffMsgs={staffMsgs}
             clientThreads={clientThreads}
@@ -1125,24 +1155,6 @@ export default function IntakeDashboard({
             onOpenPhoneDialer={() => setPhonePopoverOpen(true)}
             onOpenTasks={() => { /* tasks live in the LEFT column below; no-op for now */ }}
           />
-
-          {/* Compact Employee Time Clock pill — status indicator only. Click
-              opens the popup carrying metrics + actions (lunch/break/clock
-              out + PTO/STO requests). Hour metrics are intentionally NOT
-              shown inline on the dashboard. */}
-          <div className="max-w-[200px]">
-            <ClockBubble
-              state={timeClock}
-              actions={timeClockActions}
-              onRequestTimeOff={(_kind) => {
-                // TODO: pre-select reason_type in TimeOffTab based on kind
-                // ("pto"→"vacation", "sto"→"sick"). Today the form opens
-                // unfiltered — staffer picks the reason.
-                void _kind;
-                onChangeTab("my_schedule");
-              }}
-            />
-          </div>
         </div>
 
         {/* Escalate to Supervisor — scaffold modal (TODO: route to supervisor). */}
@@ -1179,27 +1191,11 @@ export default function IntakeDashboard({
         )}
       </div>
 
-      {/* Top bubbles — Employee Time Clock · Overview · Retention.
-          The Clock is now a compact pill — its popup carries the metrics +
-          actions, including PTO / STO requests that route to the existing
-          time-off request form (TimeOffTab inside MyScheduleTab). */}
+      {/* Top bubbles — Overview (now priority breakdown) + Performance / Goals.
+          Clock + messaging summary moved into the AttentionBubble above;
+          this row is now two equal columns. */}
       <TopBubblesRow
-        sharedTasksCount={sharedTasks.length}
-        staffMsgs={staffMsgs}
-        clientThreads={clientThreads}
-        timeClock={timeClock}
-        timeClockActions={timeClockActions}
-        onRequestTimeOff={(_kind) => {
-          // TODO: pre-select reason_type in TimeOffTab based on kind:
-          //   - "pto"  → reason_type="vacation" (PTO; PTO-specific reason type
-          //              not in the existing form schema today).
-          //   - "sto"  → reason_type="sick".
-          // The existing form already supports the underlying reason_type set —
-          // it just doesn't open with a preselected value yet. Until that
-          // refinement lands, we route to the tab and let the staffer pick.
-          void _kind;
-          onChangeTab("my_schedule");
-        }}
+        sharedTasks={sharedTasks}
       />
 
       {/*
@@ -1215,6 +1211,7 @@ export default function IntakeDashboard({
             tasks={sharedTasks}
             mode={leftMode}
             onChangeMode={setLeftMode}
+            onOpenMyTasks={() => onChangeTab("staff_tasks")}
           />
         ) : (
           <ScheduleColumnView
@@ -1288,6 +1285,10 @@ export default function IntakeDashboard({
           onCancel={handleScheduledModalCancel}
           onContinue={handleScheduledModalContinue}
         />
+      )}
+
+      {askForHelpOpen && (
+        <AskForHelpModal onClose={() => setAskForHelpOpen(false)} />
       )}
     </div>
   );
@@ -1936,7 +1937,7 @@ interface UnifiedMsgRow {
   onOpen: () => void;
 }
 
-function ConsolidatedMessagingWidget({
+export function ConsolidatedMessagingWidget({
   threads, staffMsgs, loading, onOpenView,
 }: {
   threads: (ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[];
@@ -2324,9 +2325,11 @@ interface AllTasksWidgetProps {
   tasks: TaskEntry[];
   mode: "tasks" | "schedule";
   onChangeMode: (m: "tasks" | "schedule") => void;
+  /** Routes to the per-staffer "My Tasks" page. */
+  onOpenMyTasks?: () => void;
 }
 
-function AllTasksWidget({ tasks, mode, onChangeMode }: AllTasksWidgetProps) {
+function AllTasksWidget({ tasks, mode, onChangeMode, onOpenMyTasks }: AllTasksWidgetProps) {
   // Bucket counts per color for the header chip cluster.
   const counts = useMemo(() => {
     const c: Record<TaskColor, number> = { red: 0, orange: 0, yellow: 0, blue: 0 };
@@ -2343,6 +2346,15 @@ function AllTasksWidget({ tasks, mode, onChangeMode }: AllTasksWidgetProps) {
             Upcoming Tasks
           </h3>
           <CountBadge value={tasks.length} />
+          {onOpenMyTasks && (
+            <button
+              onClick={onOpenMyTasks}
+              title="Open your full task page — resolved + outstanding + work metrics"
+              className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
+            >
+              My Tasks →
+            </button>
+          )}
         </div>
         <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
         <div className="flex items-center gap-2 mt-2">
@@ -2722,29 +2734,18 @@ function MonthGridView({
 // Tone for bubbles 1 + 2 is intentionally supportive, not surveillance-y.
 
 interface TopBubblesRowProps {
-  sharedTasksCount: number;
-  staffMsgs: StaffMessage[];
-  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
-  timeClock: TimeClockState;
-  timeClockActions: TimeClockActions;
-  /** Routes the popup's PTO / STO buttons to My Schedule. */
-  onRequestTimeOff: (kind: "pto" | "sto") => void;
+  /** All entries from the shared color-coded task pool. OverviewBubble
+   *  counts by color (RED/ORANGE/YELLOW/BLUE) for the priority breakdown. */
+  sharedTasks: TaskEntry[];
 }
 
-function TopBubblesRow({
-  sharedTasksCount, staffMsgs, clientThreads,
-  timeClock: _timeClock, timeClockActions: _timeClockActions, onRequestTimeOff: _onRequestTimeOff,
-}: TopBubblesRowProps) {
-  // The Clock used to be a full card here; it's now a compact header pill
-  // (see ClockBubble mounted up in the dashboard header). This row keeps
-  // Overview + Retention only.
+function TopBubblesRow({ sharedTasks }: TopBubblesRowProps) {
+  // Clock + per-channel unread-by-type moved into AttentionBubble (see the
+  // dashboard return). This row is Overview (priority breakdown now) +
+  // Performance / Goals Report.
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <OverviewBubble
-        sharedTasksCount={sharedTasksCount}
-        staffMsgs={staffMsgs}
-        clientThreads={clientThreads}
-      />
+      <OverviewBubble sharedTasks={sharedTasks} />
       <RetentionBubble />
     </div>
   );
@@ -3025,46 +3026,48 @@ function formatHm(totalMinutes: number): string {
 //   - reads time-tracking + task-completion logs to compute actual pace
 //   - renders an actionable but kind nudge here (never punitive)
 
+// Bubble 2 — Overview now breaks tasks down by PRIORITY LEVEL.
+//
+// Previously this bubble showed open-task count + unread-by-type
+// (SMS/Email/Team/Direct). The unread-by-type block was MOVED into
+// AttentionBubble (the consolidated red bubble at the top of the
+// dashboard). Counts here come from the same sharedTasks pool the
+// LEFT-column AllTasksWidget reads — RED/ORANGE/YELLOW/BLUE per the
+// priority rules established in earlier prompts.
+
 interface OverviewBubbleProps {
-  sharedTasksCount: number;
-  staffMsgs: StaffMessage[];
-  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
+  sharedTasks: TaskEntry[];
 }
 
-function OverviewBubble({ sharedTasksCount, staffMsgs, clientThreads }: OverviewBubbleProps) {
-  const sms    = staffMsgs.filter(m => m.channel === "sms").length;
-  const email  = staffMsgs.filter(m => m.channel === "email").length;
-  const team   = staffMsgs.filter(m => m.channel === "phone_note").length;
-  const direct = staffMsgs.filter(m => m.channel === "dm").length;
-  const clientUnread = clientThreads.reduce((s, t) => s + (t.unread_count ?? 0), 0);
+function OverviewBubble({ sharedTasks }: OverviewBubbleProps) {
+  const counts = sharedTasks.reduce(
+    (acc, t) => { acc[t.color] = (acc[t.color] ?? 0) + 1; return acc; },
+    { red: 0, orange: 0, yellow: 0, blue: 0 } as Record<TaskColor, number>,
+  );
+  const total = sharedTasks.length;
 
   return (
     <BubbleCard
-      title="Overview"
+      title="Overview — by priority"
       icon={<ListChecks className="w-4 h-4" />}
     >
       <div className="space-y-3">
         <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-[#FAFAF7] leading-none">{sharedTasksCount}</span>
+          <span className="text-2xl font-bold text-[#FAFAF7] leading-none">{total}</span>
           <span className="text-[10px] uppercase tracking-widest text-[#6B6B66]">open tasks</span>
         </div>
 
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
-            Unread to you
-          </p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            <UnreadStat icon={<MessageSquare className="w-3 h-3" />} label="SMS"    value={sms} />
-            <UnreadStat icon={<AtSign className="w-3 h-3" />}        label="Email"  value={email} />
-            <UnreadStat icon={<Users className="w-3 h-3" />}         label="Team"   value={team} />
-            <UnreadStat icon={<Send className="w-3 h-3" />}          label="Direct" value={direct} />
-          </div>
-          {clientUnread > 0 && (
-            <p className="text-[10px] text-[#6B6B66] mt-2 leading-snug">
-              Also <span className="font-bold text-[#FAFAF7]">{clientUnread}</span> unread message{clientUnread === 1 ? "" : "s"} across client threads.
-            </p>
-          )}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <PriorityCount color="red"    count={counts.red} />
+          <PriorityCount color="orange" count={counts.orange} />
+          <PriorityCount color="yellow" count={counts.yellow} />
+          <PriorityCount color="blue"   count={counts.blue} />
         </div>
+
+        <p className="text-[10px] text-[#6B6B66] italic leading-snug">
+          Same RED / ORANGE / YELLOW / BLUE rules as the left-column task list
+          and the Up Next card.
+        </p>
 
         {/* Pace nudge — SCAFFOLD. Gentle by design. */}
         <div className="flex items-start gap-2 rounded border border-emerald-700/30 bg-emerald-900/10 px-2.5 py-2">
@@ -3078,63 +3081,164 @@ function OverviewBubble({ sharedTasksCount, staffMsgs, clientThreads }: Overview
   );
 }
 
-function UnreadStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+// Single priority-tier row inside the Overview bubble.
+function PriorityCount({ color, count }: { color: TaskColor; count: number }) {
+  const cfg = {
+    red:    { label: "Hot (RED)",     desc: "appts · unread msgs · emergency",    dot: "bg-red-500" },
+    orange: { label: "Mid (ORANGE)",  desc: "urgent leads",                         dot: "bg-orange-400" },
+    yellow: { label: "Present (YEL)", desc: "attorney accepted · present case",     dot: "bg-yellow-400" },
+    blue:   { label: "Sched (BLUE)",  desc: "new contact · fee-quoted follow-ups",  dot: "bg-sky-400" },
+  }[color];
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[#6B6B66]">{icon}</span>
-      <span className="text-[10px] text-[#6B6B66] flex-1">{label}</span>
-      <span className={`text-xs font-bold ${value > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{value}</span>
+    <div className="flex items-start gap-1.5">
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${cfg.dot}`} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] text-[#6B6B66] truncate">{cfg.label}</p>
+        <p className="text-[9px] text-[#3A3A36] leading-tight truncate">{cfg.desc}</p>
+      </div>
+      <span className={`text-xs font-bold flex-shrink-0 ${count > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{count}</span>
     </div>
   );
 }
 
-// ─── Bubble 3 — Retention stats (SCAFFOLD) ───────────────────────────────────
+// ─── Bubble 3 — Performance / Goals Report (SCAFFOLD) ────────────────────────
 //
-// Placeholder metrics. The retention/metrics backend isn't built; showing
-// numbers here without the backend would risk fabricated stats appearing as
-// real, so every value is rendered as "—" with the placeholder helper.
+// TEMPLATE for the Legal and Accounting department dashboards.
+// The Accounting + Legal department dashboards (LegalDepartmentPortal,
+// AccountingPortal) will mount this SAME component with a different metric
+// set per department. The shape below is intentionally parameterized so
+// the only thing those callers vary is the `departments` prop. Keep the
+// chrome / row layout / placeholder semantics identical when reused.
 //
-// TODO Phase B — retention/metrics backend:
-//   - per-staffer outbound-call log + outcome (reached / left-msg / no-answer)
-//   - appointment-scheduled, no-show, retained, no-case, presented-not-retained
-//   - firm monthly retention goal (firms config)
-//   - leaderboard view (current month, with PTO-aware normalization)
-//   - average money-down per staffer (uses CFF + first-payment amounts)
+// What this surface IS:
+//   - Department-aware: one column per department the staffer is assigned to.
+//   - Per-metric rows: Current · Monthly Goal · What's needed (gap).
+//   - The Intake metric set: Retained · Show/answer rate · Appointments set · Presented.
+//     Monthly goal for Intake = total retained for the month + the targeted
+//     percentage on the other listed metrics.
 //
-// Some of the underlying state IS partly derivable from intake_leads.status
-// today (retained / no_case / attorney_accepted etc.) but combining it into a
-// "retention stat" surface is intentionally deferred — the prompt asked for
-// scaffold, not a half-real surface.
+// What this surface IS NOT (today):
+//   - Real numbers. The retention / per-employee goals backend isn't wired.
+//     EVERY cell renders "—" via PlaceholderValue. NO fabricated values.
+//   - Multi-department aware. The staff-setup model that assigns staffers
+//     to one or more departments isn't built; we default to a single
+//     Intake column. The dual-column LAYOUT is in place — when the
+//     staff-setup feature ships and a staffer carries 2+ department
+//     memberships, the columns side-by-side rendering kicks in
+//     automatically (see TODO inside the bubble body).
+//
+// TODO Phase B — goals + metrics backend wiring:
+//   - Reads from `firm_perf_goals` + `firm_perf_goal_results` (the tables
+//     spec'd in the SuperAdminConsole "Performance Goals" subsection).
+//     The Performance Goals UI is where supervisors / super admins set the
+//     per-employee monthly goals this card displays against.
+//   - Per-staffer department membership (multi) on `staff_members` so the
+//     `departments` array can be built from the viewer's assignments.
+//   - "What's needed" is `Math.max(0, goal_value - current_value)` for
+//     count metrics, `Math.max(0, goal_pct - current_pct)` for percentage
+//     metrics. Today both render "—".
+//
+// Department metric sets — declared at module scope so callers (the future
+// Legal + Accounting dashboards) can extend the registry by adding entries.
+
+type DeptKey = "intake" | "legal" | "accounting";
+
+interface DeptMetricDef {
+  /** Stable key used to look up the metric in the planned firm_perf_metrics table. */
+  key: string;
+  /** Display label inside the column. */
+  label: string;
+  /** True for "show rate" / "no-show rate" style metrics; renders "%" placeholder unit. */
+  isPercentage?: boolean;
+}
+
+interface DeptMetricSet {
+  key: DeptKey;
+  label: string;
+  /** Headline goal description rendered in the column header. */
+  monthlyGoalLabel: string;
+  metrics: DeptMetricDef[];
+}
+
+const INTAKE_METRICS: DeptMetricSet = {
+  key: "intake",
+  label: "Intake",
+  monthlyGoalLabel: "Monthly retained + targeted rates",
+  metrics: [
+    { key: "retained",         label: "Retained" },
+    { key: "show_answer_rate", label: "Show / answer rate", isPercentage: true },
+    { key: "appts_set",        label: "Appointments set" },
+    { key: "presented",        label: "Presented" },
+  ],
+};
+
+// Placeholder registries for Legal + Accounting — `export`ed so the future
+// LegalDepartmentPortal / AccountingPortal department dashboards can import
+// this bubble + these metric sets and mount the same surface with their
+// own data. Today only INTAKE_METRICS is consumed inside this file.
+export const LEGAL_METRICS: DeptMetricSet = {
+  key: "legal",
+  label: "Legal",
+  monthlyGoalLabel: "Monthly case throughput + signing pace",
+  metrics: [
+    { key: "filings_completed", label: "Filings completed" },
+    { key: "doc_review_turn",   label: "Doc-review turn rate", isPercentage: true },
+    { key: "signing_pace",      label: "Signing pace" },
+  ],
+};
+export const ACCOUNTING_METRICS: DeptMetricSet = {
+  key: "accounting",
+  label: "Accounting",
+  monthlyGoalLabel: "Monthly collections + autopay pace",
+  metrics: [
+    { key: "collected",         label: "Collected this month" },
+    { key: "autopay_attach",    label: "Autopay attach rate", isPercentage: true },
+    { key: "retries_resolved",  label: "Retries resolved" },
+  ],
+};
 
 function RetentionBubble() {
+  // TODO Phase B — staff-setup model:
+  //   Read viewer.department_assignments from staff_members. When the
+  //   viewer is assigned to TWO departments, this array has TWO entries
+  //   and the grid below renders them as side-by-side columns automatically.
+  //   Today we default to a single Intake column — no fabricated second
+  //   department, no fake assignment data.
+  //
+  // Example of the future two-department case (do NOT enable today):
+  //   const departments: DeptMetricSet[] =
+  //     viewer.dept_keys.includes("legal")
+  //       ? [INTAKE_METRICS, LEGAL_METRICS]
+  //       : [INTAKE_METRICS];
+  const departments: DeptMetricSet[] = [INTAKE_METRICS];
+
   return (
     <BubbleCard
-      title="Retention Stats"
-      icon={<TrendingUp className="w-4 h-4" />}
+      title="Performance / Goals Report"
+      icon={<Target className="w-4 h-4" />}
       scaffold
     >
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-          <RetentionStat label="Total calls"        value="—" />
-          <RetentionStat label="Appts scheduled"    value="—" />
-          <RetentionStat label="No-show rate"       value="—" />
-          <RetentionStat label="Retained"           value="—" />
-          <RetentionStat label="No case"            value="—" />
-          <RetentionStat label="Presented · not retained" value="—" />
-          <RetentionStat label="Monthly goal"       value="$—" />
-          <RetentionStat label="Avg money down"     value="$—" />
+        {/* Department columns. lg:grid-cols-${N} where N = departments.length;
+            for the single-department case (today) it's a 1-col grid. When
+            the staff-setup model adds a second dept, the same code renders
+            two side-by-side columns at lg+ breakpoints. */}
+        <div
+          className={`grid grid-cols-1 gap-3 ${
+            departments.length >= 2 ? "lg:grid-cols-2" : ""
+          }`}
+        >
+          {departments.map(dept => (
+            <DepartmentGoalColumn key={dept.key} dept={dept} />
+          ))}
         </div>
 
         <div className="rounded border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-2.5 py-2">
-          <div className="flex items-center gap-1.5 mb-1">
-            <Trophy className="w-3 h-3 text-[#6B6B66]" />
-            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
-              Leaderboard
-            </p>
-          </div>
           <p className="text-[11px] text-[#6B6B66] italic leading-snug">
-            Pending — wire the retention/metrics backend to rank staff by
-            retained-client count this month.
+            Numbers + goals populate once the Performance Goals backend lands —
+            see the
+            <span className="text-[#FAFAF7] font-semibold"> Super Admin Setting Portal → Performance Goals</span>
+            {" "}surface where supervisors set per-employee monthly targets.
           </p>
         </div>
       </div>
@@ -3142,13 +3246,54 @@ function RetentionBubble() {
   );
 }
 
-function RetentionStat({ label, value }: { label: string; value: string }) {
+function DepartmentGoalColumn({ dept }: { dept: DeptMetricSet }) {
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="text-[10px] text-[#6B6B66] flex-1 truncate">{label}</span>
-      <PlaceholderValue title="Placeholder — needs retention/metrics backend">
-        {value}
-      </PlaceholderValue>
+    <div className="rounded border border-[#2A2A28] bg-[#0F0F0E] p-3">
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAFAF7]">
+          {dept.label}
+        </span>
+        <span className="text-[9px] uppercase tracking-widest text-[#6B6B66]">
+          {dept.monthlyGoalLabel}
+        </span>
+      </div>
+
+      {/* Header row — Current · Goal · Needed */}
+      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center pb-1 mb-1 border-b border-[#2A2A28]">
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66]" />
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-10">Now</span>
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-10">Goal</span>
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-12">Needed</span>
+      </div>
+
+      <dl>
+        {dept.metrics.map(m => (
+          <GoalMetricRow key={m.key} metric={m} />
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+function GoalMetricRow({ metric }: { metric: DeptMetricDef }) {
+  // Single source of the placeholder copy so the tooltip is consistent
+  // everywhere this surface is reused.
+  const tooltip = "Placeholder — wired by the Performance Goals backend (firm_perf_goals + firm_perf_goal_results).";
+  // For percentage metrics, render "—%" rather than just "—" so the unit
+  // is visible to the reader even before real values land.
+  const dash = metric.isPercentage ? "—%" : "—";
+  return (
+    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center py-0.5">
+      <dt className="text-[10px] text-[#6B6B66] truncate">{metric.label}</dt>
+      <dd className="text-[10px] text-right w-10">
+        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+      </dd>
+      <dd className="text-[10px] text-right w-10">
+        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+      </dd>
+      <dd className="text-[10px] text-right w-12">
+        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+      </dd>
     </div>
   );
 }
@@ -3189,55 +3334,270 @@ function PlaceholderValue({ title, children }: { title: string; children: React.
   );
 }
 
-// ─── Overdue reminder banner ────────────────────────────────────────────────
+// ─── AttentionBubble (red overdue + consolidated affordances) ───────────────
+//
+// REPLACES the old OverdueReminderBanner. Always rendered now; the bubble
+// absorbs items that used to live elsewhere:
+//   - The "You have N overdue tasks — time to reorganize" heading + the
+//     overdue list (KEPT — was OverdueReminderBanner). Heading copy flips
+//     to a calmer line when count === 0.
+//   - "Ask for help" button (NEW — scaffold; opens AskForHelpModal).
+//   - Employee Time Clock compact pill (MOVED here from the dashboard
+//     header row — see the header now mounts only CommsPillBar + the
+//     action buttons).
+//   - Compact unread-by-type messaging summary (MOVED here from the
+//     OverviewBubble — Overview now shows priority breakdown by
+//     RED/ORANGE/YELLOW/BLUE counts).
 //
 // Real count from sharedTasks (filters TaskEntry.due in the past). A task
-// with no due can't be overdue — those rows aren't counted here.
+// with no due can't be overdue.
 //
 // "Time to reorganize" copy is intentionally non-accusatory (matches the
-// dashboard's bubble-2 tone). Wording avoids surveillance framing.
+// dashboard's "supportive, non-surveillance" tone rule).
 
-function OverdueReminderBanner({
-  count, tasks, onJumpToTasks,
+function AttentionBubble({
+  overdueCount, overdueTasks, staffMsgs, clientThreads,
+  timeClock, timeClockActions,
+  onOpenMessagingPanel, onAskForHelp, onRequestTimeOff,
 }: {
-  count: number;
-  tasks: TaskEntry[];
-  onJumpToTasks?: () => void;
+  overdueCount: number;
+  overdueTasks: TaskEntry[];
+  staffMsgs: StaffMessage[];
+  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
+  timeClock: TimeClockState;
+  timeClockActions: TimeClockActions;
+  onOpenMessagingPanel: (view: "messages" | "staff_comms") => void;
+  onAskForHelp: () => void;
+  onRequestTimeOff: (kind: "pto" | "sto") => void;
 }) {
-  if (count <= 0) return null;
-  // Pull up to 3 representative overdue items so the banner shows what's
-  // actually overdue, not just a number. The list is already sorted by the
-  // sharedTasks pipeline — overdue items appear in priority order.
-  const sample = tasks.slice(0, 3);
+  const isHot = overdueCount > 0;
+  // Up to 3 representative overdue items so the bubble shows what's
+  // actually overdue, not just a number.
+  const sample = overdueTasks.slice(0, 3);
+
+  // Unread-by-type counts (moved from OverviewBubble).
+  const sms    = staffMsgs.filter(m => m.channel === "sms").length;
+  const email  = staffMsgs.filter(m => m.channel === "email").length;
+  const team   = staffMsgs.filter(m => m.channel === "phone_note").length;
+  const direct = staffMsgs.filter(m => m.channel === "dm").length;
+  const clientUnread = clientThreads.reduce((s, t) => s + (t.unread_count ?? 0), 0);
+
+  // Container tone — red border + tint when overdue, neutral border when not.
+  const containerCls = isHot
+    ? "rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-4"
+    : "rounded-2xl border border-[#2A2A28] bg-[#1A1A18] px-5 py-4";
+
   return (
-    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-3 flex items-start gap-3">
-      <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-bold text-red-200">
-          You have {count} overdue task{count === 1 ? "" : "s"} — time to reorganize.
-        </p>
-        <ul className="mt-1.5 space-y-0.5">
-          {sample.map(t => (
-            <li key={t.id} className="text-[11px] text-red-200/80 leading-snug">
-              <span className="font-semibold">{t.title}</span>
-              <span className="text-red-300/70"> · {t.subtitle}</span>
-            </li>
-          ))}
-          {tasks.length > sample.length && (
-            <li className="text-[10px] text-red-200/60 italic">
-              + {tasks.length - sample.length} more …
-            </li>
+    <div className={containerCls}>
+      {/* Heading */}
+      <div className="flex items-start gap-3">
+        <AlertCircle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isHot ? "text-red-400" : "text-[#B8945F]"}`} />
+        <div className="flex-1 min-w-0">
+          {isHot ? (
+            <p className="text-sm font-bold text-red-200">
+              You have {overdueCount} overdue task{overdueCount === 1 ? "" : "s"} — time to reorganize.
+            </p>
+          ) : (
+            <p className="text-sm font-bold text-[#FAFAF7]">
+              All caught up — quick actions handy below.
+            </p>
           )}
-        </ul>
-      </div>
-      {onJumpToTasks && (
+          {isHot && (
+            <ul className="mt-1.5 space-y-0.5">
+              {sample.map(t => (
+                <li key={t.id} className="text-[11px] text-red-200/80 leading-snug">
+                  <span className="font-semibold">{t.title}</span>
+                  <span className="text-red-300/70"> · {t.subtitle}</span>
+                </li>
+              ))}
+              {overdueTasks.length > sample.length && (
+                <li className="text-[10px] text-red-200/60 italic">
+                  + {overdueTasks.length - sample.length} more …
+                </li>
+              )}
+            </ul>
+          )}
+        </div>
+        {/* Ask-for-help button — sits in the heading row so it's reachable
+            whether or not the overdue list is present. */}
         <button
-          onClick={onJumpToTasks}
-          className="flex-shrink-0 text-[11px] font-bold text-red-100 bg-red-700/60 hover:bg-red-700 px-2.5 py-1.5 rounded transition-colors"
+          onClick={onAskForHelp}
+          title="Ask a teammate for help — flag a task or lead for reassignment"
+          className={`flex-shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded transition-colors ${
+            isHot
+              ? "text-red-100 bg-red-700/60 hover:bg-red-700"
+              : "text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36]"
+          }`}
         >
-          Reorganize →
+          <Users className="w-3 h-3" /> Ask for help
         </button>
-      )}
+      </div>
+
+      {/* Quick-actions row — Clock + Messaging summary. Two-column on lg+. */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#2A2A28]/60">
+        {/* Clock — reuses the existing ClockBubble compact pill + popup. */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+            Clock
+          </p>
+          <ClockBubble
+            state={timeClock}
+            actions={timeClockActions}
+            onRequestTimeOff={onRequestTimeOff}
+          />
+        </div>
+
+        {/* Compact messaging summary — moved from OverviewBubble. */}
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+            Unread to you
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            <UnreadStat icon={<MessageSquare className="w-3 h-3" />} label="SMS"    value={sms}    onOpen={() => onOpenMessagingPanel("messages")} />
+            <UnreadStat icon={<AtSign className="w-3 h-3" />}        label="Email"  value={email}  onOpen={() => onOpenMessagingPanel("messages")} />
+            <UnreadStat icon={<Users className="w-3 h-3" />}         label="Team"   value={team}   onOpen={() => onOpenMessagingPanel("staff_comms")} />
+            <UnreadStat icon={<Send className="w-3 h-3" />}          label="Direct" value={direct} onOpen={() => onOpenMessagingPanel("staff_comms")} />
+          </div>
+          {clientUnread > 0 && (
+            <button
+              onClick={() => onOpenMessagingPanel("messages")}
+              className="text-[10px] text-[#6B6B66] hover:text-[#FAFAF7] mt-2 leading-snug transition-colors text-left"
+            >
+              Also <span className="font-bold text-[#FAFAF7]">{clientUnread}</span> unread message{clientUnread === 1 ? "" : "s"} across client threads.
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnreadStat({
+  icon, label, value, onOpen,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  onOpen?: () => void;
+}) {
+  return (
+    <button
+      onClick={onOpen}
+      className="flex items-center gap-1.5 text-left hover:text-[#FAFAF7] transition-colors"
+      title={onOpen ? "Open in Messaging" : undefined}
+    >
+      <span className="text-[#6B6B66]">{icon}</span>
+      <span className="text-[10px] text-[#6B6B66] flex-1">{label}</span>
+      <span className={`text-xs font-bold ${value > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{value}</span>
+    </button>
+  );
+}
+
+// ─── AskForHelpModal — SCAFFOLD reassignment-request flow ───────────────────
+//
+// Surfaces from the AttentionBubble's "Ask for help" button. Today's body is
+// a placeholder explaining what the full flow will do — a staffer flags a
+// task or lead for reassignment, picks a teammate (or "any available"),
+// adds a one-line note, and sends. No real send today.
+//
+// TODO Phase B — reassignment request wiring:
+//   - new table `staff_coverage_request (id, firm_id, requested_by,
+//     target_id, target_kind ('task' | 'lead'), reason, assigned_to (nullable),
+//     status, created_at, resolved_at)`
+//   - notify same-department staffers via the existing CommsPillBar /
+//     FloatingChat channels; supervisor surfaces unresolved requests
+//   - the staffer's request appears in the recipient's Up Next as a RED
+//     task until they accept or decline (shares the `requestOpenLead` gate)
+
+function AskForHelpModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Ask for help"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-[#2A2A28] bg-[#1A1A18] shadow-2xl">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#2A2A28]">
+          <Users className="w-4 h-4 text-[#B8945F]" />
+          <h3 className="text-sm font-bold text-[#FAFAF7]">Ask for help</h3>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+            Scaffold
+          </span>
+          <button onClick={onClose} aria-label="Close" className="ml-auto text-[#6B6B66] hover:text-[#FAFAF7]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-[#FAFAF7] leading-relaxed">
+            Need backup on something? Flag a task or lead for reassignment to a teammate —
+            handy when you're stretched thin or stepping out.
+          </p>
+
+          {/* Disabled scaffold form — no submit handler. */}
+          <div className="space-y-2">
+            <label className="block">
+              <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1">
+                What needs help?
+              </span>
+              <select
+                disabled
+                className="w-full bg-[#0F0F0E] border border-[#2A2A28] text-[#6B6B66] text-xs rounded px-2 py-1.5 cursor-not-allowed"
+              >
+                <option>— pick a task or lead —</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1">
+                Assign to
+              </span>
+              <select
+                disabled
+                className="w-full bg-[#0F0F0E] border border-[#2A2A28] text-[#6B6B66] text-xs rounded px-2 py-1.5 cursor-not-allowed"
+              >
+                <option>Any available teammate (default)</option>
+              </select>
+            </label>
+            <label className="block">
+              <span className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1">
+                Quick note (optional)
+              </span>
+              <textarea
+                disabled
+                rows={2}
+                placeholder="Anything the teammate should know?"
+                className="w-full bg-[#0F0F0E] border border-[#2A2A28] text-[#6B6B66] text-xs rounded px-2 py-1.5 cursor-not-allowed placeholder-[#3A3A36]"
+              />
+            </label>
+          </div>
+
+          <div className="rounded-lg border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-2">
+            <p className="text-[11px] text-[#6B6B66] leading-snug">
+              Coming soon — reassignment routing needs the
+              <code className="font-mono text-[#FAFAF7]"> staff_coverage_request </code>
+              table + supervisor escalation if no coverage. The recipient sees the request as
+              a RED task in their Up Next.
+            </p>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="text-xs font-semibold text-[#6B6B66] hover:text-[#FAFAF7] px-3 py-1.5 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              disabled
+              title="Send — wiring pending"
+              className="text-xs font-bold text-[#0F0F0E] bg-[#B8945F]/60 px-3 py-1.5 rounded cursor-not-allowed"
+            >
+              Send request
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

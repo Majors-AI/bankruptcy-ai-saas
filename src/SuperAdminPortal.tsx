@@ -14,6 +14,7 @@ import {
   Lightbulb,
   Filter,
   CheckSquare,
+  Target,
 } from "lucide-react";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -1381,6 +1382,76 @@ export default function SuperAdminPortal() {
           </div>
         </div>
         {/* /Planned-Settings notice */}
+
+        {/*
+          Performance Goals — view-only surface for the productivity-reporting
+          area. The full goal-management UI (custom metrics, per-person
+          quarterly goal form, history chart) lives in the Super Admin
+          Setting Portal (SuperAdminConsole.tsx). This block is the read-only
+          counterpart for productivity reporting.
+
+          Until the goals + results tables exist (see SuperAdminConsole's
+          TODO list), the chart frame renders with an explicit empty state.
+          NO fabricated bars.
+        */}
+        <div className="border border-[#B8945F]/30 bg-[#B8945F]/5 rounded-2xl px-5 py-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Target size={16} className="text-[#B8945F] mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs font-bold text-[#FAFAF7] uppercase tracking-widest">
+                  Performance Goals — view only here
+                </p>
+                <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+                  Scaffold
+                </span>
+              </div>
+              <p className="text-sm text-slate-300 leading-relaxed mt-1">
+                Department supervisors + super admins set goals in the
+                <span className="font-semibold text-white"> Super Admin Setting Portal</span>.
+                This area is where productivity reporting will show how each goal is tracking.
+              </p>
+
+              {/* Empty-state chart frame — matches the Setting Portal chart's
+                  layout so the read-only consumer sees a familiar shape. */}
+              <div className="mt-3 rounded-lg border border-slate-800 bg-[#0d1221] overflow-hidden">
+                <div className="flex items-end px-4 pt-5 pb-3" style={{ height: 160 }}>
+                  <div className="h-full flex flex-col justify-between pr-2">
+                    <span className="text-[9px] text-slate-700">—</span>
+                    <span className="text-[9px] text-slate-700">—</span>
+                    <span className="text-[9px] text-slate-700">0</span>
+                  </div>
+                  <div className="flex-1 border-l border-b border-slate-800 flex items-center justify-center">
+                    <div className="text-center">
+                      <BarChart2 className="w-5 h-5 text-slate-700 mx-auto mb-1" />
+                      <p className="text-[11px] text-slate-500 italic">No goal data yet.</p>
+                      <p className="text-[10px] text-slate-600 mt-0.5 leading-snug max-w-xs">
+                        {/* TODO Phase B — bind to the goals + results tables
+                            spec'd in SuperAdminConsole's Performance Goals
+                            block; year filter + employee/metric selectors
+                            mirror that surface. */}
+                        Wire the metrics backend + close one quarter to populate.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center px-4 pb-2 pl-10">
+                  {(["Q1", "Q2", "Q3", "Q4"] as const).map(q => (
+                    <span key={q} className="flex-1 text-center text-[10px] font-semibold uppercase tracking-widest text-slate-600">
+                      {q}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-slate-500 italic mt-3 leading-snug">
+                Reference only — productivity-reporting consumers see this view-only
+                surface. Set + adjust controls live in the Super Admin Setting Portal.
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* /Performance Goals notice */}
 
         {/* Summary Row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">

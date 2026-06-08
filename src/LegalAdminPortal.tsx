@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circle, AlertTriangle, ChevronRight, RefreshCw, Plus, X, Send, Search, Filter, ChevronDown, Bot, UserCheck, FileText, DollarSign, Scale, MapPin, ArrowRight, Flag, Zap, Info, CreditCard as Edit3, Save, Eye, Briefcase, Hash, CheckCheck, PenLine, Star, TrendingUp, BarChart2, ArrowLeft, Shield, Mic, ChevronLeft, Building, Car, PiggyBank, CreditCard, Home, User, Trash2, Play, PhoneCall, PhoneMissed, PhoneOutgoing, MailCheck, MessageCircle, ListChecks, Import as SortAsc, BellRing, BellOff, Inbox, Thermometer } from "lucide-react";
 import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
 import CaseAcceptanceFlow, { AcceptanceData as CaseAcceptanceData } from "./components/CaseAcceptanceFlow";
@@ -7,7 +8,12 @@ import { mapIntakePortalRoleToPlatformRole, canAcceptCase } from "./lib/auth";
 import { getFirmFeatures } from "./lib/featureFlags";
 import NewClientModal from "./admin/NewClientModal";
 import { supabase } from "./lib/supabase";
-import IntakeDashboard from "./components/intake-dashboard/IntakeDashboard";
+import IntakeDashboard, {
+  ConsolidatedMessagingWidget,
+  type ClientMessageThread as DashClientMessageThread,
+  type ClientMessage as DashClientMessage,
+  type StaffMessage as DashStaffMessage,
+} from "./components/intake-dashboard/IntakeDashboard";
 import StaffGuidedIntake from "./components/intake-script/StaffGuidedIntake";
 import NewLeadInline from "./components/intake-new-lead/NewLeadInline";
 import ConsultSchedulerPanel, {
@@ -4730,13 +4736,17 @@ function TimeOffTab({ timeOff, onRefresh }: { timeOff: TimeOff[]; onRefresh: () 
 //   - mirror IAmSickButton flow for family-emergency reason_type
 
 function MyScheduleTab({
-  session, timeOff, availability, canEdit, onRefresh,
+  session, timeOff, availability, canEdit, onRefresh, isSuperAdmin,
 }: {
   session: PortalSession;
   timeOff: TimeOff[];
   availability: StaffAvailability[];
   canEdit: boolean;
   onRefresh: () => void;
+  /** Drives whether the Out-of-Office (super-admin sick overrides) panel
+   *  is mounted at the bottom. Replaces the standalone "Out-of-Office"
+   *  nav entry that was removed in the nav rework. */
+  isSuperAdmin: boolean;
 }) {
   const [familyOpen, setFamilyOpen] = useState(false);
   return (
@@ -4792,8 +4802,295 @@ function MyScheduleTab({
         <AvailabilityTab availability={availability} onRefresh={onRefresh} canEdit={canEdit} />
       </div>
 
+      {/* Out-of-Office (super admin only) — was a standalone nav tab; the
+          nav rework hides that entry and mounts the panel HERE so the
+          super-admin's sick-override admin still has a home inside My
+          Schedule. Panel code is unchanged. */}
+      {isSuperAdmin && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-sm leading-none">🤒</span>
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Out-of-Office (super admin)</p>
+          </div>
+          <SuperAdminSickPanel onRefresh={onRefresh} />
+        </div>
+      )}
+
       {familyOpen && (
         <FamilyEmergencyModal session={session} onClose={() => setFamilyOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+// ─── MessagingTabView — full-page Messages nav surface ──────────────────────
+//
+// Reuses the dashboard's `ConsolidatedMessagingWidget` verbatim — same
+// component instance, same data shape, just mounted at the tab level so
+// staff can work the inbox without leaving the portal. Fetch mirrors the
+// dashboard's fetch (one-off on mount; Realtime push is a TODO listed
+// elsewhere).
+
+function MessagingTabView({
+  session, onOpenView,
+}: {
+  session: PortalSession;
+  onOpenView: (view: "messages" | "staff_comms") => void;
+}) {
+  const [threads, setThreads] = useState<(DashClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[]>([]);
+  const [staffMsgs, setStaffMsgs] = useState<DashStaffMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [tRows, sRows] = await Promise.all([
+          sbGet<DashClientMessageThread>(`client_message_threads?order=last_message_at.desc.nullslast,updated_at.desc&limit=20`),
+          sbGet<DashStaffMessage>(`staff_messages?recipient_id=eq.${session.id}&order=created_at.desc&limit=20`),
+        ]);
+        if (cancelled) return;
+        const clientIds = tRows.map(t => t.client_id).filter(Boolean);
+        const threadIds = tRows.map(t => t.id);
+        const [clients, latestMsgs] = await Promise.all([
+          clientIds.length
+            ? sbGet<{ id: string; name: string }>(`clients?id=in.(${clientIds.join(",")})&select=id,name`)
+            : Promise.resolve([] as { id: string; name: string }[]),
+          threadIds.length
+            ? sbGet<DashClientMessage>(`client_messages?thread_id=in.(${threadIds.join(",")})&select=id,thread_id,body,channel,sender_role,sender_name,created_at&order=created_at.desc&limit=${threadIds.length * 3}`)
+            : Promise.resolve([] as DashClientMessage[]),
+        ]);
+        if (cancelled) return;
+        const nameById = new Map(clients.map(c => [c.id, c.name]));
+        const firstByThread = new Map<string, DashClientMessage>();
+        for (const m of latestMsgs) if (!firstByThread.has(m.thread_id)) firstByThread.set(m.thread_id, m);
+        setThreads(tRows.map(t => ({
+          ...t,
+          client_name: nameById.get(t.client_id) ?? "Client",
+          preview: firstByThread.get(t.id)?.body ?? "",
+          last_channel: firstByThread.get(t.id)?.channel ?? null,
+        })));
+        setStaffMsgs(sRows);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session.id]);
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm font-bold text-white">Messages</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Same tabbed inbox the dashboard's messaging panel shows — full-width here.
+        </p>
+      </div>
+      <ConsolidatedMessagingWidget
+        threads={threads}
+        staffMsgs={staffMsgs}
+        loading={loading}
+        onOpenView={onOpenView}
+      />
+    </div>
+  );
+}
+
+// ─── StaffMemberTasksPage — full per-staffer task page ──────────────────────
+//
+// Resolved + outstanding tasks for the current viewer + a metrics row. Real
+// task counts come from the existing `leads` array (status-based buckets);
+// the work-metrics row is SCAFFOLD with `—` placeholders until the metrics
+// backend (firm_perf_metrics + firm_perf_goal_results — spec'd in
+// SuperAdminConsole's Performance Goals subsection) is wired.
+//
+// Reachable from the new "My Tasks" nav tab AND a link in the dashboard's
+// AllTasksWidget header.
+
+function StaffMemberTasksPage({
+  session, leads, onOpenLead,
+}: {
+  session: PortalSession;
+  leads: Lead[];
+  onOpenLead: (lead: Lead) => void;
+}) {
+  // Outstanding — leads with an active status that this staffer either
+  // owns (assigned_name matches) OR isn't yet assigned to anyone. The
+  // "own + unclaimed" rule matches the shared-pool semantics on the dashboard.
+  const OUTSTANDING_STATUSES = new Set<string>([
+    "new", "contacted", "consultation_scheduled", "consultation_complete",
+    "intake_in_progress", "intake_complete", "sent_for_attorney_review",
+    "attorney_accepted", "fee_quoted",
+  ]);
+  const RESOLVED_STATUSES = new Set<string>([
+    "retained", "declined", "no_case", "no_show",
+  ]);
+
+  const outstanding = leads.filter(l =>
+    OUTSTANDING_STATUSES.has(l.status) &&
+    (l.assigned_name === session.name || !l.assigned_name)
+  ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+  const resolved = leads.filter(l =>
+    RESOLVED_STATUSES.has(l.status) &&
+    l.assigned_name === session.name
+  ).sort((a, b) =>
+    new Date(b.retained_at ?? b.created_at).getTime() -
+    new Date(a.retained_at ?? a.created_at).getTime()
+  );
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <p className="text-sm font-bold text-white">My Tasks — {session.name}</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Your outstanding + resolved tasks, plus work-metrics scaffolds. Counts come
+          from active leads in <code className="font-mono">intake_leads</code>; full
+          metrics arrive with the Performance Goals backend.
+        </p>
+      </div>
+
+      {/* Metrics row — SCAFFOLD. No fabricated numbers. */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+        <StaffMetricCard label="Outstanding" value={String(outstanding.length)} kind="real" />
+        <StaffMetricCard label="Resolved"    value={String(resolved.length)}    kind="real" />
+        <StaffMetricCard label="Calls today"  value="—" kind="scaffold"
+          tooltip="Needs intake_contact_log roll-up + the firm_perf_metrics 'calls' source_query." />
+        <StaffMetricCard label="Appts set"    value="—" kind="scaffold"
+          tooltip="Needs status-transition log (consultation_scheduled events attributed to this staffer)." />
+        <StaffMetricCard label="Presented"    value="—" kind="scaffold"
+          tooltip="Needs status-transition log (attorney_accepted → fee_quoted events attributed to this staffer)." />
+        <StaffMetricCard label="Retained MTD" value="—" kind="scaffold"
+          tooltip="Needs intake_leads.retained_at + month-window rollup attributed to this staffer." />
+      </div>
+
+      {/* Outstanding section */}
+      <StaffTaskSection
+        title="Outstanding"
+        count={outstanding.length}
+        emptyLabel="Nothing outstanding right now."
+        leads={outstanding}
+        onOpenLead={onOpenLead}
+        session={session}
+        showWhen={false}
+      />
+
+      {/* Resolved section */}
+      <StaffTaskSection
+        title="Resolved"
+        count={resolved.length}
+        emptyLabel="No resolved leads recorded for you yet."
+        leads={resolved}
+        onOpenLead={onOpenLead}
+        session={session}
+        showWhen
+      />
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        {/* TODO Phase B — metrics + period selectors:
+            - Period picker (today / week / month / quarter) once the
+              metrics backend supports time windows
+            - "Calls", "Appts set", "Presented" fed by firm_perf_metrics
+              with the source_query allow-listed validator
+            - "Retained MTD" pulled from a nightly rollup of
+              intake_leads.retained_at attributed to staff_id */}
+        Real outstanding + resolved counts come from <code className="font-mono">intake_leads.status</code> + <code className="font-mono">assigned_name</code> today. Work metrics light up when the Performance Goals backend lands.
+      </p>
+    </div>
+  );
+}
+
+function StaffMetricCard({
+  label, value, kind, tooltip,
+}: { label: string; value: string; kind: "real" | "scaffold"; tooltip?: string }) {
+  const isScaffold = kind === "scaffold";
+  return (
+    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-3">
+      <div className="flex items-center justify-between mb-1">
+        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest truncate">{label}</p>
+        {isScaffold && (
+          <span className="text-[8px] font-semibold uppercase tracking-widest text-slate-600 border border-slate-700 rounded px-1 py-0.5">
+            Scaffold
+          </span>
+        )}
+      </div>
+      <p
+        className={`text-xl font-mono ${isScaffold ? "text-slate-600 italic" : "text-white"}`}
+        title={tooltip}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function StaffTaskSection({
+  title, count, emptyLabel, leads, onOpenLead, session, showWhen,
+}: {
+  title: string;
+  count: number;
+  emptyLabel: string;
+  leads: Lead[];
+  onOpenLead: (lead: Lead) => void;
+  session: PortalSession;
+  /** True for the Resolved section — shows retained_at / last update timestamp. */
+  showWhen: boolean;
+}) {
+  const sc = (s: string) => STATUS_CONFIG[s] ?? STATUS_CONFIG["new"];
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">{title}</p>
+        <span className="text-[10px] font-mono text-slate-600">{count}</span>
+      </div>
+      {leads.length === 0 ? (
+        <div className="bg-[#0d1221] border border-slate-800 rounded-2xl py-8 text-center">
+          <p className="text-xs text-slate-500 italic">{emptyLabel}</p>
+        </div>
+      ) : (
+        <ul className="space-y-1.5">
+          {leads.slice(0, 20).map(l => {
+            const cfg = sc(l.status);
+            const locked = isClaimedByOther(l, session.id);
+            return (
+              <li key={l.id}>
+                <button
+                  onClick={() => { if (!locked) onOpenLead(l); }}
+                  disabled={locked}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl border transition-colors text-left ${
+                    locked
+                      ? "bg-slate-800/15 border-slate-700/30 opacity-60 cursor-not-allowed"
+                      : "bg-slate-800/30 hover:bg-slate-800/60 border-slate-700/40"
+                  }`}
+                >
+                  <div className="w-7 h-7 rounded-lg bg-slate-700/60 flex items-center justify-center flex-shrink-0 text-xs font-bold text-slate-300">
+                    {l.full_name.charAt(0)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-white truncate">{l.full_name}</p>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${cfg.color} ${cfg.bg}`}>{cfg.label}</span>
+                      {l.chapter_interest && <span className="text-[9px] text-slate-500">Ch.{l.chapter_interest}</span>}
+                      <LeadClaimBadge lead={l} currentSessionId={session.id} size="xs" />
+                    </div>
+                    <p className="text-[10px] text-slate-500 mt-0.5 truncate">
+                      {l.phone ?? l.email ?? "—"}
+                      {showWhen && (l.retained_at || l.last_contact_at) && (
+                        <span> · {timeAgo(l.retained_at ?? l.last_contact_at ?? l.created_at)}</span>
+                      )}
+                    </p>
+                  </div>
+                  <ChevronRight className="w-3 h-3 text-slate-700 flex-shrink-0" />
+                </button>
+              </li>
+            );
+          })}
+          {leads.length > 20 && (
+            <li className="text-[10px] text-slate-600 italic px-3 py-1">
+              + {leads.length - 20} more — refine via the Leads tab filters.
+            </li>
+          )}
+        </ul>
       )}
     </div>
   );
@@ -6818,6 +7115,29 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clockState.clockedInAt]);
 
+  // Idle warning overlay — rendered via createPortal so it sits ABOVE
+  // every IntakePortalInner return path (presentation, new-lead window,
+  // guided intake, selected lead detail, AND the main portal). Previously
+  // only the main return mounted the modal, so a staffer in a full-screen
+  // flow could be auto-logged-out without seeing the 60s warning + dismiss
+  // affordance — losing in-progress work. The auto-logout still only fires
+  // AFTER this modal has been on screen for the countdown (the tick loop in
+  // the watcher above checks idleMs >= IDLE_LOGOUT_AT_MS independently).
+  //
+  // Including {idleWarningOverlay} as a sibling in each early-return path
+  // is safe even when idleWarning is false (overlay is null and renders
+  // nothing). createPortal anchors to document.body so the visual layer is
+  // independent of which return path's JSX it sits in.
+  const idleWarningOverlay = idleWarning
+    ? createPortal(
+        <IdleWarningModal
+          onStillHere={() => { lastActivityRef.current = Date.now(); setIdleWarning(false); }}
+          onLogoutNow={() => { clearClockState(); onLogout(); }}
+        />,
+        document.body,
+      )
+    : null;
+
   const [leads, setLeads]             = useState<Lead[]>([]);
   const [acceptances, setAcceptances] = useState<Acceptance[]>([]);
   const [calEvents, setCalEvents]     = useState<CalEvent[]>([]);
@@ -6857,7 +7177,11 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // "availability" + "timeoff" were consolidated into "my_schedule"; the
   // union keeps the historical values as safe fallbacks for any external
   // caller passing a stale tab id.
-  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+  // "messages" + "staff_tasks" added with the nav rework. "sick_admin" is
+  // kept in the union as a fallback target — its nav entry was hidden and
+  // the panel moved INSIDE MyScheduleTab, but the standalone render branch
+  // still works if anything routes to it programmatically.
+  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "messages" | "staff_tasks" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
   // Leads tab now contains both the lead table view and the Follow-Up
   // pipeline (FollowUpQueue) as a sub-section. The standalone Follow-Up
   // tab was removed for legal_admin/super_admin; attorneys still see it
@@ -7038,14 +7362,17 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
       accepted_by:           pAcc.attorney_name ?? session.name,
     };
     return (
-      <CaseAcceptanceFlow
-        clientId={pLead.id}
-        clientName={pLead.full_name}
-        acceptanceData={accData}
-        onCompleted={() => { setPresentationContext(null); load(); }}
-        onDefer={() => { setPresentationContext(null); load(); }}
-        currentUserRole={mapIntakePortalRoleToPlatformRole(session.role)}
-      />
+      <>
+        <CaseAcceptanceFlow
+          clientId={pLead.id}
+          clientName={pLead.full_name}
+          acceptanceData={accData}
+          onCompleted={() => { setPresentationContext(null); load(); }}
+          onDefer={() => { setPresentationContext(null); load(); }}
+          currentUserRole={mapIntakePortalRoleToPlatformRole(session.role)}
+        />
+        {idleWarningOverlay}
+      </>
     );
   }
 
@@ -7053,6 +7380,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // and the leads table for the duration of the new-caller capture.
   if (newLeadWindow) {
     return (
+      <>
       <NewLeadInline
         session={session}
         calEvents={calEvents}
@@ -7079,6 +7407,8 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           load();
         }}
       />
+      {idleWarningOverlay}
+      </>
     );
   }
 
@@ -7086,53 +7416,59 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // it pre-empts the lead detail panel for the duration of the intake call.
   if (guidedIntakeLead) {
     return (
-      <StaffGuidedIntake
-        lead={guidedIntakeLead}
-        session={session}
-        onExit={() => setGuidedIntakeLead(null)}
-        onSubmitted={(_submissionId) => {
-          // Drop into the lead detail panel for the same lead so the staffer
-          // can take the next action (send for review, schedule, mark fee
-          // quoted, etc.) without re-finding the lead in the queue.
-          setSelectedLead(guidedIntakeLead);
-          setGuidedIntakeLead(null);
-          load();
-        }}
-      />
+      <>
+        <StaffGuidedIntake
+          lead={guidedIntakeLead}
+          session={session}
+          onExit={() => setGuidedIntakeLead(null)}
+          onSubmitted={(_submissionId) => {
+            // Drop into the lead detail panel for the same lead so the staffer
+            // can take the next action (send for review, schedule, mark fee
+            // quoted, etc.) without re-finding the lead in the queue.
+            setSelectedLead(guidedIntakeLead);
+            setGuidedIntakeLead(null);
+            load();
+          }}
+        />
+        {idleWarningOverlay}
+      </>
     );
   }
 
   if (selectedLead) {
     return (
-      <div className="min-h-screen bg-[#090e1a] text-white">
-        <div className="sticky top-0 z-30 bg-[#090e1a]/95 backdrop-blur border-b border-slate-800 px-6 py-4">
-          <div className="max-w-screen-xl mx-auto flex items-center gap-4">
-            <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
-              <Briefcase className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-none">Intake Portal</h1>
-              <p className="text-xs text-slate-500 mt-0.5">{selectedLead.full_name}</p>
-            </div>
-            <div className="ml-auto">
-              <button onClick={load} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
+      <>
+        <div className="min-h-screen bg-[#090e1a] text-white">
+          <div className="sticky top-0 z-30 bg-[#090e1a]/95 backdrop-blur border-b border-slate-800 px-6 py-4">
+            <div className="max-w-screen-xl mx-auto flex items-center gap-4">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center flex-shrink-0">
+                <Briefcase className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div>
+                <h1 className="text-base font-bold text-white leading-none">Intake Portal</h1>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedLead.full_name}</p>
+              </div>
+              <div className="ml-auto">
+                <button onClick={load} className="p-1.5 rounded-lg text-slate-500 hover:text-white hover:bg-slate-800 transition-colors">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
+          <div className="max-w-screen-xl mx-auto px-6 py-6">
+            <LeadDetailPanel
+              lead={selectedLead}
+              acceptance={getAcceptance(selectedLead.id)}
+              session={session}
+              onBack={() => setSelectedLead(null)}
+              onRefresh={load}
+              onLaunchGuidedIntake={(l) => { setSelectedLead(null); setGuidedIntakeLead(l); }}
+              onLaunchPresentation={(lead, acc, sub) => setPresentationContext({ lead, acceptance: acc, submission: sub })}
+            />
+          </div>
         </div>
-        <div className="max-w-screen-xl mx-auto px-6 py-6">
-          <LeadDetailPanel
-            lead={selectedLead}
-            acceptance={getAcceptance(selectedLead.id)}
-            session={session}
-            onBack={() => setSelectedLead(null)}
-            onRefresh={load}
-            onLaunchGuidedIntake={(l) => { setSelectedLead(null); setGuidedIntakeLead(l); }}
-            onLaunchPresentation={(lead, acc, sub) => setPresentationContext({ lead, acceptance: acc, submission: sub })}
-          />
-        </div>
-      </div>
+        {idleWarningOverlay}
+      </>
     );
   }
 
@@ -7169,7 +7505,17 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
       ? [{ id: "followup" as const, label: "Review Queue", icon: <BellRing className="w-3.5 h-3.5" />, badge: (reviewQueue.length + feeQuotedLeads.length) || null }]
       : []),
     { id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null },
+    // Messages — opens the same ConsolidatedMessagingWidget the dashboard
+    // mounts, full-width here so staff can work the inbox without leaving
+    // the portal.
+    { id: "messages" as const,     label: "Messages",     icon: <MessageCircle className="w-3.5 h-3.5" />, badge: null },
+    // My Tasks — staff-member task page (resolved + outstanding tasks for
+    // the viewer). Also reachable via a link in the dashboard's AllTasks
+    // widget header.
+    { id: "staff_tasks" as const,  label: "My Tasks",     icon: <ListChecks className="w-3.5 h-3.5" />, badge: null },
     // My Schedule consolidates the prior "Availability" + "Time Off" tabs.
+    // The Out-of-Office surface (SuperAdminSickPanel) previously had its own
+    // nav entry; it now lives INSIDE this tab (super-admin gated).
     // Pending-approval count surfaces as the nav badge so the user notices
     // outstanding requests.
     ...( canManageLeads || isSuperAdmin
@@ -7180,7 +7526,9 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null,
         }]
       : []),
-    ...(isSuperAdmin ? [{ id: "sick_admin" as const, label: "Out-of-Office", icon: <span className="text-sm leading-none">🤒</span>, badge: null }] : []),
+    // sick_admin nav entry intentionally removed — the panel is mounted
+    // inside MyScheduleTab below for super admins. Render branch retained
+    // as a defensive fallback.
   ];
 
   return (
@@ -7599,7 +7947,9 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           <CalendarTab events={calEvents} leads={leads} timeOff={timeOff} availability={availability} staffMembers={staffMembers} onRefresh={load} />
         )}
 
-        {/* ── MY SCHEDULE TAB (consolidates the prior Availability + Time Off tabs) ── */}
+        {/* ── MY SCHEDULE TAB (consolidates Availability + Time Off; also
+              mounts the super-admin Out-of-Office panel after the nav
+              rework hid that standalone entry) ── */}
         {activeTab === "my_schedule" && (
           <MyScheduleTab
             session={session}
@@ -7607,6 +7957,23 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
             availability={availability}
             canEdit={isSuperAdmin}
             onRefresh={load}
+            isSuperAdmin={isSuperAdmin}
+          />
+        )}
+
+        {/* ── MESSAGES TAB ── opens the same tabbed Messaging panel the
+              dashboard widget uses, full-width here. */}
+        {activeTab === "messages" && (
+          <MessagingTabView session={session} onOpenView={onOpenView ?? (() => {})} />
+        )}
+
+        {/* ── MY TASKS TAB ── per-staffer task page (resolved + outstanding).
+              Also reachable from the dashboard's AllTasksWidget header link. */}
+        {activeTab === "staff_tasks" && (
+          <StaffMemberTasksPage
+            session={session}
+            leads={leads}
+            onOpenLead={(l) => requestOpenLead(l)}
           />
         )}
 
@@ -7750,17 +8117,12 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
         onOpenMessagingPanel={onOpenView ?? (() => {})}
       />
 
-      {/* Idle warning — fires the warning at ~14 min, auto-logout at ~15 min.
-          Only rendered in the main portal return today; the specialized
-          full-screen flows (presentation / new lead / guided intake / lead
-          detail) sit above without the warning modal — TODO if those become
-          common idle surfaces, lift this into a portal-rooted overlay. */}
-      {idleWarning && (
-        <IdleWarningModal
-          onStillHere={() => { lastActivityRef.current = Date.now(); setIdleWarning(false); }}
-          onLogoutNow={() => { clearClockState(); onLogout(); }}
-        />
-      )}
+      {/* Idle warning — uses the same {idleWarningOverlay} variable that the
+          full-screen flows (presentation / new lead / guided intake /
+          selected lead) include, so the 14-min warning + 60s countdown +
+          "I'm here" dismiss reach the staffer on every screen now. The
+          overlay itself is a createPortal anchor (see IntakePortalInner). */}
+      {idleWarningOverlay}
     </div>
   );
 }
