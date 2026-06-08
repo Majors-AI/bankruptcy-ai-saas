@@ -1,5 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { DollarSign, Users, TrendingUp, FileText, Plus, Check, X, AlertTriangle, CheckCircle2, Clock, RefreshCw, Scale, CreditCard as Edit2, Unlock, BarChart2, Search, ArrowUpRight, CreditCard, Building, Landmark, ChevronUp, ChevronDown, ChevronRight, Info, Banknote, Receipt, Bell, ArrowLeftRight, Shield, Eye, EyeOff, Bot, MessageSquare, Ban, RotateCcw, Zap, Calendar, WifiOff, TrendingDown, SendHorizontal as SendHorizonal, ClipboardList, History, BadgeDollarSign, ArrowRightLeft, CheckSquare, Square, Vault, PauseCircle, UserPlus, Pencil, Trash2, UserCheck, XCircle, UserX } from "lucide-react";
+import { DollarSign, Users, TrendingUp, FileText, Plus, Check, X, AlertTriangle, CheckCircle2, Clock, RefreshCw, Scale, CreditCard as Edit2, Unlock, BarChart2, Search, ArrowUpRight, CreditCard, Building, Landmark, ChevronUp, ChevronDown, ChevronRight, Info, Banknote, Receipt, Bell, ArrowLeftRight, Shield, Eye, EyeOff, Bot, MessageSquare, Ban, RotateCcw, Zap, Calendar, WifiOff, TrendingDown, SendHorizontal as SendHorizonal, ClipboardList, History, BadgeDollarSign, ArrowRightLeft, CheckSquare, Square, Vault, PauseCircle, UserPlus, Pencil, Trash2, UserCheck, XCircle, UserX, LogOut, ListChecks } from "lucide-react";
+import DepartmentPortalLogin, {
+  classifyAccountingStaff,
+  type DepartmentPortalSession,
+} from "./components/department-portal/DepartmentPortalLogin";
+import DepartmentTaskBoard, {
+  ACCOUNTING_TASK_STUBS,
+} from "./components/department-portal/DepartmentTaskBoard";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -434,7 +441,7 @@ interface HoldRequest {
   created_at: string;
 }
 
-type TabId = "clients" | "accounts" | "filed" | "cancellations" | "trust_hub" | "reports" | "collections";
+type TabId = "tasks" | "clients" | "accounts" | "filed" | "cancellations" | "trust_hub" | "reports" | "collections";
 
 // ─── Collections types ────────────────────────────────────────────────────────
 
@@ -10701,7 +10708,10 @@ function CollectionsView({ adminUser }: { adminUser: string | null }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function AccountingPortal() {
-  const [tab, setTab]                   = useState<TabId>("clients");
+  // Department entry gate — staff-pick + 4-digit PIN, mirrors the Intake
+  // Portal's login pattern. Shared dev PIN; see DepartmentPortalLogin.tsx.
+  const [session, setSession] = useState<DepartmentPortalSession | null>(null);
+  const [tab, setTab]                   = useState<TabId>("tasks");
   const [clients, setClients]           = useState<AClient[]>([]);
   const [feeStructures, setFeeStructures] = useState<FeeStructure[]>([]);
   const [payments, setPayments]         = useState<Payment[]>([]);
@@ -10802,6 +10812,7 @@ export default function AccountingPortal() {
   const pendingBatchCount     = batchRequests.filter(b => b.status === "pending_approval" || b.status === "approved").length;
 
   const TABS: { id: TabId; label: string; icon: JSX.Element; badge?: number; superAdminOnly?: boolean; adminOnly?: boolean }[] = [
+    { id: "tasks",         label: "Tasks",         icon: <ListChecks className="w-3.5 h-3.5" /> },
     { id: "clients",       label: "Clients",       icon: <Users className="w-3.5 h-3.5" />, badge: (activeRetryCount + openLifecycleAlerts) || undefined },
     { id: "cancellations", label: "Cancellations", icon: <Ban className="w-3.5 h-3.5" />, badge: (pendingCancelCount + pendingCancelTasks + pendingRefunds) || undefined },
     { id: "collections",   label: "Collections",   icon: <TrendingDown className="w-3.5 h-3.5" /> },
@@ -10809,6 +10820,20 @@ export default function AccountingPortal() {
     { id: "trust_hub",     label: "Trust Hub",     icon: <Vault className="w-3.5 h-3.5" />, badge: (readyForTransferCount + pendingBatchCount) || undefined, superAdminOnly: true },
     { id: "reports",       label: "Reports",       icon: <BarChart2 className="w-3.5 h-3.5" />, superAdminOnly: true },
   ];
+
+  // Entry gate — must complete before the portal renders.
+  if (!session) {
+    return (
+      <DepartmentPortalLogin
+        title="Accounting Portal"
+        subtitle="Accounting Admin · Accounting Manager"
+        classifyStaff={classifyAccountingStaff}
+        onLogin={s => setSession(s)}
+        accent="#B91C1C"
+        emptyHint="No accounting-department staff configured yet. Add accounting staff in Super Admin (role = 'accounting')."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg-base)] text-[var(--text-primary)]" style={{ fontFamily: "'Inter', 'Trebuchet MS', sans-serif" }}>
@@ -10872,6 +10897,21 @@ export default function AccountingPortal() {
             <button onClick={() => setShowAddClient(true)} className="flex items-center gap-1.5 bg-red-700 hover:bg-red-800 text-white font-bold text-xs px-3.5 py-2 rounded-xl transition-all shadow-sm shadow-red-700/20">
               <Plus className="w-3.5 h-3.5" /> Add Client
             </button>
+
+            {/* Session identity + sign out — from the department portal gate. */}
+            <div className="hidden md:flex items-center gap-2 pl-2 border-l border-[var(--border)]">
+              <div className="text-right">
+                <p className="text-xs font-semibold text-[var(--text-primary)] leading-none">{session.name}</p>
+                <p className="text-[10px] text-[var(--text-muted)] mt-1">{session.user_type}</p>
+              </div>
+              <button
+                onClick={() => setSession(null)}
+                title="Sign out"
+                className="flex items-center gap-1 text-xs font-semibold text-[var(--text-muted)] hover:text-[var(--text-primary)] border border-[var(--border)] hover:border-[var(--border-strong)] px-2.5 py-1.5 rounded-xl transition-colors"
+              >
+                <LogOut className="w-3 h-3" /> Sign out
+              </button>
+            </div>
           </div>
         </div>
 
@@ -10901,6 +10941,16 @@ export default function AccountingPortal() {
           <div className="flex items-center gap-3 text-[var(--text-muted)]">
             <RefreshCw className="w-5 h-5 animate-spin" />
             <span className="text-sm">Loading…</span>
+          </div>
+        </div>
+      ) : tab === "tasks" ? (
+        <div className="flex-1 overflow-auto p-6">
+          <div className="max-w-3xl mx-auto">
+            <DepartmentTaskBoard
+              session={session}
+              tasksByUserType={ACCOUNTING_TASK_STUBS}
+              accent="#B91C1C"
+            />
           </div>
         </div>
       ) : tab === "reports" ? (

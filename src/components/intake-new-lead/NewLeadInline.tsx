@@ -27,6 +27,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft, AlertCircle, Calendar, PhoneCall, Plus, RefreshCw, UserCheck, Users,
+  Ban, ExternalLink,
 } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import ConsultSchedulerPanel, {
@@ -37,6 +38,7 @@ import ConsultSchedulerPanel, {
 import {
   firmSettings, availableModalities, modalityLabel, ConsultModality,
 } from "../../lib/firmSettings";
+import ClientSearchBar, { normalizePhone, type ClientSearchLead } from "../client-search/ClientSearchBar";
 
 // TODO firm-aware refactor: read state from firms.state when available.
 const DEFAULT_FIRM_STATE = "AZ";
@@ -70,6 +72,19 @@ interface NewLeadInlineProps {
   session: PortalSession;
   /** Calendar events visible to the parent — drives load + imminent-appt detection. */
   calEvents: CalEvent[];
+  /**
+   * In-memory leads list from the parent — feeds the search bar at the top
+   * of the new-lead window. Optional: when omitted, the search bar still
+   * renders but matches against an empty array (it's only a discovery aid).
+   */
+  existingLeads?: ClientSearchLead[];
+  /**
+   * Open an existing client/lead record by id (from the search bar or the
+   * dedup blocking banner). Wires to the parent's "show lead detail" flow.
+   * Optional: when omitted, the search bar and "Open existing record"
+   * button are inert (matched rows display read-only).
+   */
+  onOpenExistingLead?: (leadId: string) => void;
   onExit: () => void;
   /** Bounces to the lead detail panel for the just-created lead. */
   onSaved: (leadId: string) => void;
@@ -84,7 +99,10 @@ interface NewLeadInlineProps {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function NewLeadInline({
-  session, calEvents, onExit, onSaved, onDoIntakeNow,
+  session, calEvents,
+  existingLeads = [],
+  onOpenExistingLead,
+  onExit, onSaved, onDoIntakeNow,
 }: NewLeadInlineProps) {
   // ── Form state ────────────────────────────────────────────────────────────
   const [firstName, setFirstName] = useState("");
@@ -121,6 +139,14 @@ export default function NewLeadInline({
   const [showWhosAvailable, setShowWhosAvailable] = useState(false);
 
   // ── Dedup (real-time, debounced) ─────────────────────────────────────────
+  // Two-tier result:
+  //   - dedupHits  — every fuzzy match (phone last-4 or email substring).
+  //                  Drives the informational warning banner.
+  //   - phoneBlockingHits — subset whose phone normalizes to the SAME 10-digit
+  //                  form as the entered phone. THIS BLOCKS creation.
+  // Email matches alone do not block (a single email can legitimately belong
+  // to multiple household members in our intake history); phone equality is
+  // the stronger signal and is treated as a hard duplicate.
   const [dedupHits, setDedupHits] = useState<DedupHit[]>([]);
   useEffect(() => {
     const e = email.trim().toLowerCase();
@@ -352,9 +378,22 @@ export default function NewLeadInline({
     if (id) onSaved(id);
   }
 
+  // ── Phone-exact duplicate detection (BLOCKING) ────────────────────────────
+  // Normalize entered phone + each hit's phone to 10-digit form and compare.
+  // The DB query is fuzzy (LIKE %last4%) so it pulls candidates that share a
+  // last-4 — we then refine here to exact-match-only for the blocking check.
+  const enteredPhoneNorm = useMemo(() => normalizePhone(phone), [phone]);
+  const phoneBlockingHits = useMemo<DedupHit[]>(() => {
+    if (!enteredPhoneNorm) return [];
+    return dedupHits.filter(h => normalizePhone(h.phone) === enteredPhoneNorm);
+  }, [dedupHits, enteredPhoneNorm]);
+  const isPhoneBlocked = phoneBlockingHits.length > 0;
+
   // ── Gating ────────────────────────────────────────────────────────────────
   const hasContactMethod = phone.trim().length > 0 || email.trim().length > 0;
-  const canCreate = fullName.length > 0 && hasContactMethod && dedupHits.length === 0 && !saving && !bookingNow;
+  // Phone-exact match is a HARD BLOCK. Email-only / partial-phone matches
+  // surface as a soft warning (see dedup banner) but do not block creation.
+  const canCreate = fullName.length > 0 && hasContactMethod && !isPhoneBlocked && !saving && !bookingNow;
   const canDoConsultNow = canCreate;
   const canSchedule = canCreate && !!selection.staffId && !!selection.slotStartIso;
 
@@ -384,6 +423,23 @@ export default function NewLeadInline({
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto w-full max-w-5xl px-6 py-6 lg:px-8 lg:py-8 space-y-6">
 
+          {/* ── Client search (top of the new-lead window) ──────────────── */}
+          {/* Same search bar that lives on the dashboard — lets staff confirm
+              the caller isn't already in the system BEFORE starting a new
+              record. Click any match to bounce into that lead instead. */}
+          <section>
+            <div className="max-w-2xl">
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
+                Is the caller already in the system?
+              </p>
+              <ClientSearchBar
+                leads={existingLeads}
+                onOpen={(l) => onOpenExistingLead?.(l.id)}
+                placeholder="Search by name or phone before creating a new record…"
+              />
+            </div>
+          </section>
+
           {/* ── Caller details ──────────────────────────────────────────── */}
           <section>
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-4">
@@ -412,26 +468,83 @@ export default function NewLeadInline({
                 </p>
               )}
 
-              {/* Dedup banner */}
-              {dedupHits.length > 0 && (
+              {/* Dedup — phone-exact = BLOCKING. */}
+              {isPhoneBlocked && (
+                <div className="rounded-lg border border-red-700/70 bg-red-950/40 px-3 py-3">
+                  <div className="flex items-start gap-2">
+                    <Ban className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-red-300">
+                        A client with this phone already exists.
+                      </p>
+                      <p className="text-[11px] text-red-200/90 mt-0.5 leading-snug">
+                        Creating a new record is blocked — open the existing one instead.
+                      </p>
+                      <ul className="mt-2 space-y-1.5">
+                        {phoneBlockingHits.slice(0, 3).map(h => {
+                          const canOpen = h.source === "intake_leads" && !!onOpenExistingLead;
+                          return (
+                            <li key={`block_${h.source}_${h.id}`}>
+                              <button
+                                onClick={() => { if (canOpen) onOpenExistingLead!(h.id); }}
+                                disabled={!canOpen}
+                                className={`w-full flex items-center gap-2 text-[11px] text-left px-2 py-1.5 rounded transition-colors ${
+                                  canOpen
+                                    ? "bg-red-900/40 hover:bg-red-900/60 border border-red-700/60 cursor-pointer"
+                                    : "bg-red-900/20 border border-red-800/40 cursor-not-allowed opacity-70"
+                                }`}
+                                title={canOpen
+                                  ? "Open this existing record"
+                                  : h.source === "clients"
+                                    ? "Match is in the clients table — open from the Clients view"
+                                    : "Open-existing handler not wired"}
+                              >
+                                <UserCheck className="w-3 h-3 text-red-300 flex-shrink-0" />
+                                <span className="font-semibold text-[#FAFAF7] truncate flex-1">{h.name}</span>
+                                {h.status && <span className="text-[#6B6B66] text-[10px] flex-shrink-0">{h.status}</span>}
+                                <span className="text-[10px] text-red-300/70 flex-shrink-0">{h.source.replace("_", " ")}</span>
+                                {canOpen && <ExternalLink className="w-3 h-3 text-red-300 flex-shrink-0" />}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Dedup — fuzzy / email-only match = informational warning. */}
+              {!isPhoneBlocked && dedupHits.length > 0 && (
                 <div className="rounded-lg border border-amber-700/60 bg-amber-950/30 px-3 py-2.5">
                   <div className="flex items-start gap-2">
                     <AlertCircle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-amber-300">
-                        Already in the system — {dedupHits.length} match{dedupHits.length === 1 ? "" : "es"}
+                        Possible match — {dedupHits.length} {dedupHits.length === 1 ? "record" : "records"}
                       </p>
                       <ul className="mt-1.5 space-y-1">
-                        {dedupHits.slice(0, 3).map(h => (
-                          <li key={`${h.source}_${h.id}`} className="text-[11px] text-[#FAFAF7]">
-                            <span className="font-semibold">{h.name}</span>
-                            {h.status && <span className="text-[#6B6B66]"> · {h.status}</span>}
-                            <span className="text-[10px] text-[#6B6B66] ml-1">({h.source.replace("_", " ")})</span>
-                          </li>
-                        ))}
+                        {dedupHits.slice(0, 3).map(h => {
+                          const canOpen = h.source === "intake_leads" && !!onOpenExistingLead;
+                          return (
+                            <li key={`warn_${h.source}_${h.id}`} className="text-[11px] text-[#FAFAF7] flex items-center gap-1.5">
+                              <span className="font-semibold">{h.name}</span>
+                              {h.status && <span className="text-[#6B6B66]">· {h.status}</span>}
+                              <span className="text-[10px] text-[#6B6B66]">({h.source.replace("_", " ")})</span>
+                              {canOpen && (
+                                <button
+                                  onClick={() => onOpenExistingLead!(h.id)}
+                                  className="text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] ml-auto inline-flex items-center gap-1"
+                                >
+                                  Open <ExternalLink className="w-3 h-3" />
+                                </button>
+                              )}
+                            </li>
+                          );
+                        })}
                       </ul>
                       <p className="text-[10px] text-amber-200/80 mt-1.5">
-                        The New Client Lead window is for callers not yet in the system — open the existing record instead.
+                        Confirm this isn't a duplicate before proceeding — the email or partial phone is similar to an existing record.
                       </p>
                     </div>
                   </div>
@@ -640,9 +753,9 @@ export default function NewLeadInline({
                 Provide a phone or email above before booking.
               </p>
             )}
-            {dedupHits.length > 0 && (
-              <p className="mt-2 text-[10px] text-amber-300/80 italic">
-                Resolve the dedup match above before creating this lead.
+            {isPhoneBlocked && (
+              <p className="mt-2 text-[10px] text-red-300 italic font-semibold">
+                Creation blocked — a client with this phone already exists. Open the existing record above.
               </p>
             )}
             {consent === "declined" && (

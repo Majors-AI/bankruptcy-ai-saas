@@ -239,8 +239,12 @@ export default function ConsultSchedulerPanel({
 
   // For each (date, hour), aggregate availability across the eligible staff
   // pool. A bubble exists if at least one staffer in the pool has ANY slot
-  // (available or otherwise) at that hour; available=true if at least one
-  // of those slots is actually open.
+  // (available or otherwise) at that hour; `available` is true if at least
+  // one of those slots is actually open.
+  //
+  // Booked / fully-blocked hours are KEPT in the list now (rendered gray /
+  // disabled) so staff see real busy vs open at a glance instead of every
+  // visible bubble looking the same shade of green.
   //
   // The "recommendedStaffId" for a tap is the staffer with the lowest
   // todayLoad among those whose slot is available at that hour. This mirrors
@@ -252,6 +256,7 @@ export default function ConsultSchedulerPanel({
     available: boolean;
     recommendedStaffId: string | null;
     openCount: number;               // # staff actually open at this hour
+    totalCount: number;              // # staff with ANY slot at this hour (open + booked)
   };
 
   // Today's per-staff consult load — used as the tiebreak for recommendation.
@@ -296,19 +301,23 @@ export default function ConsultSchedulerPanel({
         if (futureSlots.length === 0) continue;
         const openSlots = futureSlots.filter(s => s.available);
         const anchor = futureSlots[0].slot_start;
-        if (openSlots.length === 0) continue;       // omit fully-blocked hours per spec
-        // Pick least-loaded staffer among those open at this hour.
+        const isAvailable = openSlots.length > 0;
+        // Pick least-loaded staffer among those open at this hour
+        // (only meaningful for available bubbles).
         let best: { staffId: string; load: number } | null = null;
-        for (const s of openSlots) {
-          const load = todayLoadByStaff.get(s.staff_id) ?? 0;
-          if (!best || load < best.load) best = { staffId: s.staff_id, load };
+        if (isAvailable) {
+          for (const s of openSlots) {
+            const load = todayLoadByStaff.get(s.staff_id) ?? 0;
+            if (!best || load < best.load) best = { staffId: s.staff_id, load };
+          }
         }
         bubbles.push({
           hour: h,
           slotStartIso: anchor,
-          available: true,
+          available: isAvailable,
           recommendedStaffId: best?.staffId ?? null,
           openCount: openSlots.length,
+          totalCount: futureSlots.length,
         });
       }
       out.set(date, bubbles);
@@ -402,8 +411,24 @@ export default function ConsultSchedulerPanel({
           {weekDates.map((date) => {
             const bubbles = bubblesByDate.get(date) ?? [];
             const isToday = date === todayLocal;
+            // Day-level state — drives the at-a-glance availability tag.
+            //   noSlots    → RPC returned zero rows for this date (lunch-only,
+            //                holiday, or no staff on the schedule). Marked
+            //                "Closed".
+            //   fullyBooked → has slots but none available. Marked "Fully booked".
+            //   else       → normal mix; show the bubbles.
+            const noSlots = bubbles.length === 0;
+            const openBubbleCount = bubbles.filter(b => b.available).length;
+            const fullyBooked = !noSlots && openBubbleCount === 0;
             return (
-              <div key={date} className="rounded-lg border border-[#2A2A28] bg-[#0F0F0E] p-2 min-h-[300px]">
+              <div
+                key={date}
+                className={`rounded-lg border p-2 min-h-[300px] ${
+                  noSlots || fullyBooked
+                    ? "border-[#2A2A28] bg-[#0A0A09]"
+                    : "border-[#2A2A28] bg-[#0F0F0E]"
+                }`}
+              >
                 <div className="text-center mb-2 pb-2 border-b border-[#2A2A28]">
                   <p className="text-[10px] font-bold uppercase tracking-wider text-[#FAFAF7]">
                     {formatDayShort(date).split(",")[0]}
@@ -420,12 +445,43 @@ export default function ConsultSchedulerPanel({
                       today
                     </span>
                   )}
+                  {!isToday && (noSlots || fullyBooked) && (
+                    <span
+                      className={`inline-block mt-0.5 text-[9px] uppercase tracking-widest font-semibold ${
+                        fullyBooked ? "text-red-300" : "text-[#6B6B66]"
+                      }`}
+                    >
+                      {fullyBooked ? "fully booked" : "closed"}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1.5">
-                  {bubbles.length === 0 ? (
-                    <p className="text-[10px] text-[#3A3A36] italic text-center py-4">No open slots</p>
+                  {noSlots ? (
+                    <p className="text-[10px] text-[#3A3A36] italic text-center py-4 leading-snug">
+                      No working hours
+                    </p>
+                  ) : fullyBooked ? (
+                    <>
+                      <p className="text-[10px] text-red-300/80 italic text-center py-1">
+                        Every slot is booked
+                      </p>
+                      {/* Render the booked bubbles muted so the hours are still
+                          visible to staff scanning the column. */}
+                      {bubbles.map((b) => (
+                        <BookedBubble key={b.hour} timeLabel={formatTimeFirmTz(b.slotStartIso)} totalCount={b.totalCount} />
+                      ))}
+                    </>
                   ) : (
                     bubbles.map((b) => {
+                      if (!b.available) {
+                        return (
+                          <BookedBubble
+                            key={b.hour}
+                            timeLabel={formatTimeFirmTz(b.slotStartIso)}
+                            totalCount={b.totalCount}
+                          />
+                        );
+                      }
                       const isPicked =
                         selectedDate === date && selectedHour === b.hour;
                       return (
@@ -433,7 +489,7 @@ export default function ConsultSchedulerPanel({
                           key={b.hour}
                           type="button"
                           onClick={() => pickBubble(date, b)}
-                          title={`${b.openCount} staffer${b.openCount === 1 ? "" : "s"} open`}
+                          title={`${b.openCount} of ${b.totalCount} open`}
                           className={`w-full text-[11px] font-semibold py-1.5 px-2 rounded border transition-all ${
                             isPicked
                               ? "bg-[#B8945F] border-[#B8945F] text-[#0F0F0E] ring-2 ring-[#B8945F] ring-offset-1 ring-offset-[#0F0F0E]"
@@ -453,10 +509,33 @@ export default function ConsultSchedulerPanel({
       )}
 
       <p className="mt-3 text-[10px] text-[#6B6B66]">
-        Bubbles show times when at least one intake staffer is open. Lunch, booked, and off-hours are hidden.
-        Tapping a slot picks the least-loaded staffer free at that time.
+        <span className="inline-block w-2 h-2 rounded bg-emerald-700/70 align-middle mr-1" /> open ·
+        <span className="inline-block w-2 h-2 rounded bg-[#3A3A36] align-middle mx-1" /> booked ·
+        days with no open slots show <span className="text-red-300/90 font-semibold">Fully booked</span> /
+        <span className="text-[#6B6B66] font-semibold"> Closed</span>.
+        Tapping an open slot picks the least-loaded staffer free at that time.
       </p>
     </div>
+  );
+}
+
+// ─── Booked-slot bubble (gray, disabled) ─────────────────────────────────────
+//
+// Renders an hour where the RPC returned slots but none are available — i.e.
+// every staffer with a slot at that hour is already booked. Visually muted
+// so open emerald bubbles in the same column pop out at a glance.
+
+function BookedBubble({ timeLabel, totalCount }: { timeLabel: string; totalCount: number }) {
+  return (
+    <button
+      type="button"
+      disabled
+      aria-disabled="true"
+      title={`Booked — all ${totalCount} staffer${totalCount === 1 ? "" : "s"} taken at this hour`}
+      className="w-full text-[11px] font-semibold py-1.5 px-2 rounded border bg-[#1A1A18] border-[#2A2A28] text-[#6B6B66] line-through cursor-not-allowed opacity-70"
+    >
+      {timeLabel}
+    </button>
   );
 }
 

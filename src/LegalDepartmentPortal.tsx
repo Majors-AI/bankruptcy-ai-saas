@@ -5,16 +5,29 @@ import {
   FolderArchive,
   Calendar,
   DollarSign,
+  ListChecks,
+  LogOut,
 } from "lucide-react";
 import ParalegalReview from "./ParalegalReview";
 import SigningReview from "./components/SigningReview";
+import DepartmentPortalLogin, {
+  classifyLegalStaff,
+  type DepartmentPortalSession,
+} from "./components/department-portal/DepartmentPortalLogin";
+import DepartmentTaskBoard, {
+  LEGAL_TASK_STUBS,
+} from "./components/department-portal/DepartmentTaskBoard";
 
 // Phase 2 step 1: shell with sub-nav. Mounts the existing ParalegalReview
 // and SigningReview components in 'embedded' layout (no double chrome).
 // Tabs 15/16/17 remain at the top level of the global nav until the mounted
 // versions here are confirmed working — Phase 2 step 2 removes them.
+//
+// Entry gate: staff-pick + 4-digit PIN, mirroring the Intake Portal's
+// PortalLogin pattern. Shared dev PIN — see DepartmentPortalLogin.tsx.
 
 type Section =
+  | "tasks"
   | "paralegal_review"
   | "signing_review"
   | "file_cabinet"
@@ -29,6 +42,7 @@ interface SectionDef {
 }
 
 const SECTIONS: SectionDef[] = [
+  { id: "tasks",            label: "Tasks",            icon: <ListChecks className="w-4 h-4" />,     status: "active" },
   { id: "paralegal_review", label: "Paralegal Review", icon: <ClipboardCheck className="w-4 h-4" />, status: "active" },
   { id: "signing_review",   label: "Signing Review",   icon: <PenLine className="w-4 h-4" />,        status: "active" },
   { id: "file_cabinet",     label: "File Cabinet",     icon: <FolderArchive className="w-4 h-4" />,  status: "placeholder" },
@@ -37,7 +51,21 @@ const SECTIONS: SectionDef[] = [
 ];
 
 export default function LegalDepartmentPortal() {
-  const [section, setSection] = useState<Section>("paralegal_review");
+  const [session, setSession] = useState<DepartmentPortalSession | null>(null);
+  const [section, setSection] = useState<Section>("tasks");
+
+  if (!session) {
+    return (
+      <DepartmentPortalLogin
+        title="Legal Department Portal"
+        subtitle="Paralegal · Attorney · Supervising Attorney"
+        classifyStaff={classifyLegalStaff}
+        onLogin={s => setSession(s)}
+        accent="#818CF8"
+        emptyHint="No legal-department staff configured yet. Add paralegals, attorneys, or supervising attorneys in Super Admin."
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -52,6 +80,19 @@ export default function LegalDepartmentPortal() {
               Legal Department Portal
             </h1>
             <p className="text-[11px] text-slate-500">Paralegal Review · Signing Review · (more soon)</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs font-semibold text-white leading-none">{session.name}</p>
+              <p className="text-[10px] text-slate-500 mt-1">{session.user_type}</p>
+            </div>
+            <button
+              onClick={() => setSession(null)}
+              title="Sign out"
+              className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-2.5 py-1.5 rounded transition-colors"
+            >
+              <LogOut className="w-3 h-3" /> Sign out
+            </button>
           </div>
         </div>
 
@@ -80,8 +121,17 @@ export default function LegalDepartmentPortal() {
         </nav>
       </header>
 
-      {/* Active section content — existing components mounted directly with layout='embedded'. */}
+      {/* Active section content. */}
       <main className="max-w-7xl mx-auto">
+        {section === "tasks" && (
+          <div className="p-6">
+            <DepartmentTaskBoard
+              session={session}
+              tasksByUserType={LEGAL_TASK_STUBS}
+              accent="#818CF8"
+            />
+          </div>
+        )}
         {section === "paralegal_review" && <ParalegalReview layout="embedded" />}
         {section === "signing_review"   && <SigningReview   layout="embedded" />}
         {section === "file_cabinet" && (

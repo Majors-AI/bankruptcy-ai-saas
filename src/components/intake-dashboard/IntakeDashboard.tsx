@@ -5,13 +5,40 @@
 // LegalAdminPortal.tsx where the Dashboard tab and the defaultTab branch are
 // scoped to non-attorneys.
 //
-// Four widgets in a responsive grid:
-//   (1) Today's Work          — REAL. Two sections: "Coming up" (consults) +
-//                                "To do" (call/case queue) with an "Up Next"
-//                                suggestion card (Layer 1 Next Task engine).
-//   (2) Shared Email Inbox    — UI-COMPLETE on SAMPLE data (Graph shape).
-//   (3) Messaging             — REAL. client_message_threads + staff_messages.
-//   (4) Phone + Voicemail     — UI-COMPLETE on SAMPLE data (Twilio Voice shape).
+// Layout (top → bottom):
+//   - Client search row (above the header buttons): name/phone search of the
+//     existing `leads` prop; click opens the lead detail panel.
+//   - Header row: greeting, [phone-icon popover], [Escalate to Supervisor],
+//     [Existing Client Leads], [New Client Lead]
+//   - Top bubbles row: [Clock | Overview | Retention]
+//       Replaces the legacy 4-stat strip that lived in LegalAdminPortal
+//       (it's now conditionally hidden on the dashboard tab).
+//   - 3-column grid:
+//       LEFT (compact)  — AllTasksWidget OR ScheduleColumnView (toggle).
+//                          Tasks are color-coded RED/ORANGE/YELLOW/BLUE and
+//                          drawn from a SHARED firm-wide pool (no per-staff
+//                          filter — see TODO at toDoQueue/sharedTasks).
+//                          Schedule view: Next-day / 5-day / Monthly filters;
+//                          5-day reuses ConsultSchedulerPanel verbatim.
+//       MIDDLE          — Up Next & Outreach Queue (existing widget) with a
+//                          "Start the next task" cue in the header.
+//       RIGHT           — ConsolidatedMessagingWidget (All / SMS / Email /
+//                          Team / Direct / Voicemails tabs; client threads +
+//                          staff_messages combined).
+//   - Below the grid:   Today hour-by-hour (full-width).
+//
+// Data sources actually wired:
+//   - leads / calEvents — passed in from LegalAdminPortal (REAL)
+//   - client_message_threads + staff_messages — fetched here (REAL)
+//   - voicemails — NO source yet; rendered as a "Coming soon" scaffold
+//   - phone dialer (PhoneDialerWidget) — still SAMPLE data; relocated from
+//     the bottom of the grid to a popover triggered by the header phone icon
+//
+// REMOVED in this rework (flagged in the PR description):
+//   - EmailInboxWidget (was UI-complete against SAMPLE Microsoft Graph data;
+//     never connected) — drop from layout and from this file
+//   - Bottom-of-grid PhoneDialerWidget placement — replaced by header popover
+//   - "Coming up — next on your calendar" Section — replaced by TODAY grid
 //
 // TODO templating pass: every relative-time / day-of-week calc here hardcodes
 // the America/Los_Angeles tz. Make this America/Phoenix-aware (or read from
@@ -23,13 +50,22 @@
 // The case-presentation tier — currently named TIER_NEW_CALL to make room —
 // will get its own lead-state filter at that time.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Calendar, CheckCircle2, ChevronRight, Clock, Inbox, MessageCircle,
-  Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Reply,
-  UserCheck, Users, Voicemail, ListChecks, Mail, Delete,
-  AlertCircle, Sparkles, ClipboardList, BellRing, X,
+  Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock,
+  MessageCircle, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
+  Users, Voicemail, ListChecks, Mail, Delete, PlayCircle, Play, Pause,
+  Coffee, TrendingUp, Trophy, MessageSquare, AtSign, Send,
+  AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, X,
 } from "lucide-react";
+import ConsultSchedulerPanel, {
+  type StaffDetail as SchedulerStaffDetail,
+  type CalEvent as SchedulerCalEvent,
+  type SchedulerSelection,
+} from "../scheduler/ConsultSchedulerPanel";
+import ClientSearchBar from "../client-search/ClientSearchBar";
+import PostCallScheduledModal from "../lead-comms/PostCallScheduledModal";
+import CommsPillBar from "../comms-pill/CommsPillBar";
 
 // ─── Types (kept local to avoid coupling to LegalAdminPortal) ────────────────
 
@@ -54,6 +90,20 @@ interface Lead {
   consultation_date: string | null;
   chapter_interest: number | null;
   submission_id?: string | null;
+  /** Optional explicit follow-up timestamp; used as "due" on lead-derived tasks. */
+  next_follow_up_at?: string | null;
+  // Lead-locking scaffold — see src/components/lead-claim/LeadClaim.tsx.
+  // Optional reads only; the column doesn't exist yet (no migration here).
+  claimed_by?: string | null;
+  claimed_by_name?: string | null;
+  claimed_at?: string | null;
+  // SMS consent scaffold (PostCallScheduledModal reads this to suppress the
+  // outbound preview when the client has opted out). Column doesn't exist
+  // yet — TODO: planned consent table tracks opt_in_status + opted_out_at +
+  // source. Until then this is always undefined and the modal renders the
+  // normal preview.
+  sms_opt_out?: boolean | null;
+  sms_opt_in_status?: "unknown" | "opted_in" | "opted_out" | null;
 }
 
 interface CalEvent {
@@ -71,6 +121,7 @@ interface CalEvent {
 
 type TabId =
   | "dashboard" | "leads" | "followup" | "calendar"
+  | "my_schedule"
   | "availability" | "timeoff" | "sick_admin" | "manual_clients";
 
 interface ApptRow {
@@ -81,15 +132,43 @@ interface ApptRow {
   chapter: number | null;
 }
 
-type ToDoTier = "emergency" | "new" | "followup";
+// Outreach Queue tiers. `yellow` (= attorney_accepted, "present the case")
+// was added when the prioritization rules made YELLOW > NEW intake explicit.
+type ToDoTier = "emergency" | "yellow" | "new" | "followup";
 interface ToDoRow { lead: Lead; tier: ToDoTier; }
+
+// AllTasksWidget — shared color-coded task list (LEFT column).
+type TaskColor = "red" | "orange" | "yellow" | "blue";
+interface TaskEntry {
+  id: string;
+  color: TaskColor;
+  title: string;
+  subtitle: string;
+  actionLabel: string;
+  /** Lower comes first within the same color. */
+  sortKey: number;
+  /**
+   * Due-date for the task as an ISO timestamp. Present for:
+   *   - appointment tasks   → calendar_event.start_time
+   *   - lead-derived tasks  → leads.next_follow_up_at (when set)
+   * Absent (undefined) for tasks where the underlying record has no due
+   * field today (e.g. unread client messages). Renderer shows a placeholder
+   * with a TODO note rather than fabricating a date.
+   */
+  due?: string | null;
+  /** Set on lead-derived entries so callers can route to the lead detail. */
+  leadRef?: Lead;
+  onSelect: () => void;
+}
 
 // Layer 1 — what "Up Next" returns.
 type NextTask =
   | { kind: "appointment";    appt: ApptRow; minutesUntilStart: number; isInProgress: boolean }
   | { kind: "lead-emergency"; lead: Lead }
-  | { kind: "lead-new";       lead: Lead }
-  | { kind: "lead-followup";  lead: Lead }
+  | { kind: "lead-yellow";    lead: Lead; isOverdue: boolean }
+  | { kind: "lead-new";       lead: Lead; isOverdue: boolean }
+  | { kind: "lead-followup";  lead: Lead; isOverdue: boolean }
+  | { kind: "msg-unread";     threadId: string; clientName: string; preview: string; unreadCount: number }
   | { kind: "none" };
 
 interface ClientMessageThread {
@@ -158,6 +237,12 @@ async function sbPatch(table: string, id: string, body: object): Promise<void> {
 // TODO templating pass: read firm timezone from firms.timezone instead of hardcoded LA.
 const FIRM_TZ = "America/Los_Angeles";
 
+// TODO per-staffer work-hours config doesn't exist yet — using firm default 8a–6p.
+// When the work-hours surface lands (likely a staff_availability extension or
+// a new staff_work_hours table), swap to the signed-in staffer's hours.
+const BUSINESS_HOUR_START = 8;   // 8 AM
+const BUSINESS_HOUR_END   = 18;  // 6 PM (exclusive upper bound — last slot is 5pm–6pm)
+
 // Layer 1 — Next Task engine.
 const IMMINENT_APPT_WINDOW_MIN = 15;
 const NEXT_TASK_TICK_MS = 60_000;
@@ -174,12 +259,50 @@ const TIER_NEW_CALL    = 2;  // includes case presentations once that bucket exi
 const TIER_FOLLOWUP    = 3;
 
 const URGENCY_RANK: Record<string, number> = { emergency: 0, urgent: 1, normal: 2 };
-const TIER_RANK:    Record<ToDoTier, number> = { emergency: 0, new: 1, followup: 2 };
+// emergency (RED) → yellow (present the case) → new (set appointment) →
+// followup (fee-quoted). Within each tier sort by overdue-first → urgency
+// → created_at (see toDoQueue derivation).
+const TIER_RANK:    Record<ToDoTier, number> = { emergency: 0, yellow: 1, new: 2, followup: 3 };
 
 // ─── Time / format helpers ──────────────────────────────────────────────────
 
 function todayInFirmTz(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+}
+
+/** Hour (0–23) in the firm timezone for the given ISO timestamp. */
+function hourOfIsoInFirmTz(iso: string): number {
+  return parseInt(
+    new Date(iso).toLocaleTimeString("en-US", {
+      hour: "numeric", hour12: false, timeZone: FIRM_TZ,
+    }),
+    10,
+  );
+}
+
+/** YYYY-MM-DD of the next business day (skips Sat/Sun) after `dateStr`. */
+function nextBusinessDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  while (true) {
+    dt.setUTCDate(dt.getUTCDate() + 1);
+    const dow = dt.getUTCDay();
+    if (dow !== 0 && dow !== 6) {
+      const yy = dt.getUTCFullYear();
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getUTCDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    }
+  }
+}
+
+/** Localized "Tue, Jun 10" style label from a YYYY-MM-DD string. */
+function formatDayLabel(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  return dt.toLocaleDateString("en-US", {
+    weekday: "long", month: "short", day: "numeric", timeZone: "UTC",
+  });
 }
 
 function relativeTime(iso: string): string {
@@ -221,29 +344,56 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-// ─── Sample data — Widget 2 (Microsoft Graph message shape) ─────────────────
-
-interface SampleEmail {
-  id: string;
-  from: { name: string; address: string };
-  subject: string;
-  receivedDateTime: string;
-  bodyPreview: string;
-  isRead: boolean;
-  assignee: string | null;
-  status: "unhandled" | "in_progress" | "handled";
+function formatHourLabel(hour: number): string {
+  const am = hour < 12;
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h12} ${am ? "AM" : "PM"}`;
 }
 
-const SAMPLE_EMAILS: SampleEmail[] = [
-  { id: "m1", from: { name: "Sarah Mitchell",    address: "smitchell@gmail.com"   }, subject: "Question about Chapter 7 eligibility",  receivedDateTime: new Date(Date.now() - 35   * 60_000).toISOString(), bodyPreview: "Hi — my husband and I are considering filing bankruptcy. We both work full time but the medical debt is overwhelming. Could we talk through what Chapter 7 would look like?", isRead: false, assignee: null,           status: "unhandled"  },
-  { id: "m2", from: { name: "James Park",        address: "jpark@outlook.com"     }, subject: "Re: Consultation appointment",          receivedDateTime: new Date(Date.now() - 95   * 60_000).toISOString(), bodyPreview: "Thanks for the confirmation. Can we reschedule to Friday afternoon? Something came up at work for Thursday.",                                                                       isRead: true,  assignee: "Lisa Chen",    status: "in_progress" },
-  { id: "m3", from: { name: "Maria Gonzalez",    address: "mgonzalez@yahoo.com"   }, subject: "Documents requested",                   receivedDateTime: new Date(Date.now() - 3    * 3_600_000).toISOString(), bodyPreview: "Attached are the pay stubs and bank statements you requested. Let me know if you need anything else.",                                                                          isRead: true,  assignee: "Lisa Chen",    status: "handled"    },
-  { id: "m4", from: { name: "Robert Henderson",  address: "rhenderson@aol.com"    }, subject: "Wage garnishment — urgent",             receivedDateTime: new Date(Date.now() - 11   * 3_600_000).toISOString(), bodyPreview: "My employer just notified me that wage garnishment starts next week. I need to know my options ASAP. Can someone call me today?",                                                       isRead: false, assignee: null,           status: "unhandled"  },
-  { id: "m5", from: { name: "Angela Thompson",   address: "athompson@gmail.com"   }, subject: "Fee breakdown",                          receivedDateTime: new Date(Date.now() - 16   * 3_600_000).toISOString(), bodyPreview: "Can you send me the breakdown of the attorney fee vs filing fee one more time? My spouse wants to see it before we sign.",                                                         isRead: true,  assignee: null,           status: "unhandled"  },
-  { id: "m6", from: { name: "David Liu",         address: "dliu@hotmail.com"      }, subject: "New client inquiry — referral",          receivedDateTime: new Date(Date.now() - 22   * 3_600_000).toISOString(), bodyPreview: "I was referred by my friend Carlos Vega. I would like to schedule a consultation about Chapter 13.",                                                                                  isRead: true,  assignee: "Marcus Brown", status: "in_progress" },
-];
+/**
+ * Compact due-time label for a task row.
+ *   - overdue   → "5h ago"
+ *   - today     → "Today 3:00 PM"
+ *   - tomorrow  → "Tomorrow 9:00 AM"
+ *   - this week → "Tue 9:00 AM"
+ *   - else      → "Jun 12 · 9:00 AM"
+ */
+function formatDueLabel(iso: string): string {
+  const due = new Date(iso);
+  const dueMs = due.getTime();
+  const nowMs = Date.now();
+  const diffMs = dueMs - nowMs;
+  const dueDay = due.toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+  const today = todayInFirmTz();
+  const tomorrow = nextBusinessDay(today); // closest workday — informational only
 
-// ─── Sample data — Widget 4 (Twilio Voice shape) ─────────────────────────────
+  if (diffMs < 0) {
+    const mins = Math.floor(-diffMs / 60_000);
+    if (mins < 60)  return `${mins}m ago`;
+    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+    return `${Math.floor(mins / 1440)}d ago`;
+  }
+
+  const timeStr = due.toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: FIRM_TZ,
+  });
+
+  if (dueDay === today)    return `Today ${timeStr}`;
+  if (dueDay === tomorrow) return `Tomorrow ${timeStr}`;
+
+  // Within the next 6 days → weekday short label
+  const oneWeekMs = 6 * 24 * 60 * 60 * 1000;
+  if (diffMs < oneWeekMs) {
+    const dow = due.toLocaleDateString("en-US", { weekday: "short", timeZone: FIRM_TZ });
+    return `${dow} ${timeStr}`;
+  }
+  const dateStr = due.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: FIRM_TZ });
+  return `${dateStr} · ${timeStr}`;
+}
+
+// ─── Sample data — PhoneDialerWidget (Twilio Voice shape) ───────────────────
+// Kept ONLY because the dialer popover still uses these as placeholder history.
+// Real Twilio Voice wiring is the same TODO list called out below the widget.
 
 interface SampleCall {
   id: string;
@@ -312,7 +462,34 @@ function SampleChip() {
   );
 }
 
+function ComingSoonChip() {
+  return (
+    <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-2 py-0.5 rounded">
+      Coming soon
+    </span>
+  );
+}
+
 // ─── Main component ──────────────────────────────────────────────────────────
+
+// Mirrors LegalAdminPortal's TimeClockState / TimeClockActions. Kept local
+// here to follow the same "duplicate-types-no-coupling" pattern used for
+// Lead and CalEvent in this file.
+interface TimeClockState {
+  clockedInAt: number | null;
+  onLunchSince: number | null;
+  onBreakSince: number | null;
+  lunchMinutes: number;
+  breakMinutes: number;
+}
+interface TimeClockActions {
+  clockIn: () => void;
+  clockOut: () => void;
+  startLunch: () => void;
+  endLunch: () => void;
+  startBreak: () => void;
+  endBreak: () => void;
+}
 
 interface IntakeDashboardProps {
   session: PortalSession;
@@ -331,6 +508,10 @@ interface IntakeDashboardProps {
   /** Launch the full-window new-lead logging flow (NewLeadInline). */
   onLogNewLead?: () => void;
   onRefresh: () => void;
+  // Time clock is owned by IntakePortalInner (force-clock-in gate + idle
+  // watcher live there). The ClockBubble below just reflects + controls it.
+  timeClock: TimeClockState;
+  timeClockActions: TimeClockActions;
 }
 
 export default function IntakeDashboard({
@@ -339,8 +520,10 @@ export default function IntakeDashboard({
   onOpenLead: _onOpenLead,
   onChangeTab, onOpenView,
   onScheduleConsult, onDoIntakeNow, onLogNewLead, onRefresh,
+  timeClock, timeClockActions,
 }: IntakeDashboardProps) {
   const todayLocal = useMemo(() => todayInFirmTz(), []);
+  const nextDayLocal = useMemo(() => nextBusinessDay(todayLocal), [todayLocal]);
 
   // ── Layer 1 — wall-clock tick for Up Next recompute ───────────────────────
   const [currentTime, setCurrentTime] = useState<number>(() => Date.now());
@@ -349,8 +532,38 @@ export default function IntakeDashboard({
     return () => clearInterval(id);
   }, []);
 
+  // ── Header popover / modal state ─────────────────────────────────────────
+  const [phonePopoverOpen, setPhonePopoverOpen] = useState(false);
+  const [escalateOpen, setEscalateOpen] = useState(false);
+
+  // ── Left column — Tasks vs. Schedule toggle ──────────────────────────────
+  const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
+  const [scheduleRange, setScheduleRange] = useState<"next_day" | "five_day" | "monthly">("five_day");
+  // ConsultSchedulerPanel is a controlled component; we hold its selection
+  // locally because this surface is view-only — picking a slot here is a
+  // no-op and does NOT book anything (booking flows live elsewhere).
+  const [schedSelection, setSchedSelection] = useState<SchedulerSelection>({
+    staffId: null, slotStartIso: null, dateStr: null,
+  });
+
+  // ── Staff pool — needed by ConsultSchedulerPanel for the 5-day view ──────
+  const [staffPool, setStaffPool] = useState<SchedulerStaffDetail[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const rows = await sbGet<SchedulerStaffDetail>(
+        "staff_members?is_active=eq.true&order=name.asc&select=id,name,role,role_level,intake_portal_role,is_active"
+      );
+      if (!cancelled) setStaffPool(rows);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Appointments — this staffer's intake consultations (derived) ──────────
-  const { todaysAppts, upcomingAppts } = useMemo(() => {
+  // Same filter the prior "Coming up" section used. Today + next-business-day
+  // buckets are split here so the hour-grid and the next-day list both read
+  // from the same source of truth.
+  const { todaysAppts, nextDayAppts, upcomingAppts } = useMemo(() => {
     const leadById = new Map(leads.map(l => [l.id, l]));
     const all = calEvents
       .filter(e => {
@@ -369,106 +582,82 @@ export default function IntakeDashboard({
       .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
     const today: ApptRow[] = [];
+    const next: ApptRow[] = [];
     const upcoming: ApptRow[] = [];
     const now = Date.now();
     for (const a of all) {
       const d = new Date(a.start_time).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
       if (d === todayLocal) today.push(a);
+      else if (d === nextDayLocal) next.push(a);
       else if (new Date(a.start_time).getTime() > now) upcoming.push(a);
     }
-    return { todaysAppts: today, upcomingAppts: upcoming };
-  }, [calEvents, leads, todayLocal, session.id]);
+    return { todaysAppts: today, nextDayAppts: next, upcomingAppts: upcoming };
+  }, [calEvents, leads, todayLocal, nextDayLocal, session.id]);
 
-  // ── To-do queue — emergencies + new calls + follow-ups, this staffer's ────
+  // ── To-do queue — emergencies + new calls + follow-ups, SHARED firm-wide ──
+  //
+  // Tasks are a SHARED pool: every active staffer sees the same queue. The
+  // per-staff filter (matchesStaff = assigned_name === session.name) was
+  // intentionally removed when the dashboard moved to the 3-column layout.
+  //
+  // TODO per-staff weighting + closer-strength: reintroduce a ranking pass
+  // (NOT a hard filter) here once the planned closer-strength config lands.
+  // Each lead's effective rank will combine its tier + the current staffer's
+  // suitability score for that lead. Until then, the same ordering is shown
+  // to everyone.
   const toDoQueue: ToDoRow[] = useMemo(() => {
-    const matchesStaff = (l: Lead) => !l.assigned_name || l.assigned_name === session.name;
+    const nowMs = Date.now();
+    const isLeadOverdue = (l: Lead) =>
+      !!l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < nowMs;
 
-    const emergencies = leads.filter(l => l.urgency === "emergency" && matchesStaff(l));
+    const emergencies = leads.filter(l => l.urgency === "emergency");
     const emergencyIds = new Set(emergencies.map(l => l.id));
 
-    const newCalls = leads.filter(l =>
+    // YELLOW — attorney_accepted = "present the case". Ranks ABOVE NEW so
+    // presenting cases outranks setting appointments per the priority rules.
+    const presentCases = leads.filter(l =>
       !emergencyIds.has(l.id) &&
-      (l.status === "new" || l.follow_up_queue === "priority") &&
-      matchesStaff(l)
+      l.status === "attorney_accepted"
+    );
+    const presentIds = new Set(presentCases.map(l => l.id));
+
+    const newCalls = leads.filter(l =>
+      !emergencyIds.has(l.id) && !presentIds.has(l.id) &&
+      (l.status === "new" || l.follow_up_queue === "priority")
     );
     const followUps = leads.filter(l =>
-      !emergencyIds.has(l.id) &&
-      l.status === "fee_quoted" &&
-      matchesStaff(l)
+      !emergencyIds.has(l.id) && !presentIds.has(l.id) &&
+      l.status === "fee_quoted"
     );
 
     const rows: ToDoRow[] = [
       ...emergencies.map(lead => ({ lead, tier: "emergency" as const })),
+      ...presentCases.map(lead => ({ lead, tier: "yellow" as const })),
       ...newCalls.map(lead => ({ lead, tier: "new" as const })),
       ...followUps.map(lead => ({ lead, tier: "followup" as const })),
     ];
     rows.sort((a, b) => {
       if (TIER_RANK[a.tier] !== TIER_RANK[b.tier]) return TIER_RANK[a.tier] - TIER_RANK[b.tier];
+      // Within a tier, OVERDUE next_follow_up_at jumps to the top. This is
+      // the "at-risk follow-ups ahead of fresh items" rule.
+      const oa = isLeadOverdue(a.lead) ? 0 : 1;
+      const ob = isLeadOverdue(b.lead) ? 0 : 1;
+      if (oa !== ob) return oa - ob;
       const ua = URGENCY_RANK[a.lead.urgency ?? "normal"] ?? 2;
       const ub = URGENCY_RANK[b.lead.urgency ?? "normal"] ?? 2;
       if (ua !== ub) return ua - ub;
       return new Date(a.lead.created_at).getTime() - new Date(b.lead.created_at).getTime();
     });
     return rows.slice(0, 12);
-  }, [leads, session.name]);
+  }, [leads]);
 
-  // ── Layer 1 — Up Next computation ─────────────────────────────────────────
-  const [manuallyChosenId, setManuallyChosenId] = useState<string | null>(null);
-  // Single source of truth for which queue row's log-result panel is open.
-  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
-
-  const nextTask: NextTask = useMemo(() => {
-    // 1. Manual override
-    if (manuallyChosenId) {
-      const r = toDoQueue.find(x => x.lead.id === manuallyChosenId);
-      if (r) {
-        const k = r.tier === "emergency" ? "lead-emergency"
-                : r.tier === "new"       ? "lead-new"
-                :                          "lead-followup";
-        return { kind: k, lead: r.lead };
-      }
-    }
-
-    // 2. Imminent / in-progress appointment (today only)
-    const nowMs = currentTime;
-    const imminent = todaysAppts
-      .map(a => {
-        const startMs = new Date(a.start_time).getTime();
-        const endMs   = new Date(a.end_time).getTime();
-        const minsUntilStart = (startMs - nowMs) / 60_000;
-        const isInProgress = nowMs >= startMs && nowMs < endMs;
-        const startingSoon = minsUntilStart > 0 && minsUntilStart <= IMMINENT_APPT_WINDOW_MIN;
-        return { a, startMs, minsUntilStart, isInProgress, qualifies: isInProgress || startingSoon };
-      })
-      .filter(x => x.qualifies)
-      .sort((x, y) => x.startMs - y.startMs);
-    if (imminent.length > 0) {
-      const top = imminent[0];
-      return {
-        kind: "appointment",
-        appt: top.a,
-        minutesUntilStart: Math.max(0, Math.round(top.minsUntilStart)),
-        isInProgress: top.isInProgress,
-      };
-    }
-
-    // 3. Emergency lead — NEVER honors the skip set
-    const emergencyRow = toDoQueue.find(r => r.tier === "emergency");
-    if (emergencyRow) return { kind: "lead-emergency", lead: emergencyRow.lead };
-
-    // 4. Tier 1 — new call (honors skip set)
-    const newRow = toDoQueue.find(r => r.tier === "new" && !skippedIds.has(r.lead.id));
-    if (newRow) return { kind: "lead-new", lead: newRow.lead };
-
-    // 5. Tier 2 — follow-up (honors skip set)
-    const followupRow = toDoQueue.find(r => r.tier === "followup" && !skippedIds.has(r.lead.id));
-    if (followupRow) return { kind: "lead-followup", lead: followupRow.lead };
-
-    return { kind: "none" };
-  }, [todaysAppts, toDoQueue, skippedIds, manuallyChosenId, currentTime]);
-
-  // ── Widget 3 — client messaging + staff DMs (REAL) ────────────────────────
-  const [clientThreads, setClientThreads] = useState<(ClientMessageThread & { client_name?: string; preview?: string })[]>([]);
+  // ── Widget — client messaging + staff DMs (REAL) ──────────────────────────
+  // Declared BEFORE the nextTask useMemo because the priority pipeline
+  // checks clientThreads for the RED-tier "unread message" Up Next variant.
+  // last_channel is the channel of the most-recent message in the thread —
+  // used by the ConsolidatedMessagingWidget to bucket client threads into
+  // the SMS / Email tabs (the threads table itself has no channel column).
+  const [clientThreads, setClientThreads] = useState<(ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[]>([]);
   const [staffMsgs, setStaffMsgs] = useState<StaffMessage[]>([]);
   const [msgsLoading, setMsgsLoading] = useState(true);
   useEffect(() => {
@@ -499,12 +688,282 @@ export default function IntakeDashboard({
         ...t,
         client_name: nameById.get(t.client_id) ?? "Client",
         preview: firstByThread.get(t.id)?.body ?? "",
+        last_channel: firstByThread.get(t.id)?.channel ?? null,
       })));
       setStaffMsgs(dms);
       setMsgsLoading(false);
     })();
     return () => { cancelled = true; };
   }, [session.id]);
+
+  // ── Layer 1 — Up Next computation ─────────────────────────────────────────
+  const [manuallyChosenId, setManuallyChosenId] = useState<string | null>(null);
+  // Single source of truth for which queue row's log-result panel is open.
+  const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
+
+  const nextTask: NextTask = useMemo(() => {
+    const nowMs = currentTime;
+    const isLeadOverdueLocal = (l: Lead) =>
+      !!l.next_follow_up_at && new Date(l.next_follow_up_at).getTime() < nowMs;
+
+    // 1. Manual override — caller picked a specific lead from the queue.
+    //    Honors the YELLOW tier as well now.
+    if (manuallyChosenId) {
+      const r = toDoQueue.find(x => x.lead.id === manuallyChosenId);
+      if (r) {
+        if (r.tier === "emergency") return { kind: "lead-emergency", lead: r.lead };
+        if (r.tier === "yellow")    return { kind: "lead-yellow",    lead: r.lead, isOverdue: isLeadOverdueLocal(r.lead) };
+        if (r.tier === "new")       return { kind: "lead-new",       lead: r.lead, isOverdue: isLeadOverdueLocal(r.lead) };
+        return { kind: "lead-followup", lead: r.lead, isOverdue: isLeadOverdueLocal(r.lead) };
+      }
+    }
+
+    // 2. Imminent / in-progress appointment (today only) — RED tier per spec.
+    //    Still surfaces specially so the card shows the "running now" /
+    //    "starts in N min" visual instead of a generic lead row.
+    const imminent = todaysAppts
+      .map(a => {
+        const startMs = new Date(a.start_time).getTime();
+        const endMs   = new Date(a.end_time).getTime();
+        const minsUntilStart = (startMs - nowMs) / 60_000;
+        const isInProgress = nowMs >= startMs && nowMs < endMs;
+        const startingSoon = minsUntilStart > 0 && minsUntilStart <= IMMINENT_APPT_WINDOW_MIN;
+        return { a, startMs, minsUntilStart, isInProgress, qualifies: isInProgress || startingSoon };
+      })
+      .filter(x => x.qualifies)
+      .sort((x, y) => x.startMs - y.startMs);
+    if (imminent.length > 0) {
+      const top = imminent[0];
+      return {
+        kind: "appointment",
+        appt: top.a,
+        minutesUntilStart: Math.max(0, Math.round(top.minsUntilStart)),
+        isInProgress: top.isInProgress,
+      };
+    }
+
+    // 3. Emergency lead — NEVER honors the skip set (per prior behavior).
+    const emergencyRow = toDoQueue.find(r => r.tier === "emergency");
+    if (emergencyRow) return { kind: "lead-emergency", lead: emergencyRow.lead };
+
+    // 4. RED — unread client messages. Slotted ahead of YELLOW / NEW so a
+    //    client waiting on a reply outranks outbound work. Skipped ids
+    //    include msg-{thread_id}.
+    for (const t of clientThreads) {
+      if ((t.unread_count ?? 0) <= 0) continue;
+      if (skippedIds.has(`msg-${t.id}`)) continue;
+      return {
+        kind: "msg-unread",
+        threadId: t.id,
+        clientName: t.client_name ?? "Client",
+        preview: t.preview ?? "",
+        unreadCount: t.unread_count ?? 0,
+      };
+    }
+
+    // 5. YELLOW — present-the-case (attorney_accepted). Overdue first.
+    const yellowRow = toDoQueue.find(r => r.tier === "yellow" && !skippedIds.has(r.lead.id));
+    if (yellowRow) return { kind: "lead-yellow", lead: yellowRow.lead, isOverdue: isLeadOverdueLocal(yellowRow.lead) };
+
+    // 6. BLUE — at-risk follow-ups (overdue fee-quoted) BEFORE fresh NEW
+    //    intake. This is the explicit "at-risk follow-ups ahead of starting
+    //    NEW intake" rule from the priority spec.
+    const overdueFollowup = toDoQueue.find(
+      r => r.tier === "followup" && !skippedIds.has(r.lead.id) && isLeadOverdueLocal(r.lead)
+    );
+    if (overdueFollowup) {
+      return { kind: "lead-followup", lead: overdueFollowup.lead, isOverdue: true };
+    }
+
+    // 7. BLUE — fresh new-intake (status='new' / priority queue).
+    const newRow = toDoQueue.find(r => r.tier === "new" && !skippedIds.has(r.lead.id));
+    if (newRow) return { kind: "lead-new", lead: newRow.lead, isOverdue: isLeadOverdueLocal(newRow.lead) };
+
+    // 8. BLUE — fresh fee-quoted follow-ups.
+    const followupRow = toDoQueue.find(r => r.tier === "followup" && !skippedIds.has(r.lead.id));
+    if (followupRow) return { kind: "lead-followup", lead: followupRow.lead, isOverdue: false };
+
+    return { kind: "none" };
+  }, [todaysAppts, toDoQueue, clientThreads, skippedIds, manuallyChosenId, currentTime]);
+
+  // ── Shared color-coded task list (LEFT column AllTasksWidget) ─────────────
+  //
+  // Color rules (RED → ORANGE → YELLOW → BLUE), sort within each tier.
+  //
+  //   RED (top): in-progress + imminent appointments today, then unread
+  //     client message threads, then emergency-urgency leads.
+  //     NOTE — appts are STAFF-personal (a consult is booked for a specific
+  //     staffer, not a shared coverage item). Everything else in the list
+  //     is firm-shared. Messages + leads are not assigned per-staff today.
+  //   ORANGE: urgency='urgent' leads not already in red.
+  //   YELLOW: status='attorney_accepted' — completed intake + attorney
+  //     reviewed; needs a call to present the case.
+  //   BLUE: status='new' or 'contacted' (need to schedule) and status=
+  //     'fee_quoted' (have fee, follow up). Within blue, presenting/intake
+  //     work would have been Yellow, so all that's left is scheduling work.
+  //
+  // TODO (planned staff-setup model): once per-staff assignment + closer-
+  // strength weighting lands, swap this from a flat shared list to a
+  // weighted per-staff view. For now everyone sees the same pool.
+  //
+  // TODO (medium-priority bucket): ORANGE currently only contains urgent-
+  // flagged leads. Other medium buckets (e.g. intake_complete awaiting
+  // attorney review, no-show risk on a scheduled consult) could slot in
+  // here once the rules are defined.
+  const sharedTasks: TaskEntry[] = useMemo(() => {
+    const out: TaskEntry[] = [];
+    const nowMs = currentTime;
+
+    // RED — appointments (in-progress first, then imminent).
+    // DUE = appt start_time. This is the most reliable due value we have.
+    for (const a of todaysAppts) {
+      const startMs = new Date(a.start_time).getTime();
+      const endMs   = new Date(a.end_time).getTime();
+      const isInProgress = nowMs >= startMs && nowMs < endMs;
+      const minsUntilStart = (startMs - nowMs) / 60_000;
+      // Include in-progress + future-today appts. Past-and-done appts drop off.
+      if (isInProgress || minsUntilStart > -1) {
+        out.push({
+          id: `appt-${a.id}`,
+          color: "red",
+          title: a.client_name,
+          subtitle: `${formatTimeRange(a.start_time, a.end_time)}${a.chapter ? ` · Ch.${a.chapter}` : ""}${isInProgress ? " · in progress" : ""}`,
+          actionLabel: "Open",
+          sortKey: isInProgress ? 0 : Math.max(1, startMs / 60_000),
+          due: a.start_time,
+          onSelect: () => onChangeTab("calendar"),
+        });
+      }
+    }
+
+    // RED — unread client message threads.
+    // DUE = undefined. client_message_threads has no due/SLA field today;
+    // showing a fabricated due ("respond by …") would be invented data.
+    // TODO Phase B: introduce a reply-SLA on threads + surface it here.
+    for (const t of clientThreads) {
+      if ((t.unread_count ?? 0) <= 0) continue;
+      out.push({
+        id: `msg-${t.id}`,
+        color: "red",
+        title: t.client_name ?? "Client",
+        subtitle: `${t.unread_count} unread${t.preview ? ` · ${t.preview.slice(0, 48)}` : ""}`,
+        actionLabel: "Reply",
+        sortKey: 1_000_000 + (t.last_message_at ? -new Date(t.last_message_at).getTime() / 60_000 : 0),
+        // due intentionally omitted — see comment above
+        onSelect: () => onOpenView("messages"),
+      });
+    }
+
+    // RED — emergency-urgency leads. DUE = next_follow_up_at when set.
+    for (const l of leads) {
+      if (l.urgency !== "emergency") continue;
+      out.push({
+        id: `lead-${l.id}`,
+        color: "red",
+        title: l.full_name,
+        subtitle: `Emergency · ${l.phone ?? l.email ?? "—"}`,
+        actionLabel: "Call",
+        sortKey: 2_000_000 - new Date(l.created_at).getTime() / 60_000,
+        due: l.next_follow_up_at ?? null,
+        leadRef: l,
+        onSelect: () => onScheduleConsult(l),
+      });
+    }
+
+    // ORANGE — urgent leads (not already red). DUE = next_follow_up_at when set.
+    for (const l of leads) {
+      if (l.urgency === "emergency") continue;
+      if (l.urgency !== "urgent") continue;
+      out.push({
+        id: `lead-${l.id}`,
+        color: "orange",
+        title: l.full_name,
+        subtitle: `Urgent · ${l.phone ?? l.email ?? "—"}${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`,
+        actionLabel: "Call",
+        sortKey: 3_000_000 - new Date(l.created_at).getTime() / 60_000,
+        due: l.next_follow_up_at ?? null,
+        leadRef: l,
+        onSelect: () => onScheduleConsult(l),
+      });
+    }
+
+    // YELLOW — attorney_accepted: present-the-case calls.
+    // DUE = next_follow_up_at when set.
+    for (const l of leads) {
+      if (l.status !== "attorney_accepted") continue;
+      out.push({
+        id: `lead-${l.id}`,
+        color: "yellow",
+        title: l.full_name,
+        subtitle: `Present the case${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`,
+        actionLabel: "Call",
+        sortKey: 4_000_000 - new Date(l.created_at).getTime() / 60_000,
+        due: l.next_follow_up_at ?? null,
+        leadRef: l,
+        onSelect: () => onScheduleConsult(l),
+      });
+    }
+
+    // BLUE — scheduling + fee follow-ups. DUE = next_follow_up_at when set.
+    for (const l of leads) {
+      if (l.urgency === "emergency" || l.urgency === "urgent") continue;
+      if (l.status === "attorney_accepted") continue;
+      const needsScheduling =
+        l.status === "new" || l.status === "contacted" || l.follow_up_queue === "priority";
+      const feeFollowup = l.status === "fee_quoted";
+      if (!needsScheduling && !feeFollowup) continue;
+      out.push({
+        id: `lead-${l.id}`,
+        color: "blue",
+        title: l.full_name,
+        subtitle: feeFollowup
+          ? `Fee quoted · follow up${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`
+          : `${l.status === "contacted" ? "Re-contact" : "Schedule"} · ${l.phone ?? l.email ?? "—"}`,
+        actionLabel: feeFollowup ? "Follow up" : "Schedule",
+        sortKey: 5_000_000 - new Date(l.created_at).getTime() / 60_000,
+        due: l.next_follow_up_at ?? null,
+        leadRef: l,
+        onSelect: () => onScheduleConsult(l),
+      });
+    }
+
+    // Stable sort by color tier, then by sortKey within tier.
+    const colorRank: Record<TaskColor, number> = { red: 0, orange: 1, yellow: 2, blue: 3 };
+    // Sort: color tier → overdue first (within color) → sortKey.
+    //
+    // The "overdue first within color" tiebreaker is what satisfies the
+    // prioritization rule that at-risk follow-ups (overdue YELLOW/BLUE)
+    // rank ahead of fresh items in the same color tier — e.g. an overdue
+    // fee-quoted lead jumps to the top of BLUE ahead of fresh new-intake
+    // BLUE rows. YELLOW (present-the-case) > BLUE (set-appointment) is
+    // already baked into the color rank.
+    const isOverdue = (t: TaskEntry) =>
+      !!t.due && new Date(t.due).getTime() < nowMs;
+    out.sort((a, b) => {
+      const r = colorRank[a.color] - colorRank[b.color];
+      if (r !== 0) return r;
+      const oa = isOverdue(a) ? 0 : 1;
+      const ob = isOverdue(b) ? 0 : 1;
+      if (oa !== ob) return oa - ob;
+      return a.sortKey - b.sortKey;
+    });
+
+    // TODO Phase B — Anthropic "analyze what's pressing" pass:
+    //   Replace this static sort with (or layer on top of) a model call that
+    //   considers natural-language context (urgency phrases in lead notes,
+    //   case-type sensitivity, time-of-day, staffer workload). See
+    //   `analyzePressingTasksAI` below — currently a stub that returns the
+    //   static ordering unchanged.
+    return analyzePressingTasksAI(out);
+  }, [todaysAppts, clientThreads, leads, currentTime, onChangeTab, onOpenView, onScheduleConsult]);
+
+  // Count of tasks whose due timestamp is in the past. Tasks without a due
+  // can't be overdue (per spec — no fabricated due dates). Drives the banner.
+  const overdueTasks = useMemo(
+    () => sharedTasks.filter(t => !!t.due && new Date(t.due).getTime() < Date.now()),
+    [sharedTasks]
+  );
+  const overdueCount = overdueTasks.length;
 
   // ── Action handlers (Today's Work log-result panel) ───────────────────────
 
@@ -533,19 +992,39 @@ export default function IntakeDashboard({
     setManuallyChosenId(null);
   }
 
-  async function handleLeftMessage(lead: Lead) {
+  // Call-result handlers — these are the "task marked Called" outcomes.
+  //
+  // ROUTING RULES (per the post-call workflow):
+  //   - Reached & scheduling     → handleScheduleConsult opens the scaffold
+  //                                modal (SMS opt-in + email confirmation
+  //                                previews) then runs the existing scheduler.
+  //   - Reached & doing intake   → handleDoIntakeNow (unchanged).
+  //   - Left message / No answer → patch the lead with follow_up_queue=
+  //                                'priority' so it lands in the unified
+  //                                Leads view's Follow-Up sub-tab.
+  //   - Manual follow-up tag     → handleAddToFollowUp (unchanged).
+  //
+  // The follow-up routing is REAL data — intake_leads.follow_up_queue
+  // already exists. Real sends + opt-out tracking are NOT here — see
+  // PostCallScheduledModal.tsx for the Twilio/SendGrid + consent TODO list.
+
+  async function logCallOutcomeAndFollowUp(lead: Lead, outcome: "left_message" | "no_answer") {
     try {
       await sbPost("intake_contact_log", {
         lead_id: lead.id,
         channel: "phone",
         direction: "outbound",
-        outcome: "left_message",
+        outcome,
         contacted_by: session.name,
         is_bot: false,
         notes: null,
       });
-      const patch: { status?: string; last_contact_at: string } = {
+      // Patch builds on the existing write path. Setting follow_up_queue=
+      // 'priority' is what surfaces the lead in the Follow-Up filter inside
+      // the unified Leads view.
+      const patch: { status?: string; last_contact_at: string; follow_up_queue: "priority" } = {
         last_contact_at: new Date().toISOString(),
+        follow_up_queue: "priority",
       };
       if (lead.status === "new") patch.status = "contacted";
       await sbPatch("intake_leads", lead.id, patch);
@@ -553,6 +1032,14 @@ export default function IntakeDashboard({
       handleCollapse();
       onRefresh();
     }
+  }
+
+  async function handleLeftMessage(lead: Lead) {
+    await logCallOutcomeAndFollowUp(lead, "left_message");
+  }
+
+  async function handleNoAnswer(lead: Lead) {
+    await logCallOutcomeAndFollowUp(lead, "no_answer");
   }
 
   async function handleAddToFollowUp(lead: Lead) {
@@ -567,9 +1054,20 @@ export default function IntakeDashboard({
     }
   }
 
+  // PostCallScheduledModal — opens BEFORE the existing scheduler so staff
+  // see exactly what scaffold sends will fire after they book. Continue
+  // routes through to onScheduleConsult; Cancel collapses the row.
+  const [scheduledModalLead, setScheduledModalLead] = useState<Lead | null>(null);
   function handleScheduleConsult(lead: Lead) {
     handleCollapse();
-    onScheduleConsult(lead);
+    setScheduledModalLead(lead);
+  }
+  function handleScheduledModalContinue() {
+    if (scheduledModalLead) onScheduleConsult(scheduledModalLead);
+    setScheduledModalLead(null);
+  }
+  function handleScheduledModalCancel() {
+    setScheduledModalLead(null);
   }
 
   function handleDoIntakeNow(lead: Lead) {
@@ -583,15 +1081,89 @@ export default function IntakeDashboard({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-3">
-        <div className="flex-1 min-w-0">
-          <h2 className="text-lg font-medium text-[#FAFAF7]" style={{ fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>
-            {greeting}, {session.name.split(" ")[0]}.
-          </h2>
-          <p className="text-xs text-[#6B6B66] mt-0.5">
-            Your day at a glance — {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ })}
-          </p>
+      {/* Overdue reminder — only renders when at least one task in the shared
+          pool has a due timestamp in the past. Sits above everything else so
+          it can't be missed when reorganizing is genuinely needed. */}
+      <OverdueReminderBanner count={overdueCount} tasks={overdueTasks} />
+
+      {/* Client search row — sits above the action buttons. Searches the
+          existing `leads` array in memory by name / phone / email and routes
+          a click into the lead detail panel via onOpenLead. */}
+      <div className="flex items-center justify-end">
+        <ClientSearchBar
+          className="w-full sm:w-80 lg:w-96"
+          leads={leads}
+          onOpen={(l) => {
+            const full = leads.find(x => x.id === l.id);
+            if (full) _onOpenLead(full);
+          }}
+          onBrowseAll={() => onChangeTab("leads")}
+          placeholder="Search clients by name or phone…"
+        />
+      </div>
+
+      <div className="flex items-start gap-3 relative flex-wrap">
+        <div className="flex-1 min-w-0 flex items-center gap-3">
+          <div className="min-w-0">
+            <h2 className="text-lg font-medium text-[#FAFAF7]" style={{ fontFamily: "'Fraunces', Georgia, serif", letterSpacing: "-0.01em" }}>
+              {greeting}, {session.name.split(" ")[0]}.
+            </h2>
+            <p className="text-xs text-[#6B6B66] mt-0.5">
+              Your day at a glance — {new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ })}
+            </p>
+          </div>
+
+          {/* Comms pill bar — replaces the standalone phone icon. Phone lives
+              inside the pill now, alongside SMS / Email / Team / Direct /
+              Dept email + a Tasks-due indicator. Hooks into the SAME
+              staffMsgs + clientThreads data the Messaging panel uses. */}
+          <CommsPillBar
+            staffMsgs={staffMsgs}
+            clientThreads={clientThreads}
+            sharedTasksCount={sharedTasks.length}
+            onOpenMessagingPanel={onOpenView}
+            onOpenPhoneDialer={() => setPhonePopoverOpen(true)}
+            onOpenTasks={() => { /* tasks live in the LEFT column below; no-op for now */ }}
+          />
+
+          {/* Compact Employee Time Clock pill — status indicator only. Click
+              opens the popup carrying metrics + actions (lunch/break/clock
+              out + PTO/STO requests). Hour metrics are intentionally NOT
+              shown inline on the dashboard. */}
+          <div className="max-w-[200px]">
+            <ClockBubble
+              state={timeClock}
+              actions={timeClockActions}
+              onRequestTimeOff={(_kind) => {
+                // TODO: pre-select reason_type in TimeOffTab based on kind
+                // ("pto"→"vacation", "sto"→"sick"). Today the form opens
+                // unfiltered — staffer picks the reason.
+                void _kind;
+                onChangeTab("my_schedule");
+              }}
+            />
+          </div>
         </div>
+
+        {/* Escalate to Supervisor — scaffold modal (TODO: route to supervisor). */}
+        <button
+          onClick={() => setEscalateOpen(true)}
+          title="Escalate to supervisor"
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-amber-300 bg-amber-900/20 hover:bg-amber-900/30 border border-amber-700/40 px-3 py-1.5 rounded transition-colors"
+        >
+          <AlertTriangle className="w-3.5 h-3.5" /> Escalate to Supervisor
+        </button>
+
+        {/* Existing Client Leads — directs to the Leads tab (search/filter all leads). */}
+        <button
+          onClick={() => onChangeTab("leads")}
+          title="Browse all existing client leads"
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-white bg-sky-700 hover:bg-sky-600 px-3 py-1.5 rounded transition-colors"
+        >
+          <Users className="w-3.5 h-3.5" /> Existing Client Leads
+        </button>
+
+        {/* New Client Lead — unchanged (gold, far right). */}
         {onLogNewLead && (
           <button
             onClick={onLogNewLead}
@@ -601,12 +1173,69 @@ export default function IntakeDashboard({
             <span className="text-base leading-none">+</span> New Client Lead
           </button>
         )}
+
+        {phonePopoverOpen && (
+          <PhoneDialerPopover onClose={() => setPhonePopoverOpen(false)} />
+        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {/* Top bubbles — Employee Time Clock · Overview · Retention.
+          The Clock is now a compact pill — its popup carries the metrics +
+          actions, including PTO / STO requests that route to the existing
+          time-off request form (TimeOffTab inside MyScheduleTab). */}
+      <TopBubblesRow
+        sharedTasksCount={sharedTasks.length}
+        staffMsgs={staffMsgs}
+        clientThreads={clientThreads}
+        timeClock={timeClock}
+        timeClockActions={timeClockActions}
+        onRequestTimeOff={(_kind) => {
+          // TODO: pre-select reason_type in TimeOffTab based on kind:
+          //   - "pto"  → reason_type="vacation" (PTO; PTO-specific reason type
+          //              not in the existing form schema today).
+          //   - "sto"  → reason_type="sick".
+          // The existing form already supports the underlying reason_type set —
+          // it just doesn't open with a preselected value yet. Until that
+          // refinement lands, we route to the tab and let the staffer pick.
+          void _kind;
+          onChangeTab("my_schedule");
+        }}
+      />
+
+      {/*
+        Three-column body.
+          LEFT   (compact)  — AllTasksWidget OR ScheduleColumnView (toggle)
+          MIDDLE (flex)     — Up Next & Outreach Queue
+          RIGHT  (flex)     — Today hour-by-hour
+        On narrow viewports the columns stack vertically.
+      */}
+      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
+        {leftMode === "tasks" ? (
+          <AllTasksWidget
+            tasks={sharedTasks}
+            mode={leftMode}
+            onChangeMode={setLeftMode}
+          />
+        ) : (
+          <ScheduleColumnView
+            mode={leftMode}
+            onChangeMode={setLeftMode}
+            range={scheduleRange}
+            onChangeRange={setScheduleRange}
+            calEvents={calEvents}
+            todayLocal={todayLocal}
+            nextDayLocal={nextDayLocal}
+            nextDayAppts={nextDayAppts}
+            upcomingAppts={upcomingAppts}
+            staffPool={staffPool}
+            schedSelection={schedSelection}
+            onChangeSchedSelection={setSchedSelection}
+            currentSessionId={session.id}
+            onChangeTab={onChangeTab}
+          />
+        )}
+
         <TasksAndAppointmentsWidget
-          todaysAppts={todaysAppts}
-          upcomingAppts={upcomingAppts}
           toDoQueue={toDoQueue}
           nextTask={nextTask}
           expandedRowId={expandedRowId}
@@ -618,32 +1247,157 @@ export default function IntakeDashboard({
           onScheduleConsult={handleScheduleConsult}
           onDoIntakeNow={handleDoIntakeNow}
           onLeftMessage={handleLeftMessage}
+          onNoAnswer={handleNoAnswer}
           onAddToFollowUp={handleAddToFollowUp}
           onCancelExpansion={handleCollapse}
           onChangeTab={onChangeTab}
+          onOpenMessages={() => onOpenView("messages")}
         />
-        <MessagingWidget
+
+        <ConsolidatedMessagingWidget
           threads={clientThreads}
           staffMsgs={staffMsgs}
           loading={msgsLoading}
           onOpenView={onOpenView}
         />
-        <div className="lg:col-span-2">
-          <EmailInboxWidget />
-        </div>
-        <div className="lg:col-span-2">
-          <PhoneDialerWidget />
-        </div>
       </div>
+
+      {/* Today hour-by-hour — full-width row below the 3-column grid. */}
+      <TodayByHourWidget
+        todaysAppts={todaysAppts}
+        todayLocal={todayLocal}
+        onChangeTab={onChangeTab}
+      />
+
+      {escalateOpen && (
+        <EscalateModal
+          leads={leads}
+          session={session}
+          onClose={() => setEscalateOpen(false)}
+        />
+      )}
+
+      {scheduledModalLead && (
+        <PostCallScheduledModal
+          lead={{
+            full_name: scheduledModalLead.full_name,
+            phone: scheduledModalLead.phone,
+            email: scheduledModalLead.email,
+            sms_opt_out: scheduledModalLead.sms_opt_out,
+          }}
+          onCancel={handleScheduledModalCancel}
+          onContinue={handleScheduledModalContinue}
+        />
+      )}
     </div>
   );
 }
 
-// ─── Today's Work widget (Section A + Section B) ─────────────────────────────
+// ─── TODAY — hour-by-hour grid (REAL, from calEvents) ────────────────────────
+
+function TodayByHourWidget({
+  todaysAppts, todayLocal, onChangeTab,
+}: {
+  todaysAppts: ApptRow[];
+  todayLocal: string;
+  onChangeTab: (tab: TabId) => void;
+}) {
+  // Bucket appts by start-hour (firm tz). An appt belongs to the slot of its
+  // start hour even if it spills into the next slot.
+  const byHour = useMemo(() => {
+    const m = new Map<number, ApptRow[]>();
+    for (const a of todaysAppts) {
+      const h = hourOfIsoInFirmTz(a.start_time);
+      const list = m.get(h) ?? [];
+      list.push(a);
+      m.set(h, list);
+    }
+    return m;
+  }, [todaysAppts]);
+
+  const hours: number[] = [];
+  for (let h = BUSINESS_HOUR_START; h < BUSINESS_HOUR_END; h++) hours.push(h);
+
+  const currentHour = hourOfIsoInFirmTz(new Date().toISOString());
+
+  return (
+    <Card>
+      <CardHeader
+        icon={<Clock className="w-4 h-4" />}
+        title={`Today — ${formatDayLabel(todayLocal)}`}
+        badge={<CountBadge value={todaysAppts.length} />}
+        chip={
+          <button
+            onClick={() => onChangeTab("calendar")}
+            className="text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
+          >
+            Open calendar →
+          </button>
+        }
+      />
+      <div className="p-4">
+        <ul className="space-y-1">
+          {hours.map(h => {
+            const items = byHour.get(h) ?? [];
+            const isCurrent = h === currentHour;
+            return (
+              <li
+                key={h}
+                className={`flex items-start gap-3 px-2 py-1.5 rounded ${
+                  isCurrent ? "bg-[#B8945F]/10 border border-[#B8945F]/30" : ""
+                }`}
+              >
+                <div className="w-14 flex-shrink-0">
+                  <p className={`text-[11px] font-mono ${isCurrent ? "text-[#B8945F] font-bold" : "text-[#6B6B66]"}`}>
+                    {formatHourLabel(h)}
+                  </p>
+                </div>
+                <div className="flex-1 min-w-0">
+                  {items.length === 0 ? (
+                    <p className="text-[11px] text-[#3A3A36] italic">—</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {items.map(e => (
+                        <li key={e.id}>
+                          <button
+                            onClick={() => onChangeTab("calendar")}
+                            className="w-full text-left flex items-center gap-2 px-2 py-1 rounded bg-[#0F0F0E] hover:bg-[#2A2A28] border border-[#2A2A28] transition-colors"
+                          >
+                            <Calendar className="w-3 h-3 text-[#B8945F] flex-shrink-0" />
+                            <span className="text-[11px] font-mono text-[#B8945F] flex-shrink-0">
+                              {formatTimeRange(e.start_time, e.end_time)}
+                            </span>
+                            <span className="text-xs text-[#FAFAF7] truncate flex-1">
+                              {e.client_name}
+                            </span>
+                            {e.chapter && (
+                              <span className="text-[10px] text-[#6B6B66] flex-shrink-0">Ch.{e.chapter}</span>
+                            )}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+        <p className="text-[10px] text-[#6B6B66] italic mt-3 px-2">
+          Showing firm business hours ({formatHourLabel(BUSINESS_HOUR_START)}–{formatHourLabel(BUSINESS_HOUR_END)}).
+          {/* TODO: per-staff work-hours config doesn't exist yet — swap to staffer's hours when it lands. */}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Up Next + Outreach queue widget ─────────────────────────────────────────
+// (The standalone NextBusinessDayWidget that used to live here was folded into
+// `NextDayList` inside ScheduleColumnView — same calEvents source, compact for
+// the LEFT column.)
 
 interface TasksAndAppointmentsWidgetProps {
-  todaysAppts: ApptRow[];
-  upcomingAppts: ApptRow[];
   toDoQueue: ToDoRow[];
   nextTask: NextTask;
   expandedRowId: string | null;
@@ -655,63 +1409,30 @@ interface TasksAndAppointmentsWidgetProps {
   onScheduleConsult: (lead: Lead) => void;
   onDoIntakeNow: (lead: Lead) => void;
   onLeftMessage: (lead: Lead) => void;
+  onNoAnswer: (lead: Lead) => void;
   onAddToFollowUp: (lead: Lead) => void;
   onCancelExpansion: () => void;
   onChangeTab: (tab: TabId) => void;
+  /** Routes the msg-unread Up Next variant into the Messaging panel. */
+  onOpenMessages: () => void;
 }
 
 function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
-  const { todaysAppts, upcomingAppts, toDoQueue, nextTask, onChangeTab } = props;
-  const showingToday = todaysAppts.length > 0;
-  const apptsToShow = showingToday ? todaysAppts : upcomingAppts.slice(0, 5);
-  const totalToday = todaysAppts.length + toDoQueue.length;
+  const { toDoQueue, nextTask, onChangeTab } = props;
 
   return (
     <Card className="flex flex-col">
       <CardHeader
         icon={<ListChecks className="w-4 h-4" />}
-        title="Today's Work"
-        badge={<CountBadge value={totalToday} />}
+        title="Up Next & Outreach Queue"
+        badge={<CountBadge value={toDoQueue.length} />}
+        chip={
+          <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-[#B8945F]">
+            <PlayCircle className="w-3 h-3" /> Start the next task
+          </span>
+        }
       />
-      <div className="p-4 space-y-4 overflow-y-auto" style={{ maxHeight: 560 }}>
-
-        {/* Section A — Coming up */}
-        <Section
-          title={showingToday ? "Coming up" : "Coming up — next on your calendar"}
-          count={apptsToShow.length}
-          onAll={() => onChangeTab("calendar")}
-        >
-          {apptsToShow.length === 0 ? (
-            <EmptyHint>No consults on your calendar.</EmptyHint>
-          ) : (
-            <ul className="space-y-1.5">
-              {apptsToShow.map(e => (
-                <li key={e.id}>
-                  <button
-                    onClick={() => onChangeTab("calendar")}
-                    className="w-full flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
-                  >
-                    <Calendar className="w-3.5 h-3.5 text-[#6B6B66] mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[11px] font-mono text-[#B8945F] truncate">
-                        {formatDateLabel(e.start_time)} · {formatTimeRange(e.start_time, e.end_time)}
-                      </p>
-                      <p className="text-xs text-[#FAFAF7] truncate mt-0.5">
-                        {e.client_name}
-                        <span className="text-[#6B6B66]">
-                          {" — "}{e.chapter ? `Ch.${e.chapter}` : ""} consult
-                        </span>
-                      </p>
-                    </div>
-                    <ChevronRight className="w-3 h-3 text-[#6B6B66] mt-1 flex-shrink-0" />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        {/* Section B — To do (Up Next + queue) */}
+      <div className="p-4 space-y-3 overflow-y-auto" style={{ maxHeight: 560 }}>
         <div>
           <div className="flex items-center gap-2 mb-1.5 px-1">
             <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">To do</p>
@@ -732,6 +1453,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
             onStartLeadCall={props.onStartLeadCall}
             onSkip={props.onSkip}
             onChoose={props.onChoose}
+            onOpenMessages={props.onOpenMessages}
           />
 
           {/* Queue list — always visible below the Up Next card */}
@@ -748,6 +1470,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
                   onScheduleConsult={() => props.onScheduleConsult(row.lead)}
                   onDoIntakeNow={() => props.onDoIntakeNow(row.lead)}
                   onLeftMessage={() => props.onLeftMessage(row.lead)}
+                  onNoAnswer={() => props.onNoAnswer(row.lead)}
                   onAddToFollowUp={() => props.onAddToFollowUp(row.lead)}
                   onCancel={props.onCancelExpansion}
                 />
@@ -755,31 +1478,8 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
             </ul>
           )}
         </div>
-
       </div>
     </Card>
-  );
-}
-
-function Section({
-  title, count, onAll, children,
-}: { title: string; count: number; onAll?: () => void; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-1.5 px-1">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">{title}</p>
-        <span className="text-[10px] font-mono text-[#6B6B66]">{count}</span>
-        {onAll && (
-          <button
-            onClick={onAll}
-            className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
-          >
-            View all →
-          </button>
-        )}
-      </div>
-      {children}
-    </div>
   );
 }
 
@@ -798,6 +1498,7 @@ function UrgencyDot({ urgency }: { urgency: string | null }) {
 function TierChip({ tier }: { tier: ToDoTier }) {
   const cfg = {
     emergency: { label: "Emergency",         cls: "bg-red-900/40 text-red-300 border-red-700/60" },
+    yellow:    { label: "Present case",      cls: "bg-yellow-900/30 text-yellow-300 border-yellow-700/60" },
     new:       { label: "New call",          cls: "bg-[#2A2A28] text-[#B8945F] border-[#3A3A36]" },
     followup:  { label: "Follow-up — quoted", cls: "bg-[#2A2A28] text-[#6B6B66] border-[#3A3A36]" },
   }[tier];
@@ -811,7 +1512,7 @@ function TierChip({ tier }: { tier: ToDoTier }) {
 // ─── Up Next card (Layer 1) ──────────────────────────────────────────────────
 
 function UpNextCard({
-  nextTask, queue, onStartAppointment, onStartLeadCall, onSkip, onChoose,
+  nextTask, queue, onStartAppointment, onStartLeadCall, onSkip, onChoose, onOpenMessages,
 }: {
   nextTask: NextTask;
   queue: ToDoRow[];
@@ -819,6 +1520,7 @@ function UpNextCard({
   onStartLeadCall: (leadId: string) => void;
   onSkip: (taskId: string) => void;
   onChoose: (leadId: string) => void;
+  onOpenMessages: () => void;
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -834,6 +1536,16 @@ function UpNextCard({
     );
   }
 
+  // "DO THIS NEXT" cue — small pill above the card body. The label encodes
+  // *why* this is the most-pressing task (per the prioritization rules).
+  function PriorityReason({ children }: { children: React.ReactNode }) {
+    return (
+      <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-[#B8945F]">
+        <ChevronRight className="w-3 h-3" /> Do this next · <span className="text-[#FAFAF7]">{children}</span>
+      </span>
+    );
+  }
+
   // ── Appointment ──────────────────────────────────────────────────────────
   if (nextTask.kind === "appointment") {
     const { appt, minutesUntilStart, isInProgress } = nextTask;
@@ -844,6 +1556,11 @@ function UpNextCard({
             {isInProgress ? "running now" : `starts in ${minutesUntilStart} min`}
           </span>
         </UpNextHeader>
+        <div className="mt-1.5">
+          <PriorityReason>
+            {isInProgress ? "appointment running now" : `appointment in ${minutesUntilStart} min`}
+          </PriorityReason>
+        </div>
         <div className="flex items-start gap-3 mt-2">
           <Calendar className="w-4 h-4 text-[#B8945F] mt-0.5 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -875,16 +1592,77 @@ function UpNextCard({
     );
   }
 
-  // ── Lead (emergency / new / follow-up) ───────────────────────────────────
+  // ── Unread client message — RED tier, slotted ahead of leads ─────────────
+  if (nextTask.kind === "msg-unread") {
+    const { threadId, clientName, preview, unreadCount } = nextTask;
+    return (
+      <UpNextShell tone="appointment">
+        <UpNextHeader label="Up Next — client message">
+          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60">
+            {unreadCount} unread
+          </span>
+        </UpNextHeader>
+        <div className="mt-1.5">
+          <PriorityReason>client waiting on a reply</PriorityReason>
+        </div>
+        <div className="flex items-start gap-3 mt-2">
+          <Sparkles className="w-4 h-4 text-[#B8945F] mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold text-[#FAFAF7] truncate">{clientName}</p>
+            <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">
+              {preview || "(no preview)"}
+            </p>
+          </div>
+        </div>
+        <UpNextActions
+          primary={
+            <button
+              onClick={onOpenMessages}
+              className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
+            >
+              <Sparkles className="w-3 h-3" /> Reply
+            </button>
+          }
+          allowSkip
+          onSkip={() => onSkip(`msg-${threadId}`)}
+          onChooseAnother={() => setPickerOpen(o => !o)}
+          pickerOpen={pickerOpen}
+        />
+        {pickerOpen && <ChoosePicker queue={queue} onPick={(id) => { onChoose(id); setPickerOpen(false); }} onClose={() => setPickerOpen(false)} />}
+      </UpNextShell>
+    );
+  }
+
+  // ── Lead (emergency / yellow / new / follow-up) ──────────────────────────
   const lead = nextTask.lead;
   const isEmergency = nextTask.kind === "lead-emergency";
-  const tier: ToDoTier = isEmergency ? "emergency" : nextTask.kind === "lead-new" ? "new" : "followup";
+  const isYellow    = nextTask.kind === "lead-yellow";
+  const overdue     = !isEmergency && "isOverdue" in nextTask && nextTask.isOverdue;
+  const tier: ToDoTier =
+    isEmergency ? "emergency" :
+    isYellow    ? "yellow"    :
+    nextTask.kind === "lead-new" ? "new" : "followup";
+
+  const reason =
+    isEmergency ? "emergency lead" :
+    isYellow    ? "present the case (attorney accepted)" :
+    overdue     ? "at-risk follow-up (overdue)" :
+    nextTask.kind === "lead-new" ? "first contact / set appointment" :
+    "fee-quoted follow-up";
 
   return (
     <UpNextShell tone={isEmergency ? "emergency" : "lead"}>
       <UpNextHeader label={isEmergency ? "Up Next — emergency" : "Up Next"}>
         <TierChip tier={tier} />
+        {overdue && !isEmergency && (
+          <span className="text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 rounded border border-red-700/60 bg-red-900/30 text-red-300">
+            Overdue
+          </span>
+        )}
       </UpNextHeader>
+      <div className="mt-1.5">
+        <PriorityReason>{reason}</PriorityReason>
+      </div>
       <div className="flex items-start gap-3 mt-2">
         {isEmergency
           ? <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
@@ -1014,7 +1792,7 @@ function ChoosePicker({
 
 function ToDoRowItem({
   row, expanded, onCall,
-  onScheduleConsult, onDoIntakeNow, onLeftMessage, onAddToFollowUp, onCancel,
+  onScheduleConsult, onDoIntakeNow, onLeftMessage, onNoAnswer, onAddToFollowUp, onCancel,
 }: {
   row: ToDoRow;
   expanded: boolean;
@@ -1022,6 +1800,7 @@ function ToDoRowItem({
   onScheduleConsult: () => void;
   onDoIntakeNow: () => void;
   onLeftMessage: () => void;
+  onNoAnswer: () => void;
   onAddToFollowUp: () => void;
   onCancel: () => void;
 }) {
@@ -1068,13 +1847,23 @@ function ToDoRowItem({
             >
               <ClipboardList className="w-3 h-3" /> Do intake now
             </button>
-            {/* Lighter secondary actions */}
+            {/* Call-outcome shortcuts — both "Left message" and "No answer"
+                route the lead to the Follow-Up sub-tab of the unified Leads
+                view (sets intake_leads.follow_up_queue='priority'). */}
             <div className="flex items-center gap-3 ml-auto">
               <button
                 onClick={onLeftMessage}
+                title="Log: left a voicemail. Lead moves to Follow-Up."
                 className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
               >
                 Left message
+              </button>
+              <button
+                onClick={onNoAnswer}
+                title="Log: no answer. Lead moves to Follow-Up."
+                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+              >
+                No answer
               </button>
               <button
                 onClick={onAddToFollowUp}
@@ -1096,261 +1885,308 @@ function ToDoRowItem({
   );
 }
 
-// ─── Widget 3 — Messaging (REAL) ─────────────────────────────────────────────
+// ─── Consolidated messaging widget (REAL + scaffold) ────────────────────────
+//
+// All messaging surfaces in one tabbed widget. Tabs:
+//   - All        — every unread, sorted by most-recent. "Customizable" is a
+//                  future feature: users will be able to pick which channels
+//                  count toward All. Until that settings model exists, All
+//                  shows everything (TODO below).
+//   - SMS        — staff_messages where channel='sms' + client threads whose
+//                  most-recent message was channel='sms'.
+//   - Email      — staff_messages where channel='email' + client threads
+//                  whose most-recent message was channel='email'.
+//   - Team       — group/firm-wide channels. NO source yet (planned: a
+//                  staff_team_channels table). Scaffold tab with empty state.
+//   - Direct     — staff_messages where channel='dm' (1-on-1 staff DMs).
+//   - Voicemails — NO source yet (planned: Twilio voice inbound + a
+//                  voicemails table). Scaffold tab with empty state.
+//
+// Indicator: the card header shows the total unread count. Each tab's button
+// shows its own per-tab unread badge.
+//
+// TODO Phase B — customizable "All":
+//   - per-user preference: which channels count toward "All"
+//   - per-firm default
+// TODO Phase B — Team channels:
+//   - new table `staff_team_channels (id, firm_id, name)` + `staff_team_channel_members`
+//   - send/receive surface; this tab would then render the unread per-channel
+// TODO Phase B — Voicemails (same TODO list as the prior VoicemailsWidget):
+//   - Twilio Voice inbound webhook + voicemails table
+// TODO Phase B — Outbound sends (post-call workflow):
+//   - When the dashboard "Called → Scheduled" flow eventually dispatches the
+//     SMS opt-in + email confirmation (currently scaffolded in
+//     PostCallScheduledModal), insert the sent rows into client_messages with
+//     sender_role='firm' + channel='sms'|'email'. The read path here already
+//     surfaces those rows in the All / SMS / Email tabs — no further widget
+//     changes needed once the dispatcher is wired.
+//   - Respect opt-out: filter outbound queue on the planned consent flag
+//     (intake_leads.sms_opt_out / opt_in_status) BEFORE enqueueing SMS.
 
-function MessagingWidget({
+type MsgTab = "all" | "sms" | "email" | "team" | "direct" | "voicemails";
+
+interface UnifiedMsgRow {
+  id: string;
+  sender: string;
+  preview: string;
+  timestamp: string;
+  channel: "sms" | "email" | "dm" | "phone_note" | "other";
+  source: "client" | "staff";
+  unreadCount: number;
+  onOpen: () => void;
+}
+
+function ConsolidatedMessagingWidget({
   threads, staffMsgs, loading, onOpenView,
 }: {
-  threads: (ClientMessageThread & { client_name?: string; preview?: string })[];
+  threads: (ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[];
   staffMsgs: StaffMessage[];
   loading: boolean;
   onOpenView: (view: "messages" | "staff_comms") => void;
 }) {
-  const clientUnread = threads.reduce((s, t) => s + (t.unread_count ?? 0), 0);
-  const staffUnread = staffMsgs.length;
-  const totalUnread = clientUnread + staffUnread;
+  const [tab, setTab] = useState<MsgTab>("all");
+
+  // Normalize client threads + staff messages into a single row shape.
+  const rows: UnifiedMsgRow[] = useMemo(() => {
+    const out: UnifiedMsgRow[] = [];
+    for (const t of threads) {
+      const ch = (t.last_channel ?? "").toLowerCase();
+      const channel: UnifiedMsgRow["channel"] =
+        ch === "sms" ? "sms" : ch === "email" ? "email" : "other";
+      out.push({
+        id: `client-${t.id}`,
+        sender: t.client_name ?? "Client",
+        preview: t.preview || "(no preview)",
+        timestamp: t.last_message_at ?? t.updated_at,
+        channel,
+        source: "client",
+        unreadCount: t.unread_count ?? 0,
+        onOpen: () => onOpenView("messages"),
+      });
+    }
+    for (const m of staffMsgs) {
+      const channel: UnifiedMsgRow["channel"] =
+        m.channel === "sms"        ? "sms"   :
+        m.channel === "email"      ? "email" :
+        m.channel === "dm"         ? "dm"    :
+        m.channel === "phone_note" ? "phone_note" : "other";
+      out.push({
+        id: `staff-${m.id}`,
+        sender: m.sender_name,
+        preview: m.subject || m.body.slice(0, 80),
+        timestamp: m.created_at,
+        channel,
+        source: "staff",
+        unreadCount: m.read ? 0 : 1,
+        onOpen: () => onOpenView("staff_comms"),
+      });
+    }
+    // Most-recent first.
+    out.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return out;
+  }, [threads, staffMsgs, onOpenView]);
+
+  // Per-tab unread counts and row predicates.
+  const counts = useMemo(() => {
+    const c = { all: 0, sms: 0, email: 0, team: 0, direct: 0, voicemails: 0 };
+    for (const r of rows) {
+      if (r.unreadCount <= 0) continue;
+      c.all += r.unreadCount;
+      if (r.channel === "sms")   c.sms   += r.unreadCount;
+      if (r.channel === "email") c.email += r.unreadCount;
+      if (r.source === "staff" && r.channel === "dm") c.direct += r.unreadCount;
+    }
+    return c;
+  }, [rows]);
+
+  const tabRows = useMemo<UnifiedMsgRow[]>(() => {
+    switch (tab) {
+      case "all":   return rows;
+      case "sms":   return rows.filter(r => r.channel === "sms");
+      case "email": return rows.filter(r => r.channel === "email");
+      case "direct":return rows.filter(r => r.source === "staff" && r.channel === "dm");
+      case "team":  return [];  // SCAFFOLD — no source
+      case "voicemails": return [];  // SCAFFOLD — no source
+    }
+  }, [rows, tab]);
+
+  const isScaffoldTab = tab === "team" || tab === "voicemails";
+  const totalUnread = counts.all;
+
+  const TABS: { id: MsgTab; label: string; icon: React.ReactNode; count: number; scaffold?: boolean }[] = [
+    { id: "all",        label: "All",     icon: <ListChecks className="w-3 h-3" />,     count: counts.all },
+    { id: "sms",        label: "SMS",     icon: <MessageSquare className="w-3 h-3" />,  count: counts.sms },
+    { id: "email",      label: "Email",   icon: <AtSign className="w-3 h-3" />,         count: counts.email },
+    { id: "team",       label: "Team",    icon: <Users className="w-3 h-3" />,          count: counts.team,    scaffold: true },
+    { id: "direct",     label: "Direct",  icon: <Send className="w-3 h-3" />,           count: counts.direct },
+    { id: "voicemails", label: "Voicemail", icon: <Voicemail className="w-3 h-3" />,    count: counts.voicemails, scaffold: true },
+  ];
 
   return (
     <Card className="flex flex-col">
       <CardHeader
         icon={<MessageCircle className="w-4 h-4" />}
-        title="Messaging"
+        title="Messages"
         badge={<CountBadge value={totalUnread} tone={totalUnread > 0 ? "warn" : "neutral"} />}
+        chip={
+          totalUnread > 0 ? (
+            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-amber-300">
+              <BellRing className="w-3 h-3" /> {totalUnread} to address
+            </span>
+          ) : (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+              Inbox clear
+            </span>
+          )
+        }
       />
-      <div className="p-4 space-y-4 overflow-y-auto" style={{ maxHeight: 560 }}>
-        <Section title="Client Threads" count={clientUnread} onAll={() => onOpenView("messages")}>
-          {loading ? (
-            <EmptyHint>Loading…</EmptyHint>
-          ) : threads.length === 0 ? (
-            <EmptyHint>No active client threads.</EmptyHint>
-          ) : (
-            <ul className="space-y-1.5">
-              {threads.slice(0, 5).map(t => (
-                <li key={t.id}>
-                  <button
-                    onClick={() => onOpenView("messages")}
-                    className="w-full flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
-                  >
-                    <Users className="w-3.5 h-3.5 text-[#6B6B66] mt-0.5 flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className={`text-xs truncate ${t.unread_count > 0 ? "text-[#FAFAF7] font-semibold" : "text-[#FAFAF7]"}`}>
-                          {t.client_name}
-                        </p>
-                        {t.unread_count > 0 && (
-                          <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60">
-                            {t.unread_count}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">
-                        {t.preview || "(no preview)"}
-                      </p>
-                    </div>
-                    <span className="text-[10px] text-[#6B6B66] flex-shrink-0 ml-2">
-                      {t.last_message_at ? relativeTime(t.last_message_at) : ""}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
 
-        <Section title="Internal Inbox" count={staffUnread} onAll={() => onOpenView("staff_comms")}>
-          {loading ? (
-            <EmptyHint>Loading…</EmptyHint>
-          ) : staffMsgs.length === 0 ? (
-            <EmptyHint>Inbox is clear.</EmptyHint>
-          ) : (
-            <ul className="space-y-1.5">
-              {staffMsgs.slice(0, 5).map(m => (
-                <li key={m.id}>
-                  <button
-                    onClick={() => onOpenView("staff_comms")}
-                    className="w-full flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
-                  >
-                    <ChannelIcon channel={m.channel} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-xs font-semibold text-[#FAFAF7] truncate">{m.sender_name}</p>
-                        <span className="text-[9px] uppercase tracking-widest text-[#6B6B66]">
-                          {m.channel}
-                        </span>
-                      </div>
-                      <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">
-                        {m.subject || m.body.slice(0, 60)}
+      {/* Tab strip */}
+      <div className="px-2 py-2 border-b border-[#2A2A28] flex items-center gap-1 overflow-x-auto">
+        {TABS.map(t => {
+          const isActive = tab === t.id;
+          return (
+            <button
+              key={t.id}
+              onClick={() => setTab(t.id)}
+              className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors flex-shrink-0 ${
+                isActive
+                  ? "bg-[#2A2A28] text-[#FAFAF7]"
+                  : "text-[#6B6B66] hover:text-[#FAFAF7]"
+              } ${t.scaffold ? "italic" : ""}`}
+              title={t.scaffold ? "Scaffold — wiring pending" : undefined}
+            >
+              {t.icon}
+              {t.label}
+              {t.count > 0 && (
+                <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60">
+                  {t.count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="p-3 overflow-y-auto" style={{ maxHeight: 560 }}>
+        {loading ? (
+          <EmptyHint>Loading…</EmptyHint>
+        ) : isScaffoldTab ? (
+          <ScaffoldTabBody tab={tab} />
+        ) : tabRows.length === 0 ? (
+          <EmptyHint>{tab === "all" ? "Inbox is clear." : `No unread ${tab} messages.`}</EmptyHint>
+        ) : (
+          <ul className="space-y-1">
+            {tabRows.map(r => (
+              <li key={r.id}>
+                <button
+                  onClick={r.onOpen}
+                  className="w-full flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
+                >
+                  <UnifiedChannelIcon channel={r.channel} source={r.source} />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className={`text-xs truncate ${r.unreadCount > 0 ? "text-[#FAFAF7] font-semibold" : "text-[#FAFAF7]"}`}>
+                        {r.sender}
                       </p>
+                      <span className="text-[9px] uppercase tracking-widest text-[#6B6B66] flex-shrink-0">
+                        {r.source === "client" ? "client" : r.channel}
+                      </span>
+                      {r.unreadCount > 0 && (
+                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60 flex-shrink-0">
+                          {r.unreadCount}
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[10px] text-[#6B6B66] flex-shrink-0 ml-2">{relativeTime(m.created_at)}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+                    <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">{r.preview}</p>
+                  </div>
+                  <span className="text-[10px] text-[#6B6B66] flex-shrink-0 ml-2">
+                    {relativeTime(r.timestamp)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </Card>
   );
 }
 
-function ChannelIcon({ channel }: { channel: string }) {
+function UnifiedChannelIcon({
+  channel, source,
+}: { channel: UnifiedMsgRow["channel"]; source: UnifiedMsgRow["source"] }) {
   const cls = "w-3.5 h-3.5 text-[#6B6B66] mt-0.5 flex-shrink-0";
-  if (channel === "email")       return <Mail className={cls} />;
-  if (channel === "sms")         return <MessageCircle className={cls} />;
-  if (channel === "phone_note")  return <Phone className={cls} />;
+  if (channel === "sms")        return <MessageSquare className={cls} />;
+  if (channel === "email")      return <Mail className={cls} />;
+  if (channel === "dm")         return <Send className={cls} />;
+  if (channel === "phone_note") return <Phone className={cls} />;
+  // Fallback (client thread with unknown channel)
+  if (source === "client") return <Users className={cls} />;
   return <MessageCircle className={cls} />;
 }
 
-// ─── Widget 2 — Shared Email Inbox (UI-COMPLETE on SAMPLE data) ──────────────
-//
-// TODO Phase B — wire against a shared Microsoft 365 mailbox via the Graph API:
-//   1. Azure AD app registration with Mail.ReadWrite (Application) consent.
-//   2. Token endpoint (edge function) that mints a Graph access token using
-//      client_credentials grant; cache in memory with TTL.
-//   3. Polling or webhook subscription (Microsoft Graph change notifications)
-//      to surface new messages: GET /users/{intake-mailbox}/messages.
-//   4. New table `inbox_assignments` for our local claim/status overlay.
-//   5. Reply flow uses POST /messages/{id}/reply (server-side).
-
-function EmailInboxWidget() {
-  const [selectedId, setSelectedId] = useState<string | null>(SAMPLE_EMAILS[0].id);
-  const [statusFilter, setStatusFilter] = useState<"all" | "unhandled" | "in_progress" | "handled">("all");
-
-  const filtered = useMemo(() => {
-    if (statusFilter === "all") return SAMPLE_EMAILS;
-    return SAMPLE_EMAILS.filter(e => e.status === statusFilter);
-  }, [statusFilter]);
-
-  const selected = SAMPLE_EMAILS.find(e => e.id === selectedId) ?? null;
-  const unhandledCount = SAMPLE_EMAILS.filter(e => e.status === "unhandled").length;
-
+function ScaffoldTabBody({ tab }: { tab: MsgTab }) {
+  const cfg = tab === "team" ? {
+    icon: <Users className="w-3.5 h-3.5 text-[#6B6B66]" />,
+    label: "Team channels — coming soon",
+    detail:
+      "Group chats for firm sub-teams (Intake, Legal, Accounting, …) appear here once the team-channel feature lands.",
+  } : {
+    icon: <Voicemail className="w-3.5 h-3.5 text-[#6B6B66]" />,
+    label: "Voicemails — coming soon",
+    detail:
+      "Twilio voice inbound + the voicemails table will populate this tab. No fake entries until then.",
+  };
   return (
-    <Card>
-      <CardHeader
-        icon={<Inbox className="w-4 h-4" />}
-        title="Shared Intake Inbox"
-        badge={<CountBadge value={unhandledCount} tone="warn" />}
-        chip={<SampleChip />}
-      />
-      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] divide-x divide-[#2A2A28]" style={{ minHeight: 360 }}>
-        <div className="flex flex-col">
-          <div className="flex items-center gap-1 px-3 py-2 border-b border-[#2A2A28]">
-            {(["all", "unhandled", "in_progress", "handled"] as const).map(s => (
-              <button
-                key={s}
-                onClick={() => setStatusFilter(s)}
-                className={`text-[10px] font-semibold px-2 py-1 rounded transition-colors ${
-                  statusFilter === s
-                    ? "bg-[#2A2A28] text-[#FAFAF7]"
-                    : "text-[#6B6B66] hover:text-[#FAFAF7]"
-                }`}
-              >
-                {s === "all" ? "All" : s === "in_progress" ? "In progress" : s.charAt(0).toUpperCase() + s.slice(1)}
-              </button>
-            ))}
-          </div>
-          <ul className="flex-1 overflow-y-auto">
-            {filtered.map(m => {
-              const isSelected = m.id === selectedId;
-              return (
-                <li key={m.id}>
-                  <button
-                    onClick={() => setSelectedId(m.id)}
-                    className={`w-full text-left px-3 py-2.5 border-b border-[#2A2A28] transition-colors ${
-                      isSelected ? "bg-[#2A2A28]" : "hover:bg-[#222220]"
-                    }`}
-                  >
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <p className={`text-xs truncate flex-1 ${m.isRead ? "text-[#FAFAF7]" : "text-[#FAFAF7] font-semibold"}`}>
-                        {m.from.name}
-                      </p>
-                      <span className="text-[10px] text-[#6B6B66] flex-shrink-0">
-                        {relativeTime(m.receivedDateTime)}
-                      </span>
-                    </div>
-                    <p className={`text-[11px] truncate mb-1 ${m.isRead ? "text-[#6B6B66]" : "text-[#FAFAF7]"}`}>
-                      {m.subject}
-                    </p>
-                    <div className="flex items-center gap-1.5">
-                      <StatusPill status={m.status} />
-                      {m.assignee ? (
-                        <span className="text-[9px] text-[#6B6B66] truncate">· {m.assignee}</span>
-                      ) : (
-                        <span className="text-[9px] text-[#B8945F]">· unclaimed</span>
-                      )}
-                    </div>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-
-        <div className="flex flex-col">
-          {selected ? (
-            <>
-              <div className="px-4 py-3 border-b border-[#2A2A28]">
-                <p className="text-sm font-semibold text-[#FAFAF7]">{selected.subject}</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <p className="text-[11px] text-[#6B6B66] truncate">
-                    {selected.from.name} <span className="text-[#3A3A36]">·</span> {selected.from.address}
-                  </p>
-                  <span className="text-[10px] text-[#6B6B66] ml-auto flex-shrink-0">
-                    {new Date(selected.receivedDateTime).toLocaleString("en-US", { timeZone: FIRM_TZ })}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <StatusPill status={selected.status} />
-                  {selected.assignee ? (
-                    <span className="text-[10px] text-[#6B6B66]">Assigned to {selected.assignee}</span>
-                  ) : (
-                    <button disabled title="Claim/Assign — wiring pending"
-                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-[#B8945F]/15 border border-[#B8945F]/40 text-[#B8945F] opacity-70 cursor-not-allowed"
-                    >Claim</button>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 px-4 py-3 overflow-y-auto">
-                <p className="text-xs text-[#FAFAF7] leading-relaxed whitespace-pre-wrap">{selected.bodyPreview}</p>
-              </div>
-              <div className="px-4 py-3 border-t border-[#2A2A28] flex items-center gap-2">
-                <button disabled title="Reply — wiring pending"
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36] px-3 py-1.5 rounded opacity-70 cursor-not-allowed transition-colors"
-                ><Reply className="w-3 h-3" /> Reply</button>
-                <button disabled title="Mark handled — wiring pending"
-                  className="flex items-center gap-1.5 text-xs font-semibold text-[#6B6B66] hover:text-[#FAFAF7] px-3 py-1.5 rounded opacity-70 cursor-not-allowed transition-colors"
-                ><CheckCircle2 className="w-3 h-3" /> Mark handled</button>
-                <button disabled title="Convert to lead — wiring pending"
-                  className="ml-auto flex items-center gap-1.5 text-xs font-semibold text-[#6B6B66] hover:text-[#FAFAF7] px-3 py-1.5 rounded opacity-70 cursor-not-allowed transition-colors"
-                ><UserCheck className="w-3 h-3" /> Convert to lead</button>
-              </div>
-            </>
-          ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <p className="text-xs text-[#6B6B66]">Select a message to read.</p>
-            </div>
-          )}
-        </div>
+    <div className="rounded-lg border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-3">
+      <div className="flex items-center gap-2 mb-1">
+        {cfg.icon}
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B6B66]">{cfg.label}</span>
       </div>
-    </Card>
+      <p className="text-[11px] text-[#6B6B66] leading-relaxed">{cfg.detail}</p>
+    </div>
   );
 }
 
-function StatusPill({ status }: { status: SampleEmail["status"] }) {
-  const cfg = {
-    unhandled:   { label: "Unhandled",   cls: "bg-red-900/30 text-red-300 border-red-700/60" },
-    in_progress: { label: "In progress", cls: "bg-amber-900/30 text-amber-300 border-amber-700/60" },
-    handled:     { label: "Handled",     cls: "bg-emerald-900/30 text-emerald-300 border-emerald-700/60" },
-  }[status];
+// ─── Phone dialer — popover (relocated from bottom of grid) ──────────────────
+// Uses the same PhoneDialerWidget that previously rendered full-width at the
+// bottom. The popover is anchored to the header phone-icon button and dismisses
+// on backdrop click. Voicemail data inside the dialer is still SAMPLE.
+
+function PhoneDialerPopover({ onClose }: { onClose: () => void }) {
+  // Close on Escape + outside click.
+  const ref = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    function onClick(e: MouseEvent) {
+      if (!ref.current) return;
+      if (e.target instanceof Node && !ref.current.contains(e.target)) onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    // setTimeout: defer the listener so the click that opened the popover
+    // doesn't immediately close it.
+    const t = setTimeout(() => document.addEventListener("mousedown", onClick), 0);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("mousedown", onClick);
+      clearTimeout(t);
+    };
+  }, [onClose]);
+
   return (
-    <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${cfg.cls}`}>
-      {cfg.label}
-    </span>
+    <div
+      ref={ref}
+      className="absolute right-0 top-full mt-2 z-40 w-[640px] max-w-[95vw] shadow-2xl"
+    >
+      <PhoneDialerWidget />
+    </div>
   );
 }
 
-// ─── Widget 4 — Phone + Voicemail (UI-COMPLETE on SAMPLE data) ───────────────
+// ─── Phone dialer widget (UI-COMPLETE on SAMPLE data) ────────────────────────
 //
 // TODO Phase B — wire against Twilio Voice:
 //   1. Twilio Voice JS SDK in the frontend.
@@ -1480,4 +2316,1150 @@ function CallDirectionIcon({ direction, status }: { direction: "inbound" | "outb
   return direction === "inbound"
     ? <PhoneIncoming className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
     : <PhoneOutgoing className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />;
+}
+
+// ─── All-tasks widget (LEFT column, color-coded shared task list) ───────────
+
+interface AllTasksWidgetProps {
+  tasks: TaskEntry[];
+  mode: "tasks" | "schedule";
+  onChangeMode: (m: "tasks" | "schedule") => void;
+}
+
+function AllTasksWidget({ tasks, mode, onChangeMode }: AllTasksWidgetProps) {
+  // Bucket counts per color for the header chip cluster.
+  const counts = useMemo(() => {
+    const c: Record<TaskColor, number> = { red: 0, orange: 0, yellow: 0, blue: 0 };
+    for (const t of tasks) c[t.color]++;
+    return c;
+  }, [tasks]);
+
+  return (
+    <Card className="flex flex-col">
+      <div className="px-4 py-3 border-b border-[#2A2A28]">
+        <div className="flex items-center gap-2">
+          <span className="text-[#B8945F]"><ListChecks className="w-4 h-4" /></span>
+          <h3 className="text-sm font-semibold text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+            Upcoming Tasks
+          </h3>
+          <CountBadge value={tasks.length} />
+        </div>
+        <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
+        <div className="flex items-center gap-2 mt-2">
+          <ColorTag color="red"    count={counts.red} />
+          <ColorTag color="orange" count={counts.orange} />
+          <ColorTag color="yellow" count={counts.yellow} />
+          <ColorTag color="blue"   count={counts.blue} />
+        </div>
+        <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
+          Shared queue · same list for every staffer.
+          {/* TODO planned staff-setup model: per-staff weighting + closer-strength
+              ranking will reorder this list per viewer once configured. */}
+        </p>
+      </div>
+      <div className="p-3 overflow-y-auto" style={{ maxHeight: 720 }}>
+        {tasks.length === 0 ? (
+          <EmptyHint>All clear — no open tasks in the shared queue.</EmptyHint>
+        ) : (
+          <ul className="space-y-1">
+            {tasks.map(t => (
+              <li key={t.id}>
+                <button
+                  onClick={t.onSelect}
+                  className="w-full text-left flex items-start gap-2 px-2 py-1.5 rounded hover:bg-[#2A2A28] border border-transparent hover:border-[#2A2A28] transition-colors"
+                  title={t.actionLabel}
+                >
+                  <ColorDot color={t.color} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-[#FAFAF7] truncate">{t.title}</p>
+                    <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">{t.subtitle}</p>
+                    <DueLine due={t.due} />
+                  </div>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#B8945F] flex-shrink-0 mt-0.5">
+                    {t.actionLabel}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function LeftModeToggle({ mode, onChangeMode }: { mode: "tasks" | "schedule"; onChangeMode: (m: "tasks" | "schedule") => void }) {
+  return (
+    <div className="flex items-center gap-1 mt-2 rounded border border-[#2A2A28] p-0.5 bg-[#0F0F0E]">
+      <button
+        onClick={() => onChangeMode("tasks")}
+        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
+          mode === "tasks" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
+        }`}
+      >
+        <ListChecks className="w-3 h-3" /> Upcoming Tasks
+      </button>
+      <button
+        onClick={() => onChangeMode("schedule")}
+        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
+          mode === "schedule" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
+        }`}
+      >
+        <CalendarDays className="w-3 h-3" /> See my schedule
+      </button>
+    </div>
+  );
+}
+
+function ColorTag({ color, count }: { color: TaskColor; count: number }) {
+  const cfg = COLOR_CFG[color];
+  return (
+    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${cfg.chip}`}>
+      {cfg.label} · {count}
+    </span>
+  );
+}
+
+function ColorDot({ color }: { color: TaskColor }) {
+  return <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${COLOR_CFG[color].dot}`} />;
+}
+
+function DueLine({ due }: { due: string | null | undefined }) {
+  if (due) {
+    const overdue = new Date(due).getTime() < Date.now();
+    return (
+      <p className={`text-[10px] mt-0.5 font-mono ${overdue ? "text-red-300" : "text-[#B8945F]"}`}>
+        Due {formatDueLabel(due)}
+      </p>
+    );
+  }
+  // No due value on the underlying record. Render a faint placeholder so the
+  // user sees a column-aligned "—" rather than nothing — and we DO NOT make
+  // up a date.
+  // TODO Phase B: every task surface should carry its own due (next_follow_up_at
+  // for leads is wired; client_message_threads needs a reply-SLA column before
+  // those rows can show a real due here).
+  return (
+    <p className="text-[10px] mt-0.5 text-[#3A3A36] italic" title="No due date on this record yet">
+      No due set
+    </p>
+  );
+}
+
+const COLOR_CFG: Record<TaskColor, { label: string; dot: string; chip: string }> = {
+  red:    { label: "Hot",    dot: "bg-red-500",    chip: "bg-red-900/40 text-red-300 border-red-700/60" },
+  orange: { label: "Mid",    dot: "bg-orange-400", chip: "bg-orange-900/30 text-orange-300 border-orange-700/60" },
+  yellow: { label: "Present", dot: "bg-yellow-400", chip: "bg-yellow-900/30 text-yellow-300 border-yellow-700/60" },
+  blue:   { label: "Sched",  dot: "bg-sky-400",    chip: "bg-sky-900/30 text-sky-300 border-sky-700/60" },
+};
+
+// ─── Schedule column view — toggle alternate for the LEFT column ─────────────
+
+interface ScheduleColumnViewProps {
+  mode: "tasks" | "schedule";
+  onChangeMode: (m: "tasks" | "schedule") => void;
+  range: "next_day" | "five_day" | "monthly";
+  onChangeRange: (r: "next_day" | "five_day" | "monthly") => void;
+  calEvents: CalEvent[];
+  todayLocal: string;
+  nextDayLocal: string;
+  nextDayAppts: ApptRow[];
+  upcomingAppts: ApptRow[];
+  staffPool: SchedulerStaffDetail[];
+  schedSelection: SchedulerSelection;
+  onChangeSchedSelection: (s: SchedulerSelection) => void;
+  currentSessionId: string;
+  onChangeTab: (tab: TabId) => void;
+}
+
+function ScheduleColumnView(props: ScheduleColumnViewProps) {
+  const {
+    mode, onChangeMode, range, onChangeRange,
+    calEvents, todayLocal, nextDayLocal,
+    nextDayAppts, upcomingAppts, staffPool,
+    schedSelection, onChangeSchedSelection, currentSessionId,
+    onChangeTab,
+  } = props;
+
+  return (
+    <Card className="flex flex-col">
+      <div className="px-4 py-3 border-b border-[#2A2A28]">
+        <div className="flex items-center gap-2">
+          <span className="text-[#B8945F]"><CalendarDays className="w-4 h-4" /></span>
+          <h3 className="text-sm font-semibold text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+            My Schedule
+          </h3>
+          <button
+            onClick={() => onChangeTab("calendar")}
+            className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
+          >
+            Open full →
+          </button>
+        </div>
+        <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
+        <div className="flex items-center gap-1 mt-2 rounded border border-[#2A2A28] p-0.5 bg-[#0F0F0E]">
+          {(["next_day", "five_day", "monthly"] as const).map(r => (
+            <button
+              key={r}
+              onClick={() => onChangeRange(r)}
+              className={`flex-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
+                range === r ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
+              }`}
+            >
+              {r === "next_day" ? "Next day" : r === "five_day" ? "5-day" : "Monthly"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="p-3 overflow-y-auto" style={{ maxHeight: 720 }}>
+        {range === "next_day" && (
+          <NextDayList
+            appts={nextDayAppts}
+            nextDayLocal={nextDayLocal}
+            fallbackUpcoming={upcomingAppts}
+            onSelect={() => onChangeTab("calendar")}
+          />
+        )}
+        {range === "five_day" && (
+          <div>
+            <ConsultSchedulerPanel
+              staffPool={staffPool}
+              calEvents={calEvents as unknown as SchedulerCalEvent[]}
+              currentSessionId={currentSessionId}
+              selection={schedSelection}
+              onChangeSelection={onChangeSchedSelection}
+              todayLocal={todayLocal}
+            />
+            <p className="text-[10px] text-[#6B6B66] italic mt-3 px-1 leading-snug">
+              View-only here · tapping a slot does not book.
+              {/* TODO booking from the dashboard: route a confirmed slot pick
+                  through the existing NewLeadInline booking RPC. */}
+            </p>
+          </div>
+        )}
+        {range === "monthly" && (
+          <MonthGridView
+            calEvents={calEvents}
+            todayLocal={todayLocal}
+            onSelectDay={() => onChangeTab("calendar")}
+          />
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function NextDayList({
+  appts, nextDayLocal, fallbackUpcoming, onSelect,
+}: {
+  appts: ApptRow[];
+  nextDayLocal: string;
+  fallbackUpcoming: ApptRow[];
+  onSelect: () => void;
+}) {
+  const showFallback = appts.length === 0 && fallbackUpcoming.length > 0;
+  const rows = appts.length > 0 ? appts : fallbackUpcoming.slice(0, 5);
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5 px-1">
+        {formatDayLabel(nextDayLocal)}
+      </p>
+      {showFallback && (
+        <p className="text-[10px] text-[#6B6B66] italic px-1 mb-2">
+          Nothing booked for the next business day — showing further upcoming.
+        </p>
+      )}
+      {rows.length === 0 ? (
+        <EmptyHint>No upcoming consults.</EmptyHint>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map(e => (
+            <li key={e.id}>
+              <button
+                onClick={onSelect}
+                className="w-full flex items-start gap-2 px-2 py-1.5 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
+              >
+                <Calendar className="w-3 h-3 text-[#6B6B66] mt-1 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] font-mono text-[#B8945F] truncate">
+                    {formatDateLabel(e.start_time)} · {formatTimeRange(e.start_time, e.end_time)}
+                  </p>
+                  <p className="text-xs text-[#FAFAF7] truncate mt-0.5">
+                    {e.client_name}
+                    <span className="text-[#6B6B66]">{e.chapter ? ` · Ch.${e.chapter}` : ""}</span>
+                  </p>
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Month grid (scaffold) — counts consult events per day from calEvents ────
+// View-only. Reuses the same calEvents prop everything else here pulls from.
+
+function MonthGridView({
+  calEvents, todayLocal, onSelectDay,
+}: {
+  calEvents: CalEvent[];
+  todayLocal: string;
+  onSelectDay: (dateStr: string) => void;
+}) {
+  const [cursor, setCursor] = useState<{ year: number; month: number }>(() => {
+    const [y, m] = todayLocal.split("-").map(Number);
+    return { year: y, month: m - 1 };
+  });
+
+  const dayCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of calEvents) {
+      if (e.event_subtype !== "consultation") continue;
+      if (["cancelled", "no_show", "rescheduled"].includes(e.status)) continue;
+      const d = new Date(e.start_time).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+      m.set(d, (m.get(d) ?? 0) + 1);
+    }
+    return m;
+  }, [calEvents]);
+
+  // 6×7 month grid starting on Sunday.
+  const firstOfMonth = new Date(Date.UTC(cursor.year, cursor.month, 1));
+  const startDow = firstOfMonth.getUTCDay();
+  const daysInMonth = new Date(Date.UTC(cursor.year, cursor.month + 1, 0)).getUTCDate();
+  const cells: ({ dateStr: string; day: number; inMonth: boolean } | null)[] = [];
+  for (let i = 0; i < startDow; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const mm = String(cursor.month + 1).padStart(2, "0");
+    const dd = String(d).padStart(2, "0");
+    cells.push({ dateStr: `${cursor.year}-${mm}-${dd}`, day: d, inMonth: true });
+  }
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const monthLabel = new Date(Date.UTC(cursor.year, cursor.month, 1)).toLocaleDateString("en-US", {
+    month: "long", year: "numeric", timeZone: "UTC",
+  });
+
+  function shift(delta: number) {
+    setCursor(c => {
+      const next = new Date(Date.UTC(c.year, c.month + delta, 1));
+      return { year: next.getUTCFullYear(), month: next.getUTCMonth() };
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2 px-1">
+        <button
+          onClick={() => shift(-1)}
+          className="text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+          aria-label="Previous month"
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <p className="text-[11px] font-semibold uppercase tracking-widest text-[#FAFAF7] flex-1 text-center">
+          {monthLabel}
+        </p>
+        <button
+          onClick={() => shift(1)}
+          className="text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+          aria-label="Next month"
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center mb-1">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <span key={i} className="text-[9px] font-semibold text-[#6B6B66]">{d}</span>
+        ))}
+      </div>
+      <div className="grid grid-cols-7 gap-0.5">
+        {cells.map((c, i) => {
+          if (!c) return <span key={i} className="aspect-square" />;
+          const count = dayCounts.get(c.dateStr) ?? 0;
+          const isToday = c.dateStr === todayLocal;
+          return (
+            <button
+              key={i}
+              onClick={() => onSelectDay(c.dateStr)}
+              className={`aspect-square flex flex-col items-center justify-center rounded text-[10px] transition-colors ${
+                isToday
+                  ? "bg-[#B8945F]/20 border border-[#B8945F]/40 text-[#FAFAF7]"
+                  : "border border-transparent hover:border-[#2A2A28] hover:bg-[#2A2A28] text-[#FAFAF7]"
+              }`}
+              title={count > 0 ? `${count} consult${count > 1 ? "s" : ""}` : ""}
+            >
+              <span className="font-mono leading-none">{c.day}</span>
+              {count > 0 && (
+                <span className="text-[8px] font-bold text-[#B8945F] mt-0.5">{count}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[10px] text-[#6B6B66] italic mt-3 px-1 leading-snug">
+        Counts are consult events from calendar_events (this firm).
+        {/* TODO: hover/click could expand a day-detail panel with the
+            actual appts; for now we route the user to the full calendar tab. */}
+      </p>
+    </div>
+  );
+}
+
+// ─── Top bubbles row ─────────────────────────────────────────────────────────
+//
+// Three bubble cards across the top of the dashboard:
+//   1. Clock      — SCAFFOLD. Local state only; ties to the planned
+//                   time-tracking backend (not built).
+//   2. Overview   — REAL where the data exists (task + staff-message counts);
+//                   SCAFFOLD on the on-schedule indicator (needs a calibrated
+//                   pace baseline that doesn't exist yet).
+//   3. Retention  — SCAFFOLD. Placeholder metrics; ties to the planned
+//                   retention/metrics backend (not built).
+//
+// Tone for bubbles 1 + 2 is intentionally supportive, not surveillance-y.
+
+interface TopBubblesRowProps {
+  sharedTasksCount: number;
+  staffMsgs: StaffMessage[];
+  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
+  timeClock: TimeClockState;
+  timeClockActions: TimeClockActions;
+  /** Routes the popup's PTO / STO buttons to My Schedule. */
+  onRequestTimeOff: (kind: "pto" | "sto") => void;
+}
+
+function TopBubblesRow({
+  sharedTasksCount, staffMsgs, clientThreads,
+  timeClock: _timeClock, timeClockActions: _timeClockActions, onRequestTimeOff: _onRequestTimeOff,
+}: TopBubblesRowProps) {
+  // The Clock used to be a full card here; it's now a compact header pill
+  // (see ClockBubble mounted up in the dashboard header). This row keeps
+  // Overview + Retention only.
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <OverviewBubble
+        sharedTasksCount={sharedTasksCount}
+        staffMsgs={staffMsgs}
+        clientThreads={clientThreads}
+      />
+      <RetentionBubble />
+    </div>
+  );
+}
+
+// ─── Bubble 1 — Employee Time Clock (SCAFFOLD on top of sessionStorage) ─────
+//
+// State + actions are owned by IntakePortalInner (so the force-clock-in gate
+// and idle watcher can share them). This bubble is the live view + controls.
+//
+// What's REAL here:
+//   - The current "today" counter ticks against clockedInAt persisted in
+//     sessionStorage — accurate within this browser session.
+//   - Lunch + break toggles open/close timed segments. Cumulative minutes
+//     accumulate locally.
+//
+// What's SCAFFOLD (no fabricated numbers shown as real):
+//   - This week / Pay period / Overtime / Time on phone / Time idle — all
+//     rendered as "—" placeholders. They need the time-tracking backend +
+//     phone/idle telemetry to populate.
+//
+// TODO Phase B — time-tracking backend wiring:
+//   - new table `staff_time_entries (id, staff_id, clocked_in_at,
+//     clocked_out_at, lunch_minutes, break_minutes, source)`
+//   - mutations: clock_in / clock_out / start_lunch / end_lunch /
+//     start_break / end_break
+//   - week + pay-period aggregator (firm-tz, configurable pay-period start)
+//   - per-firm OT threshold (default 40h/week) + lunch/break policy
+//   - phone-call duration roll-up from the planned `calls` table
+//   - idle time from the front-end watcher (already armed in IntakePortalInner)
+
+// On the dashboard the Clock bubble is now a COMPACT pill — status only.
+// Hour metrics + lunch/break/clock-out + PTO/STO requests live in a popup
+// that opens on click. Staff don't need running hour counters in their
+// peripheral vision; they need a quick status read + a single entry point.
+
+function ClockBubble({
+  state, actions, onRequestTimeOff,
+}: {
+  state: TimeClockState;
+  actions: TimeClockActions;
+  /** Routes to the existing TimeOffTab inside MyScheduleTab. */
+  onRequestTimeOff: (kind: "pto" | "sto") => void;
+}) {
+  // 30s tick so the live status counter refreshes.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const clockedInAt = state.clockedInAt;
+  const minutesElapsed = clockedInAt ? Math.max(0, Math.floor((Date.now() - clockedInAt) / 60_000)) : 0;
+  const onLunch = state.onLunchSince != null;
+  const onBreak = state.onBreakSince != null;
+  const liveLunchMinutes = onLunch ? Math.floor((Date.now() - (state.onLunchSince ?? 0)) / 60_000) : 0;
+  const liveBreakMinutes = onBreak ? Math.floor((Date.now() - (state.onBreakSince ?? 0)) / 60_000) : 0;
+  const workedTodayMin = Math.max(0,
+    minutesElapsed - state.lunchMinutes - state.breakMinutes - liveLunchMinutes - liveBreakMinutes
+  );
+
+  const [popupOpen, setPopupOpen] = useState(false);
+
+  // Compact status pill on the dashboard. NO hour metrics shown inline —
+  // those live in the popup.
+  const statusCls =
+    onLunch ? "bg-amber-900/30 text-amber-300 border-amber-700/60" :
+    onBreak ? "bg-sky-900/30 text-sky-300 border-sky-700/60" :
+              "bg-emerald-900/20 text-emerald-300 border-emerald-700/40";
+  const StatusIcon = onLunch ? Coffee : onBreak ? Pause : Play;
+  const statusLabel = onLunch ? "On lunch" : onBreak ? "On break" : "Working";
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setPopupOpen(true)}
+        title="Open Employee Time Clock"
+        className="flex items-center gap-2 px-3 py-2 rounded-2xl border border-[#2A2A28] bg-[#1A1A18] hover:border-[#B8945F]/40 transition-colors text-left w-full"
+      >
+        <Clock className="w-3.5 h-3.5 text-[#B8945F] flex-shrink-0" />
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border ${statusCls}`}>
+          <StatusIcon className="w-3 h-3" />
+          {statusLabel}
+        </span>
+        <span className="ml-auto text-[10px] text-[#6B6B66] flex-shrink-0">Open →</span>
+      </button>
+
+      {popupOpen && (
+        <ClockPopup
+          state={state}
+          actions={actions}
+          onClose={() => setPopupOpen(false)}
+          onRequestTimeOff={onRequestTimeOff}
+          workedTodayMin={workedTodayMin}
+          liveLunchMinutes={liveLunchMinutes}
+          liveBreakMinutes={liveBreakMinutes}
+        />
+      )}
+    </>
+  );
+}
+
+// ─── Clock popup — full metrics + every clock action including PTO / STO ────
+//
+// PTO and STO ("Sick Time Off") routes are intentionally THIN: they close the
+// popup and switch to the "my_schedule" tab where the existing TimeOffTab
+// form already handles the request + writes to intake_staff_time_off. This
+// is the user's "wire to the existing path where it exists" rule — we don't
+// duplicate the request form here. TODO if PTO/STO ever need a distinct
+// reason_type the form's reason selector already supports it.
+
+function ClockPopup({
+  state, actions, onClose, onRequestTimeOff,
+  workedTodayMin, liveLunchMinutes, liveBreakMinutes,
+}: {
+  state: TimeClockState;
+  actions: TimeClockActions;
+  onClose: () => void;
+  onRequestTimeOff: (kind: "pto" | "sto") => void;
+  workedTodayMin: number;
+  liveLunchMinutes: number;
+  liveBreakMinutes: number;
+}) {
+  const onLunch = state.onLunchSince != null;
+  const onBreak = state.onBreakSince != null;
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Employee Time Clock"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-[#2A2A28] bg-[#1A1A18] shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#2A2A28] flex-shrink-0">
+          <Clock className="w-4 h-4 text-[#B8945F]" />
+          <h3 className="text-sm font-semibold text-[#FAFAF7]">Employee Time Clock</h3>
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+            Scaffold
+          </span>
+          <button onClick={onClose} aria-label="Close" className="ml-auto text-[#6B6B66] hover:text-[#FAFAF7]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-5 space-y-4 overflow-y-auto">
+          {/* Status */}
+          {onLunch ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-amber-900/30 text-amber-300 border border-amber-700/60">
+              <Coffee className="w-4 h-4" /> On lunch · {formatHm(liveLunchMinutes)}
+            </div>
+          ) : onBreak ? (
+            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-sky-900/30 text-sky-300 border border-sky-700/60">
+              <Pause className="w-4 h-4" /> On break · {formatHm(liveBreakMinutes)}
+            </div>
+          ) : (
+            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-emerald-900/20 text-emerald-300 border border-emerald-700/40">
+              <Play className="w-4 h-4" /> Working · {formatHm(workedTodayMin)}
+            </div>
+          )}
+
+          {/* Lunch / Break / Clock Out */}
+          <div className="grid grid-cols-2 gap-2">
+            {onLunch ? (
+              <button
+                onClick={() => { actions.endLunch(); }}
+                className="col-span-2 flex items-center justify-center gap-1.5 bg-amber-700 hover:bg-amber-600 text-white font-bold text-xs py-2 rounded transition-colors"
+              >
+                <Play className="w-3 h-3" /> End lunch
+              </button>
+            ) : onBreak ? (
+              <button
+                onClick={() => { actions.endBreak(); }}
+                className="col-span-2 flex items-center justify-center gap-1.5 bg-sky-700 hover:bg-sky-600 text-white font-bold text-xs py-2 rounded transition-colors"
+              >
+                <Play className="w-3 h-3" /> End break
+              </button>
+            ) : (
+              <>
+                <button
+                  onClick={() => { actions.startLunch(); }}
+                  title="Use when you'll be away 15+ minutes for lunch"
+                  className="flex items-center justify-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold py-2 rounded border border-[#3A3A36] transition-colors"
+                >
+                  <Coffee className="w-3 h-3" /> Lunch
+                </button>
+                <button
+                  onClick={() => { actions.startBreak(); }}
+                  title="Use when you'll be away 15+ minutes for a break"
+                  className="flex items-center justify-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold py-2 rounded border border-[#3A3A36] transition-colors"
+                >
+                  <Pause className="w-3 h-3" /> Break
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => { actions.clockOut(); }}
+              title="End your shift and sign out"
+              className="col-span-2 flex items-center justify-center gap-1.5 bg-[#3A1E1E] hover:bg-[#4A2424] text-[#FAFAF7] text-xs font-bold py-2 rounded transition-colors"
+            >
+              <X className="w-3 h-3" /> Clock Out (end shift)
+            </button>
+          </div>
+
+          {/* PTO / STO requests — route to MyScheduleTab's TimeOffTab form */}
+          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#2A2A28]">
+            <button
+              onClick={() => { onClose(); onRequestTimeOff("pto"); }}
+              className="flex items-center justify-center gap-1.5 bg-sky-900/30 hover:bg-sky-900/50 text-sky-200 text-xs font-semibold py-2 rounded border border-sky-700/40 transition-colors"
+              title="Open the time-off request form (My Schedule)"
+            >
+              <Calendar className="w-3 h-3" /> Request PTO
+            </button>
+            <button
+              onClick={() => { onClose(); onRequestTimeOff("sto"); }}
+              className="flex items-center justify-center gap-1.5 bg-amber-900/30 hover:bg-amber-900/50 text-amber-200 text-xs font-semibold py-2 rounded border border-amber-700/40 transition-colors"
+              title="Open the time-off request form pre-filled to Sick (My Schedule)"
+            >
+              <AlertCircle className="w-3 h-3" /> Request STO
+            </button>
+          </div>
+
+          {/* Metrics — Today real, rest scaffold (—). No fabricated hours. */}
+          <dl className="space-y-1.5 pt-2 border-t border-[#2A2A28]">
+            <CompactStat label="Today"      value={formatHm(workedTodayMin)} />
+            <CompactStat label="This week"  value={<PlaceholderValue title="Needs time-tracking backend (week aggregator)">—</PlaceholderValue>} />
+            <CompactStat label="Pay period" value={<PlaceholderValue title="Needs pay-period config + aggregator">—</PlaceholderValue>} />
+            <CompactStat label="Overtime"   value={<PlaceholderValue title="Needs OT threshold config + week total">—</PlaceholderValue>} />
+            <CompactStat label="On phone"   value={<PlaceholderValue title="Needs the planned calls table + duration roll-up">—</PlaceholderValue>} />
+            <CompactStat label="Idle"       value={<PlaceholderValue title="Idle watcher is armed; metrics surface here once the backend persists them">—</PlaceholderValue>} />
+          </dl>
+
+          <p className="text-[10px] text-[#6B6B66] italic leading-snug">
+            Clock state persists for this browser session only. Real overtime,
+            phone, and idle metrics arrive with the time-tracking backend.
+            PTO / STO requests open the existing time-off form in My Schedule.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CompactStat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="text-[9px] text-[#6B6B66] uppercase tracking-widest flex-1 truncate">{label}</dt>
+      <dd className="text-[11px] font-mono text-[#FAFAF7]">{value}</dd>
+    </div>
+  );
+}
+
+function formatHm(totalMinutes: number): string {
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${String(m).padStart(2, "0")}m`;
+}
+
+// ─── Bubble 2 — Overview (REAL where possible) ───────────────────────────────
+//
+// Real counts:
+//   - Task count            — sharedTasks.length from the LEFT-column derivation
+//   - Staff inbox by channel — staffMsgs.filter(m => m.channel === ...)
+//   - Total unread client threads — sum of clientThreads.unread_count
+//
+// Scaffolded:
+//   - On-schedule / behind indicator. We don't yet have a calibrated pace
+//     baseline (expected tasks-per-hour, expected calls-per-shift). Showing
+//     a hard "behind" signal would be both wrong AND adversarial here, so
+//     this surface stays as a gentle "you're keeping up" message until a
+//     real pace metric exists.
+//
+// TODO Phase B — pace baseline:
+//   - per-role expected throughput config (legal_admin vs attorney etc.)
+//   - reads time-tracking + task-completion logs to compute actual pace
+//   - renders an actionable but kind nudge here (never punitive)
+
+interface OverviewBubbleProps {
+  sharedTasksCount: number;
+  staffMsgs: StaffMessage[];
+  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
+}
+
+function OverviewBubble({ sharedTasksCount, staffMsgs, clientThreads }: OverviewBubbleProps) {
+  const sms    = staffMsgs.filter(m => m.channel === "sms").length;
+  const email  = staffMsgs.filter(m => m.channel === "email").length;
+  const team   = staffMsgs.filter(m => m.channel === "phone_note").length;
+  const direct = staffMsgs.filter(m => m.channel === "dm").length;
+  const clientUnread = clientThreads.reduce((s, t) => s + (t.unread_count ?? 0), 0);
+
+  return (
+    <BubbleCard
+      title="Overview"
+      icon={<ListChecks className="w-4 h-4" />}
+    >
+      <div className="space-y-3">
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-[#FAFAF7] leading-none">{sharedTasksCount}</span>
+          <span className="text-[10px] uppercase tracking-widest text-[#6B6B66]">open tasks</span>
+        </div>
+
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+            Unread to you
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            <UnreadStat icon={<MessageSquare className="w-3 h-3" />} label="SMS"    value={sms} />
+            <UnreadStat icon={<AtSign className="w-3 h-3" />}        label="Email"  value={email} />
+            <UnreadStat icon={<Users className="w-3 h-3" />}         label="Team"   value={team} />
+            <UnreadStat icon={<Send className="w-3 h-3" />}          label="Direct" value={direct} />
+          </div>
+          {clientUnread > 0 && (
+            <p className="text-[10px] text-[#6B6B66] mt-2 leading-snug">
+              Also <span className="font-bold text-[#FAFAF7]">{clientUnread}</span> unread message{clientUnread === 1 ? "" : "s"} across client threads.
+            </p>
+          )}
+        </div>
+
+        {/* Pace nudge — SCAFFOLD. Gentle by design. */}
+        <div className="flex items-start gap-2 rounded border border-emerald-700/30 bg-emerald-900/10 px-2.5 py-2">
+          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
+          <p className="text-[11px] text-emerald-200 leading-snug">
+            You're keeping up. Be mindful of the clock — and take a breath when you need one.
+          </p>
+        </div>
+      </div>
+    </BubbleCard>
+  );
+}
+
+function UnreadStat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[#6B6B66]">{icon}</span>
+      <span className="text-[10px] text-[#6B6B66] flex-1">{label}</span>
+      <span className={`text-xs font-bold ${value > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{value}</span>
+    </div>
+  );
+}
+
+// ─── Bubble 3 — Retention stats (SCAFFOLD) ───────────────────────────────────
+//
+// Placeholder metrics. The retention/metrics backend isn't built; showing
+// numbers here without the backend would risk fabricated stats appearing as
+// real, so every value is rendered as "—" with the placeholder helper.
+//
+// TODO Phase B — retention/metrics backend:
+//   - per-staffer outbound-call log + outcome (reached / left-msg / no-answer)
+//   - appointment-scheduled, no-show, retained, no-case, presented-not-retained
+//   - firm monthly retention goal (firms config)
+//   - leaderboard view (current month, with PTO-aware normalization)
+//   - average money-down per staffer (uses CFF + first-payment amounts)
+//
+// Some of the underlying state IS partly derivable from intake_leads.status
+// today (retained / no_case / attorney_accepted etc.) but combining it into a
+// "retention stat" surface is intentionally deferred — the prompt asked for
+// scaffold, not a half-real surface.
+
+function RetentionBubble() {
+  return (
+    <BubbleCard
+      title="Retention Stats"
+      icon={<TrendingUp className="w-4 h-4" />}
+      scaffold
+    >
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+          <RetentionStat label="Total calls"        value="—" />
+          <RetentionStat label="Appts scheduled"    value="—" />
+          <RetentionStat label="No-show rate"       value="—" />
+          <RetentionStat label="Retained"           value="—" />
+          <RetentionStat label="No case"            value="—" />
+          <RetentionStat label="Presented · not retained" value="—" />
+          <RetentionStat label="Monthly goal"       value="$—" />
+          <RetentionStat label="Avg money down"     value="$—" />
+        </div>
+
+        <div className="rounded border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-2.5 py-2">
+          <div className="flex items-center gap-1.5 mb-1">
+            <Trophy className="w-3 h-3 text-[#6B6B66]" />
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+              Leaderboard
+            </p>
+          </div>
+          <p className="text-[11px] text-[#6B6B66] italic leading-snug">
+            Pending — wire the retention/metrics backend to rank staff by
+            retained-client count this month.
+          </p>
+        </div>
+      </div>
+    </BubbleCard>
+  );
+}
+
+function RetentionStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="text-[10px] text-[#6B6B66] flex-1 truncate">{label}</span>
+      <PlaceholderValue title="Placeholder — needs retention/metrics backend">
+        {value}
+      </PlaceholderValue>
+    </div>
+  );
+}
+
+// ─── Bubble chrome + helpers ─────────────────────────────────────────────────
+
+function BubbleCard({
+  title, icon, scaffold, children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  scaffold?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-[#2A2A28] bg-[#1A1A18] p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-[#B8945F]">{icon}</span>
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+          {title}
+        </h3>
+        {scaffold && (
+          <span className="ml-auto text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
+            Scaffold
+          </span>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function PlaceholderValue({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <span className="text-sm font-mono text-[#6B6B66] italic" title={title}>
+      {children}
+    </span>
+  );
+}
+
+// ─── Overdue reminder banner ────────────────────────────────────────────────
+//
+// Real count from sharedTasks (filters TaskEntry.due in the past). A task
+// with no due can't be overdue — those rows aren't counted here.
+//
+// "Time to reorganize" copy is intentionally non-accusatory (matches the
+// dashboard's bubble-2 tone). Wording avoids surveillance framing.
+
+function OverdueReminderBanner({
+  count, tasks, onJumpToTasks,
+}: {
+  count: number;
+  tasks: TaskEntry[];
+  onJumpToTasks?: () => void;
+}) {
+  if (count <= 0) return null;
+  // Pull up to 3 representative overdue items so the banner shows what's
+  // actually overdue, not just a number. The list is already sorted by the
+  // sharedTasks pipeline — overdue items appear in priority order.
+  const sample = tasks.slice(0, 3);
+  return (
+    <div className="rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-3 flex items-start gap-3">
+      <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-red-200">
+          You have {count} overdue task{count === 1 ? "" : "s"} — time to reorganize.
+        </p>
+        <ul className="mt-1.5 space-y-0.5">
+          {sample.map(t => (
+            <li key={t.id} className="text-[11px] text-red-200/80 leading-snug">
+              <span className="font-semibold">{t.title}</span>
+              <span className="text-red-300/70"> · {t.subtitle}</span>
+            </li>
+          ))}
+          {tasks.length > sample.length && (
+            <li className="text-[10px] text-red-200/60 italic">
+              + {tasks.length - sample.length} more …
+            </li>
+          )}
+        </ul>
+      </div>
+      {onJumpToTasks && (
+        <button
+          onClick={onJumpToTasks}
+          className="flex-shrink-0 text-[11px] font-bold text-red-100 bg-red-700/60 hover:bg-red-700 px-2.5 py-1.5 rounded transition-colors"
+        >
+          Reorganize →
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── AI "analyze what's pressing" — SCAFFOLD ────────────────────────────────
+//
+// Today this is a pass-through: returns the statically-sorted list unchanged.
+//
+// TODO Phase B — Anthropic API integration:
+//   1. Build a compact, privacy-aware payload for each task: color, due,
+//      lead status, last-contact age, urgency phrases extracted from notes.
+//   2. Call Anthropic with a system prompt that explains the firm's
+//      priority rules + asks for a re-ranked list with one-sentence
+//      justifications.
+//   3. Cache by (taskIds-hash, hour-of-day) so the same set doesn't
+//      hit the API every render.
+//   4. Show the AI's reasoning chip on the Up Next card ("Anthropic: high
+//      urgency — foreclosure mentioned in notes").
+//   5. Add an opt-in toggle per staffer (some staffers may prefer the
+//      static rules; the AI ranking shouldn't be the only path).
+//
+// Until those land, the static rule-based sort already does the work — no
+// LLM call happens here.
+
+function analyzePressingTasksAI(staticOrdered: TaskEntry[]): TaskEntry[] {
+  // Scaffold — return the static ordering verbatim. See TODO above.
+  return staticOrdered;
+}
+
+// ─── Escalate to Supervisor — SCAFFOLD modal ────────────────────────────────
+//
+// TODO Phase B — routing: pick a department supervisor (from staff_members
+// where role/title matches) and either (a) create a staff_messages row to that
+// supervisor with the lead context, or (b) write a new escalations row that
+// surfaces in a supervisor inbox. Submit is currently no-op.
+
+function EscalateModal({
+  leads, session, onClose,
+}: { leads: Lead[]; session: PortalSession; onClose: () => void }) {
+  const [notRelatedToClient, setNotRelatedToClient] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [reason, setReason] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const matches = useMemo(() => {
+    if (notRelatedToClient) return [] as Lead[];
+    if (!query.trim()) return [] as Lead[];
+    const q = query.toLowerCase();
+    return leads
+      .filter(l =>
+        l.full_name.toLowerCase().includes(q) ||
+        (l.email ?? "").toLowerCase().includes(q) ||
+        (l.phone ?? "").includes(q)
+      )
+      .slice(0, 8);
+  }, [leads, query, notRelatedToClient]);
+
+  const selectedLead = selectedLeadId ? leads.find(l => l.id === selectedLeadId) ?? null : null;
+
+  function handleSubmit() {
+    // SCAFFOLD: do not write anything. Show a small "coming soon" note then
+    // close after the user dismisses.
+    // TODO route the escalation to the department supervisor (see header comment).
+    void session; // prevent unused-prop warnings while wiring is pending.
+    setSubmitted(true);
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Escalate to supervisor"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-xl border border-[#2A2A28] bg-[#1A1A18] shadow-2xl">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2A2A28]">
+          <AlertTriangle className="w-4 h-4 text-amber-400" />
+          <h3 className="text-sm font-semibold text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
+            Escalate to Supervisor
+          </h3>
+          <ComingSoonChip />
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {submitted ? (
+          <div className="p-5 space-y-3">
+            <p className="text-sm text-[#FAFAF7]">
+              Coming soon — routing to the department supervisor isn't wired yet.
+            </p>
+            <p className="text-[11px] text-[#6B6B66]">
+              Your reason and the selected lead were captured locally only; nothing was sent.
+            </p>
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={onClose}
+                className="text-xs font-semibold text-[#0F0F0E] bg-[#B8945F] hover:bg-[#C8A46F] px-3 py-1.5 rounded transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="p-4 space-y-4">
+            <div>
+              <label className="flex items-center gap-2 text-xs text-[#FAFAF7] cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={notRelatedToClient}
+                  onChange={(e) => {
+                    setNotRelatedToClient(e.target.checked);
+                    if (e.target.checked) {
+                      setSelectedLeadId(null);
+                      setQuery("");
+                    }
+                  }}
+                  className="accent-[#B8945F]"
+                />
+                Not related to a client — needs escalation
+              </label>
+            </div>
+
+            {!notRelatedToClient && (
+              <div>
+                <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+                  Related client / lead
+                </label>
+                {selectedLead ? (
+                  <div className="flex items-center gap-2 px-3 py-2 rounded border border-[#2A2A28] bg-[#0F0F0E]">
+                    <Users className="w-3.5 h-3.5 text-[#B8945F]" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-[#FAFAF7] truncate">{selectedLead.full_name}</p>
+                      <p className="text-[10px] text-[#6B6B66] truncate">
+                        {selectedLead.phone ?? selectedLead.email ?? "—"}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => { setSelectedLeadId(null); setQuery(""); }}
+                      className="text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+                      aria-label="Clear selection"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 px-3 py-2 rounded border border-[#2A2A28] bg-[#0F0F0E]">
+                      <Search className="w-3.5 h-3.5 text-[#6B6B66] flex-shrink-0" />
+                      <input
+                        autoFocus
+                        type="text"
+                        value={query}
+                        onChange={(e) => setQuery(e.target.value)}
+                        placeholder="Search name, phone, or email"
+                        className="flex-1 bg-transparent text-xs text-[#FAFAF7] placeholder-[#6B6B66] outline-none"
+                      />
+                    </div>
+                    {query.trim() && (
+                      <ul className="mt-1 max-h-40 overflow-y-auto rounded border border-[#2A2A28] bg-[#0F0F0E]">
+                        {matches.length === 0 ? (
+                          <li className="px-3 py-2 text-[11px] text-[#6B6B66] italic">No matches.</li>
+                        ) : (
+                          matches.map(l => (
+                            <li key={l.id}>
+                              <button
+                                onClick={() => setSelectedLeadId(l.id)}
+                                className="w-full text-left px-3 py-2 hover:bg-[#2A2A28] transition-colors"
+                              >
+                                <p className="text-xs text-[#FAFAF7] truncate">{l.full_name}</p>
+                                <p className="text-[10px] text-[#6B6B66] truncate">
+                                  {l.phone ?? l.email ?? "—"} · {l.status}
+                                </p>
+                              </button>
+                            </li>
+                          ))
+                        )}
+                      </ul>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+                Reason / details
+              </label>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                rows={4}
+                placeholder="What needs the supervisor's attention?"
+                className="w-full bg-[#0F0F0E] border border-[#2A2A28] rounded px-3 py-2 text-xs text-[#FAFAF7] placeholder-[#6B6B66] outline-none focus:border-[#B8945F]/60"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={onClose}
+                className="text-xs font-semibold text-[#6B6B66] hover:text-[#FAFAF7] px-3 py-1.5 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={!reason.trim() || (!notRelatedToClient && !selectedLeadId)}
+                className="text-xs font-semibold text-[#0F0F0E] bg-[#B8945F] hover:bg-[#C8A46F] disabled:bg-[#2A2A28] disabled:text-[#6B6B66] disabled:cursor-not-allowed px-3 py-1.5 rounded transition-colors"
+                title="Submit — routing pending"
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

@@ -1343,6 +1343,45 @@ export default function SuperAdminPortal() {
           </div>
         )}
 
+        {/*
+          Planned-Settings notice — a reminder of work designed for the Intake
+          dashboard (Employee Time Clock + idle/phone metrics) that needs a
+          settings home before being rolled out to the rest of the firm's
+          departments. NOTHING IS HARDCODED HERE — this is purely a
+          visible memo so we don't lose track. When we wire the real settings
+          model, replace this notice with the actual controls.
+        */}
+        <div className="border border-amber-500/30 bg-amber-500/5 rounded-2xl px-5 py-4 mb-6">
+          <div className="flex items-start gap-3">
+            <Lightbulb size={16} className="text-amber-300 mt-0.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-bold text-amber-200 uppercase tracking-widest">
+                Planned Settings — Reminder
+              </p>
+              <p className="text-sm text-slate-300 leading-relaxed mt-1">
+                The Intake Portal's <span className="font-semibold text-white">Employee Time Clock</span> + idle/phone metrics
+                are currently a front-end scaffold. Before rolling out to the rest of the departments, design and apply
+                the matching firm-wide settings here:
+              </p>
+              <ul className="mt-3 space-y-1.5 text-xs text-slate-400 leading-relaxed list-disc pl-5">
+                <li>Pay-period start (firm-tz Mon-start vs custom)</li>
+                <li>Overtime threshold (default 40h / week, per-firm override)</li>
+                <li>Lunch + break policy (when prompted, min/max duration)</li>
+                <li>Idle-warning threshold + auto-logout window (currently 14m / 15m on the front end)</li>
+                <li>Phone-call time roll-up (depends on the planned <code className="font-mono text-slate-300">calls</code> table)</li>
+                <li>Per-employee FMLA eligibility (selected during employee setup — feeds the My Schedule balances)</li>
+                <li>Per-department roll-out toggle so the time clock can ship to Legal / Accounting / etc. independently</li>
+                <li>Super-admin reporting view for idle / on-phone / total worked / overtime per staffer</li>
+              </ul>
+              <p className="text-[11px] text-slate-500 italic mt-3 leading-snug">
+                No values are configured here yet — intentionally. Design first, then wire to a settings model and a
+                <code className="font-mono text-slate-400"> staff_time_entries</code>-style backend before treating any number on the Intake dashboard as real.
+              </p>
+            </div>
+          </div>
+        </div>
+        {/* /Planned-Settings notice */}
+
         {/* Summary Row */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-8">
           <StatCard

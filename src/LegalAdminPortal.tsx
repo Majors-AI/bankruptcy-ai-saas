@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
-import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circle, AlertTriangle, ChevronRight, RefreshCw, Plus, X, Send, Search, Filter, ChevronDown, Bot, UserCheck, FileText, DollarSign, Scale, MapPin, ArrowRight, Flag, Zap, Info, CreditCard as Edit3, Save, Eye, Briefcase, Hash, CheckCheck, PenLine, Star, TrendingUp, BarChart2, ArrowLeft, Shield, Mic, ChevronLeft, Building, Car, PiggyBank, CreditCard, Home, User, Trash2, Play, PhoneCall, PhoneMissed, PhoneOutgoing, MailCheck, MessageCircle, ListChecks, Import as SortAsc, BellRing, BellOff, Inbox } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { Users, Phone, Mail, MessageSquare, Calendar, Clock, CheckCircle2, Circle, AlertTriangle, ChevronRight, RefreshCw, Plus, X, Send, Search, Filter, ChevronDown, Bot, UserCheck, FileText, DollarSign, Scale, MapPin, ArrowRight, Flag, Zap, Info, CreditCard as Edit3, Save, Eye, Briefcase, Hash, CheckCheck, PenLine, Star, TrendingUp, BarChart2, ArrowLeft, Shield, Mic, ChevronLeft, Building, Car, PiggyBank, CreditCard, Home, User, Trash2, Play, PhoneCall, PhoneMissed, PhoneOutgoing, MailCheck, MessageCircle, ListChecks, Import as SortAsc, BellRing, BellOff, Inbox, Thermometer } from "lucide-react";
 import { getApplicableExemptions, getWaHomesteadEligibility, getCaHomesteadByCounty, FEDERAL_EXEMPTIONS } from "./components/admin/exemptions";
 import CaseAcceptanceFlow, { AcceptanceData as CaseAcceptanceData } from "./components/CaseAcceptanceFlow";
 import { CASE_TYPES, CHAPTER_FILING_FEES, ATTORNEY_FEES, CREDIT_COUNSELING_FEE } from "./lib/feeSchedule";
@@ -16,6 +16,8 @@ import ConsultSchedulerPanel, {
   CalEvent as SchedulerCalEvent,
   SchedulerSelection,
 } from "./components/scheduler/ConsultSchedulerPanel";
+import { isClaimedByOther, LeadClaimBadge, LeadClaimBanner } from "./components/lead-claim/LeadClaim";
+import FloatingChat from "./components/floating-chat/FloatingChat";
 
 // V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
 // firms get the same feature-flag config per Section 6 of the V1 migration,
@@ -60,6 +62,13 @@ interface Lead {
   bot_followup_count: number | null;
   last_bot_followup_at: string | null;
   created_at: string;
+  // ─── Lead-locking scaffold (read-only) ────────────────────────────────
+  // Optional today — column doesn't exist yet. Once the migration lands
+  // (see src/components/lead-claim/LeadClaim.tsx for the spec), the lock
+  // surfaces start enforcing automatically without further frontend work.
+  claimed_by?: string | null;
+  claimed_by_name?: string | null;
+  claimed_at?: string | null;
 }
 
 interface ContactLogEntry {
@@ -2095,6 +2104,11 @@ function LeadDetailPanel({
         <ArrowLeft className="w-3.5 h-3.5" /> All Leads
       </button>
 
+      {/* Lead-locking banner — safety net for any open-path that bypasses the
+          requestOpenLead gate (e.g. a direct nav). Read-only scaffold today;
+          no claim mutation here. See src/components/lead-claim/LeadClaim.tsx. */}
+      <LeadClaimBanner lead={lead} currentSessionId={session.id} />
+
       {/* Header card */}
       <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-5">
         <div className="flex flex-wrap items-start gap-4">
@@ -2872,6 +2886,30 @@ interface PortalSession {
   title: string | null;
 }
 
+// Front-end-only time-clock state. Persisted to sessionStorage; no DB writes.
+// Real backend is the planned staff_time_entries / time-tracking surface.
+export interface TimeClockState {
+  /** ms timestamp the staffer clocked in for this session, or null. */
+  clockedInAt: number | null;
+  /** ms when the active lunch break started, or null. */
+  onLunchSince: number | null;
+  /** ms when the active short break started, or null. */
+  onBreakSince: number | null;
+  /** Cumulative minutes spent on lunch today (closed segments only). */
+  lunchMinutes: number;
+  /** Cumulative minutes spent on short breaks today (closed segments only). */
+  breakMinutes: number;
+}
+
+export interface TimeClockActions {
+  clockIn: () => void;
+  clockOut: () => void;
+  startLunch: () => void;
+  endLunch: () => void;
+  startBreak: () => void;
+  endBreak: () => void;
+}
+
 const ROLE_CONFIG: Record<PortalRole, {
   label: string;
   color: string;
@@ -3111,8 +3149,11 @@ const ALL_STAFF = [
 ];
 
 // ─── I'm Sick Button ──────────────────────────────────────────────────────────
+// Exported so the component remains reachable while it's not mounted in this
+// file. Was removed from the top bar; the implementation is intact for the
+// next surface (e.g., a staff settings menu) to mount.
 
-function IAmSickButton({ onMarked, session }: { onMarked: () => void; session: PortalSession }) {
+export function IAmSickButton({ onMarked, session }: { onMarked: () => void; session: PortalSession }) {
   const [loading, setLoading]   = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [todaySick, setTodaySick]   = useState<SickOverride | null>(null);
@@ -3213,6 +3254,288 @@ function IAmSickButton({ onMarked, session }: { onMarked: () => void; session: P
       <span className="text-base leading-none">🤒</span>
       I'm Sick
     </button>
+  );
+}
+
+// ─── Force-Clock-In overlay ──────────────────────────────────────────────────
+//
+// Fills the screen the moment a staffer finishes PIN entry without having
+// clocked in. Everything behind it is intentionally non-interactive — the
+// user can either clock in or sign out. NO DB writes; clock state lives in
+// sessionStorage (see TimeClockState).
+
+function ForceClockInOverlay({
+  session, onClockIn, onCancel,
+}: { session: PortalSession; onClockIn: () => void; onCancel: () => void }) {
+  // Local UX state. Three "modes":
+  //   "default"   → the three action buttons (Clock In, Report sick, Can't make it)
+  //   "sick"      → confirmation for the sick-day path (writes via the same
+  //                 staff_sick_overrides + intake_staff_time_off pattern the
+  //                 existing IAmSickButton uses; afterwards we sign the
+  //                 staffer out)
+  //   "absent"    → SCAFFOLD confirmation for "not able to make it today"
+  //                 (no DB write — TODO: same write pattern with
+  //                 reason_type='absent_other' once the column accepts it)
+  const [mode, setMode] = useState<"default" | "sick" | "absent">("default");
+  const [submitting, setSubmitting] = useState(false);
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function reportSick() {
+    setSubmitting(true);
+    try {
+      // Reuses the IAmSickButton write pattern verbatim (search this file
+      // for the original `markSick` to compare). Two real writes:
+      //   - staff_sick_overrides (today's sick flag)
+      //   - intake_staff_time_off (calendar block, reason_type='sick')
+      // No new tables, no migration.
+      await sbPost("staff_sick_overrides", {
+        staff_id:  session.id,
+        staff_name: session.name,
+        date:      today,
+        reason:    "sick",
+        marked_by: "self",
+        is_active: true,
+      });
+      await sbPost("intake_staff_time_off", {
+        staff_id:      session.id,
+        staff_name:    session.name,
+        date:          today,
+        time_off_type: "full_day",
+        reason_type:   "sick",
+        reason:        "Reported sick at clock-in gate",
+        approved:      true,
+      });
+      // TODO Phase B — reassignment routing:
+      //   1. Find today's appts + tasks assigned to this staffer.
+      //   2. For each, attempt auto-reassign to a same-department staffer
+      //      who is available (uses staff_availability + intake_staff_time_off).
+      //   3. If no coverage found, write a `staff_coverage_request` row
+      //      with status='unresolved' so the on-duty supervisor sees it.
+      //   4. Notify supervisor (Twilio SMS / SendGrid email — same TODO
+      //      list as PostCallScheduledModal).
+      onCancel();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  function reportAbsent() {
+    setSubmitting(true);
+    // SCAFFOLD — no DB write today. TODO same pattern as reportSick but
+    // with reason_type='absent_other' (or a new dedicated reason_type
+    // once the consent + leave-balances model is wired). Reassignment +
+    // supervisor flag share the TODO list above.
+    setTimeout(() => {
+      setSubmitting(false);
+      onCancel();
+    }, 300);
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-6" style={{ background: '#0F0F0E' }}>
+      <div className="w-full max-w-sm">
+        <div className="mb-8" style={{ paddingLeft: '2px' }}>
+          <Briefcase style={{ width: 24, height: 24, color: '#FAFAF7', strokeWidth: 1.5 }} />
+          <h1 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 28, letterSpacing: '-0.02em', lineHeight: 1.1, color: '#FAFAF7', marginTop: 12 }}>
+            Employee Time Clock
+          </h1>
+          <p style={{ fontSize: 13, color: '#6B6B66', marginTop: 4 }}>
+            {session.name} · {ROLE_CONFIG[session.role].label}
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-[#2A2A28] bg-[#1A1A18] p-5 space-y-4">
+          {mode === "default" && (
+            <>
+              <div className="flex items-start gap-2">
+                <Clock className="w-4 h-4 text-[#B8945F] mt-0.5 flex-shrink-0" />
+                <p className="text-sm text-[#FAFAF7] leading-relaxed">
+                  You're signed in but not clocked in. Clock in to start your shift,
+                  or let us know you can't make it today.
+                </p>
+              </div>
+              <button
+                onClick={onClockIn}
+                className="w-full flex items-center justify-center gap-2 bg-[#1E3A2F] hover:bg-[#264A3B] text-[#FAFAF7] font-bold text-sm py-3 rounded-xl transition-colors"
+              >
+                <Play className="w-4 h-4" /> Clock In
+              </button>
+
+              <div className="space-y-2 pt-2 border-t border-[#2A2A28]">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+                  Can't make it today?
+                </p>
+                <button
+                  onClick={() => setMode("sick")}
+                  className="w-full flex items-center justify-center gap-1.5 bg-amber-900/30 hover:bg-amber-900/50 border border-amber-700/50 text-amber-200 font-semibold text-xs py-2 rounded-xl transition-colors"
+                >
+                  <Thermometer className="w-3.5 h-3.5" /> Report I'm sick
+                </button>
+                <button
+                  onClick={() => setMode("absent")}
+                  className="w-full flex items-center justify-center gap-1.5 bg-rose-900/25 hover:bg-rose-900/40 border border-rose-700/40 text-rose-200 font-semibold text-xs py-2 rounded-xl transition-colors"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" /> Not able to make it in today
+                </button>
+              </div>
+
+              <button
+                onClick={onCancel}
+                className="w-full text-xs text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+              >
+                Not me — sign out
+              </button>
+              <p className="text-[10px] text-slate-700 leading-snug">
+                Scaffold — clock state lives in sessionStorage only. Wiring to the
+                real time-tracking backend (staff_time_entries + week aggregator)
+                is planned but not built.
+              </p>
+            </>
+          )}
+
+          {mode === "sick" && (
+            <>
+              <div className="flex items-start gap-2">
+                <Thermometer className="w-4 h-4 text-amber-300 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-[#FAFAF7]">Report sick — confirm</p>
+                  <p className="text-[11px] text-[#6B6B66] leading-snug mt-1">
+                    Marks you out sick for {today}. Today's intake appointments and
+                    tasks will be flagged for coverage; if none is available, the
+                    supervisor is notified.
+                  </p>
+                  <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
+                    Reassignment routing + supervisor notification are scaffolded
+                    (TODO). The sick-day write itself is real — same pattern as the
+                    existing I'm-Sick button (staff_sick_overrides + intake_staff_time_off).
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={reportSick}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 bg-amber-700 hover:bg-amber-600 text-white font-bold text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Thermometer className="w-4 h-4" />}
+                Confirm — I'm out sick
+              </button>
+              <button
+                onClick={() => setMode("default")}
+                disabled={submitting}
+                className="w-full text-xs text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+              >
+                Back
+              </button>
+            </>
+          )}
+
+          {mode === "absent" && (
+            <>
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-300 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-bold text-[#FAFAF7]">Not making it in — confirm</p>
+                  <p className="text-[11px] text-[#6B6B66] leading-snug mt-1">
+                    Reports you out today (non-sick reason). Today's appointments and
+                    tasks will be flagged for coverage; if none is available, the
+                    supervisor is notified.
+                  </p>
+                  <p className="text-[10px] text-rose-300/80 italic mt-2 leading-snug">
+                    SCAFFOLD — no DB write today. TODO: write a row to
+                    intake_staff_time_off with reason_type=&apos;absent_other&apos;
+                    once that reason_type is in the form's allowed set; mirror the
+                    reassignment + supervisor-flag routing from the sick-day path.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={reportAbsent}
+                disabled={submitting}
+                className="w-full flex items-center justify-center gap-2 bg-rose-700 hover:bg-rose-600 text-white font-bold text-sm py-2.5 rounded-xl transition-colors disabled:opacity-50"
+              >
+                {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <AlertTriangle className="w-4 h-4" />}
+                Confirm — I'm out today
+              </button>
+              <button
+                onClick={() => setMode("default")}
+                disabled={submitting}
+                className="w-full text-xs text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+              >
+                Back
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Idle Warning modal ──────────────────────────────────────────────────────
+//
+// Surfaces at ~14 minutes of inactivity (see IntakePortalInner). Shows a
+// 60-second countdown; if the user clicks "I'm here" or interacts with the
+// page, the watcher resets and the modal closes. If the countdown reaches
+// zero, the parent's `onLogoutNow` is invoked, which clears the clock state
+// and signs out.
+
+function IdleWarningModal({
+  onStillHere, onLogoutNow,
+}: { onStillHere: () => void; onLogoutNow: () => void }) {
+  const [remaining, setRemaining] = useState(60);
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRemaining(r => {
+        if (r <= 1) {
+          clearInterval(id);
+          onLogoutNow();
+          return 0;
+        }
+        return r - 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [onLogoutNow]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Idle warning"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4"
+    >
+      <div className="w-full max-w-md rounded-2xl border border-amber-500/40 bg-[#0d1221] shadow-2xl">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-800">
+          <AlertTriangle className="w-4 h-4 text-amber-400" />
+          <h3 className="text-sm font-bold text-white">Are you still there?</h3>
+          <span className="ml-auto text-[11px] font-mono text-amber-300">{remaining}s</span>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-slate-300 leading-relaxed">
+            You'll be clocked out and signed out automatically in
+            <span className="text-amber-300 font-bold"> {remaining} </span>
+            second{remaining === 1 ? "" : "s"} due to inactivity.
+          </p>
+          <p className="text-xs text-slate-500 leading-snug">
+            Any mouse move, keypress, or click cancels the timer.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onLogoutNow}
+              className="text-xs font-semibold text-slate-400 hover:text-white px-3 py-1.5 transition-colors"
+            >
+              Sign out now
+            </button>
+            <button
+              onClick={onStillHere}
+              className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 px-3 py-1.5 rounded-xl transition-colors"
+            >
+              I'm here
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -4381,6 +4704,180 @@ function TimeOffTab({ timeOff, onRefresh }: { timeOff: TimeOff[]; onRefresh: () 
   );
 }
 
+// ─── My Schedule Tab — consolidates the prior Availability + Time Off tabs ─
+//
+// Surfaces:
+//   1. Action row
+//       - I'm sick → leave now  (existing IAmSickButton; writes to
+//          staff_sick_overrides + intake_staff_time_off — same as before)
+//       - Family emergency → leave now  (SCAFFOLD modal; no DB write, TODO
+//          notes that real wiring would mirror IAmSickButton with reason_type
+//          = 'family_emergency')
+//       - Request future time off  (header CTA + scrolls to the existing
+//          TimeOffTab inline below)
+//   2. Balances row — PTO · Sick · FMLA  (ALL SCAFFOLD, no fake numbers)
+//       Real balances need a `staff_leave_balances` table (id, staff_id,
+//       pto_hours, sick_hours, fmla_hours_remaining, fmla_eligible bool,
+//       updated_at). "FMLA eligible" is selected when entering employees
+//       per the planned staff-setup model (not built yet).
+//   3. Time Off section (real) — mounts existing TimeOffTab verbatim
+//   4. Weekly availability (real) — mounts existing AvailabilityTab verbatim
+//
+// TODO Phase B — wiring required to make the balances + family-emergency
+// surfaces real:
+//   - new `staff_leave_balances` table + accrual ledger
+//   - new field on staff_members: `fmla_eligible` (admin-set during onboarding)
+//   - mirror IAmSickButton flow for family-emergency reason_type
+
+function MyScheduleTab({
+  session, timeOff, availability, canEdit, onRefresh,
+}: {
+  session: PortalSession;
+  timeOff: TimeOff[];
+  availability: StaffAvailability[];
+  canEdit: boolean;
+  onRefresh: () => void;
+}) {
+  const [familyOpen, setFamilyOpen] = useState(false);
+  return (
+    <div className="space-y-6">
+      {/* Header strip */}
+      <div className="flex items-start gap-3 flex-wrap">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-bold text-white">My Schedule</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Request future time off, manage your weekly hours, and signal when
+            you need to step away today.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <IAmSickButton onMarked={onRefresh} session={session} />
+          <button
+            onClick={() => setFamilyOpen(true)}
+            title="Family emergency — leave now"
+            className="flex items-center gap-1.5 text-xs font-bold text-rose-200 bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 rounded-xl px-3 py-1.5 transition-colors"
+          >
+            <AlertTriangle className="w-3.5 h-3.5" />
+            Family emergency
+          </button>
+        </div>
+      </div>
+
+      {/* Balances row — SCAFFOLD: no fake numbers shown as real. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <LeaveBalanceCard label="PTO"  hint="Vacation / personal time" />
+        <LeaveBalanceCard label="Sick" hint="Sick leave balance" />
+        <LeaveBalanceCard
+          label="FMLA"
+          hint="FMLA-eligible employees only"
+          eligibilityNote="FMLA eligibility is selected when entering employees (planned staff-setup model — not built yet)."
+        />
+      </div>
+
+      {/* Time Off section (existing functionality, REAL). */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <CheckCircle2 className="w-3.5 h-3.5 text-sky-400" />
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Time Off</p>
+        </div>
+        <TimeOffTab timeOff={timeOff} onRefresh={onRefresh} />
+      </div>
+
+      {/* Availability section (existing functionality, REAL). */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-3.5 h-3.5 text-sky-400" />
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Weekly availability</p>
+        </div>
+        <AvailabilityTab availability={availability} onRefresh={onRefresh} canEdit={canEdit} />
+      </div>
+
+      {familyOpen && (
+        <FamilyEmergencyModal session={session} onClose={() => setFamilyOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+function LeaveBalanceCard({
+  label, hint, eligibilityNote,
+}: { label: string; hint: string; eligibilityNote?: string }) {
+  return (
+    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{label}</p>
+        <span className="text-[9px] font-semibold uppercase tracking-widest text-slate-600 border border-slate-700 rounded px-1.5 py-0.5">
+          Scaffold
+        </span>
+      </div>
+      <p className="text-2xl font-mono text-slate-500" title="Placeholder — needs staff_leave_balances table">
+        —<span className="text-xs text-slate-700 ml-1">hrs</span>
+      </p>
+      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{hint}</p>
+      {eligibilityNote && (
+        <p className="text-[10px] text-slate-600 italic mt-2 leading-snug">{eligibilityNote}</p>
+      )}
+    </div>
+  );
+}
+
+function FamilyEmergencyModal({
+  session, onClose,
+}: { session: PortalSession; onClose: () => void }) {
+  // SCAFFOLD: no DB write. Confirmation only.
+  // TODO Phase B: route through staff_sick_overrides + intake_staff_time_off
+  // with reason_type='family_emergency', same pattern as IAmSickButton.
+  void session;
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Family emergency — leave now"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-md rounded-2xl border border-rose-500/40 bg-[#0d1221] shadow-2xl">
+        <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-800">
+          <AlertTriangle className="w-4 h-4 text-rose-400" />
+          <h3 className="text-sm font-bold text-white">Family Emergency</h3>
+          <span className="ml-auto text-[10px] font-semibold uppercase tracking-widest text-slate-500 border border-slate-700 rounded px-1.5 py-0.5">
+            Coming soon
+          </span>
+        </div>
+        <div className="p-5 space-y-3">
+          <p className="text-sm text-slate-300 leading-relaxed">
+            Take care of what matters. The supervisor will be notified and
+            today's remaining consults will be redistributed.
+          </p>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Wiring is not yet connected. When it lands, this routes through the
+            same flow as the "I'm sick" button (writes to
+            <code className="font-mono text-slate-400"> staff_sick_overrides</code> +
+            <code className="font-mono text-slate-400"> intake_staff_time_off</code>
+            with reason_type=<code className="font-mono text-slate-400">family_emergency</code>)
+            and notifies the on-duty supervisor.
+          </p>
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={onClose}
+              className="text-xs font-semibold text-slate-400 hover:text-white px-3 py-1.5 transition-colors"
+            >
+              Close
+            </button>
+            <button
+              onClick={onClose}
+              className="text-xs font-bold text-white bg-rose-600 hover:bg-rose-500 px-3 py-1.5 rounded-xl transition-colors"
+              title="Send — wiring pending"
+            >
+              I understand
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Log Contact Modal ────────────────────────────────────────────────────────
 
 const CHANNEL_CFG = {
@@ -4646,8 +5143,10 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
   );
 }
 
-function FollowUpQueue({ leads, onSelect }: {
+function FollowUpQueue({ leads, currentSessionId, onSelect }: {
   leads: Lead[];
+  /** For the lead-claim lock — when set, leads claimed by others show as locked. */
+  currentSessionId?: string | null;
   onSelect: (lead: Lead) => void;
 }) {
   const now = new Date();
@@ -4738,9 +5237,18 @@ function FollowUpQueue({ leads, onSelect }: {
   function LeadRow({ lead }: { lead: Lead }) {
     const sc   = STATUS_CONFIG[lead.status] ?? STATUS_CONFIG["new"];
     const days = daysSince(lead.last_contact_at ?? lead.created_at);
+    const locked = isClaimedByOther(lead, currentSessionId);
     return (
-      <button onClick={() => onSelect(lead)}
-        className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/30 hover:bg-slate-800/60 border border-slate-700/40 hover:border-slate-600 transition-all text-left group">
+      <button
+        onClick={() => { if (!locked) onSelect(lead); }}
+        disabled={locked}
+        aria-disabled={locked}
+        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left group ${
+          locked
+            ? "bg-slate-800/15 border-slate-700/30 opacity-60 cursor-not-allowed"
+            : "bg-slate-800/30 hover:bg-slate-800/60 border-slate-700/40 hover:border-slate-600"
+        }`}
+      >
         <div className="w-8 h-8 rounded-xl bg-slate-700/60 flex items-center justify-center flex-shrink-0 text-sm font-bold text-slate-400 group-hover:text-white transition-colors">
           {lead.full_name.charAt(0)}
         </div>
@@ -4751,6 +5259,7 @@ function FollowUpQueue({ leads, onSelect }: {
             {lead.chapter_interest && <span className="text-[9px] font-bold text-slate-500">Ch.{lead.chapter_interest}</span>}
             {lead.urgency === "emergency" && <span className="text-[9px] font-bold text-red-400 bg-red-500/10 border border-red-500/20 rounded-full px-1.5 py-0.5">Emergency</span>}
             {lead.urgency === "urgent"    && <span className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-1.5 py-0.5">Urgent</span>}
+            <LeadClaimBadge lead={lead} currentSessionId={currentSessionId} size="xs" />
           </div>
           <div className="flex items-center gap-3 mt-0.5">
             {lead.phone && <span className="text-[11px] text-slate-500">{lead.phone}</span>}
@@ -4843,6 +5352,216 @@ function FollowUpQueue({ leads, onSelect }: {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Leads metrics panel (REAL where status field supports it, SCAFFOLD otherwise) ─
+//
+// Maps the requested 11 metrics to the `intake_leads.status` field. Real
+// counts are derived from the existing leads array — NO new fetches, NO
+// fabricated numbers. Scaffold cells render "—" and carry a TODO naming the
+// field the metric needs.
+
+const APPT_SET_STATUSES = new Set<string>([
+  "consultation_scheduled", "consultation_complete",
+  "intake_in_progress", "intake_complete",
+  "sent_for_attorney_review", "attorney_accepted",
+  "fee_quoted", "retained", "no_show",
+]);
+const APPT_SHOWN_STATUSES = new Set<string>([
+  "consultation_complete",
+  "intake_in_progress", "intake_complete",
+  "sent_for_attorney_review", "attorney_accepted",
+  "fee_quoted", "retained",
+]);
+const INTAKE_NO_FEE_STATUSES = new Set<string>([
+  "intake_complete", "sent_for_attorney_review", "attorney_accepted",
+]);
+
+interface LeadsMetricsPanelProps { leads: Lead[]; }
+
+function LeadsMetricsPanel({ leads }: LeadsMetricsPanelProps) {
+  const total       = leads.length;
+  const apptsSet    = leads.filter(l => APPT_SET_STATUSES.has(l.status)).length;
+  const apptsShown  = leads.filter(l => APPT_SHOWN_STATUSES.has(l.status)).length;
+  const retained    = leads.filter(l => l.status === "retained").length;
+  const noShow      = leads.filter(l => l.status === "no_show").length;
+  const noCase      = leads.filter(l => l.status === "no_case").length;
+  // Best-effort proxy: status='declined' typically lands AFTER attorney_accepted
+  // and fee_quoted in this codebase (see LegalAdminPortal status writes).
+  const presentedNoMove = leads.filter(l => l.status === "declined").length;
+  const intakeNoFee = leads.filter(l => INTAKE_NO_FEE_STATUSES.has(l.status)).length;
+  const conversion  = total > 0 ? (retained / total) * 100 : 0;
+
+  return (
+    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <BarChart2 className="w-4 h-4 text-[#B8945F]" />
+        <h3 className="text-xs font-bold uppercase tracking-widest text-white">Leads Metrics</h3>
+      </div>
+      <dl className="space-y-1">
+        <MetricRow label="Total leads received"          value={total}            />
+        <MetricRow label="Appointments set"              value={apptsSet}         />
+        <MetricRow label="Appointments shown"            value={apptsShown}       />
+        <MetricRow label="Retained"                      value={retained}         tone="good" />
+        <MetricRow label="Appt set + no-show"            value={noShow}           tone="warn" />
+        <MetricRow label="No cases"                      value={noCase}           />
+        <MetricRow label="Consult done · no move forward" value={presentedNoMove}  tone="warn" />
+        <MetricRow label="Intake done · no fee quoted"   value={intakeNoFee}      />
+        {/* SCAFFOLD — no decline_reason / sub-status on declined yet. */}
+        <MetricRow
+          label="Not interested"
+          value={null}
+          scaffoldTooltip="Needs a decline_reason field on intake_leads (e.g. 'not_interested')."
+        />
+        <MetricRow
+          label="Went elsewhere"
+          value={null}
+          scaffoldTooltip="Needs a decline_reason field on intake_leads (e.g. 'retained_elsewhere')."
+        />
+        <MetricRow
+          label="Conversion %"
+          value={total > 0 ? `${conversion.toFixed(1)}%` : "—"}
+          tone="good"
+          captionRight={total > 0 ? `${retained} / ${total}` : undefined}
+        />
+      </dl>
+      <p className="text-[10px] text-slate-500 italic mt-3 leading-snug">
+        Counts derive from <code className="font-mono">intake_leads.status</code> only.
+        Scaffold rows need a new decline-reason field; "Consult done · no move forward"
+        currently uses <code className="font-mono">status='declined'</code> as a proxy until
+        a status-history table lands.
+        {/* TODO Phase B: status_history table for accurate stage funnels,
+            decline_reason column for the two scaffold rows. */}
+      </p>
+    </div>
+  );
+}
+
+function MetricRow({
+  label, value, tone, scaffoldTooltip, captionRight,
+}: {
+  label: string;
+  /** number → real count · string → preformatted · null → scaffold ("—") */
+  value: number | string | null;
+  tone?: "good" | "warn";
+  scaffoldTooltip?: string;
+  captionRight?: string;
+}) {
+  const isScaffold = value === null;
+  const display = isScaffold ? "—" : String(value);
+  const valueCls =
+    isScaffold       ? "text-slate-600 italic" :
+    tone === "good"  ? "text-emerald-400" :
+    tone === "warn"  ? "text-amber-300" :
+                       "text-white";
+  return (
+    <div className="flex items-baseline gap-2">
+      <dt className="text-[11px] text-slate-400 flex-1 truncate">
+        {label}
+        {isScaffold && (
+          <span className="ml-1.5 text-[9px] font-semibold uppercase tracking-widest text-slate-600 border border-slate-700 rounded px-1 py-0.5">
+            Scaffold
+          </span>
+        )}
+      </dt>
+      {captionRight && (
+        <span className="text-[10px] font-mono text-slate-500">{captionRight}</span>
+      )}
+      <dd
+        className={`text-sm font-mono ${valueCls} min-w-[2.5rem] text-right`}
+        title={scaffoldTooltip}
+      >
+        {display}
+      </dd>
+    </div>
+  );
+}
+
+// ─── Leads-by-date column — chronological feed with status filter ────────────
+//
+// Reuses the existing `leads` array (no new fetch). Displays every lead sorted
+// by created_at desc. Filter is a status dropdown — "All" by default, plus an
+// "Active" bucket that excludes closed states (retained/declined/no_case/no_show).
+// Clicking a row routes via the existing setSelectedLead handler.
+
+const CLOSED_STATUSES = new Set<string>(["retained", "declined", "no_case", "no_show"]);
+
+interface LeadsByDateColumnProps {
+  leads: Lead[];
+  /** For the lead-claim lock — when set, leads claimed by others show as locked. */
+  currentSessionId?: string | null;
+  onSelect: (lead: Lead) => void;
+}
+
+function LeadsByDateColumn({ leads, currentSessionId, onSelect }: LeadsByDateColumnProps) {
+  const [filter, setFilter] = useState<"all" | "active" | "retained" | "declined" | "no_case" | "no_show" | "fee_quoted">("all");
+
+  const rows = useMemo(() => {
+    let list = leads;
+    if (filter === "active") list = list.filter(l => !CLOSED_STATUSES.has(l.status));
+    else if (filter !== "all") list = list.filter(l => l.status === filter);
+    return [...list].sort((a, b) =>
+      new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+  }, [leads, filter]);
+
+  return (
+    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl flex flex-col">
+      <div className="px-4 py-3 border-b border-slate-800">
+        <div className="flex items-center gap-2">
+          <Inbox className="w-4 h-4 text-[#B8945F]" />
+          <h3 className="text-xs font-bold uppercase tracking-widest text-white flex-1">All Submissions</h3>
+          <span className="text-[10px] font-mono text-slate-500">{rows.length}</span>
+        </div>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as typeof filter)}
+          className="w-full mt-2 bg-slate-800 border border-slate-700 text-slate-200 text-[11px] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#B8945F]/60"
+        >
+          <option value="all">All ({leads.length})</option>
+          <option value="active">Active (open pipeline)</option>
+          <option value="fee_quoted">Fee quoted</option>
+          <option value="retained">Retained</option>
+          <option value="declined">Declined</option>
+          <option value="no_case">No case</option>
+          <option value="no_show">No-show</option>
+        </select>
+      </div>
+      <ul className="overflow-y-auto" style={{ maxHeight: 640 }}>
+        {rows.length === 0 ? (
+          <li className="px-4 py-6 text-center text-[11px] text-slate-500 italic">
+            No leads match this filter.
+          </li>
+        ) : rows.map(l => {
+          const locked = isClaimedByOther(l, currentSessionId);
+          return (
+            <li key={l.id}>
+              <button
+                onClick={() => { if (!locked) onSelect(l); }}
+                disabled={locked}
+                aria-disabled={locked}
+                className={`w-full text-left px-4 py-2.5 border-b border-slate-800 transition-colors ${
+                  locked ? "opacity-60 cursor-not-allowed" : "hover:bg-slate-800/40"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <p className="text-xs font-semibold text-white truncate flex-1">{l.full_name}</p>
+                  <LeadClaimBadge lead={l} currentSessionId={currentSessionId} size="xs" />
+                  <span className="text-[9px] font-mono text-slate-500 flex-shrink-0">
+                    {timeAgo(l.created_at)}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate mt-0.5">
+                  {l.phone ?? l.email ?? "—"} · <span className="text-slate-400">{l.status}</span>
+                  {l.chapter_interest && <span className="ml-1">· Ch.{l.chapter_interest}</span>}
+                </p>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }
@@ -6026,8 +6745,78 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   const isAtty    = isAttorney(role);
   const isSuperAdmin = isSuperAdminRole(role);
   const canManageLeads  = !isAtty || isSuperAdmin; // legal_admin, super_admin, attorney_super_admin
-  const canReviewCases  = isAtty || isSuperAdmin;  // attorneys + super admins
+  // canReviewCases was used by the "pending review" chip in the top bar
+  // before that chip was removed. Restore here if the chip comes back.
   const canManageStaff  = isSuperAdmin;
+
+  // ─── Employee Time Clock (front-end scaffold) ─────────────────────────────
+  //
+  // Persisted to sessionStorage keyed by session.id so a reload during the
+  // same browser session restores the state. NO DB writes today — real
+  // wiring (staff_time_entries table + clock_in/clock_out mutations + week
+  // aggregator + OT thresholds) is the planned time-tracking backend.
+  //
+  // Surfaces driven by this state:
+  //   - ForceClockInOverlay: blocks the portal until clockedInAt is set.
+  //   - ClockBubble (Employee Time Clock): shows live counters + lunch/break
+  //     toggles.
+  //   - Idle watcher (below): if no activity for ~15 minutes, warns the user
+  //     and then signs them out (which also clears the clock state).
+  const TIME_CLOCK_KEY = `time_clock:${session.id}`;
+  const [clockState, setClockStateRaw] = useState<TimeClockState>(() => {
+    try {
+      const raw = sessionStorage.getItem(TIME_CLOCK_KEY);
+      if (raw) return JSON.parse(raw) as TimeClockState;
+    } catch {/* fall through */}
+    return { clockedInAt: null, onLunchSince: null, onBreakSince: null, lunchMinutes: 0, breakMinutes: 0 };
+  });
+  function setClockState(next: TimeClockState) {
+    setClockStateRaw(next);
+    try { sessionStorage.setItem(TIME_CLOCK_KEY, JSON.stringify(next)); } catch {/* ignore */}
+  }
+  function clearClockState() {
+    setClockStateRaw({ clockedInAt: null, onLunchSince: null, onBreakSince: null, lunchMinutes: 0, breakMinutes: 0 });
+    try { sessionStorage.removeItem(TIME_CLOCK_KEY); } catch {/* ignore */}
+  }
+
+  // ─── Idle watcher — warns at 14 min, auto-logout at 15 min ────────────────
+  //
+  // Only armed while clockedInAt !== null. The user said: "if idle for 15
+  // minutes or more — please sign them out and clock out. Must be given a
+  // warning." We pop a warning at 14 min with a 60s countdown; if no
+  // activity in that window, we clear the clock state and call onLogout().
+  const IDLE_WARNING_AT_MS = 14 * 60 * 1000;
+  const IDLE_LOGOUT_AT_MS  = 15 * 60 * 1000;
+  const lastActivityRef = useRef<number>(Date.now());
+  const [idleWarning, setIdleWarning] = useState(false);
+
+  useEffect(() => {
+    // Bump activity on any meaningful interaction.
+    function bump() {
+      lastActivityRef.current = Date.now();
+      if (idleWarning) setIdleWarning(false);
+    }
+    const events: (keyof DocumentEventMap)[] = ["mousemove", "keydown", "click", "touchstart", "scroll"];
+    for (const e of events) document.addEventListener(e, bump, { passive: true });
+    return () => { for (const e of events) document.removeEventListener(e, bump); };
+  }, [idleWarning]);
+
+  useEffect(() => {
+    if (clockState.clockedInAt == null) return;
+    const tick = setInterval(() => {
+      const idleMs = Date.now() - lastActivityRef.current;
+      if (idleMs >= IDLE_LOGOUT_AT_MS) {
+        clearClockState();
+        onLogout();
+      } else if (idleMs >= IDLE_WARNING_AT_MS) {
+        setIdleWarning(true);
+      }
+    }, 15_000);
+    return () => clearInterval(tick);
+    // We intentionally omit `clearClockState` + `onLogout` from deps — both
+    // are stable for the lifetime of the portal session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clockState.clockedInAt]);
 
   const [leads, setLeads]             = useState<Lead[]>([]);
   const [acceptances, setAcceptances] = useState<Acceptance[]>([]);
@@ -6040,6 +6829,16 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   const [statusFilter, setStatusFilter] = useState("all");
   const [urgencyFilter, setUrgencyFilter] = useState("all");
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  // Lead-locking gate — every user-initiated "open lead" path routes through
+  // this wrapper so a claimed lead refuses to open in the detail panel.
+  // Direct setSelectedLead() calls (e.g. closing the panel, post-create
+  // bounces) intentionally bypass — those aren't user-initiated discovery.
+  // TODO Phase B: a small "Take it over" affordance when the claim is stale,
+  // wired to a claim_lead RPC; until then the gate is silent (no-op).
+  function requestOpenLead(lead: Lead) {
+    if (isClaimedByOther(lead, session.id)) return;
+    setSelectedLead(lead);
+  }
   // showNewLead + NewLeadModal kept as DEAD CODE intentionally (Phase A spec).
   // All launchers now route to setNewLeadWindow(true) for the full-window flow.
   const [showNewLead, setShowNewLead] = useState(false);
@@ -6055,7 +6854,15 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // legal admins + super admins land on the new dashboard. Pure attorneys
   // never see the dashboard tab — gated below in TABS.
   const defaultTab = isAtty && !isSuperAdmin ? "followup" : "dashboard";
-  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+  // "availability" + "timeoff" were consolidated into "my_schedule"; the
+  // union keeps the historical values as safe fallbacks for any external
+  // caller passing a stale tab id.
+  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+  // Leads tab now contains both the lead table view and the Follow-Up
+  // pipeline (FollowUpQueue) as a sub-section. The standalone Follow-Up
+  // tab was removed for legal_admin/super_admin; attorneys still see it
+  // separately as "Review Queue".
+  const [leadsSubTab, setLeadsSubTab] = useState<"leads" | "followup">("leads");
 
   // Layer 1 (Up Next): skipped task ids live here so they persist across
   // sidebar tab switches for the session. Resets on portal refresh / logout
@@ -6167,6 +6974,50 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // Until one of these options is resolved, the presentation UI works (all local state)
   // but the DB persistence steps (step tracking, payment plan save, welcome call) will no-op.
   // ─────────────────────────────────────────────────────────────────────────────────────────
+
+  // ── Clock-in actions exposed to the dashboard ─────────────────────────────
+  const clockActions: TimeClockActions = {
+    clockIn: () => setClockState({ ...clockState, clockedInAt: Date.now() }),
+    clockOut: () => {
+      // Ending the workday clears the clock state AND signs out — the next
+      // login will land back at the force-clock-in gate.
+      clearClockState();
+      onLogout();
+    },
+    startLunch: () => {
+      if (clockState.onLunchSince || clockState.onBreakSince) return;
+      setClockState({ ...clockState, onLunchSince: Date.now() });
+    },
+    endLunch: () => {
+      if (!clockState.onLunchSince) return;
+      const minutes = Math.floor((Date.now() - clockState.onLunchSince) / 60_000);
+      setClockState({ ...clockState, onLunchSince: null, lunchMinutes: clockState.lunchMinutes + minutes });
+    },
+    startBreak: () => {
+      if (clockState.onLunchSince || clockState.onBreakSince) return;
+      setClockState({ ...clockState, onBreakSince: Date.now() });
+    },
+    endBreak: () => {
+      if (!clockState.onBreakSince) return;
+      const minutes = Math.floor((Date.now() - clockState.onBreakSince) / 60_000);
+      setClockState({ ...clockState, onBreakSince: null, breakMinutes: clockState.breakMinutes + minutes });
+    },
+  };
+
+  // ── Force-clock-in gate ───────────────────────────────────────────────────
+  // Must be ABOVE every other early-return path — even specialized full-screen
+  // flows (selected lead / presentation / new-lead / guided intake) sit behind
+  // the clock-in screen. The user can either clock in or sign back out.
+  if (clockState.clockedInAt == null) {
+    return (
+      <ForceClockInOverlay
+        session={session}
+        onClockIn={clockActions.clockIn}
+        onCancel={onLogout}
+      />
+    );
+  }
+
   if (presentationContext) {
     const { lead: pLead, acceptance: pAcc, submission: pSub } = presentationContext;
     const isBif = pAcc.case_type === "ch7_bifurcated";
@@ -6205,6 +7056,12 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
       <NewLeadInline
         session={session}
         calEvents={calEvents}
+        existingLeads={leads}
+        onOpenExistingLead={async (leadId) => {
+          setNewLeadWindow(false);
+          const { data } = await supabase.from("intake_leads").select("*").eq("id", leadId).single();
+          if (data) setSelectedLead(data as Lead);
+        }}
         onExit={() => setNewLeadWindow(false)}
         onSaved={async (leadId) => {
           setNewLeadWindow(false);
@@ -6304,10 +7161,25 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     ...(false
       ? [{ id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null }]
       : []),
-    { id: "followup" as const,     label: isAtty && !isSuperAdmin ? "Review Queue" : "Follow-Up", icon: <BellRing className="w-3.5 h-3.5" />,  badge: isAtty ? (reviewQueue.length + feeQuotedLeads.length || null) : followUpBadge },
+    // Follow-Up tab consolidated into the Leads tab for legal_admin /
+    // super_admin (it lives as a "Follow-Up" sub-nav inside Leads). Attorneys
+    // still see "Review Queue" here because that surface renders the
+    // AttorneyReviewQueue component — different from FollowUpQueue.
+    ...(isAtty
+      ? [{ id: "followup" as const, label: "Review Queue", icon: <BellRing className="w-3.5 h-3.5" />, badge: (reviewQueue.length + feeQuotedLeads.length) || null }]
+      : []),
     { id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null },
-    ...( canManageLeads || isSuperAdmin ? [{ id: "availability" as const, label: "Availability", icon: <Clock className="w-3.5 h-3.5" />, badge: null }] : []),
-    ...( canManageLeads || isSuperAdmin ? [{ id: "timeoff" as const, label: "Time Off", icon: <CheckCircle2 className="w-3.5 h-3.5" />, badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null }] : []),
+    // My Schedule consolidates the prior "Availability" + "Time Off" tabs.
+    // Pending-approval count surfaces as the nav badge so the user notices
+    // outstanding requests.
+    ...( canManageLeads || isSuperAdmin
+      ? [{
+          id: "my_schedule" as const,
+          label: "My Schedule",
+          icon: <Calendar className="w-3.5 h-3.5" />,
+          badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null,
+        }]
+      : []),
     ...(isSuperAdmin ? [{ id: "sick_admin" as const, label: "Out-of-Office", icon: <span className="text-sm leading-none">🤒</span>, badge: null }] : []),
   ];
 
@@ -6324,21 +7196,11 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
             </span>
           </div>
           <div className="ml-auto flex items-center gap-3 flex-wrap justify-end">
-            {emergencies.length > 0 && (
-              <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #991B1B', color: '#991B1B', background: 'transparent', borderRadius: 2, padding: '2px 6px' }}>
-                {emergencies.length} emergency
-              </span>
-            )}
-            {canReviewCases && reviewQueue.length > 0 && (
-              <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', border: '1px solid #B45309', color: '#B45309', background: 'transparent', borderRadius: 2, padding: '2px 6px' }}>
-                {reviewQueue.length} pending review
-              </span>
-            )}
-            {/* User identity */}
-            <span style={{ fontSize: 13, color: '#6B6B66' }}>
-              {session.name} <span style={{ color: '#3A3A36' }}>·</span> {ROLE_CONFIG[role].label}
-            </span>
-            <IAmSickButton onMarked={load} session={session} />
+            {/* Removed from this top bar (now lives elsewhere or has been retired
+                for this surface): emergency + pending-review chips, the user
+                identity span, and IAmSickButton. The greeting block inside the
+                dashboard already personalizes the surface; the chips were
+                duplicating the badges already shown on the side-nav tabs. */}
             {canManageLeads && activeTab === "leads" && (
               <button
                 onClick={() => setNewLeadWindow(true)}
@@ -6415,25 +7277,28 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
         <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
-        {/* Stats row — always visible */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
-          {[
-            { label: "Total Leads",    val: leads.length,       color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
-            { label: "Need Scheduling",       val: newLeads.length,       color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
-            { label: "Today Appointments",    val: todayConsult.length,   color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
-            { label: "Pending Atty Review",   val: reviewQueue.length,    color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
-            { label: "Fee Quoted / Follow-Up",val: feeQuotedLeads.length, color: "text-orange-400",  icon: <DollarSign className="w-4 h-4" />,  tab: "followup" as const },
-          ].map(s => (
-            <button key={s.label} onClick={() => setActiveTab(s.tab)}
-              className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4 flex items-center gap-3 hover:border-slate-700 transition-colors text-left">
-              <span className={`${s.color} opacity-60`}>{s.icon}</span>
-              <div>
-                <p className="text-[10px] text-slate-500">{s.label}</p>
-                <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+        {/* Stats row — hidden on the dashboard tab (replaced there by the
+            three TopBubbles inside IntakeDashboard). Other tabs keep it. */}
+        {activeTab !== "dashboard" && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+            {[
+              { label: "Total Leads",    val: leads.length,       color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
+              { label: "Need Scheduling",       val: newLeads.length,       color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
+              { label: "Today Appointments",    val: todayConsult.length,   color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
+              { label: "Pending Atty Review",   val: reviewQueue.length,    color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
+              { label: "Fee Quoted / Follow-Up",val: feeQuotedLeads.length, color: "text-orange-400",  icon: <DollarSign className="w-4 h-4" />,  tab: "followup" as const },
+            ].map(s => (
+              <button key={s.label} onClick={() => setActiveTab(s.tab)}
+                className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4 flex items-center gap-3 hover:border-slate-700 transition-colors text-left">
+                <span className={`${s.color} opacity-60`}>{s.icon}</span>
+                <div>
+                  <p className="text-[10px] text-slate-500">{s.label}</p>
+                  <p className={`text-2xl font-bold ${s.color}`}>{s.val}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* ── DASHBOARD TAB (legal_admin / super_admin only — attorneys never see this) ── */}
         {activeTab === "dashboard" && (
@@ -6441,21 +7306,65 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
             session={session}
             leads={leads}
             calEvents={calEvents}
-            onOpenLead={(l) => setSelectedLead(l)}
+            onOpenLead={(l) => requestOpenLead(l)}
             onChangeTab={(t) => setActiveTab(t)}
             onOpenView={onOpenView ?? (() => {})}
-            onScheduleConsult={(l) => setSelectedLead(l)}
+            onScheduleConsult={(l) => requestOpenLead(l)}
             onDoIntakeNow={(l) => setGuidedIntakeLead(l)}
             onLogNewLead={() => setNewLeadWindow(true)}
             onRefresh={load}
             skippedIds={dashboardSkippedIds}
             setSkippedIds={setDashboardSkippedIds}
+            timeClock={clockState}
+            timeClockActions={clockActions}
           />
         )}
 
-        {/* ── LEADS TAB ── */}
+        {/* ── LEADS TAB (now contains Leads + Follow-Up sub-views) ── */}
         {activeTab === "leads" && (
           <>
+            {/* Sub-nav — Leads (table view) vs Follow-Up (pipeline view).
+                Consolidates the former standalone Follow-Up tab. */}
+            <div className="flex items-center gap-1 bg-[#0d1221] border border-slate-800 rounded-xl p-1 w-fit">
+              {([
+                { id: "leads"   as const, label: "Leads",     badge: newLeads.length || null },
+                { id: "followup" as const, label: "Follow-Up", badge: followUpBadge          },
+              ]).map(s => {
+                const isActive = leadsSubTab === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setLeadsSubTab(s.id)}
+                    className={`flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                      isActive
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    {s.label}
+                    {s.badge != null && s.badge > 0 && (
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        isActive ? "bg-slate-700 text-slate-100" : "bg-slate-800 text-slate-400"
+                      }`}>
+                        {s.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {leadsSubTab === "followup" ? (
+              <FollowUpQueue leads={leads} currentSessionId={session.id} onSelect={l => {
+                if (l.status === "sent_for_attorney_review" && l.submission_id && onOpenAttorneyReview) {
+                  onOpenAttorneyReview(l.id);
+                } else {
+                  requestOpenLead(l);
+                }
+              }} />
+            ) : (
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
+                <div className="space-y-5">
             {emergencies.length > 0 && (
               <div className="bg-red-500/8 border border-red-500/25 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-3">
@@ -6463,15 +7372,28 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                   <p className="text-sm font-bold text-red-400">Emergency Leads — Immediate Attention Required</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {emergencies.map(l => (
-                    <button key={l.id} onClick={() => setSelectedLead(l)}
-                      className="flex items-center gap-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl px-3 py-2 transition-colors text-xs">
-                      <Flag className="w-3 h-3 text-red-400" />
-                      <span className="text-red-200 font-semibold">{l.full_name}</span>
-                      {l.phone && <span className="text-red-400">{l.phone}</span>}
-                      <ChevronRight className="w-3 h-3 text-red-600" />
-                    </button>
-                  ))}
+                  {emergencies.map(l => {
+                    const locked = isClaimedByOther(l, session.id);
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => requestOpenLead(l)}
+                        disabled={locked}
+                        aria-disabled={locked}
+                        className={`flex items-center gap-2 border rounded-xl px-3 py-2 transition-colors text-xs ${
+                          locked
+                            ? "bg-slate-800/30 border-slate-700/40 cursor-not-allowed opacity-60"
+                            : "bg-red-500/10 hover:bg-red-500/20 border-red-500/30"
+                        }`}
+                      >
+                        <Flag className={`w-3 h-3 ${locked ? "text-slate-500" : "text-red-400"}`} />
+                        <span className={`font-semibold ${locked ? "text-slate-300" : "text-red-200"}`}>{l.full_name}</span>
+                        {l.phone && <span className={locked ? "text-slate-500" : "text-red-400"}>{l.phone}</span>}
+                        <LeadClaimBadge lead={l} currentSessionId={session.id} size="xs" />
+                        {!locked && <ChevronRight className="w-3 h-3 text-red-600" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -6484,16 +7406,29 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                   <span className="text-xs text-amber-500/70">— intake complete, awaiting attorney decision</span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {reviewQueue.map(l => (
-                    <button key={l.id} onClick={() => setSelectedLead(l)}
-                      className="flex items-center gap-2 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 rounded-xl px-3 py-2 transition-colors text-xs">
-                      <UserCheck className="w-3 h-3 text-amber-400" />
-                      <span className="text-amber-200 font-semibold">{l.full_name}</span>
-                      {l.chapter_interest && <span className="text-amber-500">Ch. {l.chapter_interest}</span>}
-                      {l.sent_for_review_at && <span className="text-amber-600">{timeAgo(l.sent_for_review_at)}</span>}
-                      <ChevronRight className="w-3 h-3 text-amber-600" />
-                    </button>
-                  ))}
+                  {reviewQueue.map(l => {
+                    const locked = isClaimedByOther(l, session.id);
+                    return (
+                      <button
+                        key={l.id}
+                        onClick={() => requestOpenLead(l)}
+                        disabled={locked}
+                        aria-disabled={locked}
+                        className={`flex items-center gap-2 border rounded-xl px-3 py-2 transition-colors text-xs ${
+                          locked
+                            ? "bg-slate-800/30 border-slate-700/40 cursor-not-allowed opacity-60"
+                            : "bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30"
+                        }`}
+                      >
+                        <UserCheck className={`w-3 h-3 ${locked ? "text-slate-500" : "text-amber-400"}`} />
+                        <span className={`font-semibold ${locked ? "text-slate-300" : "text-amber-200"}`}>{l.full_name}</span>
+                        {l.chapter_interest && <span className={locked ? "text-slate-500" : "text-amber-500"}>Ch. {l.chapter_interest}</span>}
+                        {l.sent_for_review_at && <span className={locked ? "text-slate-600" : "text-amber-600"}>{timeAgo(l.sent_for_review_at)}</span>}
+                        <LeadClaimBadge lead={l} currentSessionId={session.id} size="xs" />
+                        {!locked && <ChevronRight className="w-3 h-3 text-amber-600" />}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -6577,13 +7512,27 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                         const sc = STATUS_CONFIG[lead.status] ?? STATUS_CONFIG["new"];
                         const uc = URGENCY_CONFIG[lead.urgency ?? "normal"] ?? URGENCY_CONFIG["normal"];
                         const acceptance = getAcceptance(lead.id);
+                        const locked = isClaimedByOther(lead, session.id);
                         return (
-                          <tr key={lead.id} onClick={() => setSelectedLead(lead)} className="hover:bg-slate-800/30 cursor-pointer transition-colors">
+                          <tr
+                            key={lead.id}
+                            onClick={() => { if (!locked) requestOpenLead(lead); }}
+                            className={`transition-colors ${
+                              locked
+                                ? "opacity-60 cursor-not-allowed"
+                                : "hover:bg-slate-800/30 cursor-pointer"
+                            }`}
+                            aria-disabled={locked}
+                          >
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <div className="w-7 h-7 rounded-lg bg-slate-700/60 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0">{lead.full_name.charAt(0)}</div>
                                 <div>
-                                  <p className="text-sm font-semibold text-white flex items-center gap-1.5">{lead.full_name}{lead.ai_scheduled && <Bot className="w-3 h-3 text-sky-400 flex-shrink-0" />}</p>
+                                  <p className="text-sm font-semibold text-white flex items-center gap-1.5">
+                                    {lead.full_name}
+                                    {lead.ai_scheduled && <Bot className="w-3 h-3 text-sky-400 flex-shrink-0" />}
+                                    <LeadClaimBadge lead={lead} currentSessionId={session.id} size="xs" />
+                                  </p>
                                   {lead.state && <p className="text-[10px] text-slate-600">{lead.state}</p>}
                                 </div>
                               </div>
@@ -6611,10 +7560,18 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 </div>
               </div>
             )}
+                </div>
+                {/* Right column — metrics + chronological submissions list. */}
+                <aside className="space-y-4">
+                  <LeadsMetricsPanel leads={leads} />
+                  <LeadsByDateColumn leads={leads} currentSessionId={session.id} onSelect={(l) => requestOpenLead(l)} />
+                </aside>
+              </div>
+            )}
           </>
         )}
 
-        {/* ── FOLLOW-UP TAB ── */}
+        {/* ── FOLLOW-UP TAB (attorneys only — Review Queue) ── */}
         {activeTab === "followup" && (
           isAtty && !isSuperAdmin
             ? <AttorneyReviewQueue leads={leads} acceptances={acceptances} onSelect={l => {
@@ -6625,14 +7582,14 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 if (l.status === 'sent_for_attorney_review' && l.submission_id && onOpenAttorneyReview) {
                   onOpenAttorneyReview(l.id);
                 } else {
-                  setSelectedLead(l);
+                  requestOpenLead(l);
                 }
               }} />
-            : <FollowUpQueue leads={leads} onSelect={l => {
+            : <FollowUpQueue leads={leads} currentSessionId={session.id} onSelect={l => {
                 if (l.status === 'sent_for_attorney_review' && l.submission_id && onOpenAttorneyReview) {
                   onOpenAttorneyReview(l.id);
                 } else {
-                  setSelectedLead(l);
+                  requestOpenLead(l);
                 }
               }} />
         )}
@@ -6642,14 +7599,15 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           <CalendarTab events={calEvents} leads={leads} timeOff={timeOff} availability={availability} staffMembers={staffMembers} onRefresh={load} />
         )}
 
-        {/* ── AVAILABILITY TAB ── */}
-        {activeTab === "availability" && (
-          <AvailabilityTab availability={availability} onRefresh={load} canEdit={isSuperAdmin} />
-        )}
-
-        {/* ── TIME OFF TAB ── */}
-        {activeTab === "timeoff" && (
-          <TimeOffTab timeOff={timeOff} onRefresh={load} />
+        {/* ── MY SCHEDULE TAB (consolidates the prior Availability + Time Off tabs) ── */}
+        {activeTab === "my_schedule" && (
+          <MyScheduleTab
+            session={session}
+            timeOff={timeOff}
+            availability={availability}
+            canEdit={isSuperAdmin}
+            onRefresh={load}
+          />
         )}
 
         {/* ── OUT-OF-OFFICE ADMIN TAB ── */}
@@ -6780,6 +7738,27 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           firmName="Majors Law Group"
           onClose={() => setShowNewClient(false)}
           onCreated={() => { setShowNewClient(false); loadManualClients(); }}
+        />
+      )}
+
+      {/* Floating chat — small bubble that follows the staffer across the
+          main portal views (dashboard / leads / calendar / etc). Specialized
+          full-screen flows (presentation / new lead / guided intake / lead
+          detail) sit above this return so they don't see it. */}
+      <FloatingChat
+        currentSessionId={session.id}
+        onOpenMessagingPanel={onOpenView ?? (() => {})}
+      />
+
+      {/* Idle warning — fires the warning at ~14 min, auto-logout at ~15 min.
+          Only rendered in the main portal return today; the specialized
+          full-screen flows (presentation / new lead / guided intake / lead
+          detail) sit above without the warning modal — TODO if those become
+          common idle surfaces, lift this into a portal-rooted overlay. */}
+      {idleWarning && (
+        <IdleWarningModal
+          onStillHere={() => { lastActivityRef.current = Date.now(); setIdleWarning(false); }}
+          onLogoutNow={() => { clearClockState(); onLogout(); }}
         />
       )}
     </div>
