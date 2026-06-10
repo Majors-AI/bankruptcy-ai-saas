@@ -5,8 +5,15 @@ import {
   CheckCircle, AlertTriangle, Palmtree, Stethoscope, ChevronDown,
   ChevronUp, Bell, RefreshCw
 } from "lucide-react";
+import { getCurrentAttorneyName } from "../../lib/currentAttorney";
 
-const ATTORNEY_NAME = "Dominic Majors";
+// Was hardcoded "Dominic Majors", then a module-load const. Now a function
+// call site at each use so the value re-resolves AFTER login writes to
+// sessionStorage — fixes the "logged in as Sarah Kim but task panel still
+// queries Jennifer Smith's tasks" mismatch caused by the prior module-load
+// cache. The function reads sessionStorage first (set by LegalAdminPortal's
+// login handler), then VITE_ATTORNEY_NAME env override, then the default.
+function attorneyName(): string { return getCurrentAttorneyName(); }
 
 type TaskType = "hearing" | "client_call" | "signing_call" | "existing_client_call" | "pto" | "personal";
 
@@ -121,9 +128,9 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
   async function loadAll() {
     setLoading(true);
     const [{ data: t }, { data: p }, { data: s }] = await Promise.all([
-      supabase.from("attorney_tasks").select("*").eq("attorney_name", ATTORNEY_NAME).order("scheduled_at", { ascending: true }),
-      supabase.from("attorney_pto_requests").select("*").eq("attorney_name", ATTORNEY_NAME).order("created_at", { ascending: false }),
-      supabase.from("attorney_sick_days").select("*").eq("attorney_name", ATTORNEY_NAME).order("sick_date", { ascending: false }),
+      supabase.from("attorney_tasks").select("*").eq("attorney_name", attorneyName()).order("scheduled_at", { ascending: true }),
+      supabase.from("attorney_pto_requests").select("*").eq("attorney_name", attorneyName()).order("created_at", { ascending: false }),
+      supabase.from("attorney_sick_days").select("*").eq("attorney_name", attorneyName()).order("sick_date", { ascending: false }),
     ]);
     setTasks((t as Task[]) ?? []);
     setPtoList((p as PtoRequest[]) ?? []);
@@ -141,7 +148,7 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
     }
     setSubmitting(true);
     await supabase.from("attorney_tasks").insert({
-      attorney_name: ATTORNEY_NAME,
+      attorney_name: attorneyName(),
       task_type: newTask.task_type,
       title: newTask.title,
       notes: newTask.notes,
@@ -164,7 +171,7 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
     if (!newPto.start_date || !newPto.end_date) return;
     setSubmitting(true);
     await supabase.from("attorney_pto_requests").insert({
-      attorney_name: ATTORNEY_NAME,
+      attorney_name: attorneyName(),
       start_date: newPto.start_date,
       end_date: newPto.end_date,
       reason: newPto.reason,
@@ -182,7 +189,7 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
     if (isSickToday) return;
     setSubmitting(true);
     await supabase.from("attorney_sick_days").insert({
-      attorney_name: ATTORNEY_NAME,
+      attorney_name: attorneyName(),
       sick_date: todayStr,
       notified_superuser: true,
       rescheduled: false,
@@ -196,7 +203,7 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
       headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
       body: JSON.stringify({
         sick_date: todayStr,
-        attorney_name: ATTORNEY_NAME,
+        attorney_name: attorneyName(),
         reason: "The attorney is out sick today. All appointments are being rescheduled and we will be in contact shortly to confirm a new time.",
       }),
     }).catch(() => {});
@@ -243,7 +250,7 @@ export default function AttorneyTaskPanel({ onClose }: Props) {
               </div>
               <div>
                 <h2 className="text-white font-bold text-base">My Tasks & Schedule</h2>
-                <p className="text-slate-500 text-xs">{ATTORNEY_NAME}</p>
+                <p className="text-slate-500 text-xs">{attorneyName()}</p>
               </div>
             </div>
             <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors p-1.5 hover:bg-slate-800 rounded-lg">

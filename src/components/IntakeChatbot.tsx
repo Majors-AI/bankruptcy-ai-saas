@@ -41,7 +41,10 @@ export default function IntakeChatbot({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Default collapsed so the chat doesn't compete with the intake form for
+  // attention — clients see the form prompts first and can open the chat
+  // when they actually have a question.
+  const [collapsed, setCollapsed] = useState(true);
   const [initialized, setInitialized] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -313,11 +316,11 @@ export default function IntakeChatbot({
           </div>
           <div className="text-left">
             <p className="text-white text-xs font-semibold">
-              {isAdmin ? "Client Chat" : "AI Assistant"}
+              {isAdmin ? "Client Chat" : "Ask a Question"}
             </p>
-            <p className="text-slate-500 text-xs">
-              {isAdmin ? "All messages retained with file" : "Ask questions about your intake"}
-            </p>
+            {isAdmin && (
+              <p className="text-slate-500 text-xs">All messages retained with file</p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

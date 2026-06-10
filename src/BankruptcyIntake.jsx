@@ -5,7 +5,7 @@ import PageContainer from "./components/layout/PageContainer";
 import irsData from "./data/irs_standards_az_wa_ca_(1).json";
 
 const US_STATES = ["Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut","Delaware","Florida","Georgia","Hawaii","Idaho","Illinois","Indiana","Iowa","Kansas","Kentucky","Louisiana","Maine","Maryland","Massachusetts","Michigan","Minnesota","Mississippi","Missouri","Montana","Nebraska","Nevada","New Hampshire","New Jersey","New Mexico","New York","North Carolina","North Dakota","Ohio","Oklahoma","Oregon","Pennsylvania","Rhode Island","South Carolina","South Dakota","Tennessee","Texas","Utah","Vermont","Virginia","Washington","West Virginia","Wisconsin","Wyoming","District of Columbia"];
-const SECTIONS  = ["Filing Type","Household","Income","Real Property","Personal Property","Expenses","Debts","Financial History","Personal Injury Screening","Review & Submit"];
+const SECTIONS  = ["👤 Who is Filing Bankruptcy?","👨‍👩‍👧 Household Size Details","💰 All Household Income","🏡 Real Estate Ownership Details","🚗 Personal Property Details","📊 Current Monthly Expenses","💳 Creditor Information","Financial History","Personal Injury Screening","Review & Submit"];
 
 const COUNTIES_BY_STATE = {
   "Alabama":    ["Autauga","Baldwin","Barbour","Bibb","Blount","Bullock","Butler","Calhoun","Chambers","Cherokee","Chilton","Choctaw","Clarke","Clay","Cleburne","Coffee","Colbert","Conecuh","Coosa","Covington","Crenshaw","Cullman","Dale","Dallas","DeKalb","Elmore","Escambia","Etowah","Fayette","Franklin","Geneva","Greene","Hale","Henry","Houston","Jackson","Jefferson","Lamar","Lauderdale","Lawrence","Lee","Limestone","Lowndes","Macon","Madison","Marengo","Marion","Marshall","Mobile","Monroe","Montgomery","Morgan","Perry","Pickens","Pike","Randolph","Russell","Shelby","St. Clair","Sumter","Talladega","Tallapoosa","Tuscaloosa","Walker","Washington","Wilcox","Winston"],
@@ -31,64 +31,13 @@ const COUNTIES_BY_STATE = {
   "Washington": ["Adams","Asotin","Benton","Chelan","Clallam","Clark","Columbia","Cowlitz","Douglas","Ferry","Franklin","Garfield","Grant","Grays Harbor","Island","Jefferson","King","Kitsap","Kittitas","Klickitat","Lewis","Lincoln","Mason","Okanogan","Pacific","Pend Oreille","Pierce","San Juan","Skagit","Skamania","Snohomish","Spokane","Stevens","Thurston","Wahkiakum","Walla Walla","Whatcom","Whitman","Yakima"],
 };
 
-const MEDIAN_INCOME = {
-  "Alabama":       { 1:62672,  2:75465,  3:90321,  4:104003, extra:11100 },
-  "Alaska":        { 1:83617,  2:109882, 3:109882, 4:138492, extra:11100 },
-  "Arizona":       { 1:72039,  2:86745,  3:102274, 4:118067, extra:11100 },
-  "Arkansas":      { 1:56923,  2:71742,  3:80218,  4:94586,  extra:11100 },
-  "California":    { 1:77221,  2:100161, 3:113553, 4:135505, extra:11100 },
-  "Colorado":      { 1:85685,  2:106890, 3:127495, 4:149566, extra:11100 },
-  "Connecticut":   { 1:82141,  2:103501, 3:131022, 4:155834, extra:11100 },
-  "Delaware":      { 1:67733,  2:92445,  3:108420, 4:128854, extra:11100 },
-  "Florida":       { 1:68085,  2:84385,  3:95039,  4:111819, extra:11100 },
-  "Georgia":       { 1:66722,  2:82787,  3:98877,  4:120315, extra:11100 },
-  "Hawaii":        { 1:83068,  2:103479, 3:120289, 4:138536, extra:11100 },
-  "Idaho":         { 1:71531,  2:83951,  3:95859,  4:116594, extra:11100 },
-  "Illinois":      { 1:71304,  2:91526,  3:110712, 4:134366, extra:11100 },
-  "Indiana":       { 1:62808,  2:79884,  3:93175,  4:112691, extra:11100 },
-  "Iowa":          { 1:65883,  2:86523,  3:101463, 4:122826, extra:11100 },
-  "Kansas":        { 1:67423,  2:85199,  3:101189, 4:122741, extra:11100 },
-  "Kentucky":      { 1:60071,  2:71998,  3:83027,  4:108637, extra:11100 },
-  "Louisiana":     { 1:57923,  2:70493,  3:82433,  4:100971, extra:11100 },
-  "Maine":         { 1:73946,  2:88126,  3:104083, 4:128204, extra:11100 },
-  "Maryland":      { 1:84699,  2:111673, 3:132464, 4:161913, extra:11100 },
-  "Massachusetts": { 1:85941,  2:109818, 3:135837, 4:173947, extra:11100 },
-  "Michigan":      { 1:65625,  2:81293,  3:100797, 4:134254, extra:11100 },
-  "Minnesota":     { 1:75704,  2:95807,  3:123244, 4:146039, extra:11100 },
-  "Mississippi":   { 1:52594,  2:68525,  3:80722,  4:94965,  extra:11100 },
-  "Missouri":      { 1:63306,  2:79971,  3:97658,  4:115491, extra:11100 },
-  "Montana":       { 1:69482,  2:88107,  3:100637, 4:118578, extra:11100 },
-  "Nebraska":      { 1:65206,  2:88402,  3:100754, 4:121867, extra:11100 },
-  "Nevada":        { 1:65868,  2:85860,  3:99032,  4:111184, extra:11100 },
-  "New Hampshire": { 1:85049,  2:106521, 3:137902, 4:151224, extra:11100 },
-  "New Jersey":    { 1:84938,  2:104138, 3:133620, 4:163817, extra:11100 },
-  "New Mexico":    { 1:64537,  2:77534,  3:85784,  4:96074,  extra:11100 },
-  "New York":      { 1:71393,  2:90520,  3:112616, 4:135475, extra:11100 },
-  "North Carolina":{ 1:65396,  2:82221,  3:98932,  4:113744, extra:11100 },
-  "North Dakota":  { 1:71683,  2:93882,  3:103951, 4:134254, extra:11100 },
-  "Ohio":          { 1:64541,  2:81578,  3:99876,  4:120531, extra:11100 },
-  "Oklahoma":      { 1:59611,  2:75229,  3:84618,  4:99188,  extra:11100 },
-  "Oregon":        { 1:77061,  2:91268,  3:113736, 4:136434, extra:11100 },
-  "Pennsylvania":  { 1:70378,  2:85290,  3:107327, 4:132379, extra:11100 },
-  "Rhode Island":  { 1:75662,  2:96205,  3:116357, 4:133954, extra:11100 },
-  "South Carolina":{ 1:63140,  2:81614,  3:93219,  4:113332, extra:11100 },
-  "South Dakota":  { 1:67415,  2:87598,  3:88297,  4:127386, extra:11100 },
-  "Tennessee":     { 1:62339,  2:80722,  3:95011,  4:106775, extra:11100 },
-  "Texas":         { 1:65123,  2:84491,  3:96728,  4:114938, extra:11100 },
-  "Utah":          { 1:85644,  2:93302,  3:109860, 4:128363, extra:11100 },
-  "Vermont":       { 1:70603,  2:94477,  3:111150, 4:134056, extra:11100 },
-  "Virginia":      { 1:76479,  2:98577,  3:120001, 4:141113, extra:11100 },
-  "Washington":    { 1:86314,  2:104354, 3:128369, 4:152553, extra:11100 },
-  "West Virginia": { 1:62270,  2:66833,  3:89690,  4:91270,  extra:11100 },
-  "Wisconsin":     { 1:69343,  2:87938,  3:105734, 4:129964, extra:11100 },
-  "Wyoming":       { 1:69906,  2:88156,  3:95951,  4:107469, extra:11100 },
-};
-const MEDIAN_DATE = "November 1, 2025";
-const getMedian = (state, hhSize) => {
-  const t = MEDIAN_INCOME[state];
-  if (!t) return null;
-  return hhSize <= 4 ? (t[hhSize] || t[4]) : t[4] + (hhSize - 4) * t.extra;
-};
+// Median income reads come from the centralized legal-reference store
+// (src/lib/irsMeansStandards.ts → MEDIAN_INCOME_BY_STATE). The old local
+// MEDIAN_INCOME table + MEDIAN_DATE constant were removed so editing the
+// store propagates here automatically.
+import { getMedianAnnualIncome as storeGetMedian, MEDIAN_INCOME_META, getHousing2025 as storeGetHousing2025, getNationalStandard2025 as storeGetNS2025 } from "./lib/irsMeansStandards";
+const MEDIAN_DATE = MEDIAN_INCOME_META.effectiveDate;
+const getMedian = (state, hhSize) => storeGetMedian(state, hhSize);
 
 const EXEMPTIONS = {
   federal: {
@@ -346,16 +295,20 @@ const calcDomicileResult = (data) => {
 
 const emptySource = (id) => ({ id, sourceType:"", employerName:"", payFrequency:"", grossPerPeriod:"", netPerPeriod:"", receiveBonus:"", bonusIncludedInIncome:"", bonusGross:"", bonusNet:"", businessName:"", businessType:"", businessGrossIncome:"", businessExpenses:"", bizExpRent:"", bizExpPayroll:"", bizExpSupplies:"", bizExpEquipment:"", bizExpLicenses:"", bizExpMarketing:"", bizExpProfessional:"", bizExpInsurance:"", bizExpInventory:"", bizExpOther:"", bizExpOtherDesc:"", bizExpUseItemized:false });
 
+// VEHICLE_TYPES is now ONLY for primary on-road vehicles. Recreational types
+// (motorcycle, RV, ATV, boat, jet ski, snowmobile, plane, helicopter) moved
+// to the Recreational Vehicles & Watercraft section so the two question sets
+// don't overlap and so financed recreational items flow into Schedule D via
+// the recreationalVehicles[] array instead of being mixed with daily-driver
+// vehicles.
 const VEHICLE_TYPES = [
-  "Car / Truck / SUV / Van","Motorcycle","Motorhome / RV / Travel Trailer",
-  "ATV / Quad / Side-by-Side","Boat","Jet Ski / Personal Watercraft",
-  "Snowmobile","Airplane / Aircraft","Helicopter","Other Titled Vehicle",
+  "Car / Truck / SUV / Van","Other Titled Vehicle",
 ];
 
-const emptyVehicle = (id) => ({ id, type:"", year:"", make:"", model:"", value:"", valueDate:"", valueConfirmed:false, intent:"", hasLoan:"", loanBalance:"", monthlyPayment:"", interestRate:"", lenderName:"", valuationStatus:"idle", valuationResult:null, valuationError:null, valuationOverride:false, overrideReason:"", overrideDetails:"", ownershipType:"", ownedBeforeMarriage:"", maritalFundsUsed:"", hasPrenup:"", inheritedOrGift:"", communityPropFlag:false });
+const emptyVehicle = (id) => ({ id, type:"", year:"", make:"", model:"", value:"", valueDate:"", valueConfirmed:false, intent:"", hasLoan:"", loanBalance:"", monthlyPayment:"", interestRate:"", lenderName:"", isLease:"", purchaseDate:"", hasHandicapPlacard:"", valuationStatus:"idle", valuationResult:null, valuationError:null, valuationOverride:false, overrideReason:"", overrideDetails:"", ownershipType:"", ownedBeforeMarriage:"", maritalFundsUsed:"", hasPrenup:"", inheritedOrGift:"", communityPropFlag:false });
 
-const KBB_TYPES = ["Car / Truck / SUV / Van","Motorcycle","Motorhome / RV / Travel Trailer"];
-const NADA_TYPES = ["ATV / Quad / Side-by-Side","Boat","Jet Ski / Personal Watercraft","Snowmobile","Airplane / Aircraft","Helicopter","Other Titled Vehicle"];
+const KBB_TYPES = ["Car / Truck / SUV / Van"];
+const NADA_TYPES = ["Other Titled Vehicle"];
 const COMMUNITY_PROPERTY_STATES = ["Arizona","California","Idaho","Louisiana","Nevada","New Mexico","Texas","Washington","Wisconsin"];
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
@@ -486,6 +439,22 @@ const IRS_STANDARD_LABELS = {
 };
 
 const getIrsStandard = (category, hhSize) => {
+  // Prefer the centralized legal-reference store so attorney edits in the
+  // LegalReferenceStore National Standards tab propagate here. Falls back
+  // to the local IRS_STANDARDS_2025 table only when the store value is null
+  // (e.g., outOfPocketHealth is intentionally null = TODO).
+  const storeKeyMap = {
+    food: 'food',
+    housekeeping: 'housekeeping',
+    apparel: 'apparel',
+    personalCare: 'personalCare',
+    miscellaneous: 'miscellaneous',
+  };
+  const k = storeKeyMap[category];
+  if (k) {
+    const fromStore = storeGetNS2025(k, hhSize);
+    if (fromStore != null) return fromStore;
+  }
   const row = IRS_STANDARDS_2025[category];
   if (!row) return null;
   if (hhSize <= 4) return row[hhSize] || row[4];
@@ -498,12 +467,15 @@ const IRS_COVERED_STATES = ['Arizona','Washington','California','AZ','WA','CA'];
 function getHousingAllocations(state, county, hhSize) {
   const abbr = STATE_ABBR_MAP[state];
   if (!abbr) return null;
+  // Prefer the centralized store's 2025 housing-utilities bundle so
+  // attorney edits in the LegalReferenceStore propagate here. Falls back
+  // to the local irsData bundle only when the store has no value yet.
+  const storeBundle = storeGetHousing2025(abbr, county, hhSize);
   const stateData = irsData.housing_and_utilities[abbr];
-  if (!stateData) return null;
-  const countyData = stateData[county];
-  if (!countyData) return null;
+  const countyData = stateData?.[county];
   const key = String(Math.min(hhSize, 5));
-  const bundle = countyData[key];
+  const localBundle = countyData?.[key];
+  const bundle = storeBundle != null ? storeBundle : localBundle;
   if (!bundle) return null;
   const hr = irsData.allocation_ratios.housing_and_utilities_bundle;
   return {
@@ -593,7 +565,7 @@ const IrsExpenseField = ({ label, category, hhSize, value, onChange, overrideRea
 
       {overLimit && (
         <div className="mt-2 bg-amber-500/8 border border-amber-500/30 rounded-lg px-3 py-2.5">
-          <p className="text-xs text-amber-300 font-semibold mb-1">
+          <p className="text-xs text-amber-400 font-semibold mb-1">
             Amount exceeds the IRS standard by ${(numVal - standard).toLocaleString()} — your attorney will review
           </p>
           <p className="text-xs text-slate-400 mb-2">
@@ -704,7 +676,9 @@ const RadioGroup = ({ name, options, current, onChange, error }) => (
 
 const SectionCard = ({ title, icon, children }) => (
   <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 mb-5">
-    <div className="flex items-center gap-2.5 mb-5"><span className="text-2xl">{icon}</span><h3 className="font-serif text-lg font-semibold text-white">{title}</h3></div>
+    {title && (
+      <div className="flex items-center gap-2.5 mb-5"><span className="text-2xl">{icon}</span><h3 className="font-serif text-lg font-semibold text-white">{title}</h3></div>
+    )}
     {children}
   </div>
 );
@@ -719,7 +693,7 @@ const ExemptionPreviewCard = ({ data }) => {
     if (!data.addressYears) return null;
     return (
       <SectionCard title="Exemptions — Attorney Review Required" icon="⚖️">
-        <div className="p-3 rounded-lg bg-amber-400/10 border border-amber-400/30 text-xs text-amber-300 mb-3 leading-relaxed">
+        <div className="p-3 rounded-lg bg-amber-400/10 border border-amber-400/30 text-xs text-amber-400 mb-3 leading-relaxed">
           <span className="font-semibold block mb-1">
             {dr.rule === "no-prior" ? "⚠️ Please complete your prior address information above."
               : dr.rule === "730-day" ? `⚠️ ${dr.stateName} — exemption data coming soon.`
@@ -746,7 +720,7 @@ const ExemptionPreviewCard = ({ data }) => {
   };
   const alertStyle = dr.resident ? "bg-green-400/10 border-green-400/30 text-green-300"
     : dr.rule === "state_only" ? "bg-blue-400/10 border-blue-400/30 text-blue-300"
-    : "bg-amber-400/10 border-amber-400/30 text-amber-300";
+    : "bg-amber-400/10 border-amber-400/30 text-amber-400";
   const ruleLabels = {
     "730-day": `✅ ${dr.stateName} exemptions apply — you've lived here 2+ years`,
     "state_or_federal": `✅ ${dr.stateName} state exemptions apply — debtor may also elect federal §522(d) exemptions`,
@@ -807,42 +781,78 @@ const ExemptionPreviewCard = ({ data }) => {
   );
 };
 
-const SourceCard = ({ who, src, idx, total, onRemove, onUpdate, onError, periodToMonthly }) => {
+const SourceCard = ({ who, src, idx, total, onRemove, onUpdate, onError, periodToMonthly, workStatus, personName, sources }) => {
   const fmtD = n => n.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
   const set  = (f,v) => onUpdate(who, idx, f, v);
   const err  = (f)   => onError(who, idx, f);
   const mg   = src.sourceType==="employment" ? periodToMonthly(src.grossPerPeriod, src.payFrequency) : (parseFloat(src.businessGrossIncome)||0);
   const bonus= src.sourceType==="employment" && src.receiveBonus==="yes" && src.bonusIncludedInIncome==="no" ? (parseFloat(src.bonusGross)||0)/12 : 0;
 
+  // Gate Source Type options by the parent's workStatus so the client only
+  // sees the relevant choice. "employed" → W-2 only; "selfEmployed" → self-
+  // employment only; "both" → both options exist.
+  const showW2 = workStatus === "employed" || workStatus === "both";
+  const showSE = workStatus === "selfEmployed" || workStatus === "both";
+  const lockedToType =
+    workStatus === "employed" ? "employment" :
+    workStatus === "selfEmployed" ? "selfEmployment" :
+    null;
+  // Compute per-type ordinal for the heading — e.g., "Dom Employer #2" or
+  // "Self Employment Income #3". Counts only same-type entries up to and
+  // including this one.
+  const perTypeIndex = (sources || []).slice(0, idx + 1).filter(s => s.sourceType === src.sourceType).length;
+  const heading = src.sourceType === "employment"
+    ? `${personName || "Client"} — Employer #${perTypeIndex}`
+    : src.sourceType === "selfEmployment"
+      ? `Self-Employment Income #${perTypeIndex}`
+      : `Income Source #${idx + 1}`;
+
+  // If workStatus locks the type but the entry hasn't been set yet (new add),
+  // initialize it to the locked type via effect. Done in effect (not during
+  // render) so React doesn't see a setState during render.
+  useEffect(() => {
+    if (lockedToType && !src.sourceType) {
+      set("sourceType", lockedToType);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lockedToType, src.sourceType]);
+
   return (
     <div className="bg-slate-900/60 border border-slate-600 rounded-xl p-4 mb-3">
       <div className="flex items-center justify-between mb-3">
         <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-          Income Source {idx+1}
+          {heading}
           {mg>0 && <span className="text-amber-400 ml-2">· ${fmtD(mg+bonus)}/mo</span>}
         </p>
         {total>1 && (
           <button onClick={onRemove} className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 hover:border-red-400 px-2 py-1 rounded-lg transition-colors">Remove</button>
         )}
       </div>
-      <Field label="Source Type" error={err("sourceType")}>
-        <RadioGroup name={`${who}_${idx}_type`} current={src.sourceType} onChange={v=>set("sourceType",v)} error={err("sourceType")}
-          options={[{value:"employment",label:"💼 Employment (W-2)"},{value:"selfEmployment",label:"🏢 Self-Employment / Business"}]}/>
-      </Field>
-      {src.sourceType==="employment" && <>
-        <Field label="Employer Name" error={err("employerName")}>
-          <Input value={src.employerName} onChange={v=>set("employerName",v)} placeholder="Employer name" hasError={!!err("employerName")}/>
+      {/* Source-Type picker only when both types are possible ("both"
+          workStatus). Otherwise the type is locked silently. */}
+      {workStatus === "both" && (
+        <Field label="Is this a W-2 job or your own business?" error={err("sourceType")}>
+          <RadioGroup name={`${who}_${idx}_type`} current={src.sourceType} onChange={v=>set("sourceType",v)} error={err("sourceType")}
+            options={[
+              ...(showW2 ? [{value:"employment",label:"💼 W-2 job (regular paycheck from an employer)"}] : []),
+              ...(showSE ? [{value:"selfEmployment",label:"🏢 My own business or self-employment (Uber, DoorDash, contractor, LLC, etc.)"}] : []),
+            ]}/>
         </Field>
-        <Field label="Pay Frequency" error={err("payFrequency")}>
+      )}
+      {src.sourceType==="employment" && <>
+        <Field label="Who do you work for?" hint="Name of the company on your paystub" error={err("employerName")}>
+          <Input value={src.employerName} onChange={v=>set("employerName",v)} placeholder="e.g. Walmart, Acme Corp" hasError={!!err("employerName")}/>
+        </Field>
+        <Field label="How often do you get paid?" error={err("payFrequency")}>
           <Select value={src.payFrequency} onChange={v=>set("payFrequency",v)} hasError={!!err("payFrequency")}
-            options={["Weekly","Bi-Weekly","Semi-Monthly","Monthly"]} placeholder="Select pay frequency..."/>
+            options={["Weekly","Bi-Weekly","Semi-Monthly","Monthly"]} placeholder="Pick one..."/>
         </Field>
         {src.payFrequency && <>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={`Gross per ${src.payFrequency==="Monthly"?"month":"pay period"}`} hint="Before taxes" error={err("grossPerPeriod")}>
+            <Field label={src.payFrequency==="Monthly"?"How much do you make each month BEFORE taxes?":"How much do you make each paycheck BEFORE taxes?"} hint="The 'gross' number on your paystub" error={err("grossPerPeriod")}>
               <Input type="number" value={src.grossPerPeriod} onChange={v=>set("grossPerPeriod",v)} placeholder="Enter amount" hasError={!!err("grossPerPeriod")}/>
             </Field>
-            <Field label={`Net per ${src.payFrequency==="Monthly"?"month":"pay period"}`} hint="Take-home" error={err("netPerPeriod")}>
+            <Field label={src.payFrequency==="Monthly"?"How much do you actually get each month (take-home)?":"How much do you actually get each paycheck (take-home)?"} hint="The 'net' number — what hits your bank account" error={err("netPerPeriod")}>
               <Input type="number" value={src.netPerPeriod} onChange={v=>set("netPerPeriod",v)} placeholder="Enter amount" hasError={!!err("netPerPeriod")}/>
             </Field>
           </div>
@@ -879,13 +889,13 @@ const SourceCard = ({ who, src, idx, total, onRemove, onUpdate, onError, periodT
         </>}
       </>}
       {src.sourceType==="selfEmployment" && <>
-        <Field label="Business Name" error={err("businessName")}>
-          <Input value={src.businessName} onChange={v=>set("businessName",v)} placeholder="Name or DBA" hasError={!!err("businessName")}/>
+        <Field label="What's the name of this business or gig?" hint="One source per entry — list Uber, DoorDash, your own business, etc. separately" error={err("businessName")}>
+          <Input value={src.businessName} onChange={v=>set("businessName",v)} placeholder="e.g. Uber, DoorDash, Smith Plumbing LLC" hasError={!!err("businessName")}/>
         </Field>
-        <Field label="Type of Business" error={err("businessType")}>
-          <Input value={src.businessType} onChange={v=>set("businessType",v)} placeholder="e.g. Sole proprietor, LLC, contractor" hasError={!!err("businessType")}/>
+        <Field label="What kind of business is it?" hint="Just describe it in your own words" error={err("businessType")}>
+          <Input value={src.businessType} onChange={v=>set("businessType",v)} placeholder="e.g. Rideshare driver, plumber, online seller, freelancer" hasError={!!err("businessType")}/>
         </Field>
-        <Field label="Gross Monthly Business Income" error={err("businessGrossIncome")}>
+        <Field label="How much money does this bring in each month (before expenses)?" hint="Total before any business costs" error={err("businessGrossIncome")}>
           <Input type="number" value={src.businessGrossIncome} onChange={v=>set("businessGrossIncome",v)} placeholder="Enter amount" hasError={!!err("businessGrossIncome")}/>
         </Field>
         {/* Business Expenses */}
@@ -895,7 +905,7 @@ const SourceCard = ({ who, src, idx, total, onRemove, onUpdate, onError, periodT
             <button
               type="button"
               onClick={()=>{ const useItemized = !src.bizExpUseItemized; set("bizExpUseItemized",useItemized); if(!useItemized){["bizExpRent","bizExpPayroll","bizExpSupplies","bizExpEquipment","bizExpLicenses","bizExpMarketing","bizExpProfessional","bizExpInsurance","bizExpInventory","bizExpOther","bizExpOtherDesc"].forEach(f=>set(f,"")); set("businessExpenses",""); } }}
-              className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-2 transition-colors"
+              className="text-xs text-amber-400 hover:text-amber-400 underline underline-offset-2 transition-colors"
             >
               {src.bizExpUseItemized ? "Switch to single total" : "Itemize by category"}
             </button>
@@ -950,7 +960,7 @@ const SourceCard = ({ who, src, idx, total, onRemove, onUpdate, onError, periodT
                   <div className="p-2 bg-slate-800/80 border border-slate-600 rounded-lg text-xs text-slate-300">
                     Itemized total: <span className="text-amber-400 font-semibold">${fmtD(itemizedTotal)}/mo</span>
                   </div>
-                  <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+                  <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400">
                     <strong>Not listed above?</strong> Do not include: personal vehicle use (unless reimbursed at IRS mileage rate and business-only), personal cell phone (unless a dedicated business line), personal travel, meals, clothing, or any expense already in your personal expense schedule.
                   </div>
                 </div>
@@ -979,7 +989,6 @@ const PersonIncomeSection = ({ who, label, personName, workStatusKey, workStatus
       <div className="flex items-center justify-between mb-1">
         <div>
           <p className="font-serif text-base font-bold text-white">{personName}</p>
-          <p className="text-xs text-slate-400">{label}</p>
         </div>
         {isEmployed && monthlyGrossTotal>0 && (
           <div className="text-right">
@@ -988,13 +997,13 @@ const PersonIncomeSection = ({ who, label, personName, workStatusKey, workStatus
           </div>
         )}
       </div>
-      <Field label="Current Employment Status" error={onError(workStatusKey)}>
+      <Field label="What's your work situation right now?" error={onError(workStatusKey)}>
         <RadioGroup name={workStatusKey} current={workStatus} onChange={onStatusChange} error={onError(workStatusKey)}
           options={[
-            {value:"employed", label:"💼 Employed (W-2 / Salary)"},
-            {value:"selfEmployed", label:"🏢 Self-Employed / Business Owner"},
-            {value:"both", label:"⚡ Both Employment + Self-Employment"},
-            {value:"notEmployed", label:"🚫 Not Currently Employed"},
+            {value:"employed", label:"💼 I have a regular job (W-2 employee)"},
+            {value:"selfEmployed", label:"🏢 I work for myself (own business, Uber, DoorDash, freelance, etc.)"},
+            {value:"both", label:"⚡ Both — I have a regular job AND a side business"},
+            {value:"notEmployed", label:"🚫 I'm not working right now"},
           ]}/>
       </Field>
       {workStatus==="notEmployed" && (
@@ -1007,11 +1016,17 @@ const PersonIncomeSection = ({ who, label, personName, workStatusKey, workStatus
           {sources.map((src, i) => (
             <SourceCard key={src.id} who={who} src={src} idx={i} total={sources.length}
               onRemove={()=>onRemove(who, i)} onUpdate={onUpdate} onError={onError}
-              periodToMonthly={periodToMonthly}/>
+              periodToMonthly={periodToMonthly}
+              workStatus={workStatus} personName={personName} sources={sources}/>
           ))}
           <button onClick={()=>onAdd(who)}
             className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 hover:bg-amber-400/5 text-sm font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
-            <span className="text-lg leading-none">+</span> Add Another Income Source for {personName}
+            <span className="text-lg leading-none">+</span>
+            {workStatus === "employed"
+              ? `Add Another Employer for ${personName}`
+              : workStatus === "selfEmployed"
+                ? `Add Another Self-Employment Source for ${personName} (Uber, DoorDash, etc.)`
+                : `Add Another Income Source for ${personName}`}
           </button>
         </div>
       )}
@@ -1080,7 +1095,44 @@ export default function BankruptcyIntake({
   initialData,
   onStepChange,
   onSubmitted,
+  // ── White-label firm config. Each firm / department can override the
+  //    welcome screen, logo, contact info, and custom field help via the
+  //    staff settings panel. Defaults below are used when nothing custom
+  //    has been set so the form still works on the public route.
+  firmConfig = {},
 } = {}) {
+  // Resolve white-label config with sensible defaults so the welcome page
+  // and field-level help stay functional even when no firm-specific values
+  // are provided. Each value can be overridden individually. The default
+  // name reads "(Insert Law Firm Name)" so it's obvious during testing /
+  // demo that the firm name will be injected from super-admin settings.
+  const FIRM = {
+    name: firmConfig.name ?? "(Insert Law Firm Name)",
+    logoUrl: firmConfig.logoUrl ?? null, // null → default ⚖️ glyph
+    phone: firmConfig.phone ?? "(800) 555-1234",
+    phoneHref: firmConfig.phoneHref ?? "tel:+18005551234",
+    contactEmail: firmConfig.contactEmail ?? null, // optional — adds email line under phone
+    welcomeMessage: firmConfig.welcomeMessage ?? null, // null → use default copy
+    customHelp: firmConfig.customHelp ?? {}, // { fieldKey: "custom hint text" }
+    // Department-controlled feature flags for the intake form. PI screening
+    // defaults to OFF — firms that take PI referrals turn it on from the
+    // Department Settings panel. Most bankruptcy practices don't take PI,
+    // so hiding by default keeps the intake focused.
+    enablePersonalInjuryScreening: firmConfig.enablePersonalInjuryScreening ?? false,
+    // Disclosure / consent text overrides — each firm can edit these in
+    // the Department Settings panel. When null, the defaults below are
+    // rendered. The default body uses {firmName} as a placeholder which
+    // gets substituted with FIRM.name at render time.
+    certificationText: firmConfig.certificationText ?? null,
+    smsConsentText: firmConfig.smsConsentText ?? null,
+  };
+  // Default consent strings — used when the firm hasn't overridden them.
+  // {firmName} substitution happens inline below.
+  const DEFAULT_CERT_TEXT = "I certify that all information is true, correct, and complete. I understand this does not constitute legal advice or create an attorney-client relationship.";
+  const DEFAULT_SMS_TEXT = `By submitting this form, I agree that {firmName} and its staff may contact me by phone call, text message (including automated and AI-assisted texts), and email at the phone number and email address I provide, to schedule and handle my intake. Message and data rates may apply. I can reply STOP at any time to opt out of texts. Consent is not a condition of receiving legal services.`;
+  const renderConsent = (text) => (text ?? "").replace(/\{firmName\}/g, FIRM.name);
+  const CERT_TEXT = renderConsent(FIRM.certificationText ?? DEFAULT_CERT_TEXT);
+  const SMS_TEXT = renderConsent(FIRM.smsConsentText ?? DEFAULT_SMS_TEXT);
   const isStaffSession = !!staffMode;
   const isTakeover = staffMode?.mode === 'takeover';
   const [step, setStep] = useState(0);
@@ -1111,9 +1163,19 @@ export default function BankruptcyIntake({
     maritalStatus:"", filingType:"", firstName:"", lastName:"", email: clientEmail||"", phone: clientPhone||"", spouseFirstName:"", spouseLastName:"",
     address:"", city:"", zip:"",
     state:"", county:"", addressYears:"",
+    // Mailing address — asked AFTER the residential address so the client can
+    // confirm "same as where I live" with one tap and skip re-entering it.
+    // If different, we collect the separate mailing address.
+    mailingSameAsCurrent:"",
+    mailingAddress:"", mailingCity:"", mailingState:"", mailingZip:"",
     priorDomicileState:"",
     priorAddr1Street:"", priorAddr1City:"", priorAddr1State:"", priorAddr1From:"", priorAddr1To:"",
     numDependents:"0", dependents:[], householdSizeChanged:"", householdSizeChangeDetails:"",
+    // Support paid to people OUTSIDE the household (e.g., adult child in
+    // college, elderly parent in their own home). Distinct from dependents
+    // who live in the household. Each entry tracks relationship + monthly $.
+    supportsOutsideHome:"",
+    outsideSupport:[{id:1, relationship:"", monthlyAmount:""}],
     debtorWorkStatus:"",
     debtorSources:[emptySource(1)],
     spouseWorkStatus:"",
@@ -1131,6 +1193,13 @@ export default function BankruptcyIntake({
     sFamilySupport:"", sFamilySupportDesc:"",
     sRoyalties:"", sInvestment:"", sOtherIncome:"", sOtherIncomeDesc:"",
     avgMonthly6:"",
+    // Income reconciliation questions (asked after the income summary on step 2).
+    // If the client's current/6-mo income don't match OR they expect a change,
+    // attorney needs to know so means-test analysis can adjust forward-looking.
+    incomeMatches6Mo:"",
+    incomeMatchDetails:"",
+    incomeFutureChange:"",
+    incomeFutureChangeDetails:"",
     expRentMortgage:"", mortgageIncludesInsurance:"", mortgageInsuranceAmount:"", mortgageTaxAmount:"", expPropTax:"", expHoa:"",
     payLotSpaceRent:"", expLotSpaceRent:"",
     expElectricGas:"", expElectricGasOverride:"",
@@ -1166,11 +1235,30 @@ export default function BankruptcyIntake({
     zillowLookup:{status:"idle", zestimate:null, low:null, high:null, lastUpdated:null, error:null},
     zillowLookup2:{status:"idle", zestimate:null, low:null, high:null, lastUpdated:null, error:null},
     secondProperty:"", secondPropAddress:"", secondPropValue:"", secondMortgage:"", secondMortgagePayment:"",
+    // Second-property mortgage-current + arrears — mirror of the primary's
+    // mortgageCurrent/mortgageArrears so the attorney eligibility analysis
+    // can factor in arrears for EVERY property the debtor wants to keep.
+    secondMortgageCurrent:"", secondMortgageArrears:"",
     hasInvestmentProperty:"", hasRawLandTimeshare:"", hasNameOnOthersRealEstate:"",
     hasVehicles:"",
-    vehicles:[{id:1,type:"",year:"",make:"",model:"",value:"",intent:"",hasLoan:"",loanBalance:"",monthlyPayment:"",valuationStatus:"idle",valuationResult:null,valuationError:null,valuationOverride:false,overrideReason:"",overrideDetails:"",ownershipType:"",ownedBeforeMarriage:"",maritalFundsUsed:"",hasPrenup:"",inheritedOrGift:"",communityPropFlag:false}],
+    vehicles:[{id:1,type:"",year:"",make:"",model:"",value:"",intent:"",hasLoan:"",loanBalance:"",monthlyPayment:"",isLease:"",purchaseDate:"",hasHandicapPlacard:"",valuationStatus:"idle",valuationResult:null,valuationError:null,valuationOverride:false,overrideReason:"",overrideDetails:"",ownershipType:"",ownedBeforeMarriage:"",maritalFundsUsed:"",hasPrenup:"",inheritedOrGift:"",communityPropFlag:false}],
+    // Expense entry mode — "manual" (client types everything) or "auto"
+    // (pre-fill IRS standards into the auto-fillable categories; client can
+    // still tap "I don't have this" or override per line).
+    expenseFillMode:"",
+    // Borrowed-vehicle disclosure — regularly using someone else's car or
+    // truck. Drives Schedule J "other transportation" + attorney review.
+    borrowedVehicleUse:"",
+    borrowedVehiclePays:"",
+    borrowedVehicleAmount:"",
+    borrowedVehicleDescription:"",
     noVehicles:false,
     hasBankAccounts:"",
+    // Health Savings / Flexible Spending accounts — Schedule A/B disclosure.
+    // HSA balances are usually NOT exempt (depending on state); FSA balances
+    // generally aren't either. Both are estate assets and need to be listed.
+    hasHsaFsa:"",
+    hsaFsaEntries:[{ id:1, accountType:"", provider:"", balance:"" }],
     bankAccounts:[{id:1,bankName:"",accountType:"",balance:""}], noBankAccounts:false,
     hasRetirement:"",
     retirementAccounts:[{id:1, accountType:"", institution:"", balance:"", ownerName:""}], noRetirement:false,
@@ -1178,10 +1266,21 @@ export default function BankruptcyIntake({
     lifePolicies:[{id:1,policyType:"",faceValue:"",cashValue:"",beneficiary:"",purchaseDate:""}],
     hasAnnuities:"",
     annuities:[{id:1,annuityType:"",currentValue:"",yearsHeld:"",beneficiary:"",purchaseDate:""}],
-    hasPendingClaims:"", pendingClaimsDesc:"", pendingClaimsValue:"",
+    hasPendingClaims:"", pendingClaimsDesc:"", pendingClaimsValue:"", pendingClaimsValueUnknown:false,
+    // Personal property — pending PI claims + inheritance expectations.
+    // Both flagged for attorney review as red-flag issues so the case
+    // analyst can verify schedule disclosures and exemption treatment.
+    hasPiClaimInProperty:"",
+    piClaimInPropertyDetails:"",
+    expectsInheritance:"",
+    inheritanceDetails:"",
     hasSsClaim:"", ssPendingDesc:"",
     hasSsBackPay:"", ssBackPayAmount:"", ssBackPaySegregated:"",
     hasMoneyOwed:"", moneyOwedDesc:"", moneyOwedAmt:"",
+    // Money owed TO the client (Schedule A/B asset). Per-entry shape:
+    // sourceType (loan/deposit/tax refund/etc.) + sourceDescription (who owes
+    // / what for) + amount + expectsToCollect Y/N.
+    moneyOwedEntries:[{ id:1, sourceType:"", sourceDescription:"", amount:"", expectsToCollect:"" }],
     hasHouseholdGoods:"",
     noHouseholdGoods:false,
     householdGoodsValue:"", electronicsValue:"", jewelryValue:"", toolsValue:"",
@@ -1193,14 +1292,39 @@ export default function BankruptcyIntake({
     hasBusinessAssets:"",
     businessAssets:[{id:1, assetType:"", description:"", estimatedValue:"", owedOnIt:"", lienHolder:""}],
 
+    // Recreational / titled vehicles separate from primary vehicles — motorcycles,
+    // quads/ATVs, boats, jet skis, travel trailers, planes, RVs, snowmobiles, etc.
+    // Each entry mirrors the vehicle shape (type/make/model/value + loan) so any
+    // financed item auto-flows into Schedule D and into Schedule J transportation.
+    hasRecreationalVehicles:"",
+    recreationalVehicles:[{id:1, type:"", make:"", model:"", year:"", value:"", hasLoan:"", lenderName:"", loanBalance:"", monthlyPayment:"", intent:"keep"}],
+
     mortgageCurrent:"", mortgageArrears:"",
     securedDebt:"", hasMortgage:"",
+    // Other secured creditors not already disclosed via mortgages / vehicles /
+    // recreational vehicles. Surfaced on Schedule D after the auto-pulled list,
+    // gated on `securedListComplete === "no"`.
+    securedListComplete:"",
+    hasOtherVehicleLoans:"",
+    // collateralAssetKey links to a previously-disclosed asset (e.g.,
+    // "realProperty1", "vehicle:3", "rv:1", "category:household_goods").
+    // When = "other" the client describes new property via collateralDescription.
+    otherSecuredCreditors:[{id:1, creditorName:"", collateralAssetKey:"", collateralDescription:"", balance:"", monthlyPayment:""}],
     creditCardDebt:"", medicalDebt:"", studentLoanDebt:"", taxDebt:"",
     personalLoanDebt:"", judgmentDebt:"", otherUnsecured:"",
     childSupportCurrent:"", childSupportArrears:"", noChildSupportArrears:false,
     alimonyCurrent:"", alimonyArrears:"", noAlimonyArrears:false,
     noCreditCardDebt:false, noMedicalDebt:false, noStudentLoanDebt:false, noTaxDebt:false,
     noPersonalLoanDebt:false, noJudgmentDebt:false, noOtherUnsecured:false,
+    // Priority debts (Schedule E) — back taxes, back child support, back alimony.
+    // Source of truth for new entries is priorityDebts[]; legacy seeds may still
+    // populate the flat taxDebt / childSupportArrears / alimonyArrears fields
+    // and the attorney-side analyzer reads both paths.
+    hasPriorityDebt:"",
+    // paymentMethod = "direct" | "paycheck" | "both" | "none" — drives Schedule J
+    // de-duplication. Paycheck-deducted payments don't appear as Schedule J
+    // expenses (the deduction already shows on the paystub against gross income).
+    priorityDebts:[{ id:1, type:"", creditor:"", amount:"", balance:"", taxYear:"", taxFiled:"", monthlyPayment:"", paymentMethod:"" }],
     finesInvolveDui:"", finesDuiInfo:false,
     hasBusinessDebt:"",
     sbaEidlDebt:"", sba7aDebt:"", businessEquipmentDebt:"", businessLineDebt:"",
@@ -1214,11 +1338,47 @@ export default function BankruptcyIntake({
     transfers:[{id:1, description:"", recipient:"", amount:"", date:"", relationship:"", fairMarketValue:"", soldForLess:""}],
     preferentialPayments:"",
     preferentialEntries:[{id:1, creditor:"", amount:"", date:"", type:"", dateConfirmedRecent:""}],
+    // Secured creditor 90-day payment confirmation — auto-pulled from
+    // mortgages / vehicles / recreational vehicles with monthly payment ≥ $600.
+    // Keyed by creditor reference (e.g., "primary_mortgage", "vehicle:0"); each
+    // entry tracks whether the client paid the expected amount over the last
+    // 90 days and what the actual amount was if not.
+    securedPaymentConfirmations:{},
+    // Catch-all — any OTHER creditor paid over $600 in 90 days that wasn't
+    // already auto-listed from secured creditors.
+    otherCreditorPaymentsOver600:"",
+    otherCreditorPaymentsList:[{ id:1, creditor:"", amount:"", date:"" }],
+    // SOFA — property stored / held by someone else.
+    propertyStoredElsewhere:"",
+    storedPropertyEntries:[{ id:1, locationType:"", locationDetails:"", items:"", value:"" }],
+    // SOFA Part 9 — does the client hold property that belongs to someone
+    // else? (reverse of "property stored elsewhere"). Per-entry tracks who
+    // owns it + a description of the item(s).
+    holdsPropertyForOther:"",
+    propertyHeldForOtherEntries:[{ id:1, ownerName:"", description:"" }],
     preferentialPaymentsInsider:"",
     preferentialInsiderEntries:[{id:1, creditor:"", amount:"", date:"", relationship:"", dateConfirmedRecent:"", dateIsOld:""}],
     createdTrust:"", trustDetails:"",
+    // Structured trust disclosure — replaces / supplements trustDetails.
+    // Each trust entry captures name + transfer + trustee + beneficiary
+    // + revocable/irrevocable so the attorney has everything needed for
+    // § 548 fraudulent-transfer + § 541 estate-inclusion analysis.
+    trustEntries:[{ id:1, trustName:"", propertyTransferred:"", propertyValue:"", trusteeName:"", beneficiaryName:"", trustType:"" }],
     pendingLawsuits:"", lawsuitDetails:"",
+    // Lawsuit entries — replaces the single free-text lawsuitDetails field
+    // (kept above for back-compat with older submissions). Each entry asks
+    // who is suing the client and what the suit is about.
+    lawsuitEntries:[{ id:1, plaintiff:"", suitType:"", suitTypeOther:"", claimValue:"", claimValueUnknown:false, details:"" }],
+    // Friends / family debt — Schedule F entries owed to people close to
+    // the client. Each entry also tracks "paid in last 12 months" so the
+    // SOFA insider-preference section can pull from the same answers.
+    hasFriendsFamilyDebt:"",
+    friendsFamilyDebtEntries:[{ id:1, name:"", relationship:"", amountOwed:"", paidLast12Months:"" }],
     ownedBusiness:"", businessDetails:"",
+    // Structured business disclosure — supplements free-text businessDetails
+    // for back-compat. Each entry: business name + entity type + state of
+    // incorporation. Multiple businesses supported.
+    businessEntries:[{ id:1, businessName:"", entityType:"", stateOfIncorporation:"" }],
     expectedRefund:"", refundAmount:"",
     dsoObligation:"", dsoAmount:"",
     recentLuxury:"", luxuryDetails:"",
@@ -1227,6 +1387,21 @@ export default function BankruptcyIntake({
     garnishmentMonthlyAmount:"",
     foreclosurePending:"",
     foreclosureDate:"",
+    // Tax filing status — SOFA/eligibility gate. Bankruptcy requires the
+    // most recent tax returns be filed (§ 1308 in Ch.13; § 521(e)(2)(A) for
+    // Ch.7 requires the most recent return). If any missing, flag for the
+    // attorney to chase down. "Not required" exempts clients with no
+    // income / SS-only / similar.
+    hasFiledAllTaxReturns:"",
+    unfiledTaxYears:"",
+    notRequiredToFile:"",
+    notRequiredReason:"",
+    notRequiredOtherDetails:"",
+    confirmedMustFileBeforeFiling:false,
+    // SOFA — losses to fire, theft, or gambling within the lookback period.
+    // Each entry: type, date, amount. Surfaces on the SOFA disclosure schedule.
+    hasLosses:"",
+    lossEntries:[{ id:1, type:"", lossDate:"", amount:"", description:"" }],
     confirmedAccurate: false,
     readInfoSheet: false,
     smsEmailConsent: false,
@@ -1691,6 +1866,15 @@ export default function BankruptcyIntake({
           });
         }
       }
+      // Income reconciliation
+      req("incomeMatches6Mo","Please answer whether your income matches the last 6 months");
+      if (data.incomeMatches6Mo === "no" && (!data.incomeMatchDetails || !String(data.incomeMatchDetails).trim())) {
+        errs["incomeMatchDetails"] = "Please explain what's different";
+      }
+      req("incomeFutureChange","Please answer whether your income is expected to change");
+      if ((data.incomeFutureChange === "up" || data.incomeFutureChange === "down") && (!data.incomeFutureChangeDetails || !String(data.incomeFutureChangeDetails).trim())) {
+        errs["incomeFutureChangeDetails"] = "Please explain what's changing";
+      }
     }
     if (s===3) {
       req("ownsRealEstate","Please answer yes or no");
@@ -1747,6 +1931,14 @@ export default function BankruptcyIntake({
           }
         });
       }
+      req("hasHsaFsa","Please answer yes or no");
+      if (data.hasHsaFsa === "yes") {
+        (data.hsaFsaEntries || []).forEach((acc, i) => {
+          if (!acc.accountType) errs[`hsafsa_${i}_accountType`] = "Please pick a type";
+          if (!acc.provider || !String(acc.provider).trim()) errs[`hsafsa_${i}_provider`] = "Please enter the provider";
+          if (acc.balance === "" || acc.balance === undefined) errs[`hsafsa_${i}_balance`] = "Please enter the balance (or 0)";
+        });
+      }
       req("hasBankAccounts","Please indicate whether you have any bank accounts");
       if (data.hasBankAccounts==="yes") {
         data.bankAccounts.forEach((acc,i)=>{
@@ -1759,9 +1951,26 @@ export default function BankruptcyIntake({
       req("hasLifeInsurance","Please answer yes or no");
       req("hasAnnuities","Please answer yes or no");
       req("hasPendingClaims","Please answer yes or no");
-      if (data.hasPendingClaims==="yes") { req("pendingClaimsDesc","Please describe the claim"); }
+      if (data.hasPendingClaims === "yes") {
+        if (!data.pendingClaimsValueUnknown && (!data.pendingClaimsValue || parseFloat(data.pendingClaimsValue) <= 0)) {
+          errs["pendingClaimsValue"] = "Enter the dollar amount or click Unknown";
+        }
+        if (!data.pendingClaimsDesc || !String(data.pendingClaimsDesc).trim()) errs["pendingClaimsDesc"] = "Please describe the claim";
+      }
+      req("hasPiClaimInProperty","Please answer yes or no");
+      if (data.hasPiClaimInProperty==="yes") { req("piClaimInPropertyDetails","Please describe the personal injury claim"); }
+      req("expectsInheritance","Please answer yes or no");
+      if (data.expectsInheritance==="yes") { req("inheritanceDetails","Please describe what you expect to receive"); }
       req("hasSsClaim","Please answer yes or no");
       req("hasMoneyOwed","Please answer yes or no");
+      if (data.hasMoneyOwed === "yes") {
+        (data.moneyOwedEntries || []).forEach((mo, i) => {
+          if (!mo.sourceType) errs[`moneyOwed_${i}_sourceType`] = "Please pick a type";
+          if (!mo.sourceDescription || !String(mo.sourceDescription).trim()) errs[`moneyOwed_${i}_sourceDescription`] = "Please describe who owes you and why";
+          if (!mo.amount || parseFloat(mo.amount) <= 0) errs[`moneyOwed_${i}_amount`] = "Please enter the amount";
+          if (!mo.expectsToCollect) errs[`moneyOwed_${i}_expectsToCollect`] = "Please answer whether you expect to collect";
+        });
+      }
       req("householdGoodsValue","Please enter a value or click 'I don't have this'");
       req("electronicsValue","Please enter a value or click 'I don't have this'");
       req("jewelryValue","Please enter a value or click 'I don't have this'");
@@ -1779,14 +1988,48 @@ export default function BankruptcyIntake({
       }
     }
     if (s===6) {
+      req("securedListComplete","Please confirm whether the secured creditor list is complete");
+      req("hasOtherVehicleLoans","Please indicate whether you have other vehicle loans");
+      if (data.securedListComplete === "no") {
+        (data.otherSecuredCreditors || []).forEach((sc, i) => {
+          if (!sc.creditorName || !String(sc.creditorName).trim()) errs[`otherSec_${i}_creditorName`] = "Creditor name is required";
+          if (!sc.collateralAssetKey) errs[`otherSec_${i}_collateralAssetKey`] = "Please pick what the lien is on";
+          if (sc.collateralAssetKey === "other" && (!sc.collateralDescription || !String(sc.collateralDescription).trim())) {
+            errs[`otherSec_${i}_collateralDescription`] = "Please describe the property";
+          }
+          if (!sc.balance || parseFloat(sc.balance) <= 0) errs[`otherSec_${i}_balance`] = "Balance is required";
+        });
+      }
+      req("hasPriorityDebt","Please indicate whether you have any priority debts (back taxes, back child support, back alimony)");
+      if (data.hasPriorityDebt === "yes") {
+        (data.priorityDebts || []).forEach((d,i)=>{
+          if (!d.type) errs[`priority_${i}_type`] = "Please select a type";
+          if (d.type === "back_taxes") {
+            if (!d.taxYear || !String(d.taxYear).trim()) errs[`priority_${i}_taxYear`] = "Tax year is required";
+            if (!d.amount || parseFloat(d.amount) <= 0) errs[`priority_${i}_amount`] = "Amount owed is required";
+            if (!d.taxFiled) errs[`priority_${i}_taxFiled`] = "Please confirm whether the tax return was filed";
+          }
+          if (d.type === "back_child_support" || d.type === "back_alimony") {
+            if (!d.amount || parseFloat(d.amount) <= 0) errs[`priority_${i}_amount`] = "Total past-due amount is required";
+            if (!d.monthlyPayment) errs[`priority_${i}_monthlyPayment`] = "Monthly payment is required";
+          }
+          // If there's a monthly payment, require the payment method (drives Schedule J de-dup)
+          if (d.type && parseFloat(d.monthlyPayment) > 0 && !d.paymentMethod) {
+            errs[`priority_${i}_paymentMethod`] = "Please indicate how this payment is made (direct, paycheck, or both)";
+          }
+        });
+      }
       req("hasBusinessDebt","Please indicate whether you have any business debts");
-      if (!data.hasMortgage) errs["securedDebt"]="Please indicate whether you have a mortgage";
-      if (data.hasMortgage==="yes") reqN("securedDebt","Please enter your mortgage balance");
-      ["creditCardDebt","medicalDebt","studentLoanDebt","taxDebt","personalLoanDebt","judgmentDebt","otherUnsecured"].forEach(f=>reqN(f));
-      if (!data.childSupportCurrent) errs["childSupportCurrent"]="Please indicate whether you are current or behind on child support";
-      if (data.childSupportCurrent==="behind" && !data.noChildSupportArrears) reqN("childSupportArrears");
-      if (!data.alimonyCurrent) errs["alimonyCurrent"]="Please indicate whether you are current or behind on alimony";
-      if (data.alimonyCurrent==="behind" && !data.noAlimonyArrears) reqN("alimonyArrears");
+      ["creditCardDebt","medicalDebt","studentLoanDebt","personalLoanDebt","judgmentDebt","otherUnsecured"].forEach(f=>reqN(f));
+      req("hasFriendsFamilyDebt","Please answer yes or no");
+      if (data.hasFriendsFamilyDebt === "yes") {
+        (data.friendsFamilyDebtEntries || []).forEach((ff, i) => {
+          if (!ff.name || !String(ff.name).trim()) errs[`ff_${i}_name`] = "Please enter the name";
+          if (!ff.relationship || !String(ff.relationship).trim()) errs[`ff_${i}_relationship`] = "Please enter the relationship";
+          if (!ff.amountOwed || parseFloat(ff.amountOwed) <= 0) errs[`ff_${i}_amountOwed`] = "Please enter the amount owed";
+          if (ff.paidLast12Months === "" || ff.paidLast12Months === undefined) errs[`ff_${i}_paidLast12Months`] = "Please enter the amount paid in the last 12 months (or 0)";
+        });
+      }
     }
     if (s===7) {
       req("priorBankruptcy","Please answer yes or no");
@@ -1798,20 +2041,76 @@ export default function BankruptcyIntake({
         });
       }
       req("createdTrust","Please answer yes or no");
-      if (data.createdTrust==="yes") req("trustDetails","Please provide details about the trust");
+      if (data.createdTrust === "yes") {
+        (data.trustEntries || []).forEach((t, i) => {
+          if (!t.trustName || !String(t.trustName).trim()) errs[`trust_${i}_trustName`] = "Please enter the trust name";
+          if (!t.propertyTransferred || !String(t.propertyTransferred).trim()) errs[`trust_${i}_propertyTransferred`] = "Please describe the property transferred";
+          if (!t.propertyValue || parseFloat(t.propertyValue) <= 0) errs[`trust_${i}_propertyValue`] = "Please enter the value";
+          if (!t.trusteeName || !String(t.trusteeName).trim()) errs[`trust_${i}_trusteeName`] = "Please enter the trustee's name";
+          if (!t.beneficiaryName || !String(t.beneficiaryName).trim()) errs[`trust_${i}_beneficiaryName`] = "Please enter the beneficiary's name";
+          if (!t.trustType) errs[`trust_${i}_trustType`] = "Please pick revocable or irrevocable";
+        });
+      }
       req("transferredProperty","Please answer yes or no");
       req("preferentialPayments","Please answer yes or no");
       req("preferentialPaymentsInsider","Please answer yes or no");
       req("pendingLawsuits","Please answer yes or no");
-      if (data.pendingLawsuits==="yes") req("lawsuitDetails","Please describe the lawsuit(s)");
+      if (data.pendingLawsuits==="yes") {
+        (data.lawsuitEntries || []).forEach((ls, i) => {
+          if (!ls.plaintiff || !String(ls.plaintiff).trim()) errs[`lawsuit_${i}_plaintiff`] = "Please enter who is suing you";
+          if (!ls.suitType) errs[`lawsuit_${i}_suitType`] = "Please pick a type";
+          if (ls.suitType === "other" && (!ls.suitTypeOther || !String(ls.suitTypeOther).trim())) errs[`lawsuit_${i}_suitTypeOther`] = "Please add details";
+          if (!ls.claimValueUnknown && (!ls.claimValue || parseFloat(ls.claimValue) <= 0)) {
+            errs[`lawsuit_${i}_claimValue`] = "Enter the dollar amount or click Unknown";
+          }
+          if (!ls.details || !String(ls.details).trim()) errs[`lawsuit_${i}_details`] = "Please add details";
+        });
+      }
       req("ownedBusiness","Please answer yes or no");
-      if (data.ownedBusiness==="yes") req("businessDetails","Please describe the business");
-      req("expectedRefund","Please answer yes, no, or don't know");
-      req("dsoObligation","Please answer yes or no");
+      if (data.ownedBusiness === "yes") {
+        (data.businessEntries || []).forEach((biz, i) => {
+          if (!biz.businessName || !String(biz.businessName).trim()) errs[`biz_${i}_businessName`] = "Please enter the business name";
+          if (!biz.entityType) errs[`biz_${i}_entityType`] = "Please pick an entity type";
+          if (!biz.stateOfIncorporation) errs[`biz_${i}_stateOfIncorporation`] = "Please pick a state";
+        });
+      }
+      req("hasFiledAllTaxReturns","Please answer about your tax filings");
+      if (data.hasFiledAllTaxReturns === "no") {
+        if (!data.unfiledTaxYears || !String(data.unfiledTaxYears).trim()) errs["unfiledTaxYears"] = "Please list the unfiled tax year(s)";
+        if (!data.confirmedMustFileBeforeFiling) errs["confirmedMustFileBeforeFiling"] = "Please acknowledge you must file these returns before bankruptcy";
+      }
+      if (data.hasFiledAllTaxReturns === "not_required") {
+        if (!data.notRequiredReason) errs["notRequiredReason"] = "Please pick a reason";
+        if (data.notRequiredReason === "other" && (!data.notRequiredOtherDetails || !String(data.notRequiredOtherDetails).trim())) {
+          errs["notRequiredOtherDetails"] = "Please explain your situation";
+        }
+      }
+      req("propertyStoredElsewhere","Please answer yes or no");
+      if (data.propertyStoredElsewhere === "yes") {
+        (data.storedPropertyEntries || []).forEach((sp, i) => {
+          if (!sp.locationType) errs[`storedProperty_${i}_locationType`] = "Please pick a location type";
+          if (!sp.items || !String(sp.items).trim()) errs[`storedProperty_${i}_items`] = "Please describe the items";
+        });
+      }
+      req("holdsPropertyForOther","Please answer yes or no");
+      if (data.holdsPropertyForOther === "yes") {
+        (data.propertyHeldForOtherEntries || []).forEach((ph, i) => {
+          if (!ph.ownerName || !String(ph.ownerName).trim()) errs[`heldFor_${i}_ownerName`] = "Please enter who you hold it for";
+          if (!ph.description || !String(ph.description).trim()) errs[`heldFor_${i}_description`] = "Please describe the property";
+        });
+      }
       req("recentLuxury","Please answer yes or no");
       req("garnishment","Please answer yes or no");
+      req("hasLosses","Please answer yes or no");
+      if (data.hasLosses === "yes") {
+        (data.lossEntries || []).forEach((ls, i) => {
+          if (!ls.type) errs[`loss_${i}_type`] = "Please pick the type of loss";
+          if (!ls.lossDate) errs[`loss_${i}_lossDate`] = "Please enter the date";
+          if (!ls.amount || parseFloat(ls.amount) <= 0) errs[`loss_${i}_amount`] = "Please enter the amount";
+        });
+      }
     }
-    if (s===8) {
+    if (s===8 && FIRM.enablePersonalInjuryScreening) {
       req("piHasClaim","Please answer yes or no");
     }
     if (s===9) {
@@ -1825,7 +2124,12 @@ export default function BankruptcyIntake({
   const handleContinue = () => {
     const errs = validateStep(step);
     setErrors(errs);
-    setStep(s=>s+1);
+    // Skip the PI screening step (8) when the firm has it toggled off.
+    setStep(s => {
+      const next = s + 1;
+      if (next === 8 && !FIRM.enablePersonalInjuryScreening) return 9;
+      return next;
+    });
     topRef.current?.scrollIntoView({behavior:"smooth"});
   };
 
@@ -1863,6 +2167,11 @@ export default function BankruptcyIntake({
       ];
 
       // ── Real property ─────────────────────────────────────────────────────
+      // Each entry carries the arrears values so the attorney dashboard's
+      // Ch.7/Ch.13 analysis can factor arrears into the plan-funding total
+      // (analyzeChapter7 warns "Ch.7 does not cure arrears"; analyzeChapter13
+      // adds them to the cure pool over the plan term). Without these,
+      // arrears would silently drop on the way into the eligibility engine.
       const real_properties = [];
       if (data.ownsRealEstate === "yes") {
         real_properties.push({
@@ -1871,6 +2180,7 @@ export default function BankruptcyIntake({
           value:         n(data.realPropValue),
           mortgageBalance: n(data.mortgageBalance),
           monthlyPayment:  n(data.realPropMonthlyPayment),
+          arrearsAmount:   n(data.mortgageArrears),
           intent:          data.realPropIntent || "",
           isCurrent:       data.mortgageCurrent || "",
           ownershipType:   data.realPropOwnershipType || "",
@@ -1883,6 +2193,8 @@ export default function BankruptcyIntake({
           value:          n(data.secondPropValue),
           mortgageBalance: n(data.secondMortgage),
           monthlyPayment:  n(data.secondMortgagePayment),
+          arrearsAmount:   n(data.secondMortgageArrears),
+          isCurrent:       data.secondMortgageCurrent || "",
         });
       }
 
@@ -2155,8 +2467,23 @@ export default function BankruptcyIntake({
     switch(step) {
       case 0: return (
         <div>
-          <SectionCard title="Who is filing?" icon="👤">
-            <Field label="Marital Status" error={e("maritalStatus")}>
+          <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+            <p className="text-base text-white font-bold leading-relaxed">
+              We need your <strong className="text-amber-400">basic contact info</strong> and <strong className="text-amber-400">marital status</strong> to set up your case.
+            </p>
+            <p className="text-base text-white font-bold leading-relaxed mt-2">
+              If your spouse doesn't want to file, pick <strong className="text-amber-400">"married and my spouse is not filing with me"</strong>.
+            </p>
+            <p className="text-base text-white font-bold leading-relaxed mt-2">
+              Spouse info is still needed if you live in a <strong className="text-amber-400">community property state</strong>.
+            </p>
+            <p className="text-base text-amber-400 font-bold leading-relaxed mt-2">
+              Everything you share is strictly confidential.
+            </p>
+          </div>
+          <SectionCard title="" icon="">
+            <p className="text-base font-semibold text-white mb-2">Are you married, single, divorced, separated, or widowed?</p>
+            <Field label="Pick your current marital status:" error={e("maritalStatus")}>
               <RadioGroup name="maritalStatus" current={data.maritalStatus} onChange={v=>{
                 u("maritalStatus",v);
                 if (v==="single" || v==="divorced" || v==="widowed") u("filingType","individual");
@@ -2164,9 +2491,9 @@ export default function BankruptcyIntake({
                 else u("filingType","");
               }} error={e("maritalStatus")}
                 options={[
-                  {value:"single",    label:"Single — I am not currently married"},
+                  {value:"single",    label:"Single — I'm not married"},
                   {value:"married",   label:"Married"},
-                  {value:"separated", label:"Legally Separated"},
+                  {value:"separated", label:"Legally separated from my spouse"},
                   {value:"divorced",  label:"Divorced"},
                   {value:"widowed",   label:"Widowed"},
                 ]}/>
@@ -2175,18 +2502,18 @@ export default function BankruptcyIntake({
               <div className="mt-2 p-3 bg-slate-700/50 rounded-lg">
                 <p className="text-xs text-slate-400 leading-relaxed">
                   {data.maritalStatus === "separated"
-                    ? "Legal separation may affect community property treatment. Your attorney will advise on how your separation agreement impacts the filing."
+                    ? "Got it. Being legally separated can change how property gets handled. Your attorney will look at your separation paperwork."
                     : data.maritalStatus === "divorced"
-                    ? "If your divorce was finalized before filing, you will file as an individual. Please ensure your divorce decree is available for your attorney's review."
-                    : "Widowed filers file as individuals. If your spouse passed within the last 2 years, your attorney will review eligibility for certain joint filing provisions."}
+                    ? "Got it. If your divorce is already final, you'll file by yourself. Please have your divorce paperwork ready for your attorney."
+                    : "Got it. Widowed clients file by themselves. If your spouse passed away in the last 2 years, your attorney will check if any joint filing rules still apply."}
                 </p>
               </div>
             )}
 
             {data.maritalStatus==="married" && (
-              <Field label="Filing Type" error={e("filingType")}>
+              <Field label="Are you and your spouse filing together, or just you?" error={e("filingType")}>
                 <RadioGroup name="filingType" current={data.filingType} onChange={v=>u("filingType",v)} error={e("filingType")}
-                  options={[{value:"joint",label:"Filing jointly with my spouse"},{value:"individual-nonfiling-spouse",label:"Filing individually — my spouse is not filing"}]}/>
+                  options={[{value:"joint",label:"Both of us are filing together"},{value:"individual-nonfiling-spouse",label:"Just me — my spouse isn't filing"}]}/>
               </Field>
             )}
 
@@ -2212,7 +2539,7 @@ export default function BankruptcyIntake({
                     <div className="flex gap-3 items-start">
                       <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                       <div>
-                        <p className="text-xs font-semibold text-amber-300 mb-1">Non-filing spouse notice</p>
+                        <p className="text-xs font-semibold text-amber-400 mb-1">Non-filing spouse notice</p>
                         <p className="text-xs text-amber-200/70 leading-relaxed">
                           {data.state ? `${data.state} is not a community property state. However, your` : "Depending on your state, your"} non-filing spouse's income is still required for the means test. If you reside in a community property state (Arizona, California, Idaho, Louisiana, Nevada, New Mexico, Texas, Washington, or Wisconsin), you will also be required to disclose all community property assets and interests. Your attorney will advise on full disclosure requirements.
                         </p>
@@ -2223,23 +2550,26 @@ export default function BankruptcyIntake({
               </>
             )}
 
+            <p className="text-base font-semibold text-white mb-2 mt-4">What's your name and how can we reach you?</p>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="First Name" error={e("firstName")}><Input value={data.firstName} onChange={v=>u("firstName",v)} placeholder="First" hasError={!!e("firstName")}/></Field>
-              <Field label="Last Name" error={e("lastName")}><Input value={data.lastName} onChange={v=>u("lastName",v)} placeholder="Last" hasError={!!e("lastName")}/></Field>
+              <Field label="What's your first name?" error={e("firstName")}><Input value={data.firstName} onChange={v=>u("firstName",v)} placeholder="First" hasError={!!e("firstName")}/></Field>
+              <Field label="What's your last name?" error={e("lastName")}><Input value={data.lastName} onChange={v=>u("lastName",v)} placeholder="Last" hasError={!!e("lastName")}/></Field>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Email Address" error={e("email")}><Input type="email" value={data.email} onChange={v=>u("email",v)} placeholder="your@email.com" hasError={!!e("email")}/></Field>
-              <Field label="Phone Number" error={e("phone")}><Input type="tel" value={data.phone} onChange={v=>u("phone",v)} placeholder="(555) 555-5555" hasError={!!e("phone")}/></Field>
+              <Field label="What's your email address?" error={e("email")}><Input type="email" value={data.email} onChange={v=>u("email",v)} placeholder="your@email.com" hasError={!!e("email")}/></Field>
+              <Field label="What's your phone number?" error={e("phone")}><Input type="tel" value={data.phone} onChange={v=>u("phone",v)} placeholder="(555) 555-5555" hasError={!!e("phone")}/></Field>
             </div>
             {(data.filingType==="joint"||data.filingType==="individual-nonfiling-spouse") && <>
-              <p className="text-xs text-slate-400 mb-2">{data.filingType==="joint"?"Co-debtor (spouse):":"Non-filing spouse:"}</p>
+              <p className="text-base font-semibold text-white mb-2 mt-3">{data.filingType==="joint"?"Now your spouse's name (you're filing together):":"Now your spouse's name (they aren't filing):"}</p>
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Spouse First" error={e("spouseFirstName")}><Input value={data.spouseFirstName} onChange={v=>u("spouseFirstName",v)} placeholder="First" hasError={!!e("spouseFirstName")}/></Field>
-                <Field label="Spouse Last" error={e("spouseLastName")}><Input value={data.spouseLastName} onChange={v=>u("spouseLastName",v)} placeholder="Last" hasError={!!e("spouseLastName")}/></Field>
+                <Field label="Spouse's first name" error={e("spouseFirstName")}><Input value={data.spouseFirstName} onChange={v=>u("spouseFirstName",v)} placeholder="First" hasError={!!e("spouseFirstName")}/></Field>
+                <Field label="Spouse's last name" error={e("spouseLastName")}><Input value={data.spouseLastName} onChange={v=>u("spouseLastName",v)} placeholder="Last" hasError={!!e("spouseLastName")}/></Field>
               </div>
             </>}
           </SectionCard>
           <SectionCard title="Current Address" icon="🏠">
+            <p className="text-base font-semibold text-white mb-2">Where do you currently live?</p>
+            <p className="text-xs text-slate-400 mb-3">This is the address where you sleep most nights — your home. We'll ask about your mailing address next.</p>
             <Field label="Street Address" error={e("address")}>
               <Input value={data.address} onChange={v=>u("address",v)} placeholder="123 Main Street" hasError={!!e("address")}/>
             </Field>
@@ -2251,19 +2581,50 @@ export default function BankruptcyIntake({
                 <Input value={data.zip} onChange={v=>u("zip",v)} placeholder="85001" hasError={!!e("zip")}/>
               </Field>
             </div>
-            <Field label="State of Residence" error={e("state")}>
+            <Field label="What state do you live in?" error={e("state")}>
               <Select value={data.state} onChange={v=>{u("state",v);u("county","");}} options={US_STATES} placeholder="Select state..." hasError={!!e("state")}/>
             </Field>
-            <Field label="County" error={e("county")}>
+            <Field label="What county do you live in?" error={e("county")}>
               {COUNTIES_BY_STATE[data.state]
                 ? <Select value={data.county} onChange={v=>u("county",v)} options={COUNTIES_BY_STATE[data.state]} placeholder="Select county..." hasError={!!e("county")}/>
-                : <Input value={data.county} onChange={v=>u("county",v)} placeholder={data.state?"Enter county name":"Select a state first"} hasError={!!e("county")}/>}
+                : <Input value={data.county} onChange={v=>u("county",v)} placeholder={data.state?"Enter county name":"Pick a state first"} hasError={!!e("county")}/>}
             </Field>
-            <Field label="How long at current address?" error={e("addressYears")}>
+
+            {/* Mailing address question — asked BEFORE how-long-at-address per
+                client spec. If same, we skip collecting a second address. */}
+            <Field label="Is your mailing address the same as the address above?" error={e("mailingSameAsCurrent")}>
+              <RadioGroup name="mailingSameAsCurrent" current={data.mailingSameAsCurrent}
+                onChange={v=>u("mailingSameAsCurrent",v)} error={e("mailingSameAsCurrent")}
+                options={[
+                  {value:"yes",label:"Yes — my mail comes to the same address"},
+                  {value:"no",label:"No — I get my mail at a different address (like a P.O. Box)"},
+                ]}/>
+            </Field>
+            {data.mailingSameAsCurrent === "no" && (
+              <div className="mb-3 p-3 bg-slate-800/40 border border-slate-700 rounded-xl">
+                <p className="text-[11px] text-slate-400 mb-2">Where should we send your mail?</p>
+                <Field label="Mailing Street Address (or P.O. Box)">
+                  <Input value={data.mailingAddress} onChange={v=>u("mailingAddress",v)} placeholder="P.O. Box 1234 or 456 Other Street"/>
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="City">
+                    <Input value={data.mailingCity} onChange={v=>u("mailingCity",v)} placeholder="City"/>
+                  </Field>
+                  <Field label="ZIP Code">
+                    <Input value={data.mailingZip} onChange={v=>u("mailingZip",v)} placeholder="85001"/>
+                  </Field>
+                </div>
+                <Field label="State">
+                  <Select value={data.mailingState} onChange={v=>u("mailingState",v)} options={US_STATES} placeholder="Select state..."/>
+                </Field>
+              </div>
+            )}
+
+            <Field label="How long have you lived at the address above?" error={e("addressYears")}>
               <Select value={data.addressYears} onChange={v=>u("addressYears",v)} hasError={!!e("addressYears")}
-                options={["Less than 91 days","91 days – 6 months","6 months – 2 years","2+ years"]} placeholder="Select..."/>
+                options={["Less than 91 days","91 days – 6 months","6 months – 2 years","2+ years"]} placeholder="Pick one..."/>
             </Field>
-            {data.addressYears==="Less than 91 days" && <p className="text-amber-400 text-xs mt-1">⚠️ Venue may be disputed — prior state's exemptions may apply.</p>}
+            {data.addressYears==="Less than 91 days" && <p className="text-amber-400 text-xs mt-1">⚠️ Because you haven't lived here long, we may need to ask about your old state.</p>}
           </SectionCard>
           {needsPriorAddresses() && (
             <SectionCard title="Prior Domicile State" icon="📍">
@@ -2300,15 +2661,30 @@ export default function BankruptcyIntake({
               )}
             </SectionCard>
           )}
-          {data.addressYears && <ExemptionPreviewCard data={data} />}
+          {/* Exemption preview HIDDEN from the client-facing intake form per
+              firm spec — the client shouldn't see which state's exemptions
+              apply during intake; that's an attorney-side determination
+              surfaced in the attorney review surfaces. The card itself is
+              still exported for any internal surface that wants to mount it. */}
+          {false && data.addressYears && <ExemptionPreviewCard data={data} />}
           <ErrorBanner errors={errors}/>
         </div>
       );
 
       case 1: return (
         <div>
-          <SectionCard title="Household Composition" icon="👨‍👩‍👧">
-            <Field label="Number of Dependents" hint="Children or others financially dependent on you">
+          <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+            <p className="text-base text-white font-bold leading-relaxed">
+              We use your <strong className="text-amber-400">Household Size</strong> for the <strong className="text-amber-400">Means Test</strong> — the income check required by federal bankruptcy law. The number of people in your home decides the income threshold your attorney compares against.
+            </p>
+            <p className="text-base text-amber-400 font-bold leading-relaxed mt-3">
+              Count everyone who lives in your home and depends on you financially.
+            </p>
+          </div>
+          <SectionCard title="" icon="">
+            <p className="text-base font-semibold text-white mb-2">Do you have any children or other dependents who live with you?</p>
+            <p className="text-xs text-slate-400 mb-3">A dependent is anyone you take care of financially — kids, an elderly parent, a family member who lives in your home. Pick how many.</p>
+            <Field label="How many dependents live with you?" hint="Children or other people you support financially">
               <Select value={data.numDependents} onChange={v=>{
                 const n=parseInt(v)||0;
                 const arr=Array.from({length:n},(_,i)=>data.dependents[i]||{age:"",relationship:"",stillLivesHere:"",contributesFinancially:"",monthlyContribution:""});
@@ -2319,44 +2695,44 @@ export default function BankruptcyIntake({
               <div className="mt-2 space-y-3">
                 {data.dependents.map((dep,i)=>(
                   <div key={i} className="bg-slate-900/60 border border-slate-600 rounded-xl p-4">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Dependent {i+1}</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-slate-400 mb-3">Person {i+1}</p>
                     <div className="grid grid-cols-2 gap-3">
-                      <Field label="Age" error={errors[`dep_${i}_age`]}>
+                      <Field label="How old are they?" error={errors[`dep_${i}_age`]}>
                         <Select value={dep.age} onChange={v=>{
                           const arr=[...data.dependents];
                           arr[i]={...arr[i],age:v};
                           setData(d=>({...d,dependents:arr}));
                         }} hasError={!!errors[`dep_${i}_age`]}
                         options={["Under 1","1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","16","17","18","19","20","21","22","23","24","25","26","27","28","29","30","31","32","33","34","35","36","37","38","39","40","41","42","43","44","45","46","47","48","49","50","51","52","53","54","55","56","57","58","59","60","61","62","63","64","65","66","67","68","69","70","71","72","73","74","75","76","77","78","79","80","81","82","83","84","85","86","87","88","89","90","91","92","93","94","95+"]}
-                        placeholder="Select age..."/>
+                        placeholder="Pick an age..."/>
                       </Field>
-                      <Field label="Relationship" error={errors[`dep_${i}_relationship`]}>
+                      <Field label="How are they related to you?" error={errors[`dep_${i}_relationship`]}>
                         <Select value={dep.relationship} onChange={v=>{
                           const arr=[...data.dependents];
                           arr[i]={...arr[i],relationship:v};
                           setData(d=>({...d,dependents:arr}));
                         }} hasError={!!errors[`dep_${i}_relationship`]}
                         options={["Son","Daughter","Stepson","Stepdaughter","Grandson","Granddaughter","Mother","Father","Stepmother","Stepfather","Grandmother","Grandfather","Sister","Brother","Aunt","Uncle","Niece","Nephew","Significant Other","Friend","Other"]}
-                        placeholder="Select relationship..."/>
+                        placeholder="Pick a relationship..."/>
                       </Field>
                     </div>
                     <div className="mt-3">
-                      <Field label="Does this person currently live in your household?" error={errors[`dep_${i}_stillLivesHere`]}>
+                      <Field label="Does this person live in your home with you right now?" error={errors[`dep_${i}_stillLivesHere`]}>
                         <RadioGroup name={`dep_${i}_stillLivesHere`} current={dep.stillLivesHere} onChange={v=>{
                           const arr=[...data.dependents]; arr[i]={...arr[i],stillLivesHere:v}; setData(d=>({...d,dependents:arr}));
                         }} error={errors[`dep_${i}_stillLivesHere`]}
-                          options={[{value:"yes",label:"Yes — lives with me"},{value:"no",label:"No — does not live with me"}]}/>
+                          options={[{value:"yes",label:"Yes — they live with me"},{value:"no",label:"No — they live somewhere else"}]}/>
                       </Field>
                     </div>
                     <div className="mt-3">
-                      <Field label="Does this person contribute financially to the household?" error={errors[`dep_${i}_contributesFinancially`]}>
+                      <Field label="Does this person help pay any of the home's bills?" error={errors[`dep_${i}_contributesFinancially`]}>
                         <RadioGroup name={`dep_${i}_contributesFinancially`} current={dep.contributesFinancially} onChange={v=>{
                           const arr=[...data.dependents]; arr[i]={...arr[i],contributesFinancially:v, monthlyContribution: v==="no"?"":arr[i].monthlyContribution}; setData(d=>({...d,dependents:arr}));
                         }} error={errors[`dep_${i}_contributesFinancially`]}
-                          options={[{value:"yes",label:"Yes — they contribute income or money toward household expenses"},{value:"no",label:"No — they do not contribute financially"}]}/>
+                          options={[{value:"yes",label:"Yes — they give money toward rent, food, or other bills"},{value:"no",label:"No — they don't help pay any bills"}]}/>
                       </Field>
                       {dep.contributesFinancially==="yes" && (
-                        <Field label="Monthly amount contributed" error={errors[`dep_${i}_monthlyContribution`]}>
+                        <Field label="How much do they give each month?" error={errors[`dep_${i}_monthlyContribution`]}>
                           <Input type="number" value={dep.monthlyContribution} onChange={v=>{
                             const arr=[...data.dependents]; arr[i]={...arr[i],monthlyContribution:v}; setData(d=>({...d,dependents:arr}));
                           }} placeholder="e.g. 500" hasError={!!errors[`dep_${i}_monthlyContribution`]}/>
@@ -2367,8 +2743,58 @@ export default function BankruptcyIntake({
                 ))}
               </div>
             )}
+
+            {/* Support paid OUTSIDE the household — separate from dependents
+                because these people don't live with the client (e.g., adult
+                child away at college, elderly parent in own home, ex-spouse). */}
+            <div className="mt-4 pt-4 border-t border-slate-700/60">
+              <p className="text-base font-semibold text-white mb-2">Do you give money each month to anyone who does NOT live with you?</p>
+              <p className="text-xs text-slate-400 mb-3">For example: an adult child in college, a parent in their own home, or someone else you help support. Don't include child support or alimony here — we ask about those later.</p>
+              <Field label="Do you support anyone outside your home?" error={e("supportsOutsideHome")}>
+                <RadioGroup name="supportsOutsideHome" current={data.supportsOutsideHome}
+                  onChange={v=>u("supportsOutsideHome",v)} error={e("supportsOutsideHome")}
+                  options={[
+                    {value:"yes",label:"Yes — I give money to someone outside my home"},
+                    {value:"no",label:"No — I don't support anyone outside my home"},
+                  ]}/>
+              </Field>
+              {data.supportsOutsideHome === "yes" && (
+                <div className="mt-2 space-y-2">
+                  {(data.outsideSupport || []).map((os, i) => (
+                    <div key={os.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Person {i+1}</p>
+                        {(data.outsideSupport || []).length > 1 && (
+                          <button type="button"
+                            onClick={()=>u("outsideSupport", data.outsideSupport.filter(x => x.id !== os.id))}
+                            className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                        )}
+                      </div>
+                      <Field label="How are they related to you?" error={errors[`outsideSupport_${i}_relationship`]}>
+                        <Select value={os.relationship}
+                          onChange={v=>u("outsideSupport", data.outsideSupport.map((x,idx)=>idx===i?{...x,relationship:v}:x))}
+                          hasError={!!errors[`outsideSupport_${i}_relationship`]}
+                          options={["Son","Daughter","Stepson","Stepdaughter","Grandson","Granddaughter","Mother","Father","Stepmother","Stepfather","Grandmother","Grandfather","Sister","Brother","Aunt","Uncle","Niece","Nephew","Significant Other","Friend","Other"]}
+                          placeholder="Pick a relationship..."/>
+                      </Field>
+                      <Field label="How much do you send them each month?" error={errors[`outsideSupport_${i}_monthlyAmount`]}>
+                        <Input type="number" value={os.monthlyAmount}
+                          onChange={v=>u("outsideSupport", data.outsideSupport.map((x,idx)=>idx===i?{...x,monthlyAmount:v}:x))}
+                          placeholder="e.g. 300" hasError={!!errors[`outsideSupport_${i}_monthlyAmount`]}/>
+                      </Field>
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={()=>u("outsideSupport", [...(data.outsideSupport || []), { id: Date.now(), relationship:"", monthlyAmount:"" }])}
+                    className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <span className="text-base">+</span> Add Another Person
+                  </button>
+                </div>
+              )}
+            </div>
+
             <div className="mt-3 p-3 bg-slate-700/50 rounded-lg">
-              <p className="text-xs text-slate-400">Household Size for Means Test:</p>
+              <p className="text-xs text-slate-400">Household size we'll use to calculate the means test:</p>
               <p className="text-xl font-serif text-amber-400 font-bold">{parseInt(data.numDependents||0)+(data.filingType==="joint"||data.filingType==="individual-nonfiling-spouse"?2:1)} people</p>
             </div>
           </SectionCard>
@@ -2377,8 +2803,14 @@ export default function BankruptcyIntake({
       );
 
       case 2: {
-        const debtorName = data.firstName ? `${data.firstName} ${data.lastName}`.trim() : "Debtor";
-        const spouseName = data.spouseFirstName ? `${data.spouseFirstName} ${data.spouseLastName}`.trim() : (data.filingType==="joint"?"Spouse":"Non-Filing Spouse");
+        // Role labels — "Client 1" / "Client 2" / "Non-filing Spouse" so it's
+        // clear whose info each section is asking about. The actual entered
+        // first/last name (when present) is shown above the role label.
+        const debtorName = data.firstName ? `${data.firstName} ${data.lastName}`.trim() : "Client 1";
+        const spouseName = data.spouseFirstName
+          ? `${data.spouseFirstName} ${data.spouseLastName}`.trim()
+          : (data.filingType==="joint" ? "Client 2" : "Non-filing Spouse");
+        const spouseRoleLabel = data.filingType==="joint" ? "Client 2" : "Non-filing Spouse";
         const hasSpouse = data.filingType==="joint"||data.filingType==="individual-nonfiling-spouse";
         const hhSize = parseInt(data.numDependents||0)+(hasSpouse?2:1);
         const cmiExcluded = (parseFloat(data.dSsRetirement)||0)+(parseFloat(data.dSsDisability)||0)+(parseFloat(data.dVeterans)||0)+(parseFloat(data.sSsRetirement)||0)+(parseFloat(data.sSsDisability)||0)+(parseFloat(data.sVeterans)||0);
@@ -2417,15 +2849,26 @@ export default function BankruptcyIntake({
 
         return (
           <div>
+            <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+              <p className="text-base text-white font-bold leading-relaxed">
+                We need to look at your <strong className="text-amber-400">current monthly income</strong> and the <strong className="text-amber-400">income you received in the last 6 months</strong>.
+              </p>
+              <p className="text-base text-white font-bold leading-relaxed mt-2">
+                This goes into the <strong className="text-amber-400">Means Test</strong> — the income check required by federal bankruptcy law that compares your income to your state's median.
+              </p>
+              <p className="text-base text-amber-400 font-bold leading-relaxed mt-2">
+                We'll also ask if anything's expected to change soon.
+              </p>
+            </div>
             <PersonIncomeSection
-              who="debtorSources" label="Debtor" personName={debtorName}
+              who="debtorSources" label="Client 1" personName={debtorName}
               workStatusKey="debtorWorkStatus" workStatus={data.debtorWorkStatus}
               sources={data.debtorSources} monthlyGrossTotal={monthlyGross()}
               onStatusChange={v=>u("debtorWorkStatus",v)} onUpdate={uSrc} onError={eSrc}
               onAdd={addSrc} onRemove={removeSrc} periodToMonthly={periodToMonthly} isSpouse={false}/>
             {hasSpouse && (
               <PersonIncomeSection
-                who="spouseSources" label={data.filingType==="joint"?"Spouse / Co-Debtor":"Non-Filing Spouse"} personName={spouseName}
+                who="spouseSources" label={spouseRoleLabel} personName={spouseName}
                 workStatusKey="spouseWorkStatus" workStatus={data.spouseWorkStatus}
                 sources={data.spouseSources} monthlyGrossTotal={spouseMonthlyGross()}
                 onStatusChange={v=>u("spouseWorkStatus",v)} onUpdate={uSrc} onError={eSrc}
@@ -2490,6 +2933,14 @@ export default function BankruptcyIntake({
                 </div>
               </div>
             </div>
+            {/* DMI / Ch.7-vs-Ch.13 eligibility comparison HIDDEN from the
+                client-facing intake form per firm spec — the client
+                shouldn't be shown a pre-attorney eligibility verdict.
+                The block is preserved (wrapped in `{false && (...)}` below)
+                so it can be reinstated for an internal surface by flipping
+                the conditional. Computation helpers (ch7DMI/ch13DMI/etc.)
+                still run above so any downstream consumer keeps working. */}
+            {false && (
             <SectionCard title="Chapter 7 & 13 Eligibility / DMI" icon="📊">
               <div className="mb-4 p-3 bg-slate-800/60 border border-slate-600 rounded-xl">
                 <p className="text-xs font-semibold text-slate-300 mb-1">How Disposable Monthly Income (DMI) is calculated</p>
@@ -2592,7 +3043,7 @@ export default function BankruptcyIntake({
                 <div className="px-4 py-4 space-y-4">
 
                   {overMedian && (
-                    <div className="flex items-start gap-2 text-[10px] bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-300">
+                    <div className="flex items-start gap-2 text-[10px] bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 text-amber-400">
                       <svg className="w-3 h-3 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.998L13.732 4c-.77-1.332-2.694-1.332-3.464 0L3.34 16.002c-.77 1.331.192 2.998 1.732 2.998z"/></svg>
                       <span><span className="font-bold">Presumptive Ch. 13:</span> Over median — self-employment income shown as gross (no Schedule C deductions per 11 U.S.C. § 1325(b))</span>
                     </div>
@@ -2600,7 +3051,7 @@ export default function BankruptcyIntake({
 
                   {data.debtorSources.length > 0 && (
                     <div>
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Debtor Income</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Client 1 Income</p>
                       <div className="space-y-1 bg-slate-800/30 rounded-xl border border-slate-700/40 p-3">
                         {data.debtorSources.map((src, i) => {
                           const isSE = src.sourceType !== "employment";
@@ -2621,7 +3072,7 @@ export default function BankruptcyIntake({
                           );
                         })}
                         <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-700/50 mt-0.5">
-                          <span className="text-slate-400 font-semibold">Debtor Subtotal</span>
+                          <span className="text-slate-400 font-semibold">Client 1 Subtotal</span>
                           <span className="text-white font-bold">{fmt2(
                             data.debtorSources.reduce((s, src) => {
                               const isSE = src.sourceType !== "employment";
@@ -2640,7 +3091,7 @@ export default function BankruptcyIntake({
                   {hasSpouse && data.spouseSources.length > 0 && (
                     <div>
                       <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">
-                        {data.filingType === "individual-nonfiling-spouse" ? "Non-Filing Spouse Income" : "Spouse Income"}
+                        {data.filingType === "individual-nonfiling-spouse" ? "Non-filing Spouse Income" : "Client 2 Income"}
                       </p>
                       <div className="space-y-1 bg-slate-800/30 rounded-xl border border-slate-700/40 p-3">
                         {data.spouseSources.map((src, i) => {
@@ -2662,7 +3113,7 @@ export default function BankruptcyIntake({
                           );
                         })}
                         <div className="flex justify-between items-center text-xs pt-1.5 border-t border-slate-700/50 mt-0.5">
-                          <span className="text-slate-400 font-semibold">Spouse Subtotal</span>
+                          <span className="text-slate-400 font-semibold">{data.filingType === "individual-nonfiling-spouse" ? "Non-filing Spouse Subtotal" : "Client 2 Subtotal"}</span>
                           <span className="text-white font-bold">{fmt2(
                             data.spouseSources.reduce((s, src) => {
                               const isSE = src.sourceType !== "employment";
@@ -2761,6 +3212,62 @@ export default function BankruptcyIntake({
                 </div>
               </div>
             </SectionCard>
+            )}
+
+            {/* Income reconciliation — asked AFTER the summary so the client
+                has the figures in mind. If either answer flags a change, the
+                attorney portal surfaces it for review. */}
+            <SectionCard title="Does your income match what's shown?" icon="🔎">
+              <Field label="Does your income look the same as what you received in the last 6 months?" error={e("incomeMatches6Mo")}>
+                <RadioGroup name="incomeMatches6Mo" current={data.incomeMatches6Mo}
+                  onChange={v=>u("incomeMatches6Mo",v)} error={e("incomeMatches6Mo")}
+                  options={[
+                    {value:"yes",label:"Yes — it looks about the same"},
+                    {value:"no",label:"No — it's different from the last 6 months"},
+                  ]}/>
+              </Field>
+              {data.incomeMatches6Mo === "no" && (
+                <Field label="What's different? Please explain." error={e("incomeMatchDetails")}>
+                  <textarea
+                    value={data.incomeMatchDetails || ""}
+                    onChange={ev=>u("incomeMatchDetails", ev.target.value)}
+                    rows={3}
+                    placeholder="e.g. Lost my job in March, started a new job last month, business was seasonal..."
+                    className={`w-full bg-slate-900 border ${e("incomeMatchDetails")?"border-red-500":"border-slate-600"} rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none`}
+                  />
+                </Field>
+              )}
+
+              <Field label="Do you expect your income to go up or down in the future?" error={e("incomeFutureChange")}>
+                <RadioGroup name="incomeFutureChange" current={data.incomeFutureChange}
+                  onChange={v=>u("incomeFutureChange",v)} error={e("incomeFutureChange")}
+                  options={[
+                    {value:"no",label:"No — I expect it to stay about the same"},
+                    {value:"up",label:"Yes — I expect it to go UP"},
+                    {value:"down",label:"Yes — I expect it to go DOWN"},
+                  ]}/>
+              </Field>
+              {(data.incomeFutureChange === "up" || data.incomeFutureChange === "down") && (
+                <Field label="What's changing? Please explain." error={e("incomeFutureChangeDetails")}>
+                  <textarea
+                    value={data.incomeFutureChangeDetails || ""}
+                    onChange={ev=>u("incomeFutureChangeDetails", ev.target.value)}
+                    rows={3}
+                    placeholder="e.g. New job starting next month, retiring at end of year, hours being cut..."
+                    className={`w-full bg-slate-900 border ${e("incomeFutureChangeDetails")?"border-red-500":"border-slate-600"} rounded-xl px-3 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400 resize-none`}
+                  />
+                </Field>
+              )}
+
+              {(data.incomeMatches6Mo === "no" || data.incomeFutureChange === "up" || data.incomeFutureChange === "down") && (
+                <div className="mt-2 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-[11px] text-amber-200/95">
+                    <strong className="text-amber-400">Flagged for attorney review.</strong> Because your income has changed or will change, your attorney will adjust the means-test analysis to account for what you actually expect to earn.
+                  </p>
+                </div>
+              )}
+            </SectionCard>
+
             <ErrorBanner errors={errors}/>
           </div>
         );
@@ -2768,19 +3275,34 @@ export default function BankruptcyIntake({
 
       case 3: return (
         <div>
-          <div className="mb-4 p-4 bg-slate-800/60 border border-slate-600 rounded-xl space-y-3">
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">Equity and why it matters</p>
-              <p className="text-xs text-slate-400 leading-relaxed">Equity is the difference between what your property is worth and what you owe on it. For example, if your home is worth $300,000 and you owe $250,000, your equity is $50,000. In bankruptcy, equity is important because it determines whether the property can be protected.</p>
+          <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+            <p className="text-sm font-bold text-amber-400 mb-4 text-center">Real Estate Section — Why It's Important</p>
+
+            <p className="text-base text-white font-bold leading-relaxed mb-3">
+              List <strong className="text-amber-400">all</strong> real estate so your attorney can protect what's yours.
+            </p>
+
+            <p className="text-base text-white font-bold leading-relaxed mb-3">
+              We take the <strong className="text-amber-400">value of your property</strong> and subtract any{" "}
+              <strong className="text-amber-400">liens</strong> (mortgages, judgments, tax liens) to figure out your{" "}
+              <strong className="text-amber-400">equity</strong>.
+            </p>
+
+            <p className="text-base text-white font-bold leading-relaxed mb-4">
+              Equity matters because we need to know if it's <strong className="text-amber-400">protected by an exemption</strong>.
+              If yes — you keep the property. If not — the trustee may be able to sell it.
+            </p>
+
+            <div className="border-t border-slate-700/60 pt-3 mt-3">
+              <p className="text-[11px] uppercase tracking-widest text-amber-400/80 font-bold mb-2 text-center">Quick definitions</p>
+              <ul className="text-base text-white font-bold leading-relaxed space-y-1.5">
+                <li>• <strong className="text-amber-400">Equity</strong> = value minus what you owe.</li>
+                <li>• <strong className="text-amber-400">Exemption</strong> = legal shield that lets you keep property up to a set dollar amount.</li>
+                <li>• <strong className="text-amber-400">Trustee</strong> = court official who reviews your case (in Ch. 7 may sell non-exempt items).</li>
+              </ul>
             </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">What is an exemption?</p>
-              <p className="text-xs text-slate-400 leading-relaxed">An exemption is a legal protection that allows you to keep certain property in bankruptcy up to a specified dollar amount. Federal and state laws provide exemptions for your home (the "homestead exemption"), vehicles, household goods, retirement accounts, and more. If your equity in a property is within the exemption limit, you may be able to keep it. Your attorney will determine which exemptions apply to your situation.</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">What is a trustee?</p>
-              <p className="text-xs text-slate-400 leading-relaxed">A bankruptcy trustee is a court-appointed official who reviews your case to ensure your disclosures are accurate and complete. In a Chapter 7 case, the trustee may liquidate (sell) non-exempt assets to pay creditors. In a Chapter 13 case, the trustee administers your repayment plan. Accurate and honest disclosures are essential.</p>
-            </div>
+
+            <p className="text-base text-white font-bold leading-relaxed mt-4 text-center">Your attorney picks the exemptions for your state.</p>
           </div>
           <SectionCard title="Real Estate — Schedule A/B" icon="🏡">
             <Field label="Do you own or have any interest in real estate?" error={e("ownsRealEstate")}>
@@ -2792,9 +3314,36 @@ export default function BankruptcyIntake({
                 <Select value={data.realPropType} onChange={v=>{u("realPropType",v); if(v!=="Mobile Home"){u("payLotSpaceRent",""); u("expLotSpaceRent","");}}} hasError={!!e("realPropType")}
                   options={["Primary Residence","Mobile Home","Investment Property","Rental Property","Vacant Land","Commercial","Other"]}/>
               </Field>
-              <Field label="Property Address" error={e("realPropAddress")}>
-                <Input value={data.realPropAddress} onChange={v=>u("realPropAddress",v)} placeholder="Street, City, State ZIP" hasError={!!e("realPropAddress")}/>
-              </Field>
+              {/* Property-address shortcut: most filers' primary residence IS
+                  the address they entered in Section 1 above. Ask yes/no
+                  first; only show the free-text Property Address input when
+                  the property is at a DIFFERENT location (rental, second
+                  home, investment property, etc.). When "yes", auto-compose
+                  the property address from data.address + city + state + zip
+                  so realPropAddress stays populated for downstream consumers
+                  (Zillow lookup, Schedule A/B render, etc.). */}
+              {(() => {
+                const composed = [data.address, data.city, data.state, data.zip].filter(Boolean).join(", ");
+                const haveSection1 = composed.length > 0;
+                return (
+                  <Field label="Is this property at the same address you entered in Section 1?" error={e("realPropSameAsAbove")}>
+                    <RadioGroup name="realPropSame" current={data.realPropSameAsAbove} onChange={v=>{
+                      u("realPropSameAsAbove", v);
+                      if (v === "yes") u("realPropAddress", composed);
+                      if (v === "no")  u("realPropAddress", "");
+                    }} error={e("realPropSameAsAbove")}
+                      options={[
+                        { value: "yes", label: haveSection1 ? `Yes — ${composed}` : "Yes — same as Section 1 (complete the address in Section 1 first)" },
+                        { value: "no",  label: "No — different address" },
+                      ]}/>
+                  </Field>
+                );
+              })()}
+              {data.realPropSameAsAbove === "no" && (
+                <Field label="Property Address" error={e("realPropAddress")}>
+                  <Input value={data.realPropAddress} onChange={v=>u("realPropAddress",v)} placeholder="Street, City, State ZIP" hasError={!!e("realPropAddress")}/>
+                </Field>
+              )}
               <Field label="Do you currently live in this property as your primary residence?" error={e("isOccupiedPrimary")}>
                 <RadioGroup name="isPrimary" current={data.isOccupiedPrimary} onChange={v=>{
                   u("isOccupiedPrimary",v);
@@ -2855,7 +3404,7 @@ export default function BankruptcyIntake({
                 return (
                   <>
                     <div className="mb-4 bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3">
-                      <p className="text-xs text-amber-300 mb-3">
+                      <p className="text-xs text-amber-400 mb-3">
                         <span className="font-semibold">Trustee notice:</span> Trustees typically use Zillow's Zestimate or a comparable market analysis to verify property values. Click below to fetch the Zestimate — it will auto-populate the value field.
                       </p>
                       <button
@@ -2891,7 +3440,7 @@ export default function BankruptcyIntake({
                               <p className="text-xs text-slate-400 mt-1.5">Value auto-populated below. If you believe your property is worth less, use the override option.</p>
                             </>
                           ) : (
-                            <p className="text-xs text-amber-300">No Zestimate found for this address. Please enter the value manually or <a href={zl.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">search Zillow directly</a>.</p>
+                            <p className="text-xs text-amber-400">No Zestimate found for this address. Please enter the value manually or <a href={zl.sourceUrl} target="_blank" rel="noopener noreferrer" className="underline">search Zillow directly</a>.</p>
                           )}
                         </div>
                       )}
@@ -2911,9 +3460,9 @@ export default function BankruptcyIntake({
                       <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl flex gap-3 items-start">
                         <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                         <div className="flex-1">
-                          <p className="text-xs font-semibold text-amber-300 mb-1">Value is more than 90 days old — please update</p>
-                          <p className="text-xs text-amber-200/70 mb-2">Your property value was last verified over 90 days ago. Please click "Verify My Value with Zillow" above to get a current estimate, or visit <a href="https://www.zillow.com" target="_blank" rel="noopener noreferrer" className="underline text-amber-300">zillow.com</a> and update the value manually.</p>
-                          <a href="https://www.zillow.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
+                          <p className="text-xs font-semibold text-amber-400 mb-1">Value is more than 90 days old — please update</p>
+                          <p className="text-xs text-amber-200/70 mb-2">Your property value was last verified over 90 days ago. Please click "Verify My Value with Zillow" above to get a current estimate, or visit <a href="https://www.zillow.com" target="_blank" rel="noopener noreferrer" className="underline text-amber-400">zillow.com</a> and update the value manually.</p>
+                          <a href="https://www.zillow.com" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-400 transition-colors">
                             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                             Check current value on Zillow
                           </a>
@@ -2986,7 +3535,7 @@ export default function BankruptcyIntake({
                   options={[{value:"keep",label:"Keep — I want to keep this property and continue paying the mortgage"},{value:"surrender",label:"Surrender — I wish to give this property back to the lender"}]}/>
               </Field>
               {data.realPropIntent==="surrender" && (
-                <div className="mt-1 mb-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+                <div className="mt-1 mb-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400">
                   This property will be surrendered. The mortgage will not be factored into your plan funding requirements.
                 </div>
               )}
@@ -3005,6 +3554,65 @@ export default function BankruptcyIntake({
                   if (data.isOccupiedPrimary==="yes") u("expRentMortgage",v);
                 }} placeholder="Enter monthly payment" hasError={!!e("realPropMonthlyPayment")}/>
               </Field>
+              {/* Does the mortgage include property taxes + insurance (PITI)?
+                  Asked here in the Real Estate section so it sits with all
+                  the other property details. The same state field is read
+                  by Schedule D (auto-displayed) and Schedule J (read-only
+                  chip "Confirm" — see case 5 Housing section). */}
+              <Field label="Does your mortgage payment INCLUDE property taxes and homeowner's insurance?" hint="Most escrowed mortgages bundle taxes + insurance (called PITI). Check your monthly statement." error={e("mortgageIncludesInsurance")}>
+                <RadioGroup name="mortgIncIns" current={data.mortgageIncludesInsurance}
+                  onChange={v=>{
+                    u("mortgageIncludesInsurance", v);
+                    if (v === "both" || v === "taxonly") { u("expPropTax","0"); }
+                    if (v === "both" || v === "insonly") { u("expInsHome","0"); }
+                  }}
+                  error={e("mortgageIncludesInsurance")}
+                  options={[
+                    {value:"both", label:"Yes — both taxes & insurance are included (full PITI)"},
+                    {value:"taxonly", label:"Taxes only — I pay insurance separately"},
+                    {value:"insonly", label:"Insurance only — I pay taxes separately"},
+                    {value:"neither", label:"Neither — I pay taxes and insurance separately"},
+                  ]}/>
+              </Field>
+              {/* Mortgage-current + arrears inline with each mortgage creditor.
+                  Drives the attorney dashboard's Ch.7-vs-Ch.13 analysis:
+                  any non-zero arrears triggers a "Ch. 7 does not cure arrears
+                  — Ch. 13 may be required to save the home" warning and the
+                  arrears amount is added to the Ch.13 plan funding total
+                  (see AttorneyIntakeDashboard.tsx:662, 764). State shared
+                  with the housing-expenses block so editing either updates
+                  the other. */}
+              <Field label="Are you current on this mortgage?" error={e("mortgageCurrent")}>
+                <RadioGroup name="mortgCurrInProp" current={data.mortgageCurrent} onChange={v=>{
+                  u("mortgageCurrent", v);
+                  if (v === "yes") u("mortgageArrears", "0");
+                }} error={e("mortgageCurrent")}
+                  options={[{value:"yes",label:"Yes — current on all payments"},{value:"no",label:"No — behind on payments"}]}/>
+              </Field>
+              {data.mortgageCurrent === "no" && (
+                <>
+                  <Field label="How much are you behind on the mortgage?" hint="Total back payments owed. Ch.7 does NOT cure these — Ch.13 cures them over 3–5 years." error={e("mortgageArrears")}>
+                    <Input type="number" value={data.mortgageArrears} onChange={v=>u("mortgageArrears", v)} placeholder="Enter amount past due" hasError={!!e("mortgageArrears")}/>
+                  </Field>
+                  {/* Foreclosure question — placed with the rest of the
+                      real-property questions and shown only when the client
+                      is behind on the mortgage (a current-paying client by
+                      definition is not in foreclosure). */}
+                  <Field label="Is your house being foreclosed on right now?">
+                    <RadioGroup name="foreclosurePending" current={data.foreclosurePending}
+                      onChange={v=>u("foreclosurePending",v)}
+                      options={[{value:"yes",label:"Yes"},{value:"no",label:"No"},{value:"unknown",label:"Not sure"}]}/>
+                  </Field>
+                  {data.foreclosurePending==="yes" && (
+                    <div className="mb-3 p-2.5 rounded-lg bg-red-500/10 border border-red-500/30">
+                      <p className="text-xs text-red-300 font-bold mb-2"><span className="text-red-400">⚠ URGENT</span> — Filing <strong className="text-white">before the sale date</strong> stops the foreclosure. <strong>Don't wait.</strong></p>
+                      <Field label="When is the foreclosure sale date? (if you know)">
+                        <Input value={data.foreclosureDate} onChange={v=>u("foreclosureDate",v)} placeholder="MM/DD/YYYY"/>
+                      </Field>
+                    </div>
+                  )}
+                </>
+              )}
               {data.realPropType==="Mobile Home" && (
                 <>
                   <Field label="Do you pay lot or space rent for the land your mobile home sits on?" error={e("payLotSpaceRent")}>
@@ -3043,9 +3651,9 @@ export default function BankruptcyIntake({
                     error={e("realPropOwnershipType")}
                     options={
                       data.filingType==="joint"
-                        ? [{value:"debtor1",label:"Debtor 1 only"},{value:"debtor2",label:"Debtor 2 only"},{value:"both",label:"Owned jointly by both debtors"}]
+                        ? [{value:"debtor1",label:"Client 1 only"},{value:"debtor2",label:"Client 2 only"},{value:"both",label:"Owned jointly by both clients"}]
                         : data.filingType==="individual-nonfiling-spouse"
-                        ? [{value:"debtor1",label:"Debtor only (100%)"},{value:"spouse",label:"Non-filing spouse only (100%)"},{value:"both",label:"Owned jointly with non-filing spouse"}]
+                        ? [{value:"debtor1",label:"Client 1 only (100%)"},{value:"spouse",label:"Non-filing spouse only (100%)"},{value:"both",label:"Owned jointly with non-filing spouse"}]
                         : [{value:"debtor1",label:"Yes — 100% owned by me"},{value:"partial",label:"No — shared ownership with another person"}]
                     }
                   />
@@ -3053,51 +3661,51 @@ export default function BankruptcyIntake({
 
                 {(data.filingType==="joint"||data.filingType==="individual-nonfiling-spouse") && (data.realPropOwnershipType==="debtor1"||data.realPropOwnershipType==="spouse") && (
                   <>
-                    <Field label="Was this property owned before the marriage?" error={e("realPropOwnedBeforeMarriage")}>
+                    <Field label="Did you own this property before you got married?" error={e("realPropOwnedBeforeMarriage")}>
                       <RadioGroup
                         name="realPropOwnedBeforeMarriage"
                         current={data.realPropOwnedBeforeMarriage}
                         onChange={v=>{u("realPropOwnedBeforeMarriage",v); if(v==="no"){u("realPropMaritalFundsUsed","");u("realPropHasPrenup","");u("realPropInheritedOrGift","");u("realPropCommunityPropFlag",false);}}}
                         error={e("realPropOwnedBeforeMarriage")}
-                        options={[{value:"yes",label:"Yes — owned before marriage"},{value:"no",label:"No — acquired during marriage"},{value:"unknown",label:"Unsure"}]}
+                        options={[{value:"yes",label:"Yes — I had it before we got married"},{value:"no",label:"No — I got it after we got married"},{value:"unknown",label:"I'm not sure"}]}
                       />
                     </Field>
 
                     {data.realPropOwnedBeforeMarriage==="yes" && (
                       <>
-                        <Field label="Was this property inherited or received as a gift solely by one spouse?" error={e("realPropInheritedOrGift")}>
+                        <Field label="Was this property given to you as a gift or did you inherit it?" error={e("realPropInheritedOrGift")}>
                           <RadioGroup
                             name="realPropInheritedOrGift"
                             current={data.realPropInheritedOrGift}
                             onChange={v=>u("realPropInheritedOrGift",v)}
                             error={e("realPropInheritedOrGift")}
-                            options={[{value:"yes",label:"Yes — inherited or received as a gift to one spouse alone"},{value:"no",label:"No — purchased with separate property funds"},{value:"unsure",label:"Unsure"}]}
+                            options={[{value:"yes",label:"Yes — someone gave it to me or I inherited it"},{value:"no",label:"No — I bought it with my own money before getting married"},{value:"unsure",label:"I'm not sure"}]}
                           />
                         </Field>
-                        <Field label="Were any marital (community) funds ever used to pay for, improve, or maintain this property (e.g., mortgage payments, renovations, repairs made after marriage)?" error={e("realPropMaritalFundsUsed")}>
+                        <Field label="After you got married, did you ever use money you earned together to pay the mortgage, fix it up, or improve this property?" hint="For example, paying the mortgage from a joint bank account, or paying for repairs and renovations after the wedding." error={e("realPropMaritalFundsUsed")}>
                           <RadioGroup
                             name="realPropMaritalFundsUsed"
                             current={data.realPropMaritalFundsUsed}
                             onChange={v=>u("realPropMaritalFundsUsed",v)}
                             error={e("realPropMaritalFundsUsed")}
-                            options={[{value:"yes",label:"Yes — marital funds were used"},{value:"no",label:"No — only separate property funds were used"},{value:"unsure",label:"Unsure / some of both"}]}
+                            options={[{value:"yes",label:"Yes — we used money we earned during the marriage"},{value:"no",label:"No — only money I had from before the marriage"},{value:"unsure",label:"I'm not sure / a mix of both"}]}
                           />
                         </Field>
                         {(data.realPropMaritalFundsUsed==="yes"||data.realPropMaritalFundsUsed==="unsure") && (
                           <>
-                            <Field label="Is there a prenuptial (or postnuptial) agreement that designates this property as separate property?" error={e("realPropHasPrenup")}>
+                            <Field label="Did you and your spouse sign a prenup (or postnup) that says this property stays just yours?" hint="A prenup is a written agreement signed before the wedding. A postnup is signed after." error={e("realPropHasPrenup")}>
                               <RadioGroup
                                 name="realPropHasPrenup"
                                 current={data.realPropHasPrenup}
                                 onChange={v=>{u("realPropHasPrenup",v); u("realPropCommunityPropFlag",v==="no"||v==="unsure");}}
                                 error={e("realPropHasPrenup")}
-                                options={[{value:"yes",label:"Yes — there is a prenup or postnup protecting this as separate property"},{value:"no",label:"No agreement exists"},{value:"unsure",label:"Unsure"}]}
+                                options={[{value:"yes",label:"Yes — we signed a prenup or postnup that keeps it just mine"},{value:"no",label:"No, we didn't sign anything like that"},{value:"unsure",label:"I'm not sure"}]}
                               />
                             </Field>
                             {(data.realPropHasPrenup==="no"||data.realPropHasPrenup==="unsure") && (
                               <div className="mt-1 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex gap-2">
                                 <span className="text-red-400 flex-shrink-0">⚑</span>
-                                <span><strong>Attorney Review Required:</strong> Although this property was owned before marriage, the use of marital (community) funds without a protecting prenuptial agreement could mean it has been <em>transmuted</em> to community property in whole or in part. Your attorney must evaluate this before filing to determine accurate ownership and exemption eligibility.</span>
+                                <span><strong>Your attorney needs to look at this:</strong> Even though you owned this property before getting married, because you used money you earned together to pay for it — and you don't have a prenup — this property might now partly or fully belong to both of you. Your attorney will look at this before filing.</span>
                               </div>
                             )}
                           </>
@@ -3221,6 +3829,22 @@ export default function BankruptcyIntake({
                 <Field label="Monthly Mortgage Payment" hint="Auto-populates your expense schedule" error={e("secondMortgagePayment")}>
                   <Input type="number" value={data.secondMortgagePayment} onChange={v=>u("secondMortgagePayment",v)} placeholder="Enter monthly payment" hasError={!!e("secondMortgagePayment")}/>
                 </Field>
+                {/* Same arrears questions as the primary property — Ch.7
+                    won't cure arrears on the second property either; the
+                    attorney needs to see this in the Ch.13 plan-funding
+                    analysis. */}
+                <Field label="Are you current on this mortgage?" error={e("secondMortgageCurrent")}>
+                  <RadioGroup name="secMortgCurr" current={data.secondMortgageCurrent} onChange={v=>{
+                    u("secondMortgageCurrent", v);
+                    if (v === "yes") u("secondMortgageArrears", "0");
+                  }} error={e("secondMortgageCurrent")}
+                    options={[{value:"yes",label:"Yes — current on all payments"},{value:"no",label:"No — behind on payments"}]}/>
+                </Field>
+                {data.secondMortgageCurrent === "no" && (
+                  <Field label="Total amount past due (mortgage arrears)" hint="Total back payments owed on this property. Ch.7 does NOT cure arrears; Ch.13 cures them through the plan." error={e("secondMortgageArrears")}>
+                    <Input type="number" value={data.secondMortgageArrears} onChange={v=>u("secondMortgageArrears", v)} placeholder="Enter amount past due" hasError={!!e("secondMortgageArrears")}/>
+                  </Field>
+                )}
 
                 {/* Second Property Ownership */}
                 <div className="mt-3 pt-3 border-t border-slate-700/60">
@@ -3232,9 +3856,9 @@ export default function BankruptcyIntake({
                       onChange={v=>{u("secondPropOwnershipType",v); if(v!=="debtor1"&&v!=="spouse"){u("secondPropOwnedBeforeMarriage","");u("secondPropMaritalFundsUsed","");u("secondPropHasPrenup","");u("secondPropInheritedOrGift","");u("secondPropCommunityPropFlag",false);}}}
                       options={
                         data.filingType==="joint"
-                          ? [{value:"debtor1",label:"Debtor 1 only"},{value:"debtor2",label:"Debtor 2 only"},{value:"both",label:"Jointly by both debtors"}]
+                          ? [{value:"debtor1",label:"Client 1 only"},{value:"debtor2",label:"Client 2 only"},{value:"both",label:"Jointly by both clients"}]
                           : data.filingType==="individual-nonfiling-spouse"
-                          ? [{value:"debtor1",label:"Debtor only"},{value:"spouse",label:"Non-filing spouse only"},{value:"both",label:"Joint with non-filing spouse"}]
+                          ? [{value:"debtor1",label:"Client 1 only"},{value:"spouse",label:"Non-filing spouse only"},{value:"both",label:"Joint with non-filing spouse"}]
                           : [{value:"debtor1",label:"100% mine"},{value:"partial",label:"Shared with another person"}]
                       }
                     />
@@ -3340,7 +3964,7 @@ export default function BankruptcyIntake({
               )}
 
               {data.nfsAssets==="unsure" && (
-                <div className="mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-300 flex gap-2">
+                <div className="mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-xs text-amber-400 flex gap-2">
                   <span className="text-amber-400 flex-shrink-0">⚑</span>
                   <span><strong>Attorney Review Required:</strong> Please discuss your non-filing spouse's assets with your attorney before proceeding. Community property rules vary by state and the analysis can significantly affect your case.</span>
                 </div>
@@ -3354,19 +3978,16 @@ export default function BankruptcyIntake({
 
       case 4: return (
         <div>
-          <div className="mb-4 p-4 bg-slate-800/60 border border-slate-600 rounded-xl space-y-3">
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">Why all assets must be listed</p>
-              <p className="text-xs text-slate-400 leading-relaxed">Federal law requires that all assets be disclosed in your bankruptcy schedules, regardless of their value or whether you believe they are protected. Omitting an asset — even unintentionally — can create problems with your case. Your attorney and the bankruptcy trustee will review what you own to determine whether any assets are subject to exemptions or other protections.</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">Equity and exemptions for personal property</p>
-              <p className="text-xs text-slate-400 leading-relaxed">Just as with real estate, the equity in your vehicles and other assets matters. An exemption may allow you to keep property up to a certain dollar value. Common exemptions include those for motor vehicles, household goods, jewelry, tools of trade, and retirement accounts. Your attorney will determine which exemptions apply based on your state's laws.</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-slate-300 mb-1">The role of the bankruptcy trustee</p>
-              <p className="text-xs text-slate-400 leading-relaxed">The bankruptcy trustee is a court-appointed official responsible for reviewing your schedules and administering your case. The trustee may ask questions about your assets at the 341 Meeting of Creditors. Providing accurate, complete information now helps ensure that process goes smoothly.</p>
-            </div>
+          <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+            <p className="text-base text-white font-bold leading-relaxed">
+              List <strong className="text-amber-400">all personal property</strong> you own — vehicles, bank accounts, retirement, household goods, jewelry, tools, collectibles, etc.
+            </p>
+            <p className="text-base text-white font-bold leading-relaxed mt-2">
+              Also include <strong className="text-amber-400">future claims</strong> (lawsuits, insurance payouts, expected refunds) and <strong className="text-amber-400">money owed to you</strong>.
+            </p>
+            <p className="text-base text-amber-400 font-bold leading-relaxed mt-2">
+              Provide a fair value for each — even small items matter.
+            </p>
           </div>
           <SectionCard title="Vehicles & Titled Property — Schedule A/B" icon="🚗">
             <Field label="Do you own any vehicles or titled assets?" error={e("hasVehicles")}>
@@ -3430,7 +4051,7 @@ export default function BankruptcyIntake({
                       <>
                         {vi && (
                           <div className="mb-4 bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3">
-                            <p className="text-xs text-amber-300 mb-3">
+                            <p className="text-xs text-amber-400 mb-3">
                               <span className="font-semibold">Trustee notice:</span> Trustees typically use {vi.source} to verify vehicle values. Use the button below to fetch the current estimated value — it will auto-populate the field below.
                             </p>
                             <button
@@ -3481,9 +4102,9 @@ export default function BankruptcyIntake({
                           <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/40 rounded-xl flex gap-3 items-start">
                             <svg className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                             <div className="flex-1">
-                              <p className="text-xs font-semibold text-amber-300 mb-1">Value is more than 90 days old — please update</p>
+                              <p className="text-xs font-semibold text-amber-400 mb-1">Value is more than 90 days old — please update</p>
                               <p className="text-xs text-amber-200/70 mb-2">Your vehicle value was last verified over 90 days ago. Please click "{vi?.label || "Look Up Value"}" above to get a current estimate, or visit KBB directly to update the value.</p>
-                              <a href={vi?.url || "https://www.kbb.com/whats-my-car-worth/"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-300 transition-colors">
+                              <a href={vi?.url || "https://www.kbb.com/whats-my-car-worth/"} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 hover:text-amber-400 transition-colors">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
                                 Check current value on {vi?.source || "KBB"}
                               </a>
@@ -3551,19 +4172,86 @@ export default function BankruptcyIntake({
                       </>
                     );
                   })()}
+                  {/* Vehicle purchase date — drives two attorney issues:
+                      (1) purchased within 90 days → check lien perfection
+                          (under § 547, a perfection delay can be voidable;
+                           also relates to § 522(f) hanging-paragraph analysis)
+                      (2) owned > 910 days when financed → eligible for
+                          Ch.13 cramdown (§ 1325(a) hanging paragraph). */}
+                  <Field label="When did you purchase this vehicle?" hint="Approximate date is OK. Example: 'March 2022' or '06/15/2021'." error={errors[`veh_${i}_purchaseDate`]}>
+                    <Input type="date" value={veh.purchaseDate || ""}
+                      onChange={v=>uVehicle(i,"purchaseDate",v)}
+                      hasError={!!errors[`veh_${i}_purchaseDate`]}/>
+                  </Field>
+                  {(() => {
+                    if (!veh.purchaseDate) return null;
+                    const purchaseDate = new Date(veh.purchaseDate);
+                    if (isNaN(purchaseDate.getTime())) return null;
+                    const daysSincePurchase = Math.floor((Date.now() - purchaseDate.getTime()) / (1000*60*60*24));
+                    if (daysSincePurchase < 90) {
+                      return (
+                        <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                          <p className="text-sm text-red-200"><strong className="text-red-300">⚑ Flagged for attorney review.</strong> Purchased <strong className="text-white">within the last 90 days</strong> ({daysSincePurchase} day{daysSincePurchase===1?"":"s"} ago). Your attorney will verify the lender's lien perfection — late-perfected liens can be voidable under § 547.</p>
+                        </div>
+                      );
+                    }
+                    if (daysSincePurchase >= 910 && (veh.hasLoan === "yes" || veh.isLease === "loan")) {
+                      return (
+                        <div className="mb-3 p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                          <p className="text-sm text-blue-200"><strong className="text-blue-300">Good news:</strong> Owned <strong className="text-white">{Math.floor(daysSincePurchase/365)} year{Math.floor(daysSincePurchase/365)===1?"":"s"}</strong> ({daysSincePurchase} days). May be eligible for <strong className="text-amber-400">Ch.13 cramdown</strong> to current value (§ 1325(a) hanging paragraph). Your attorney will analyze.</p>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+
                   <Field label="What do you intend to do with this vehicle?" error={errors[`veh_${i}_intent`]}>
                     <RadioGroup name={`veh_${i}_intent`} current={veh.intent} onChange={v=>uVehicle(i,"intent",v)} error={errors[`veh_${i}_intent`]}
                       options={[{value:"keep",label:"Keep — I want to keep this vehicle and continue paying"},{value:"surrender",label:"Surrender — I wish to give this vehicle back to the lender"}]}/>
                   </Field>
                   {veh.intent==="surrender" && (
-                    <div className="mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-300">
+                    <div className="mt-1 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400">
                       This vehicle will be surrendered. Its loan will not be factored into your plan funding requirements.
                     </div>
                   )}
-                  <Field label="Is there a loan on this vehicle?" error={errors[`veh_${i}_hasLoan`]}>
-                    <RadioGroup name={`veh_${i}_loan`} current={veh.hasLoan} onChange={v=>uVehicle(i,"hasLoan",v)} error={errors[`veh_${i}_hasLoan`]}
-                      options={[{value:"yes",label:"Yes — there is a loan"},{value:"no",label:"No — owned free and clear"}]}/>
+                  {/* Handicap / disability placard — many states provide an
+                      enhanced motor-vehicle exemption for vehicles used by
+                      or equipped for a person with a disability. Flagged so
+                      the attorney can apply the higher exemption amount. */}
+                  <Field label="Do you have a handicap / disability placard for this vehicle?" hint="Example: a state-issued disabled-parking placard or license plate." error={errors[`veh_${i}_hasHandicapPlacard`]}>
+                    <RadioGroup name={`veh_${i}_hasHandicapPlacard`} current={veh.hasHandicapPlacard}
+                      onChange={v=>uVehicle(i,"hasHandicapPlacard",v)}
+                      error={errors[`veh_${i}_hasHandicapPlacard`]}
+                      options={[{value:"yes",label:"Yes — handicap placard or plate"},{value:"no",label:"No"}]}/>
                   </Field>
+                  {veh.hasHandicapPlacard === "yes" && (
+                    <div className="mt-1 mb-3 p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                      <p className="text-sm text-blue-200"><strong className="text-blue-300">Good news:</strong> The <strong className="text-amber-400">vehicle exemption amount is generally higher</strong> when the vehicle is used by or equipped for a person with a disability. Your attorney will apply the enhanced exemption.</p>
+                    </div>
+                  )}
+                  {/* Lease vs. loan vs. owned outright. Lease drives Schedule G
+                      (executory contracts) — flagged below when isLease=yes. */}
+                  <Field label="Is this vehicle a lease, financed (loan), or owned outright?" error={errors[`veh_${i}_isLease`]}>
+                    <RadioGroup name={`veh_${i}_isLease`} current={veh.isLease}
+                      onChange={v=>{
+                        uVehicle(i,"isLease",v);
+                        // Sync hasLoan so existing downstream code keeps working:
+                        // lease + financed both imply monthly payments are owed.
+                        if (v === "lease" || v === "loan") uVehicle(i,"hasLoan","yes");
+                        if (v === "owned") uVehicle(i,"hasLoan","no");
+                      }}
+                      error={errors[`veh_${i}_isLease`]}
+                      options={[
+                        {value:"lease",label:"Lease — I lease this vehicle"},
+                        {value:"loan",label:"Financed — there is a loan"},
+                        {value:"owned",label:"Owned free and clear — no payments"},
+                      ]}/>
+                  </Field>
+                  {veh.isLease === "lease" && (
+                    <div className="mb-3 p-2.5 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                      <p className="text-sm text-blue-200"><strong className="text-blue-300">Note:</strong> Leases are <strong className="text-white">executory contracts</strong> and will also be listed on <strong className="text-amber-400">Schedule G</strong>. Your attorney will decide whether to assume or reject the lease.</p>
+                    </div>
+                  )}
                   {veh.hasLoan==="yes" && (
                     <>
                       <Field label="Lender Name">
@@ -3599,9 +4287,9 @@ export default function BankruptcyIntake({
                         error={errors[`veh_${i}_ownershipType`]}
                         options={
                           data.filingType==="joint"
-                            ? [{value:"debtor1",label:"Debtor 1 only"},{value:"debtor2",label:"Debtor 2 only"},{value:"both",label:"Owned jointly by both debtors"}]
+                            ? [{value:"debtor1",label:"Client 1 only"},{value:"debtor2",label:"Client 2 only"},{value:"both",label:"Owned jointly by both clients"}]
                             : data.filingType==="individual-nonfiling-spouse"
-                            ? [{value:"debtor1",label:"Debtor only (100%)"},{value:"spouse",label:"Non-filing spouse only (100%)"},{value:"both",label:"Owned jointly with non-filing spouse"}]
+                            ? [{value:"debtor1",label:"Client 1 only (100%)"},{value:"spouse",label:"Non-filing spouse only (100%)"},{value:"both",label:"Owned jointly with non-filing spouse"}]
                             : [{value:"debtor1",label:"Yes — 100% owned by me"},{value:"partial",label:"No — I share ownership with another person"}]
                         }
                       />
@@ -3609,39 +4297,39 @@ export default function BankruptcyIntake({
 
                     {(data.filingType==="joint"||data.filingType==="individual-nonfiling-spouse") && (veh.ownershipType==="debtor1"||veh.ownershipType==="spouse") && (
                       <>
-                        <Field label="Was this vehicle owned before the marriage?" error={errors[`veh_${i}_ownedBeforeMarriage`]}>
+                        <Field label="Did you own this vehicle before you got married?" error={errors[`veh_${i}_ownedBeforeMarriage`]}>
                           <RadioGroup
                             name={`veh_${i}_ownedBeforeMarriage`}
                             current={veh.ownedBeforeMarriage}
                             onChange={v=>{ uVehicle(i,"ownedBeforeMarriage",v); if(v==="no"){ uVehicle(i,"maritalFundsUsed",""); uVehicle(i,"hasPrenup",""); uVehicle(i,"inheritedOrGift",""); } }}
                             error={errors[`veh_${i}_ownedBeforeMarriage`]}
-                            options={[{value:"yes",label:"Yes — owned before marriage"},{value:"no",label:"No — acquired during marriage"},{value:"unknown",label:"Unsure"}]}
+                            options={[{value:"yes",label:"Yes — I had it before we got married"},{value:"no",label:"No — I got it after we got married"},{value:"unknown",label:"I'm not sure"}]}
                           />
                         </Field>
 
                         {veh.ownedBeforeMarriage==="yes" && (
                           <>
-                            <Field label="Was this vehicle inherited or received as a gift?" error={errors[`veh_${i}_inheritedOrGift`]}>
+                            <Field label="Was this vehicle given to you as a gift or did you inherit it?" error={errors[`veh_${i}_inheritedOrGift`]}>
                               <RadioGroup
                                 name={`veh_${i}_inheritedOrGift`}
                                 current={veh.inheritedOrGift}
                                 onChange={v=>uVehicle(i,"inheritedOrGift",v)}
                                 error={errors[`veh_${i}_inheritedOrGift`]}
-                                options={[{value:"yes",label:"Yes — inherited or gifted to me alone"},{value:"no",label:"No — I purchased it"},{value:"unsure",label:"Unsure"}]}
+                                options={[{value:"yes",label:"Yes — someone gave it to me or I inherited it"},{value:"no",label:"No — I bought it myself"},{value:"unsure",label:"I'm not sure"}]}
                               />
                             </Field>
-                            <Field label="Were any marital (community) funds ever used to pay for, maintain, or improve this vehicle?" error={errors[`veh_${i}_maritalFundsUsed`]}>
+                            <Field label="After you got married, did you ever use money you earned together to pay for, fix, or upgrade this vehicle?" hint="For example, paying the loan from a joint bank account, or paying for repairs with money you made after the wedding." error={errors[`veh_${i}_maritalFundsUsed`]}>
                               <RadioGroup
                                 name={`veh_${i}_maritalFundsUsed`}
                                 current={veh.maritalFundsUsed}
                                 onChange={v=>uVehicle(i,"maritalFundsUsed",v)}
                                 error={errors[`veh_${i}_maritalFundsUsed`]}
-                                options={[{value:"yes",label:"Yes — marital funds were used"},{value:"no",label:"No — only separate property funds used"},{value:"unsure",label:"Unsure"}]}
+                                options={[{value:"yes",label:"Yes — we used money we earned during the marriage"},{value:"no",label:"No — only money I had from before the marriage"},{value:"unsure",label:"I'm not sure"}]}
                               />
                             </Field>
                             {(veh.maritalFundsUsed==="yes"||veh.maritalFundsUsed==="unsure") && (
                               <>
-                                <Field label="Is there a prenuptial agreement that designates this as separate property?" error={errors[`veh_${i}_hasPrenup`]}>
+                                <Field label="Did you and your spouse sign a prenup (or postnup) that says this vehicle stays just yours?" hint="A prenup is a written agreement signed before the wedding. A postnup is signed after." error={errors[`veh_${i}_hasPrenup`]}>
                                   <RadioGroup
                                     name={`veh_${i}_hasPrenup`}
                                     current={veh.hasPrenup}
@@ -3653,7 +4341,7 @@ export default function BankruptcyIntake({
                                 {(veh.hasPrenup==="no"||veh.hasPrenup==="unsure") && (
                                   <div className="mt-1 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-xs text-red-300 flex gap-2">
                                     <span className="text-red-400 flex-shrink-0">⚑</span>
-                                    <span><strong>Attorney Review Required:</strong> This vehicle may have been <em>transmuted</em> to community property because marital funds were used without a prenuptial agreement protecting it as separate property. Your attorney will need to evaluate this carefully before filing.</span>
+                                    <span><strong>Your attorney needs to look at this:</strong> Because you used money you earned together (during the marriage) to pay for this vehicle — and you don't have a prenup saying it's only yours — this vehicle might now belong to both of you under the law. Your attorney will look at this carefully before filing.</span>
                                   </div>
                                 )}
                               </>
@@ -3674,6 +4362,105 @@ export default function BankruptcyIntake({
                 </div>
               )}
             </>}
+          </SectionCard>
+
+          {/* Recreational Vehicles — motorcycles, ATVs/quads, boats, jet skis,
+              travel trailers, planes, snowmobiles, RVs, etc. Treated as
+              titled / Schedule A/B property; any with a loan auto-populates
+              Schedule D and Schedule J transportation downstream. */}
+          <SectionCard title="Recreational Vehicles & Watercraft — Schedule A/B" icon="🛥️">
+            <Field label="Do you own any motorcycles, quads / ATVs, boats, jet skis, travel trailers, RVs, planes, or other recreational vehicles?" error={e("hasRecreationalVehicles")}>
+              <RadioGroup name="hasRecreationalVehicles" current={data.hasRecreationalVehicles}
+                onChange={v=>u("hasRecreationalVehicles",v)} error={e("hasRecreationalVehicles")}
+                options={[{value:"yes",label:"Yes — I own recreational vehicles or watercraft"},{value:"no",label:"No — I do not own any"}]}/>
+            </Field>
+            {data.hasRecreationalVehicles==="yes" && (
+              <>
+                {(data.recreationalVehicles || []).map((rv, i) => (
+                  <div key={rv.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-4 mb-3">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Recreational Vehicle {i+1}</p>
+                      {(data.recreationalVehicles || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("recreationalVehicles", data.recreationalVehicles.filter(x => x.id !== rv.id))}
+                          className="text-xs text-red-400 hover:text-red-300 border border-red-400/30 px-2 py-1 rounded-lg">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Type" error={errors[`rv_${i}_type`]}>
+                      <Select value={rv.type}
+                        onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,type:v}:x))}
+                        hasError={!!errors[`rv_${i}_type`]}
+                        options={["Motorcycle","ATV / Quad","Boat","Jet Ski / PWC","Travel Trailer","Motorhome / RV","Airplane","Snowmobile","Other"]}
+                        placeholder="Select type..."/>
+                    </Field>
+                    <div className="grid grid-cols-3 gap-3">
+                      <Field label="Year">
+                        <Input value={rv.year || ""}
+                          onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,year:v}:x))}
+                          placeholder="e.g. 2018"/>
+                      </Field>
+                      <Field label="Make">
+                        <Input value={rv.make || ""}
+                          onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,make:v}:x))}
+                          placeholder="e.g. Yamaha"/>
+                      </Field>
+                      <Field label="Model">
+                        <Input value={rv.model || ""}
+                          onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,model:v}:x))}
+                          placeholder="e.g. WaveRunner"/>
+                      </Field>
+                    </div>
+                    <Field label="Estimated Market Value" error={errors[`rv_${i}_value`]}>
+                      <Input type="number" value={rv.value || ""}
+                        onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,value:v}:x))}
+                        placeholder="Enter amount" hasError={!!errors[`rv_${i}_value`]}/>
+                    </Field>
+                    <Field label="What do you intend to do with this?">
+                      <RadioGroup name={`rv_${i}_intent`} current={rv.intent}
+                        onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,intent:v}:x))}
+                        options={[{value:"keep",label:"Keep — continue paying"},{value:"surrender",label:"Surrender — give back to lender"}]}/>
+                    </Field>
+                    <Field label="Is there a loan on this item?" error={errors[`rv_${i}_hasLoan`]}>
+                      <RadioGroup name={`rv_${i}_hasLoan`} current={rv.hasLoan}
+                        onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,hasLoan:v}:x))}
+                        error={errors[`rv_${i}_hasLoan`]}
+                        options={[{value:"yes",label:"Yes — there is a loan"},{value:"no",label:"No — owned free and clear"}]}/>
+                    </Field>
+                    {rv.hasLoan === "yes" && (
+                      <>
+                        <Field label="Lender Name">
+                          <Input value={rv.lenderName || ""}
+                            onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,lenderName:v}:x))}
+                            placeholder="e.g. Bank of the West, Sheffield Financial"/>
+                        </Field>
+                        <div className="grid grid-cols-2 gap-3 mt-1">
+                          <Field label="Loan Balance" error={errors[`rv_${i}_loanBalance`]}>
+                            <Input type="number" value={rv.loanBalance || ""}
+                              onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,loanBalance:v}:x))}
+                              placeholder="Enter amount" hasError={!!errors[`rv_${i}_loanBalance`]}/>
+                          </Field>
+                          <Field label="Monthly Payment" error={errors[`rv_${i}_monthlyPayment`]}>
+                            <Input type="number" value={rv.monthlyPayment || ""}
+                              onChange={v=>u("recreationalVehicles", data.recreationalVehicles.map((x,idx)=>idx===i?{...x,monthlyPayment:v}:x))}
+                              placeholder="Enter amount" hasError={!!errors[`rv_${i}_monthlyPayment`]}/>
+                          </Field>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("recreationalVehicles", [...(data.recreationalVehicles || []), { id: Date.now(), type:"", make:"", model:"", year:"", value:"", hasLoan:"", lenderName:"", loanBalance:"", monthlyPayment:"", intent:"keep" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-sm font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mb-2">
+                  <span className="text-lg">+</span> Add Another Recreational Vehicle
+                </button>
+                {(data.recreationalVehicles || []).filter(rv => rv.hasLoan === "yes" && parseFloat(rv.loanBalance) > 0).length > 0 && (
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300">
+                    📋 Financed recreational vehicles will auto-populate Schedule D (secured creditors) and Schedule J transportation.
+                  </div>
+                )}
+              </>
+            )}
           </SectionCard>
 
           <SectionCard title="Bank & Deposit Accounts — Schedule A/B" icon="🏦">
@@ -3702,6 +4489,62 @@ export default function BankruptcyIntake({
             </>}
           </SectionCard>
 
+          {/* Health Savings (HSA) / Flexible Spending (FSA) — these aren't
+              bank accounts and aren't retirement, but they ARE assets that
+              must be listed on Schedule A/B. Exemption treatment varies. */}
+          <SectionCard title="Health Savings (HSA) / Flexible Spending (FSA) Accounts — Schedule A/B" icon="🩺">
+            <Field label="Do you have a Health Savings Account (HSA) or Flexible Spending Account (FSA)?" hint="Example: an HSA tied to a high-deductible health plan, or an FSA you fund through payroll deductions." error={e("hasHsaFsa")}>
+              <RadioGroup name="hasHsaFsa" current={data.hasHsaFsa}
+                onChange={v=>u("hasHsaFsa",v)} error={e("hasHsaFsa")}
+                options={[{value:"yes",label:"Yes — I have an HSA or FSA"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.hasHsaFsa === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.hsaFsaEntries || []).map((acc, i) => (
+                  <div key={acc.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Account #{i+1}</p>
+                      {(data.hsaFsaEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("hsaFsaEntries", data.hsaFsaEntries.filter(x => x.id !== acc.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Account type" error={errors[`hsafsa_${i}_accountType`]}>
+                      <Select value={acc.accountType}
+                        onChange={v=>u("hsaFsaEntries", data.hsaFsaEntries.map((x,idx)=>idx===i?{...x,accountType:v}:x))}
+                        hasError={!!errors[`hsafsa_${i}_accountType`]}
+                        options={[
+                          {value:"hsa",label:"HSA — Health Savings Account"},
+                          {value:"fsa",label:"FSA — Flexible Spending Account"},
+                          {value:"hra",label:"HRA — Health Reimbursement Arrangement"},
+                          {value:"dcfsa",label:"Dependent-Care FSA"},
+                        ]}
+                        placeholder="Pick a type..."/>
+                    </Field>
+                    <Field label="Provider / administrator" error={errors[`hsafsa_${i}_provider`]}>
+                      <Input value={acc.provider || ""}
+                        onChange={v=>u("hsaFsaEntries", data.hsaFsaEntries.map((x,idx)=>idx===i?{...x,provider:v}:x))}
+                        placeholder="e.g. Fidelity, HealthEquity, your employer's plan administrator"
+                        hasError={!!errors[`hsafsa_${i}_provider`]}/>
+                    </Field>
+                    <Field label="Current balance" error={errors[`hsafsa_${i}_balance`]}>
+                      <Input type="number" value={acc.balance || ""}
+                        onChange={v=>u("hsaFsaEntries", data.hsaFsaEntries.map((x,idx)=>idx===i?{...x,balance:v}:x))}
+                        placeholder="Enter amount"
+                        hasError={!!errors[`hsafsa_${i}_balance`]}/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("hsaFsaEntries", [...(data.hsaFsaEntries || []), { id: Date.now(), accountType:"", provider:"", balance:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-sm font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-lg">+</span> Add Another Account
+                </button>
+              </div>
+            )}
+          </SectionCard>
+
           <SectionCard title="Retirement Accounts — Schedule A/B" icon="🏛️">
             <Field label="Do you have any retirement or pension accounts?" error={e("hasRetirement")}>
               <RadioGroup name="hasRetirement" current={data.hasRetirement} onChange={v=>u("hasRetirement",v)} error={e("hasRetirement")}
@@ -3724,7 +4567,7 @@ export default function BankruptcyIntake({
                           options={RETIREMENT_TYPES.map(t=>({value:t.value,label:t.label}))} placeholder="Select account type..."/>
                       </Field>
                       {acctDef && (
-                        <div className={`p-2 rounded-lg mb-3 text-xs ${acctDef.exempt===false?"bg-red-400/10 border border-red-400/30 text-red-300":acctDef.erisa||acctDef.iraCapApplies?"bg-green-400/10 border border-green-400/30 text-green-300":"bg-amber-400/10 border border-amber-400/30 text-amber-300"}`}>
+                        <div className={`p-2 rounded-lg mb-3 text-xs ${acctDef.exempt===false?"bg-red-400/10 border border-red-400/30 text-red-300":acctDef.erisa||acctDef.iraCapApplies?"bg-green-400/10 border border-green-400/30 text-green-300":"bg-amber-400/10 border border-amber-400/30 text-amber-400"}`}>
                           {acctDef.note}
                         </div>
                       )}
@@ -3775,7 +4618,7 @@ export default function BankruptcyIntake({
                       <Input type="date" value={pol.purchaseDate} onChange={v=>uArr("lifePolicies",i,"purchaseDate",v)} hasError={!!errors[`lp_${i}_purchaseDate`]}/>
                     </Field>
                     {pol.purchaseDate && isCashValue && (
-                      <div className={`p-3 rounded-lg mb-3 text-xs border ${seasoned ? "bg-blue-400/10 border-blue-400/30 text-blue-300" : "bg-amber-400/10 border-amber-400/30 text-amber-300"}`}>
+                      <div className={`p-3 rounded-lg mb-3 text-xs border ${seasoned ? "bg-blue-400/10 border-blue-400/30 text-blue-300" : "bg-amber-400/10 border-amber-400/30 text-amber-400"}`}>
                         {seasoned
                           ? <>ℹ️ Owned approximately <strong>{days?.toLocaleString()} days</strong> — attorney will review applicable protections.</>
                           : <>⚠️ Owned approximately <strong>{days?.toLocaleString()} days</strong> ({Math.round((days||0)/30)} months) — 2-year seasoning rule may apply. Attorney review required.</>
@@ -3823,7 +4666,7 @@ export default function BankruptcyIntake({
                       <Input type="date" value={ann.purchaseDate} onChange={v=>uArr("annuities",i,"purchaseDate",v)} hasError={!!errors[`an_${i}_purchaseDate`]}/>
                     </Field>
                     {ann.purchaseDate && (
-                      <div className={`p-3 rounded-lg mb-3 text-xs border ${seasoned ? "bg-blue-400/10 border-blue-400/30 text-blue-300" : "bg-amber-400/10 border-amber-400/30 text-amber-300"}`}>
+                      <div className={`p-3 rounded-lg mb-3 text-xs border ${seasoned ? "bg-blue-400/10 border-blue-400/30 text-blue-300" : "bg-amber-400/10 border-amber-400/30 text-amber-400"}`}>
                         {seasoned
                           ? <>ℹ️ Owned approximately <strong>{days?.toLocaleString()} days</strong>.</>
                           : <>⚠️ Owned approximately <strong>{days?.toLocaleString()} days</strong> ({Math.round((days||0)/30)} months) — attorney review recommended.</>
@@ -3842,14 +4685,80 @@ export default function BankruptcyIntake({
           </SectionCard>
 
           <SectionCard title="Claims & Money Owed — Schedule A/B" icon="⚖️">
-            <Field label="Do you have any pending claims, lawsuits, or money owed to you?" error={e("hasPendingClaims")}>
+            <Field label="Do you have any pending claims, lawsuits, or money owed to you?" hint="Example: a lawsuit you filed against someone, money a court ordered someone to pay you, an insurance claim still in process." error={e("hasPendingClaims")}>
               <RadioGroup name="hasClaims" current={data.hasPendingClaims} onChange={v=>u("hasPendingClaims",v)} error={e("hasPendingClaims")}
                 options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
             {data.hasPendingClaims==="yes" && (
-              <Field label="Describe the claim(s)" error={e("pendingClaimsDesc")}>
-                <Input value={data.pendingClaimsDesc} onChange={v=>u("pendingClaimsDesc",v)} placeholder="Nature of the claim, who owes you, status" hasError={!!e("pendingClaimsDesc")}/>
-              </Field>
+              <>
+                <Field label="Value of the claim" error={e("pendingClaimsValue")}>
+                  {data.pendingClaimsValueUnknown ? (
+                    <div className="flex items-center justify-between bg-slate-800/40 border border-slate-600 rounded-xl px-4 py-2.5">
+                      <span className="text-slate-300 text-sm">Value unknown — attorney will estimate</span>
+                      <button type="button" onClick={()=>u("pendingClaimsValueUnknown",false)} className="text-xs text-amber-400 hover:text-amber-300 underline">Enter amount instead</button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <Input type="number" value={data.pendingClaimsValue}
+                          onChange={v=>u("pendingClaimsValue",v)}
+                          placeholder="Enter dollar amount" hasError={!!e("pendingClaimsValue")}/>
+                      </div>
+                      <button type="button"
+                        onClick={()=>{u("pendingClaimsValueUnknown",true); u("pendingClaimsValue","");}}
+                        className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap">
+                        Unknown
+                      </button>
+                    </div>
+                  )}
+                </Field>
+                <Field label="Details — what is the claim about?" error={e("pendingClaimsDesc")}>
+                  <Input value={data.pendingClaimsDesc} onChange={v=>u("pendingClaimsDesc",v)} placeholder="Nature of the claim, who owes you, status" hasError={!!e("pendingClaimsDesc")}/>
+                </Field>
+                <div className="mt-1 mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-200"><strong className="text-red-300">⚑ Flagged for attorney review.</strong> Pending claims you may collect on are <strong className="text-white">assets</strong> of the bankruptcy estate and must be valued and disclosed on Schedule A/B.</p>
+                </div>
+              </>
+            )}
+
+            {/* Pending personal injury claims — flagged for attorney review. */}
+            <Field label="Do you have any pending personal injury claims?" hint="Car accident, slip and fall, medical malpractice, workplace injury, etc." error={e("hasPiClaimInProperty")}>
+              <RadioGroup name="hasPiClaimInProperty" current={data.hasPiClaimInProperty}
+                onChange={v=>u("hasPiClaimInProperty",v)} error={e("hasPiClaimInProperty")}
+                options={[{value:"yes",label:"Yes — I have a personal injury claim"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.hasPiClaimInProperty === "yes" && (
+              <>
+                <Field label="Briefly describe the personal injury claim" error={e("piClaimInPropertyDetails")}>
+                  <Input value={data.piClaimInPropertyDetails || ""}
+                    onChange={v=>u("piClaimInPropertyDetails",v)}
+                    placeholder="What happened, when, who's involved, attorney name if any"
+                    hasError={!!e("piClaimInPropertyDetails")}/>
+                </Field>
+                <div className="mt-1 mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-[11px] text-red-300"><strong className="text-red-400">⚑ Flagged for attorney review.</strong> Personal injury claims are <strong className="text-white">assets</strong> that must be listed and may qualify for an exemption. We'll ask more details on the next page.</p>
+                </div>
+              </>
+            )}
+
+            {/* Inheritance / estate / trust expectations — flagged for review. */}
+            <Field label="Do you expect to receive any money from a will, trust, or estate?" hint="Inheritance from a parent, payout from a trust, life-insurance beneficiary, etc." error={e("expectsInheritance")}>
+              <RadioGroup name="expectsInheritance" current={data.expectsInheritance}
+                onChange={v=>u("expectsInheritance",v)} error={e("expectsInheritance")}
+                options={[{value:"yes",label:"Yes — I expect to receive something"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.expectsInheritance === "yes" && (
+              <>
+                <Field label="Briefly describe what you expect to receive" error={e("inheritanceDetails")}>
+                  <Input value={data.inheritanceDetails || ""}
+                    onChange={v=>u("inheritanceDetails",v)}
+                    placeholder="Who passed / set up the trust, expected amount, when"
+                    hasError={!!e("inheritanceDetails")}/>
+                </Field>
+                <div className="mt-1 mb-3 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-[11px] text-red-300"><strong className="text-red-400">⚑ Flagged for attorney review.</strong> Money you'll receive from a <strong className="text-white">will, trust, or estate</strong> within <strong className="text-white">180 days after filing</strong> belongs to the bankruptcy estate (11 U.S.C. § 541(a)(5)). Your attorney will time the filing carefully.</p>
+                </div>
+              </>
             )}
             <Field label="Do you have a pending Social Security claim or appeal?" error={e("hasSsClaim")}>
               <RadioGroup name="hasSsClaim" current={data.hasSsClaim} onChange={v=>u("hasSsClaim",v)} error={e("hasSsClaim")}
@@ -3880,7 +4789,7 @@ export default function BankruptcyIntake({
                   </div>
                 )}
                 {data.ssBackPaySegregated==="no" && (
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-300 leading-relaxed">
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-400 leading-relaxed">
                     <p className="font-bold mb-1">Attorney Review Required — Co-Mingling Risk</p>
                     <p>When Social Security back pay is mixed ("co-mingled") with other funds, the protection under 42 U.S.C. § 407 may be lost. Your attorney must review this. <strong>Do not spend or move this money until you speak with your attorney.</strong></p>
                   </div>
@@ -3893,14 +4802,68 @@ export default function BankruptcyIntake({
                 <p>If you are awarded Social Security back pay before your bankruptcy case is filed, <strong>deposit it into its own dedicated bank account and do not mix it with any other funds.</strong> Social Security back pay kept in a segregated account is protected from the bankruptcy trustee under federal law (42 U.S.C. § 407). Your attorney will advise you on this.</p>
               </div>
             )}
-            <Field label="Is anyone owing you money (loans, deposits, tax refunds, etc.)?" error={e("hasMoneyOwed")}>
+            <Field label="Does anyone owe you money?" hint="Loans, security deposits, tax refunds, wages owed, etc." error={e("hasMoneyOwed")}>
               <RadioGroup name="hasMoneyOwed" current={data.hasMoneyOwed} onChange={v=>u("hasMoneyOwed",v)} error={e("hasMoneyOwed")}
                 options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
             {data.hasMoneyOwed==="yes" && (
-              <Field label="Describe what is owed and by whom" error={e("moneyOwedDesc")}>
-                <Input value={data.moneyOwedDesc} onChange={v=>u("moneyOwedDesc",v)} placeholder="e.g. $2,000 personal loan to brother" hasError={!!e("moneyOwedDesc")}/>
-              </Field>
+              <div className="mt-2 space-y-2">
+                {(data.moneyOwedEntries || []).map((mo, i) => (
+                  <div key={mo.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Money Owed #{i+1}</p>
+                      {(data.moneyOwedEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("moneyOwedEntries", data.moneyOwedEntries.filter(x => x.id !== mo.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="What type of money is owed to you?" error={errors[`moneyOwed_${i}_sourceType`]}>
+                      <Select value={mo.sourceType}
+                        onChange={v=>u("moneyOwedEntries", data.moneyOwedEntries.map((x,idx)=>idx===i?{...x,sourceType:v}:x))}
+                        hasError={!!errors[`moneyOwed_${i}_sourceType`]}
+                        options={[
+                          "Personal loan to family / friend",
+                          "Security deposit (rental, utility)",
+                          "Tax refund (federal / state)",
+                          "Wages or commissions owed by an employer",
+                          "Business loan or receivable",
+                          "Court-ordered judgment in your favor",
+                          "Settlement payment",
+                          "Insurance claim payout",
+                          "Other",
+                        ]}
+                        placeholder="Pick a type..."/>
+                    </Field>
+                    <Field label="Who owes it to you and why?" error={errors[`moneyOwed_${i}_sourceDescription`]}>
+                      <Input value={mo.sourceDescription || ""}
+                        onChange={v=>u("moneyOwedEntries", data.moneyOwedEntries.map((x,idx)=>idx===i?{...x,sourceDescription:v}:x))}
+                        placeholder="e.g. Brother John — loan for car repair"
+                        hasError={!!errors[`moneyOwed_${i}_sourceDescription`]}/>
+                    </Field>
+                    <Field label="How much is owed?" error={errors[`moneyOwed_${i}_amount`]}>
+                      <Input type="number" value={mo.amount || ""}
+                        onChange={v=>u("moneyOwedEntries", data.moneyOwedEntries.map((x,idx)=>idx===i?{...x,amount:v}:x))}
+                        placeholder="Enter amount" hasError={!!errors[`moneyOwed_${i}_amount`]}/>
+                    </Field>
+                    <Field label="Do you expect to actually collect this money?" error={errors[`moneyOwed_${i}_expectsToCollect`]}>
+                      <RadioGroup name={`moneyOwed_${i}_expectsToCollect`} current={mo.expectsToCollect}
+                        onChange={v=>u("moneyOwedEntries", data.moneyOwedEntries.map((x,idx)=>idx===i?{...x,expectsToCollect:v}:x))}
+                        error={errors[`moneyOwed_${i}_expectsToCollect`]}
+                        options={[
+                          {value:"yes",label:"Yes — I expect to collect"},
+                          {value:"no",label:"No — I don't expect to get it back"},
+                          {value:"unsure",label:"Not sure"},
+                        ]}/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("moneyOwedEntries", [...(data.moneyOwedEntries || []), { id: Date.now(), sourceType:"", sourceDescription:"", amount:"", expectsToCollect:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another
+                </button>
+              </div>
             )}
           </SectionCard>
 
@@ -3909,7 +4872,7 @@ export default function BankruptcyIntake({
             <ExpenseField label="Household Goods & Furniture" hint="Sofas, beds, tables, appliances, kitchenware, and other furnishings" error={e("householdGoodsValue")} value={data.householdGoodsValue} onChange={v=>u("householdGoodsValue",v)} badge="Fair Market Value"/>
             <ExpenseField label="Electronics" hint="Phones, computers, tablets, TVs, gaming consoles, cameras, and similar devices" error={e("electronicsValue")} value={data.electronicsValue} onChange={v=>u("electronicsValue",v)} badge="Fair Market Value"/>
             <ExpenseField label="Jewelry & Watches" hint="Rings, necklaces, bracelets, watches — include all household members' items" error={e("jewelryValue")} value={data.jewelryValue} onChange={v=>u("jewelryValue",v)} badge="Fair Market Value"/>
-            <ExpenseField label="Work Tools & Equipment" hint="Hand tools, power tools, professional equipment used for work or trade" error={e("toolsValue")} value={data.toolsValue} onChange={v=>u("toolsValue",v)} badge="Fair Market Value"/>
+            <ExpenseField label="Personal Handtools and Equipment" hint="Household hand & power tools only. List business tools in the Business Property section below." error={e("toolsValue")} value={data.toolsValue} onChange={v=>u("toolsValue",v)} badge="Fair Market Value"/>
             <Field label="Do you own stocks, bonds, or brokerage accounts?" error={e("hasStocks")}>
               <RadioGroup name="hasStocks" current={data.hasStocks} onChange={v=>u("hasStocks",v)} error={e("hasStocks")}
                 options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
@@ -4017,7 +4980,7 @@ export default function BankruptcyIntake({
               <button onClick={()=>addArr("businessAssets",emptyBusinessAsset)} className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-sm font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 mb-2">
                 <span className="text-lg">+</span> Add Another Business Asset
               </button>
-              <div className="p-3 rounded-xl bg-amber-400/5 border border-amber-400/20 text-xs text-amber-300 leading-relaxed">
+              <div className="p-3 rounded-xl bg-amber-400/5 border border-amber-400/20 text-xs text-amber-400 leading-relaxed">
                 <p className="font-bold mb-1">Attorney Will Review</p>
                 <p>Your attorney will evaluate whether any business exemptions apply (e.g., tools of the trade) and how business assets affect your case strategy.</p>
               </div>
@@ -4058,31 +5021,62 @@ export default function BankruptcyIntake({
 
         return (
         <div>
-          <div className="mb-4 p-4 bg-slate-800/60 border border-slate-600 rounded-xl">
-            <p className="text-xs font-semibold text-slate-300 mb-1">Why expenses matter</p>
-            <p className="text-xs text-slate-400 leading-relaxed">Your monthly expenses are filed on Official Form 106J (Schedule J) and are a required part of your bankruptcy case. They are also used in the Means Test to calculate your disposable income — the amount left over after subtracting allowed expenses from your income. The IRS publishes "National Standards" for certain categories (food, housekeeping, clothing, personal care, and miscellaneous) that are used as benchmarks. Please enter your actual monthly amounts as accurately as possible. Your attorney will review all figures.</p>
+          <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+            <p className="text-base text-white font-bold leading-relaxed">
+              Your expenses go on <strong className="text-amber-400">Official Form 106J (Schedule J)</strong> and into the <strong className="text-amber-400">Means Test</strong> to figure out your <strong className="text-amber-400">disposable income</strong>.
+            </p>
+            <p className="text-base text-white font-bold leading-relaxed mt-2">
+              For food, housekeeping, clothing, personal care, and miscellaneous, the IRS publishes <strong className="text-amber-400">National Standards</strong>. We'll show you those numbers as a guide.
+            </p>
+            <p className="text-base text-amber-400 font-bold leading-relaxed mt-2">
+              Enter your actual monthly amounts. If you spend more than the IRS standard, that's fine — we'll flag it for attorney review.
+            </p>
           </div>
-          <div className="mb-4 bg-cyan-400/5 border border-cyan-400/20 rounded-xl px-4 py-3">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold text-cyan-300 mb-1">IRS Standards Auto-Fill{housingStd ? ` — ${data.county} County, ${data.state}` : ""}</p>
-                <p className="text-xs text-slate-400">Based on your <span className="text-white font-semibold">{hhSizeExp}-person household</span>, the 2025 IRS National Standards for Food, Housekeeping, Apparel, Personal Care, and Miscellaneous total <span className="text-cyan-400 font-semibold">${irsTotal.toLocaleString()}/mo</span>.
-                  {housingStd && <span> Location-based standards are also available for utilities and transportation (housing bundle: <span className="text-cyan-400 font-semibold">${housingStd.bundle.toLocaleString()}/mo</span>).</span>}
-                  {!housingStd && IRS_COVERED_STATES.includes(data.state) && !data.county && <span className="text-amber-400 ml-1">Enter your county to unlock location-based utility and transportation standards.</span>}
-                </p>
+          {/* Up-front choice — manual entry vs. IRS-standards auto-fill.
+              Auto-fill only touches the IRS-bound categories (food,
+              housekeeping, clothing, personal care, misc, utilities, gas/
+              maintenance, vehicle insurance). Rent / mortgage / car payment
+              / childcare / education stay manual so the client enters their
+              actual numbers for those. */}
+          {!data.expenseFillMode ? (
+            <div className="mb-4 p-5 bg-slate-800/60 border border-slate-600 rounded-xl">
+              <p className="text-base font-bold text-amber-400 mb-2 text-center">How would you like to fill out your expenses?</p>
+              <p className="text-base text-white font-bold leading-relaxed mb-4 text-center">
+                Pick one — you can change individual amounts later.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button type="button"
+                  onClick={()=>u("expenseFillMode","manual")}
+                  className="text-left p-4 rounded-xl border border-slate-600 bg-slate-900/40 hover:border-amber-400 hover:bg-amber-400/5 transition-all">
+                  <p className="text-base font-bold text-white mb-1">✍️ Enter my actual amounts</p>
+                  <p className="text-sm text-slate-400 leading-relaxed">I'll type each amount myself.</p>
+                </button>
+                <button type="button"
+                  onClick={()=>{ u("expenseFillMode","auto"); autoFillIrsStandards(); }}
+                  className="text-left p-4 rounded-xl border border-amber-400/50 bg-amber-400/10 hover:border-amber-400 hover:bg-amber-400/20 transition-all">
+                  <p className="text-base font-bold text-amber-400 mb-1">⚡ Auto-fill using standard amounts</p>
+                  <p className="text-sm text-amber-200/90 leading-relaxed">
+                    Pre-fill food, household, utilities, clothing, personal care, gas, and vehicle insurance using the IRS standard for a <strong>{hhSizeExp}-person household</strong>.
+                  </p>
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={autoFillIrsStandards}
-                className="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold bg-cyan-400/10 border border-cyan-400/40 text-cyan-400 hover:bg-cyan-400/20 hover:border-cyan-400 px-3 py-2 rounded-lg transition-all"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                Auto-fill all
-              </button>
+              <p className="text-sm text-slate-500 leading-relaxed mt-4">
+                <strong className="text-amber-400">Note:</strong> Rent / mortgage, car payment, childcare, and children's education are <strong>not auto-filled</strong> — you'll enter your actual amounts for those.
+              </p>
             </div>
-          </div>
-          <p className="text-xs text-slate-400 mb-4 p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
-            All fields are required — enter <span className="text-white font-semibold">$0.00</span> for any that do not apply.
+          ) : (
+            <div className="mb-4 px-4 py-2.5 bg-slate-800/60 border border-slate-600 rounded-xl flex items-center justify-between">
+              <p className="text-sm text-white font-bold">
+                {data.expenseFillMode === "auto"
+                  ? <>⚡ Using <strong className="text-amber-400">IRS standard</strong> amounts. You can edit any line.</>
+                  : <>✍️ <strong className="text-amber-400">Manual entry</strong> — enter each amount yourself.</>}
+              </p>
+              <button type="button" onClick={()=>u("expenseFillMode","")}
+                className="text-xs text-amber-400 hover:text-amber-400 underline">Change</button>
+            </div>
+          )}
+          <p className="text-base text-white font-bold leading-relaxed mb-4 p-3 bg-slate-800/60 border border-slate-700 rounded-xl">
+            All fields are required — if a category does not apply, click <strong className="text-amber-400">I don't have this</strong>.
           </p>
           <SectionCard title="Housing — Primary Residence" icon="🏠">
             {data.realPropMonthlyPayment && data.isOccupiedPrimary==="yes" ? (
@@ -4124,38 +5118,118 @@ export default function BankruptcyIntake({
                 ))}
               </div>
             )}
-            <Field label="Is this a mortgage or rent payment?" hint="This determines whether we ask about taxes, insurance, and payment status" error={e("mortgageIncludesInsurance")}>
-              <RadioGroup name="mortgPITI" current={data.mortgageIncludesInsurance} onChange={v=>{
-                u("mortgageIncludesInsurance",v);
-                if (v==="renter") { u("expPropTax","0"); u("expHoa","0"); u("expHomeMaintenance","0"); }
-                if (v==="both"||v==="taxonly") { u("expPropTax","0"); }
-                if (v==="both"||v==="insonly") { u("expInsHome","0"); }
-              }} error={e("mortgageIncludesInsurance")}
-                options={[
-                  {value:"both", label:"Mortgage — includes both taxes & insurance (full PITI)"},
-                  {value:"taxonly", label:"Mortgage — taxes included, insurance paid separately"},
-                  {value:"insonly", label:"Mortgage — insurance included, taxes paid separately"},
-                  {value:"neither", label:"Mortgage — I pay taxes and insurance separately"},
-                  {value:"renter", label:"Rent — I am renting my residence"},
-                ]}/>
-            </Field>
-            {data.mortgageIncludesInsurance && data.mortgageIncludesInsurance!=="renter" && (
-              <Field label="Are you current on your mortgage?" error={e("mortgageCurrent")}>
-                <RadioGroup name="mortgCurr" current={data.mortgageCurrent} onChange={v=>u("mortgageCurrent",v)} error={e("mortgageCurrent")}
-                  options={[{value:"yes",label:"Yes — current"},{value:"no",label:"No — behind on payments"}]}/>
+            {/* Other-secured-creditor payments tied to real-property collateral
+                (e.g., a HELOC, second-trust deed, or property tax lien added
+                in Schedule D's "other secured" list). Read-only — source of
+                truth is the Schedule D otherSecuredCreditors entries. */}
+            {(data.otherSecuredCreditors || []).filter(sc => (sc.collateralAssetKey || "").startsWith("realProperty:")).filter(sc => parseFloat(sc.monthlyPayment) > 0).length > 0 && (
+              <div className="mb-4">
+                <label className="block text-xs font-semibold uppercase tracking-widest text-amber-400 mb-2">Other Secured Housing Payments</label>
+                {(data.otherSecuredCreditors || []).filter(sc => (sc.collateralAssetKey || "").startsWith("realProperty:")).filter(sc => parseFloat(sc.monthlyPayment) > 0).map(sc => (
+                  <div key={`osc-rp-${sc.id}`} className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-4 py-3 mb-2">
+                    <div>
+                      <p className="text-sm font-semibold text-green-400">${parseFloat(sc.monthlyPayment).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</p>
+                      <p className="text-xs text-slate-400">{sc.creditorName || "Other secured creditor"}{sc.collateralDescription ? ` — ${sc.collateralDescription}` : ""}</p>
+                    </div>
+                    <span className="text-xs text-slate-500">from Schedule D</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Mortgage PITI question — asked in the Real Estate section
+                (Schedule A/B). The answer carries here via the shared
+                `mortgageIncludesInsurance` state field. We show a read-only
+                chip with a "Confirm" button so the client can verify the
+                answer is still correct. If they need to change it, the
+                Change link sends them back to the picker below. For renters
+                and clients without a mortgage we still show the picker. */}
+            {data.mortgageIncludesInsurance && data.mortgageIncludesInsurance !== "renter" ? (
+              <div className="mb-4">
+                <label className="block text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">Mortgage Type</label>
+                <div className="flex items-center justify-between w-full bg-slate-700/60 border border-green-500/40 rounded-lg px-4 py-3">
+                  <span className="text-green-400 font-bold text-sm">
+                    {data.mortgageIncludesInsurance === "both" && "Mortgage includes BOTH taxes & insurance (PITI)"}
+                    {data.mortgageIncludesInsurance === "taxonly" && "Mortgage includes taxes only — insurance paid separately"}
+                    {data.mortgageIncludesInsurance === "insonly" && "Mortgage includes insurance only — taxes paid separately"}
+                    {data.mortgageIncludesInsurance === "neither" && "Mortgage does NOT include taxes or insurance — both paid separately"}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-400 text-xs">from Real Property section</span>
+                    <button type="button"
+                      onClick={()=>u("mortgageIncludesInsurance","")}
+                      className="text-xs font-semibold text-amber-400 hover:text-amber-300 underline">
+                      Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <Field label="Is this a mortgage or rent payment?" hint="This determines whether we ask about taxes, insurance, and payment status" error={e("mortgageIncludesInsurance")}>
+                <RadioGroup name="mortgPITI" current={data.mortgageIncludesInsurance} onChange={v=>{
+                  u("mortgageIncludesInsurance",v);
+                  if (v==="renter") { u("expPropTax","0"); u("expHoa","0"); u("expHomeMaintenance","0"); }
+                  if (v==="both"||v==="taxonly") { u("expPropTax","0"); }
+                  if (v==="both"||v==="insonly") { u("expInsHome","0"); }
+                }} error={e("mortgageIncludesInsurance")}
+                  options={[
+                    {value:"both", label:"Mortgage — includes both taxes & insurance (full PITI)"},
+                    {value:"taxonly", label:"Mortgage — taxes included, insurance paid separately"},
+                    {value:"insonly", label:"Mortgage — insurance included, taxes paid separately"},
+                    {value:"neither", label:"Mortgage — I pay taxes and insurance separately"},
+                    {value:"renter", label:"Rent — I am renting my residence"},
+                  ]}/>
               </Field>
             )}
-            {data.mortgageCurrent==="no" && (
-              <Field label="Total Mortgage Arrears" error={e("mortgageArrears")}>
-                <Input type="number" value={data.mortgageArrears} onChange={v=>u("mortgageArrears",v)} placeholder="Enter amount" hasError={!!e("mortgageArrears")}/>
-              </Field>
+            {/* Mortgage-current + arrears questions used to live here in the
+                Expenses section. Moved to the Real Property section so the
+                question sits with the mortgage creditor it asks about, and
+                so the same arrears questions exist for BOTH the primary and
+                the second property. State keys (mortgageCurrent / mortgageArrears)
+                are unchanged — answers entered in the property section flow
+                through to the same expense calculations downstream. If the
+                client somehow reaches the expenses section without having
+                answered them in the property section, a read-only summary
+                shows the current value: */}
+            {data.mortgageIncludesInsurance && data.mortgageIncludesInsurance!=="renter" && data.mortgageCurrent && (
+              <div className="mb-4 p-3 bg-slate-800/40 border border-slate-700 rounded-xl text-xs">
+                <p className="text-slate-400">
+                  Mortgage current?{" "}
+                  <span className="text-white font-semibold">
+                    {data.mortgageCurrent === "yes" ? "Yes — current" : "No — behind on payments"}
+                  </span>
+                  {data.mortgageCurrent === "no" && data.mortgageArrears && (
+                    <> · <span className="text-amber-400 font-semibold">${parseFloat(data.mortgageArrears).toLocaleString()} arrears</span></>
+                  )}
+                </p>
+                <p className="text-slate-500 mt-1 text-[10px]">Edit in the Real Property section above.</p>
+              </div>
             )}
             {(data.mortgageIncludesInsurance==="insonly"||data.mortgageIncludesInsurance==="neither") && (
               <ExpenseField label="Monthly Property Tax" error={e("expPropTax")} value={data.expPropTax} onChange={v=>u("expPropTax",v)}/>
             )}
             {data.mortgageIncludesInsurance!=="renter" && (
               <>
-                <ExpenseField label="HOA / Condo Fees" error={e("expHoa")} value={data.expHoa} onChange={v=>u("expHoa",v)}/>
+                {/* HOA — auto-pulled from Schedule A/B when the client said
+                    "Yes I have an HOA" + entered monthly dues. Read-only here
+                    so we don't ask the same question twice. */}
+                {data.hasHoa === "yes" && parseFloat(data.hoaMonthlyDues) > 0 ? (
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">HOA / Condo Fees</label>
+                    <div className="flex items-center justify-between w-full bg-slate-700/60 border border-green-500/40 rounded-lg px-4 py-3">
+                      <span className="text-green-400 font-bold">${parseFloat(data.hoaMonthlyDues || 0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                      <span className="text-slate-400 text-xs">auto-filled from Real Property{data.hoaName ? ` — ${data.hoaName}` : ""}</span>
+                    </div>
+                  </div>
+                ) : data.hasHoa === "no" ? (
+                  <div className="mb-4">
+                    <label className="block text-xs font-semibold uppercase tracking-widest text-amber-400 mb-1">HOA / Condo Fees</label>
+                    <div className="flex items-center gap-2 w-full bg-slate-700/60 border border-slate-600 rounded-lg px-4 py-3">
+                      <span className="text-slate-400 text-sm">No HOA — confirmed in Real Property section</span>
+                    </div>
+                  </div>
+                ) : (
+                  <ExpenseField label="HOA / Condo Fees" error={e("expHoa")} value={data.expHoa} onChange={v=>u("expHoa",v)}/>
+                )}
                 <ExpenseField label="Home Maintenance & Repairs" error={e("expHomeMaintenance")} value={data.expHomeMaintenance} onChange={v=>u("expHomeMaintenance",v)}/>
               </>
             )}
@@ -4188,22 +5262,118 @@ export default function BankruptcyIntake({
           </SectionCard>
           <SectionCard title="Transportation" icon="🚗">
             {transportStd && !transportStd.isTransit && (
-              <p className="text-xs text-slate-400 mb-3">IRS transport standard ({numVehicles} vehicle{numVehicles!==1?"s":""}, {data.county} County): <span className="text-cyan-400 font-semibold">${transportStd.bundle.toLocaleString()}/mo total</span></p>
+              <p className="text-sm text-slate-400 mb-3">IRS transport standard ({numVehicles} vehicle{numVehicles!==1?"s":""}, {data.county} County): <span className="text-cyan-400 font-semibold">${transportStd.bundle.toLocaleString()}/mo total</span></p>
             )}
-            <IrsExpenseField label="Gas, Fuel & Vehicle Maintenance" category={null} hhSize={hhSizeExp} value={data.expGasFuel} onChange={v=>u("expGasFuel",v)} overrideReason={data.expGasFuelOverride} onOverrideReasonChange={v=>u("expGasFuelOverride",v)} error={e("expGasFuel")} customStandard={transportStd && !transportStd.isTransit ? transportStd.fuelMaintenance : null} customLabel={transportStd && !transportStd.isTransit ? `${data.county} County area — fuel, maintenance, repairs, registration, parking` : null}/>
-            <ExpenseField label="Vehicle Maintenance & Repairs (if separate)" error={e("expCarMaintenance")} value={data.expCarMaintenance} onChange={v=>u("expCarMaintenance",v)}/>
+            {/* Gas/fuel/maintenance — only relevant if the client owns or
+                regularly drives a vehicle. Single consolidated field; the
+                separate "Vehicle Maintenance & Repairs" line was removed
+                because it overlapped with the IRS bundle anyway. */}
+            {numVehicles > 0 && (
+              <IrsExpenseField label="Gas, Fuel & Vehicle Maintenance" hint="Combined: fuel + repairs + maintenance + registration + parking" category={null} hhSize={hhSizeExp} value={data.expGasFuel} onChange={v=>u("expGasFuel",v)} overrideReason={data.expGasFuelOverride} onOverrideReasonChange={v=>u("expGasFuelOverride",v)} error={e("expGasFuel")} customStandard={transportStd && !transportStd.isTransit ? transportStd.fuelMaintenance : null} customLabel={transportStd && !transportStd.isTransit ? `${data.county} County area — fuel, maintenance, repairs, registration, parking` : null}/>
+            )}
             <ExpenseField label="Public Transit / Rideshare" error={e("expPublicTransit")} value={data.expPublicTransit} onChange={v=>u("expPublicTransit",v)}/>
-            {financedVehicles().length===0 && (
-              <div className="p-3 bg-slate-700/50 rounded-lg text-xs text-slate-400">No financed vehicles on file.</div>
+
+            {/* Borrowed-vehicle / shared-use disclosure. Flagged for attorney
+                review — they may need to document the arrangement and decide
+                whether to allow an "ownership cost" for means-test purposes
+                if the client effectively pays for someone else's vehicle. */}
+            <div className="mt-3 pt-3 border-t border-slate-700/60">
+              <Field label="Do you regularly use a vehicle that belongs to someone else?" hint="A parent's car, spouse's truck, a co-signed vehicle in another name, etc." error={e("borrowedVehicleUse")}>
+                <RadioGroup name="borrowedVehicleUse" current={data.borrowedVehicleUse}
+                  onChange={v=>u("borrowedVehicleUse",v)} error={e("borrowedVehicleUse")}
+                  options={[{value:"yes",label:"Yes — I drive someone else's vehicle"},{value:"no",label:"No"}]}/>
+              </Field>
+              {data.borrowedVehicleUse === "yes" && (
+                <>
+                  <Field label="Do you pay any costs for that vehicle (gas, payment, insurance, maintenance)?" error={e("borrowedVehiclePays")}>
+                    <RadioGroup name="borrowedVehiclePays" current={data.borrowedVehiclePays}
+                      onChange={v=>u("borrowedVehiclePays",v)} error={e("borrowedVehiclePays")}
+                      options={[{value:"yes",label:"Yes — I help pay for it"},{value:"no",label:"No — the other person pays everything"}]}/>
+                  </Field>
+                  {data.borrowedVehiclePays === "yes" && (
+                    <>
+                      <Field label="How much do you pay each month?" error={e("borrowedVehicleAmount")}>
+                        <Input type="number" value={data.borrowedVehicleAmount}
+                          onChange={v=>u("borrowedVehicleAmount",v)}
+                          placeholder="e.g. 200" hasError={!!e("borrowedVehicleAmount")}/>
+                      </Field>
+                      <Field label="Whose vehicle is it and what do you pay for?" error={e("borrowedVehicleDescription")}>
+                        <Input value={data.borrowedVehicleDescription}
+                          onChange={v=>u("borrowedVehicleDescription",v)}
+                          placeholder="e.g. Mom's 2018 Honda — I cover gas and insurance"
+                          hasError={!!e("borrowedVehicleDescription")}/>
+                      </Field>
+                    </>
+                  )}
+                  <div className="mt-1 mb-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-sm text-amber-200/95"><strong className="text-amber-400">⚑ Flagged for attorney review.</strong> Driving someone else's vehicle can affect the IRS transportation allowance on the means test. Your attorney will document the arrangement.</p>
+                  </div>
+                </>
+              )}
+            </div>
+            {/* Auto-pulled financed vehicle payments (read-only, source = Schedule A/B). */}
+            {financedVehicles().length===0 && (data.recreationalVehicles || []).filter(rv => rv.hasLoan === "yes" && parseFloat(rv.monthlyPayment) > 0).length === 0 && (
+              <div className="p-3 bg-slate-700/50 rounded-lg text-xs text-slate-400">No financed vehicles or recreational vehicles on file.</div>
             )}
-            {financedVehicles().map((v,i)=>(
+            {financedVehicles().map((v)=>(
               <Field key={v.id} label={`${v.year} ${v.make} ${v.model} — Monthly Loan Payment`}>
-                <div className="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-amber-400 font-semibold text-sm">
-                  ${(parseFloat(v.monthlyPayment)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo
+                <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                  <span className="text-green-400 font-semibold text-sm">${(parseFloat(v.monthlyPayment)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                  <span className="text-xs text-slate-500">auto-filled from Vehicles</span>
+                </div>
+              </Field>
+            ))}
+            {/* Auto-pulled recreational vehicle payments (read-only, source =
+                Recreational Vehicles & Watercraft section). Same auto-fill
+                pattern as primary vehicles so the client isn't asked twice. */}
+            {(data.recreationalVehicles || []).filter(rv => rv.hasLoan === "yes" && parseFloat(rv.monthlyPayment) > 0).map((rv) => (
+              <Field key={`rv-${rv.id}`} label={`${rv.year || ""} ${rv.make || ""} ${rv.model || ""}`.trim() ? `${rv.year} ${rv.make} ${rv.model} (${rv.type}) — Monthly Loan Payment` : `${rv.type || "Recreational vehicle"} — Monthly Loan Payment`}>
+                <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                  <span className="text-green-400 font-semibold text-sm">${(parseFloat(rv.monthlyPayment)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                  <span className="text-xs text-slate-500">auto-filled from Recreational Vehicles</span>
+                </div>
+              </Field>
+            ))}
+            {/* Other-secured-creditor payments tied to a vehicle / RV
+                collateral (e.g., a co-signed car loan added on Schedule D).
+                These also belong in Schedule J transportation. Read-only —
+                source of truth is the Schedule D other-secured list. */}
+            {(data.otherSecuredCreditors || []).filter(sc => (sc.collateralAssetKey || "").startsWith("vehicle:") || (sc.collateralAssetKey || "").startsWith("rv:")).filter(sc => parseFloat(sc.monthlyPayment) > 0).map((sc) => (
+              <Field key={`osc-v-${sc.id}`} label={`${sc.collateralDescription || "Other secured vehicle creditor"} — Monthly Payment`}>
+                <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                  <span className="text-green-400 font-semibold text-sm">${(parseFloat(sc.monthlyPayment)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                  <span className="text-xs text-slate-500">auto-filled from Schedule D ({sc.creditorName || "creditor"})</span>
                 </div>
               </Field>
             ))}
           </SectionCard>
+
+          {/* Other Secured Payments — auto-pulled from Schedule D when the
+              client added "other secured creditors" with monthly payments
+              and the collateral wasn't a vehicle or RV (those land in
+              Transportation above). Avoids re-asking. */}
+          {(() => {
+            const otherSecured = (data.otherSecuredCreditors || []).filter(sc => {
+              const key = sc.collateralAssetKey || "";
+              const monthly = parseFloat(sc.monthlyPayment) || 0;
+              return monthly > 0 && !key.startsWith("vehicle:") && !key.startsWith("rv:") && !key.startsWith("realProperty:");
+            });
+            if (data.securedListComplete !== "no" || otherSecured.length === 0) return null;
+            return (
+              <SectionCard title="Other Secured Creditor Payments" icon="🔒">
+                <p className="text-base text-white font-bold mb-2">These payments came from <strong className="text-amber-400">Schedule D</strong> — you do <strong className="text-amber-400">not</strong> need to re-enter them.</p>
+                {otherSecured.map(sc => (
+                  <Field key={`osc-other-${sc.id}`} label={`${sc.creditorName || "Other secured creditor"}${sc.collateralDescription ? ` — ${sc.collateralDescription}` : ""}`}>
+                    <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                      <span className="text-green-400 font-semibold text-sm">${(parseFloat(sc.monthlyPayment)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                      <span className="text-xs text-slate-500">auto-filled from Schedule D</span>
+                    </div>
+                  </Field>
+                ))}
+              </SectionCard>
+            );
+          })()}
+
           <SectionCard title="Medical & Dental" icon="🏥">
             <ExpenseField label="Out-of-Pocket Medical & Dental" hint="Co-pays, prescriptions, not reimbursed" error={e("expMedical")} value={data.expMedical} onChange={v=>u("expMedical",v)}/>
           </SectionCard>
@@ -4223,13 +5393,92 @@ export default function BankruptcyIntake({
           <SectionCard title="Children & Family" icon="👨‍👩‍👧">
             <ExpenseField label="Childcare" error={e("expChildcare")} value={data.expChildcare} onChange={v=>u("expChildcare",v)}/>
             <ExpenseField label="Children's Education" error={e("expChildEducation")} value={data.expChildEducation} onChange={v=>u("expChildEducation",v)}/>
-            <ExpenseField label="Ongoing Child Support Paid (monthly — paid outside any plan)" error={e("expAlimonyPaid")} value={data.expAlimonyPaid} onChange={v=>u("expAlimonyPaid",v)}/>
-            <ExpenseField label="Ongoing Alimony / Spousal Support Paid (monthly — paid outside any plan)" error={e("expSupportOthers")} value={data.expSupportOthers} onChange={v=>u("expSupportOthers",v)}/>
+            {(() => {
+              // Auto-pull ongoing child support / alimony payments from the
+              // Priority Debts section. Only direct-paid (or "both") amounts
+              // belong on Schedule J; paycheck-deducted amounts are already
+              // netted out of gross income on the paystub and would
+              // double-count as an expense if shown here.
+              const csEntries = (data.priorityDebts || []).filter(d => d.type === "back_child_support" && parseFloat(d.monthlyPayment) > 0 && d.paymentMethod);
+              const alEntries = (data.priorityDebts || []).filter(d => d.type === "back_alimony" && parseFloat(d.monthlyPayment) > 0 && d.paymentMethod);
+
+              const renderEntry = (d, label) => {
+                const amount = parseFloat(d.monthlyPayment) || 0;
+                const directOrBoth = d.paymentMethod === "direct" || d.paymentMethod === "both";
+                return (
+                  <Field key={d.id} label={`${label}${d.creditor ? ` — ${d.creditor}` : ""}`}>
+                    {directOrBoth ? (
+                      <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                        <span className="text-green-400 font-semibold text-sm">${amount.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                        <span className="text-xs text-slate-500">{d.paymentMethod === "both" ? "auto-filled from Schedule E — partly paid directly" : "auto-filled from Schedule E — paid directly"}</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between bg-slate-800/60 border border-slate-600 rounded-lg px-3 py-2">
+                        <span className="text-slate-500 text-xs italic">${amount.toLocaleString()}/mo — wage-deducted, NOT a Schedule J expense</span>
+                        <span className="text-xs text-slate-500">from paycheck</span>
+                      </div>
+                    )}
+                  </Field>
+                );
+              };
+
+              if (csEntries.length === 0 && alEntries.length === 0) {
+                return (
+                  <>
+                    <ExpenseField label="Ongoing Child Support Paid (monthly — paid outside any plan)" error={e("expAlimonyPaid")} value={data.expAlimonyPaid} onChange={v=>u("expAlimonyPaid",v)}/>
+                    <ExpenseField label="Ongoing Alimony / Spousal Support Paid (monthly — paid outside any plan)" error={e("expSupportOthers")} value={data.expSupportOthers} onChange={v=>u("expSupportOthers",v)}/>
+                  </>
+                );
+              }
+              return (
+                <>
+                  {csEntries.map(d => renderEntry(d, "Ongoing Child Support Paid"))}
+                  {alEntries.map(d => renderEntry(d, "Ongoing Alimony / Spousal Support Paid"))}
+                  {csEntries.length === 0 && (
+                    <ExpenseField label="Ongoing Child Support Paid (monthly — paid outside any plan)" error={e("expAlimonyPaid")} value={data.expAlimonyPaid} onChange={v=>u("expAlimonyPaid",v)}/>
+                  )}
+                  {alEntries.length === 0 && (
+                    <ExpenseField label="Ongoing Alimony / Spousal Support Paid (monthly — paid outside any plan)" error={e("expSupportOthers")} value={data.expSupportOthers} onChange={v=>u("expSupportOthers",v)}/>
+                  )}
+                </>
+              );
+            })()}
           </SectionCard>
           <SectionCard title="Other Monthly Expenses" icon="📋">
             <ExpenseField label="Recreation & Entertainment" error={e("expRecreation")} value={data.expRecreation} onChange={v=>u("expRecreation",v)}/>
             <ExpenseField label="Charitable Contributions" error={e("expCharitable")} value={data.expCharitable} onChange={v=>u("expCharitable",v)}/>
-            <ExpenseField label="Additional Tax Payments" error={e("expAddlTaxes")} value={data.expAddlTaxes} onChange={v=>u("expAddlTaxes",v)}/>
+            {(() => {
+              // Auto-pull IRS / state tax installment payments from priority
+              // debts. Direct-pay only — wage-deducted (e.g., voluntary
+              // additional withholding) is already netted out of gross income.
+              const taxEntries = (data.priorityDebts || []).filter(d => d.type === "back_taxes" && parseFloat(d.monthlyPayment) > 0 && d.paymentMethod);
+              if (taxEntries.length === 0) {
+                return <ExpenseField label="Additional Tax Payments" error={e("expAddlTaxes")} value={data.expAddlTaxes} onChange={v=>u("expAddlTaxes",v)}/>;
+              }
+              return (
+                <>
+                  {taxEntries.map(d => {
+                    const amount = parseFloat(d.monthlyPayment) || 0;
+                    const directOrBoth = d.paymentMethod === "direct" || d.paymentMethod === "both";
+                    return (
+                      <Field key={d.id} label={`Tax Installment — ${d.creditor || `${d.taxYear || ""} Tax Year`}`}>
+                        {directOrBoth ? (
+                          <div className="flex items-center justify-between bg-slate-700/60 border border-green-500/40 rounded-lg px-3 py-2">
+                            <span className="text-green-400 font-semibold text-sm">${amount.toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/mo</span>
+                            <span className="text-xs text-slate-500">{d.paymentMethod === "both" ? "auto-filled from Schedule E — partly paid directly" : "auto-filled from Schedule E — paid directly"}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between bg-slate-800/60 border border-slate-600 rounded-lg px-3 py-2">
+                            <span className="text-slate-500 text-xs italic">${amount.toLocaleString()}/mo — wage-deducted, NOT a Schedule J expense</span>
+                            <span className="text-xs text-slate-500">from paycheck</span>
+                          </div>
+                        )}
+                      </Field>
+                    );
+                  })}
+                </>
+              );
+            })()}
             <ExpenseField label="Government Fines, Court Fees & Restitution" error={e("expGovFines")} value={data.expGovFines} onChange={v=>u("expGovFines",v)}/>
             {(parseFloat(data.expGovFines)||0) > 0 && (
               <div className="ml-0 mb-3 bg-amber-400/5 border border-amber-400/20 rounded-xl p-4">
@@ -4274,7 +5523,564 @@ export default function BankruptcyIntake({
 
       case 6: return (
         <div>
-          <SectionCard title="Business Debts — Schedule E/F" icon="🏢">
+          {/* Schedule D — Secured Consumer Debts.
+              Auto-aggregates secured creditors disclosed in earlier sections:
+                • Real-property mortgages (primary + second)
+                • Financed vehicles
+                • Financed recreational vehicles
+              Then asks if the auto-list is complete. If not, the client adds
+              additional secured creditors (judgment liens, IRS liens, security
+              agreements on personal property, family-co-signed loans, etc.)
+              via otherSecuredCreditors[]. We don't re-ask balance/payment for
+              items the client already entered — the displayed amounts are
+              read-only summaries of those prior answers. */}
+          <SectionCard title="Secured Consumer Debts — Schedule D" icon="🔒">
+            {(() => {
+              const securedRows = [];
+              const num = (v) => parseFloat(v) || 0;
+
+              // Primary residence mortgage
+              if (data.ownsRealEstate === "yes" && (num(data.mortgageBalance) > 0 || num(data.realPropMonthlyPayment) > 0)) {
+                securedRows.push({
+                  source: "Real Property",
+                  creditor: data.mortgageLender || "Primary mortgage lender",
+                  collateral: data.realPropAddress || "Primary residence",
+                  balance: num(data.mortgageBalance),
+                  monthlyPayment: num(data.realPropMonthlyPayment),
+                  arrears: num(data.mortgageArrears),
+                });
+              }
+              // Second property mortgage
+              if (data.secondProperty === "yes" && (num(data.secondMortgage) > 0 || num(data.secondMortgagePayment) > 0)) {
+                securedRows.push({
+                  source: "Real Property",
+                  creditor: data.secondMortgageLender || "Second-property mortgage lender",
+                  collateral: data.secondPropAddress || "Second / investment property",
+                  balance: num(data.secondMortgage),
+                  monthlyPayment: num(data.secondMortgagePayment),
+                  arrears: num(data.secondMortgageArrears),
+                });
+              }
+              // Property liens (judgment / tax / HOA liens disclosed under real property)
+              if (data.hasLiens === "yes") {
+                (data.liens || []).forEach((l) => {
+                  if (num(l.balance) > 0 || num(l.monthlyPayment) > 0) {
+                    securedRows.push({
+                      source: "Real Property — Lien",
+                      creditor: l.lienHolder || "Lien holder",
+                      collateral: l.lienType || "Real property lien",
+                      balance: num(l.balance),
+                      monthlyPayment: num(l.monthlyPayment),
+                      arrears: 0,
+                    });
+                  }
+                });
+              }
+              // Financed vehicles
+              if (data.hasVehicles === "yes") {
+                (data.vehicles || []).forEach((v) => {
+                  if (v.hasLoan === "yes" && (num(v.loanBalance) > 0 || num(v.monthlyPayment) > 0)) {
+                    securedRows.push({
+                      source: "Vehicle",
+                      creditor: v.lenderName || "Vehicle lender",
+                      collateral: `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim() || "Vehicle",
+                      balance: num(v.loanBalance),
+                      monthlyPayment: num(v.monthlyPayment),
+                      arrears: 0,
+                    });
+                  }
+                });
+              }
+              // Financed recreational vehicles
+              if (data.hasRecreationalVehicles === "yes") {
+                (data.recreationalVehicles || []).forEach((rv) => {
+                  if (rv.hasLoan === "yes" && (num(rv.loanBalance) > 0 || num(rv.monthlyPayment) > 0)) {
+                    securedRows.push({
+                      source: "Recreational",
+                      creditor: rv.lenderName || "Lender",
+                      collateral: `${rv.year || ""} ${rv.make || ""} ${rv.model || ""}`.trim() || rv.type || "Recreational vehicle",
+                      balance: num(rv.loanBalance),
+                      monthlyPayment: num(rv.monthlyPayment),
+                      arrears: 0,
+                    });
+                  }
+                });
+              }
+
+              const totalBalance = securedRows.reduce((a, r) => a + r.balance, 0);
+
+              return (
+                <>
+                  <p className="text-sm font-semibold text-white mb-1">Do you have any secured debts?</p>
+                  <p className="text-[11px] text-slate-400 mb-3">
+                    <strong className="text-amber-400">Secured debts</strong> have something backing them — like a house, car, or boat. We already pulled these in from earlier — you do <strong className="text-white">not</strong> need to enter them again.
+                  </p>
+
+                  {securedRows.length === 0 ? (
+                    <div className="p-3 bg-slate-800/40 border border-slate-700 rounded-xl text-xs text-slate-500 italic mb-3">
+                      No secured creditors auto-pulled from earlier sections. If you have any secured debts, add them below.
+                    </div>
+                  ) : (
+                    <div className="border border-slate-700 rounded-xl overflow-hidden mb-3">
+                      <table className="w-full text-xs">
+                        <thead className="bg-slate-800/60">
+                          <tr className="text-left text-slate-400 uppercase tracking-widest text-[10px]">
+                            <th className="px-3 py-2">Creditor</th>
+                            <th className="px-3 py-2">Collateral</th>
+                            <th className="px-3 py-2 text-right">Balance</th>
+                            <th className="px-3 py-2 text-right">Monthly</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {securedRows.map((r, idx) => (
+                            <tr key={idx} className="border-t border-slate-700/60 text-slate-200">
+                              <td className="px-3 py-2">
+                                <div className="font-semibold">{r.creditor}</div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-widest">{r.source}</div>
+                              </td>
+                              <td className="px-3 py-2 text-slate-300">{r.collateral}</td>
+                              <td className="px-3 py-2 text-right tabular-nums">${r.balance.toLocaleString("en-US",{maximumFractionDigits:0})}{r.arrears > 0 && <div className="text-[10px] text-amber-400">+${r.arrears.toLocaleString()} arrears</div>}</td>
+                              <td className="px-3 py-2 text-right tabular-nums text-slate-400">{r.monthlyPayment > 0 ? `$${r.monthlyPayment.toLocaleString()}/mo` : "—"}</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-slate-600 bg-slate-800/40 font-bold">
+                            <td className="px-3 py-2 text-slate-300" colSpan={2}>Total secured balance</td>
+                            <td className="px-3 py-2 text-right tabular-nums text-amber-400" colSpan={2}>${totalBalance.toLocaleString("en-US",{maximumFractionDigits:0})}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Mortgage PITI question lives in the Real Estate section
+                      (Schedule A/B) alongside the mortgage creditor + monthly
+                      payment. The same `mortgageIncludesInsurance` state
+                      carries the answer over to Schedule J. */}
+
+                  {/* Vehicle-specific confirmation — user request: ask if there
+                      are any OTHER vehicle loans (e.g., co-signed, family member
+                      on title, vehicle not yet disclosed). */}
+                  <Field label="Do you owe any OTHER vehicle / recreational-vehicle loans not already listed above?" error={e("hasOtherVehicleLoans")}>
+                    <RadioGroup name="hasOtherVehicleLoans"
+                      current={data.hasOtherVehicleLoans}
+                      onChange={v=>u("hasOtherVehicleLoans",v)}
+                      error={e("hasOtherVehicleLoans")}
+                      options={[
+                        {value:"no",label:"No — the vehicles / recreational items listed above are all of them"},
+                        {value:"yes",label:"Yes — I have other vehicle loans not listed (e.g., co-signed)"},
+                      ]}/>
+                  </Field>
+                  {data.hasOtherVehicleLoans === "yes" && (
+                    <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-[11px] text-amber-400">
+                      Please go back to the <strong>Vehicles</strong> or <strong>Recreational Vehicles</strong> section above and add the missing loan(s). Auto-pulled items are the source of truth — adding them in the right section keeps Schedule J and the vehicle valuation consistent.
+                    </div>
+                  )}
+
+                  {/* General confirmation — does the auto-list cover everything? */}
+                  <Field label="Does the list above include ALL of your secured creditors?" error={e("securedListComplete")}>
+                    <RadioGroup name="securedListComplete"
+                      current={data.securedListComplete}
+                      onChange={v=>u("securedListComplete",v)}
+                      error={e("securedListComplete")}
+                      options={[
+                        {value:"yes",label:"Yes — these are all of my secured creditors"},
+                        {value:"no",label:"No — I have additional secured creditors to add"},
+                      ]}/>
+                  </Field>
+
+                  {data.securedListComplete === "no" && (() => {
+                    // Build collateral options from previously-listed assets.
+                    // Each option's value is a stable key the client picks; the
+                    // label is what they see; the description prop is the
+                    // human-readable text we stash into collateralDescription
+                    // so PDFs / Schedule D show the right collateral name.
+                    const collateralOptions = [];
+                    if (data.ownsRealEstate === "yes" && (data.realPropAddress || data.mortgageBalance)) {
+                      collateralOptions.push({ value: "realProperty:primary", label: `🏠 Primary home — ${data.realPropAddress || "the home you listed"}` });
+                    }
+                    if (data.secondProperty === "yes" && (data.secondPropAddress || data.secondMortgage)) {
+                      collateralOptions.push({ value: "realProperty:second", label: `🏡 Second property — ${data.secondPropAddress || "the second property you listed"}` });
+                    }
+                    if (data.hasVehicles === "yes") {
+                      (data.vehicles || []).forEach((v, vi) => {
+                        const desc = `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim();
+                        if (desc) collateralOptions.push({ value: `vehicle:${vi}`, label: `🚗 ${desc}` });
+                      });
+                    }
+                    if (data.hasRecreationalVehicles === "yes") {
+                      (data.recreationalVehicles || []).forEach((rv, ri) => {
+                        const desc = `${rv.year || ""} ${rv.make || ""} ${rv.model || ""}`.trim() || rv.type;
+                        if (desc) collateralOptions.push({ value: `rv:${ri}`, label: `🛥️ ${desc}` });
+                      });
+                    }
+                    // Generic asset categories
+                    if (parseFloat(data.householdGoodsValue) > 0 || data.noHouseholdGoods === false) collateralOptions.push({ value: "category:household_goods", label: "🛋️ Household goods / furniture" });
+                    if (parseFloat(data.electronicsValue) > 0) collateralOptions.push({ value: "category:electronics", label: "📺 Electronics" });
+                    if (parseFloat(data.jewelryValue) > 0) collateralOptions.push({ value: "category:jewelry", label: "💍 Jewelry" });
+                    if (parseFloat(data.toolsValue) > 0) collateralOptions.push({ value: "category:tools", label: "🔧 Tools / equipment" });
+                    if (data.hasFirearms === "yes") collateralOptions.push({ value: "category:firearms", label: "🔫 Firearms" });
+                    if (data.hasCollectibles === "yes") collateralOptions.push({ value: "category:collectibles", label: "🎨 Collectibles" });
+                    if (data.hasBusinessAssets === "yes") collateralOptions.push({ value: "category:business_assets", label: "🏭 Business assets / equipment" });
+                    collateralOptions.push({ value: "other", label: "📦 Other — something not listed yet" });
+
+                    const labelForKey = (key) => collateralOptions.find(o => o.value === key)?.label?.replace(/^[^\s]+\s/, "") || "";
+
+                    return (
+                      <div className="mt-2">
+                        <p className="text-[11px] text-slate-400 mb-2">
+                          Add any <strong className="text-amber-400">other secured creditors</strong> (judgment liens, IRS / state tax liens, pawn loans, security agreements on furniture or electronics, etc.).
+                        </p>
+                        {(data.otherSecuredCreditors || []).map((sc, i) => (
+                          <div key={sc.id} className="border border-slate-700 rounded-xl p-3 mb-2 bg-slate-800/40">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-semibold text-slate-300">Other Secured Creditor #{i+1}</span>
+                              {(data.otherSecuredCreditors || []).length > 1 && (
+                                <button type="button"
+                                  onClick={()=>u("otherSecuredCreditors", data.otherSecuredCreditors.filter(x => x.id !== sc.id))}
+                                  className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                              )}
+                            </div>
+                            <Field label="Who is the creditor?">
+                              <Input value={sc.creditorName || ""}
+                                onChange={v=>u("otherSecuredCreditors", data.otherSecuredCreditors.map((x,idx)=>idx===i?{...x,creditorName:v}:x))}
+                                placeholder="e.g., Wells Fargo, IRS, John Smith"/>
+                            </Field>
+                            {/* Collateral picker — links the lien to an asset
+                                the client already listed. Picking "Other"
+                                opens the free-text input for new property. */}
+                            <Field label="What does this debt have a lien on?">
+                              <Select
+                                value={sc.collateralAssetKey || ""}
+                                onChange={v=>{
+                                  // When picking a listed asset, snap the
+                                  // collateralDescription to that asset's
+                                  // human-readable label so downstream
+                                  // PDF/Schedule D output is consistent.
+                                  const descFromKey = v === "other" ? (sc.collateralDescription || "") : labelForKey(v);
+                                  u("otherSecuredCreditors", data.otherSecuredCreditors.map((x,idx)=>idx===i?{...x,collateralAssetKey:v,collateralDescription:descFromKey}:x));
+                                }}
+                                options={collateralOptions}
+                                placeholder="Pick the property this lien is on..."/>
+                            </Field>
+                            {sc.collateralAssetKey === "other" && (
+                              <Field label="Describe the property the lien is on">
+                                <Input value={sc.collateralDescription || ""}
+                                  onChange={v=>u("otherSecuredCreditors", data.otherSecuredCreditors.map((x,idx)=>idx===i?{...x,collateralDescription:v}:x))}
+                                  placeholder="e.g., Living room set from Aaron's, business inventory"/>
+                              </Field>
+                            )}
+                            <div className="grid grid-cols-2 gap-3">
+                              <Field label="How much do you owe?">
+                                <Input type="number" value={sc.balance || ""}
+                                  onChange={v=>u("otherSecuredCreditors", data.otherSecuredCreditors.map((x,idx)=>idx===i?{...x,balance:v}:x))}
+                                  placeholder="Enter amount"/>
+                              </Field>
+                              <Field label="Monthly payment (if any)">
+                                <Input type="number" value={sc.monthlyPayment || ""}
+                                  onChange={v=>u("otherSecuredCreditors", data.otherSecuredCreditors.map((x,idx)=>idx===i?{...x,monthlyPayment:v}:x))}
+                                  placeholder="Enter amount or 0"/>
+                              </Field>
+                            </div>
+                          </div>
+                        ))}
+                        <button type="button"
+                          onClick={()=>u("otherSecuredCreditors", [...(data.otherSecuredCreditors || []), { id: Date.now(), creditorName:"", collateralAssetKey:"", collateralDescription:"", balance:"", monthlyPayment:"" }])}
+                          className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                          <span className="text-base">+</span> Add Another Secured Creditor
+                        </button>
+                      </div>
+                    );
+                  })()}
+                </>
+              );
+            })()}
+          </SectionCard>
+
+          {/* Schedule E — Priority Debts (back taxes, back child support, back alimony).
+              Listed AFTER Schedule D per Bankruptcy Code ordering (D → E → F).
+              Each entry carries paymentMethod ("direct" | "paycheck" | "both")
+              so Schedule J knows whether the ongoing payment is wage-deducted
+              (already netted out of gross income) or paid out-of-pocket (true
+              Schedule J expense). The attorney-side analyzer reads priorityDebts[]
+              (by balance) and surfaces unfiled-tax entries as an attorney issue. */}
+          <SectionCard title="Priority Debts — Schedule E" icon="⚖️">
+            <p className="text-sm font-semibold text-white mb-1">Do you owe any priority debts?</p>
+            <p className="text-[11px] text-slate-400 mb-3">
+              <strong className="text-amber-400">Priority debts</strong> are special debts the law treats first — <strong className="text-white">back taxes</strong>, <strong className="text-white">past-due child support</strong>, and <strong className="text-white">past-due alimony</strong>.
+            </p>
+            {data.hasPriorityDebt !== "yes" && (
+              <button onClick={()=>u("hasPriorityDebt","no")}
+                className={`w-full flex items-center justify-center gap-3 px-4 py-4 rounded-xl border-2 font-bold text-sm transition-all mb-3 ${data.hasPriorityDebt==="no"?"bg-green-500/20 border-green-500 text-green-300":"bg-slate-800/60 border-dashed border-slate-500 text-slate-300 hover:border-amber-400 hover:text-amber-400"}`}>
+                {data.hasPriorityDebt==="no" ? <>✓ Acknowledged — I have no priority creditors</> : <>⚖️ I do not owe any back taxes, back child support, or back alimony — click to confirm</>}
+              </button>
+            )}
+            {data.hasPriorityDebt==="no" && (
+              <button onClick={()=>u("hasPriorityDebt","")} className="w-full text-xs text-slate-400 hover:text-amber-400 underline mb-2 text-center">I do have priority debts — click to enter them</button>
+            )}
+            {data.hasPriorityDebt !== "no" && (
+              <>
+                {data.hasPriorityDebt !== "yes" && (
+                  <button onClick={()=>u("hasPriorityDebt","yes")} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-amber-400/50 text-amber-400 hover:bg-amber-400/10 font-semibold text-sm transition-all mb-3">
+                    <span>+</span> I owe priority debts — enter them below
+                  </button>
+                )}
+                {data.hasPriorityDebt==="yes" && (
+                  <>
+                    {(data.priorityDebts || []).map((d, i) => (
+                      <div key={d.id} className="border border-slate-700 rounded-xl p-3 mb-3 bg-slate-800/40">
+                        <div className="flex items-center justify-between mb-3">
+                          <span className="text-xs font-semibold text-slate-300">Priority Debt #{i+1}</span>
+                          {(data.priorityDebts || []).length > 1 && (
+                            <button type="button"
+                              onClick={()=>u("priorityDebts", data.priorityDebts.filter(x => x.id !== d.id))}
+                              className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                          )}
+                        </div>
+
+                        <Field label="Type of priority debt" error={e(`priority_${i}_type`)}>
+                          <Select
+                            value={d.type}
+                            onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,type:v,taxYear:"",taxFiled:"",monthlyPayment:"",paymentMethod:""}:x))}
+                            options={["Back Taxes (IRS / State)","Back Child Support","Back Alimony / Spousal Support"].map(label=>{
+                              const v = label==="Back Taxes (IRS / State)" ? "back_taxes" : label==="Back Child Support" ? "back_child_support" : "back_alimony";
+                              return { value:v, label };
+                            })}
+                            placeholder="Select type…"
+                          />
+                        </Field>
+
+                        {d.type === "back_taxes" && (
+                          <div className="mt-2 space-y-2">
+                            <Field label="Tax Year" error={e(`priority_${i}_taxYear`)}>
+                              <Input type="number" value={d.taxYear || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,taxYear:v,creditor:`IRS / State — ${v} Tax Year`}:x))}
+                                placeholder="e.g., 2022"/>
+                            </Field>
+                            <Field label="Amount Owed for this Tax Year" error={e(`priority_${i}_amount`)}>
+                              <Input type="number" value={d.amount || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,amount:v,balance:v}:x))}
+                                placeholder="Enter amount"/>
+                            </Field>
+                            <Field label="Was the tax return for this year FILED with the IRS / State?" error={e(`priority_${i}_taxFiled`)}>
+                              <div className="flex gap-2">
+                                {[{v:"yes",label:"Yes — Return Filed"},{v:"no",label:"No — Return NOT Filed"}].map(opt=>(
+                                  <button key={opt.v} type="button"
+                                    onClick={()=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,taxFiled:opt.v}:x))}
+                                    className={`flex-1 text-xs py-2.5 rounded-xl border font-medium transition-all ${d.taxFiled===opt.v ? (opt.v==="no" ? "bg-red-600 border-red-500 text-white" : "bg-blue-600 border-blue-500 text-white") : "bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200"}`}
+                                  >{opt.label}</button>
+                                ))}
+                              </div>
+                            </Field>
+                            {d.taxFiled === "no" && (
+                              <div className="p-3 bg-red-500/10 border border-red-500/40 rounded-lg">
+                                <p className="text-[11px] text-red-300 font-semibold mb-1">⚠️ Attorney Review Required</p>
+                                <p className="text-[11px] text-red-200/90">
+                                  Unfiled tax returns are flagged for attorney review. Tax returns for the <strong>4 most recent tax years</strong> must
+                                  generally be filed with the IRS before bankruptcy. Your attorney will advise you to file these returns —
+                                  in many cases <strong>before the petition is filed</strong> — to avoid dismissal or discharge issues.
+                                </p>
+                              </div>
+                            )}
+                            <Field label="Are you currently making monthly payments toward this tax debt?" error={e(`priority_${i}_monthlyPayment`)}>
+                              <Input type="number" value={d.monthlyPayment || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,monthlyPayment:v}:x))}
+                                placeholder="Enter monthly amount (or 0 if not paying)"/>
+                            </Field>
+                          </div>
+                        )}
+
+                        {(d.type === "back_child_support" || d.type === "back_alimony") && (
+                          <div className="mt-2 space-y-2">
+                            <Field label="Payee / Creditor (optional)">
+                              <Input value={d.creditor || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,creditor:v}:x))}
+                                placeholder={d.type === "back_child_support" ? "e.g., Jane Doe / Maricopa County DCSS" : "e.g., John Doe"}/>
+                            </Field>
+                            <Field label="Total Past-Due Amount" error={e(`priority_${i}_amount`)}>
+                              <Input type="number" value={d.amount || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,amount:v,balance:v}:x))}
+                                placeholder="Enter total arrears amount"/>
+                            </Field>
+                            <Field label="Going-Forward Monthly Payment" error={e(`priority_${i}_monthlyPayment`)}>
+                              <Input type="number" value={d.monthlyPayment || ""}
+                                onChange={v=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,monthlyPayment:v}:x))}
+                                placeholder="Enter current monthly payment"/>
+                            </Field>
+                          </div>
+                        )}
+
+                        {/* Payment method — applies to ALL priority debt types.
+                            Drives Schedule J de-duplication: if the obligation
+                            is wage-deducted, it already nets out of gross income
+                            on the paystub and should NOT appear as a Schedule J
+                            expense. Direct-pay items DO appear on Schedule J. */}
+                        {d.type && parseFloat(d.monthlyPayment) > 0 && (
+                          <div className="mt-3 pt-3 border-t border-slate-700/60">
+                            <Field label="How is this monthly payment made?" error={e(`priority_${i}_paymentMethod`)}>
+                              <div className="flex flex-col gap-2">
+                                {[
+                                  {v:"direct",label:"Paid directly to the creditor (out of pocket)"},
+                                  {v:"paycheck",label:"Deducted from my paycheck / wage garnishment"},
+                                  {v:"both",label:"Both — part wage-deducted, part paid directly"},
+                                ].map(opt=>(
+                                  <button key={opt.v} type="button"
+                                    onClick={()=>u("priorityDebts", data.priorityDebts.map((x,idx)=>idx===i?{...x,paymentMethod:opt.v}:x))}
+                                    className={`text-xs py-2.5 px-3 rounded-xl border font-medium transition-all text-left ${d.paymentMethod===opt.v ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200"}`}
+                                  >{opt.label}</button>
+                                ))}
+                              </div>
+                            </Field>
+                            {d.paymentMethod === "paycheck" && (
+                              <p className="text-[11px] text-blue-200 mt-1.5">
+                                <strong className="text-blue-300">Got it.</strong> Since it comes out of your paycheck, we <strong className="text-white">won't double-count it</strong> on your expenses.
+                              </p>
+                            )}
+                            {d.paymentMethod === "direct" && (
+                              <p className="text-[11px] text-blue-200 mt-1.5">
+                                <strong className="text-blue-300">Got it.</strong> We'll add this to your <strong className="text-white">monthly expenses</strong> automatically.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {(d.type === "back_child_support" || d.type === "back_alimony") && (
+                          <p className="text-[11px] text-blue-400/80 mt-2">
+                            Arrears are paid as a priority claim through your Ch. 13 plan. Your ongoing monthly payment continues outside the plan.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+
+                    <button type="button"
+                      onClick={()=>u("priorityDebts", [...(data.priorityDebts || []), { id: Date.now(), type:"", creditor:"", amount:"", balance:"", taxYear:"", taxFiled:"", monthlyPayment:"", paymentMethod:"" }])}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl border border-dashed border-amber-400/50 text-amber-400 hover:bg-amber-400/10 font-semibold text-xs transition-all mb-2">
+                      + Add Another Priority Debt
+                    </button>
+
+                    <div className="mt-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-[11px] text-amber-200/95">
+                        <strong className="text-amber-400">Important:</strong> Chapter 7 does <strong className="text-white">not</strong> wipe these out. You may need <strong className="text-amber-400">Chapter 13</strong> to pay them off over <strong className="text-white">3–5 years</strong>.
+                      </p>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+          </SectionCard>
+
+          <SectionCard title="Unsecured Consumer Debts — Schedule F" icon="💳">
+            <p className="text-sm font-semibold text-white mb-1">Do you have any unsecured consumer debts?</p>
+            <p className="text-[11px] text-slate-400 mb-2">
+              <strong className="text-amber-400">Unsecured debts</strong> have <strong className="text-white">nothing backing them</strong> — like credit cards, medical bills, personal loans, and judgments. Enter the balance for each, or tap <strong className="text-slate-300">I don't have this</strong>.
+            </p>
+            <p className="text-[10px] text-slate-500 mb-3 italic">Back taxes and back child support / alimony belong in <strong className="text-amber-400/80">Priority Debts</strong> above — not here.</p>
+
+            {[
+              {key:"creditCardDebt", noKey:"noCreditCardDebt", label:"Credit Card Debt", hint:null},
+              {key:"medicalDebt", noKey:"noMedicalDebt", label:"Medical Bills", hint:null},
+              {key:"studentLoanDebt", noKey:"noStudentLoanDebt", label:"Student Loans", hint:null},
+              {key:"personalLoanDebt", noKey:"noPersonalLoanDebt", label:"Personal / Payday Loans", hint:null},
+              {key:"judgmentDebt", noKey:"noJudgmentDebt", label:"Judgments Against You", hint:null},
+              {key:"otherUnsecured", noKey:"noOtherUnsecured", label:"All Other Unsecured Consumer Debt", hint:null},
+            ].map(({key, noKey, label}) => (
+              <div key={key} className="mb-3">
+                {data[noKey] ? (
+                  <div className="flex items-center justify-between bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5">
+                    <span className="text-green-400 text-xs font-semibold flex items-center gap-1.5">
+                      <span className="text-green-400">✓</span> {label} — not applicable
+                    </span>
+                    <button type="button" onClick={()=>{u(noKey,false); u(key,"");}} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors">
+                      I do have this
+                    </button>
+                  </div>
+                ) : (
+                  <Field label={label} error={e(key)}>
+                    <div className="flex gap-2 items-start">
+                      <div className="flex-1">
+                        <Input type="number" value={data[key]} onChange={v=>u(key,v)} placeholder="Enter amount" hasError={!!e(key)}/>
+                      </div>
+                      <button type="button"
+                        onClick={()=>{u(noKey,true); u(key,"0");}}
+                        className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap"
+                      >
+                        I don't have this
+                      </button>
+                    </div>
+                  </Field>
+                )}
+              </div>
+            ))}
+
+            {/* Friends / family debt — these creditors are INSIDERS for SOFA
+                purposes. Each entry's "paid in last 12 months" amount feeds
+                the SOFA insider-preferences section so the client doesn't
+                re-enter the same info twice. */}
+            <div className="mt-4 pt-4 border-t border-slate-700/60">
+              <Field label="Do you owe money to any friends or family members?" hint="Example: a loan from your parents, a sibling who covered a bill, a friend who helped with rent." error={e("hasFriendsFamilyDebt")}>
+                <RadioGroup name="hasFriendsFamilyDebt" current={data.hasFriendsFamilyDebt}
+                  onChange={v=>u("hasFriendsFamilyDebt", v)} error={e("hasFriendsFamilyDebt")}
+                  options={[{value:"yes",label:"Yes — I owe friends or family"},{value:"no",label:"No"}]}/>
+              </Field>
+              {data.hasFriendsFamilyDebt === "yes" && (
+                <div className="mt-2 space-y-2">
+                  {(data.friendsFamilyDebtEntries || []).map((ff, i) => (
+                    <div key={ff.id} className="bg-slate-900/60 border border-amber-400/30 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Friend / Family #{i+1}</p>
+                        {(data.friendsFamilyDebtEntries || []).length > 1 && (
+                          <button type="button"
+                            onClick={()=>u("friendsFamilyDebtEntries", data.friendsFamilyDebtEntries.filter(x => x.id !== ff.id))}
+                            className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                        )}
+                      </div>
+                      <Field label="Who do you owe?" error={errors[`ff_${i}_name`]}>
+                        <Input value={ff.name || ""}
+                          onChange={v=>u("friendsFamilyDebtEntries", data.friendsFamilyDebtEntries.map((x,idx)=>idx===i?{...x,name:v}:x))}
+                          placeholder="Full name"
+                          hasError={!!errors[`ff_${i}_name`]}/>
+                      </Field>
+                      <Field label="How are they related to you?" error={errors[`ff_${i}_relationship`]}>
+                        <Input value={ff.relationship || ""}
+                          onChange={v=>u("friendsFamilyDebtEntries", data.friendsFamilyDebtEntries.map((x,idx)=>idx===i?{...x,relationship:v}:x))}
+                          placeholder="e.g. Mother, Brother, Best friend"
+                          hasError={!!errors[`ff_${i}_relationship`]}/>
+                      </Field>
+                      <Field label="How much do you owe them?" error={errors[`ff_${i}_amountOwed`]}>
+                        <Input type="number" value={ff.amountOwed || ""}
+                          onChange={v=>u("friendsFamilyDebtEntries", data.friendsFamilyDebtEntries.map((x,idx)=>idx===i?{...x,amountOwed:v}:x))}
+                          placeholder="Enter amount"
+                          hasError={!!errors[`ff_${i}_amountOwed`]}/>
+                      </Field>
+                      <Field label="How much have you paid them in the last 12 months?" hint="Even $0 is fine — but the trustee asks because payments to insiders within 1 year can be recovered." error={errors[`ff_${i}_paidLast12Months`]}>
+                        <Input type="number" value={ff.paidLast12Months || ""}
+                          onChange={v=>u("friendsFamilyDebtEntries", data.friendsFamilyDebtEntries.map((x,idx)=>idx===i?{...x,paidLast12Months:v}:x))}
+                          placeholder="Enter total paid in last 12 mo (or 0)"
+                          hasError={!!errors[`ff_${i}_paidLast12Months`]}/>
+                      </Field>
+                      {parseFloat(ff.paidLast12Months) > 0 && (
+                        <div className="mt-1 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                          <p className="text-sm text-amber-200"><strong className="text-amber-400">Carried to SOFA:</strong> The <strong className="text-white">${parseFloat(ff.paidLast12Months).toLocaleString("en-US",{maximumFractionDigits:2})}</strong> you paid {ff.name || "this person"} in the last 12 months will appear in the SOFA insider-payments section for you to confirm. <em>You won't need to enter it again.</em></p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={()=>u("friendsFamilyDebtEntries", [...(data.friendsFamilyDebtEntries || []), { id: Date.now(), name:"", relationship:"", amountOwed:"", paidLast12Months:"" }])}
+                    className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                    <span className="text-base">+</span> Add Another Friend / Family Creditor
+                  </button>
+                </div>
+              )}
+            </div>
+          </SectionCard>
+
+          {/* Business Debts — Schedule F (non-consumer). Moved BELOW consumer
+              Schedule F per the new section ordering (Priority → Secured →
+              Unsecured Consumer → Business). The five business-bucket fields
+              auto-classify as non-consumer in the attorney-side composition
+              calc; the dollar amount that lives here drives § 707(b)(1)
+              primarily-business-debt analysis. */}
+          <SectionCard title="Business Debts — Schedule F" icon="🏢">
             {data.hasBusinessDebt !== "yes" && (
               <button onClick={()=>u("hasBusinessDebt","no")}
                 className={`w-full flex items-center justify-center gap-3 px-4 py-4 rounded-xl border-2 font-bold text-sm transition-all mb-4 ${data.hasBusinessDebt==="no"?"bg-green-500/20 border-green-500 text-green-300":"bg-slate-800/60 border-dashed border-slate-500 text-slate-300 hover:border-amber-400 hover:text-amber-400"}`}>
@@ -4338,151 +6144,6 @@ export default function BankruptcyIntake({
             )}
           </SectionCard>
 
-          <SectionCard title="Secured Consumer Debts — Schedule D" icon="🔒">
-            {data.hasMortgage !== "yes" && (
-              <button onClick={()=>{u("hasMortgage","no"); u("securedDebt","0");}}
-                className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-xl border-2 font-bold text-sm transition-all mb-4 ${data.hasMortgage==="no"?"bg-green-500/20 border-green-500 text-green-300":"bg-slate-800/60 border-dashed border-slate-500 text-slate-300 hover:border-amber-400 hover:text-amber-400"}`}>
-                {data.hasMortgage==="no" ? <>✓ Acknowledged — I do not have a mortgage</> : <>🏠 I do not have a mortgage — click to confirm</>}
-              </button>
-            )}
-            {data.hasMortgage==="no" && (
-              <button onClick={()=>{u("hasMortgage",""); u("securedDebt","");}} className="w-full text-xs text-slate-400 hover:text-amber-400 underline mb-3 text-center">I do have a mortgage — click to enter it</button>
-            )}
-            {data.hasMortgage !== "no" && data.hasMortgage !== "yes" && (
-              <button onClick={()=>u("hasMortgage","yes")} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-amber-400/50 text-amber-400 hover:bg-amber-400/10 font-semibold text-sm transition-all mb-4">
-                <span>+</span> I have a mortgage — enter balance below
-              </button>
-            )}
-            {data.hasMortgage==="yes" && (
-              <Field label="Total Mortgage Balance" error={e("securedDebt")}>
-                {data.mortgageBalance && data.mortgageBalance !== "" ? (
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 bg-slate-800/60 border border-slate-600 rounded-xl px-4 py-3 flex items-center justify-between">
-                      <span className="text-white font-semibold">${parseFloat(data.mortgageBalance).toLocaleString("en-US",{maximumFractionDigits:0})}</span>
-                      <span className="text-xs text-slate-500 flex items-center gap-1">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                        From property info
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <Input type="number" value={data.securedDebt} onChange={v=>u("securedDebt",v)} placeholder="Enter mortgage balance" hasError={!!e("securedDebt")}/>
-                )}
-              </Field>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Unsecured Consumer Debts — Schedule E/F" icon="💳">
-            <p className="text-xs text-slate-400 mb-4">Enter the approximate balance for each debt type, or tap <strong className="text-slate-300">I don't have this</strong> if a category does not apply to you.</p>
-
-            {[
-              {key:"creditCardDebt", noKey:"noCreditCardDebt", label:"Credit Card Debt", hint:null},
-              {key:"medicalDebt", noKey:"noMedicalDebt", label:"Medical Bills", hint:null},
-              {key:"studentLoanDebt", noKey:"noStudentLoanDebt", label:"Student Loans", hint:null},
-              {key:"taxDebt", noKey:"noTaxDebt", label:"Tax Debt (IRS / State — personal income taxes)", hint:null},
-              {key:"personalLoanDebt", noKey:"noPersonalLoanDebt", label:"Personal / Payday Loans", hint:null},
-              {key:"judgmentDebt", noKey:"noJudgmentDebt", label:"Judgments Against You", hint:null},
-              {key:"otherUnsecured", noKey:"noOtherUnsecured", label:"All Other Unsecured Consumer Debt", hint:null},
-            ].map(({key, noKey, label}) => (
-              <div key={key} className="mb-3">
-                {data[noKey] ? (
-                  <div className="flex items-center justify-between bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5">
-                    <span className="text-green-400 text-xs font-semibold flex items-center gap-1.5">
-                      <span className="text-green-400">✓</span> {label} — not applicable
-                    </span>
-                    <button type="button" onClick={()=>{u(noKey,false); u(key,"");}} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors">
-                      I do have this
-                    </button>
-                  </div>
-                ) : (
-                  <Field label={label} error={e(key)}>
-                    <div className="flex gap-2 items-start">
-                      <div className="flex-1">
-                        <Input type="number" value={data[key]} onChange={v=>u(key,v)} placeholder="Enter amount" hasError={!!e(key)}/>
-                      </div>
-                      <button type="button"
-                        onClick={()=>{u(noKey,true); u(key,"0");}}
-                        className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap"
-                      >
-                        I don't have this
-                      </button>
-                    </div>
-                  </Field>
-                )}
-              </div>
-            ))}
-
-            {/* Child Support — current status & arrears */}
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-slate-300 mb-2">Child Support</p>
-              <Field label="Are you current or behind on child support payments?" error={e("childSupportCurrent")}>
-                <div className="flex gap-2">
-                  {[{v:"current",label:"Current"},{v:"behind",label:"Behind / Have Arrears"},{v:"none",label:"No Obligation"}].map(opt=>(
-                    <button key={opt.v} type="button"
-                      onClick={()=>{u("childSupportCurrent",opt.v); if(opt.v!=="behind"){u("childSupportArrears",""); u("noChildSupportArrears",false);}}}
-                      className={`flex-1 text-xs py-2.5 rounded-xl border font-medium transition-all ${data.childSupportCurrent===opt.v ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200"}`}
-                    >{opt.label}</button>
-                  ))}
-                </div>
-              </Field>
-              {data.childSupportCurrent==="behind" && (
-                <div className="mt-2">
-                  {data.noChildSupportArrears ? (
-                    <div className="flex items-center justify-between bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5">
-                      <span className="text-green-400 text-xs font-semibold flex items-center gap-1.5"><span className="text-green-400">✓</span> Child Support Arrears — not applicable</span>
-                      <button type="button" onClick={()=>{u("noChildSupportArrears",false); u("childSupportArrears","");}} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors">I do have this</button>
-                    </div>
-                  ) : (
-                    <Field label="Child Support Arrears (total past-due amount)" error={e("childSupportArrears")}>
-                      <div className="flex gap-2 items-start">
-                        <div className="flex-1">
-                          <Input type="number" value={data.childSupportArrears} onChange={v=>u("childSupportArrears",v)} placeholder="Enter arrears amount" hasError={!!e("childSupportArrears")}/>
-                        </div>
-                        <button type="button" onClick={()=>{u("noChildSupportArrears",true); u("childSupportArrears","0");}} className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap">I don't have this</button>
-                      </div>
-                      <p className="text-[11px] text-blue-400/80 mt-1.5">Arrears will be listed as a priority debt paid through your Ch. 13 plan. Your ongoing monthly payment continues outside the plan.</p>
-                    </Field>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Alimony — current status & arrears */}
-            <div className="mb-3">
-              <p className="text-xs font-semibold text-slate-300 mb-2">Alimony / Spousal Support</p>
-              <Field label="Are you current or behind on alimony / spousal support payments?" error={e("alimonyCurrent")}>
-                <div className="flex gap-2">
-                  {[{v:"current",label:"Current"},{v:"behind",label:"Behind / Have Arrears"},{v:"none",label:"No Obligation"}].map(opt=>(
-                    <button key={opt.v} type="button"
-                      onClick={()=>{u("alimonyCurrent",opt.v); if(opt.v!=="behind"){u("alimonyArrears",""); u("noAlimonyArrears",false);}}}
-                      className={`flex-1 text-xs py-2.5 rounded-xl border font-medium transition-all ${data.alimonyCurrent===opt.v ? "bg-blue-600 border-blue-500 text-white" : "bg-slate-800 border-slate-600 text-slate-400 hover:border-slate-400 hover:text-slate-200"}`}
-                    >{opt.label}</button>
-                  ))}
-                </div>
-              </Field>
-              {data.alimonyCurrent==="behind" && (
-                <div className="mt-2">
-                  {data.noAlimonyArrears ? (
-                    <div className="flex items-center justify-between bg-green-500/8 border border-green-500/20 rounded-xl px-4 py-2.5">
-                      <span className="text-green-400 text-xs font-semibold flex items-center gap-1.5"><span className="text-green-400">✓</span> Alimony Arrears — not applicable</span>
-                      <button type="button" onClick={()=>{u("noAlimonyArrears",false); u("alimonyArrears","");}} className="text-xs text-slate-500 hover:text-slate-300 underline underline-offset-2 transition-colors">I do have this</button>
-                    </div>
-                  ) : (
-                    <Field label="Alimony Arrears (total past-due amount)" error={e("alimonyArrears")}>
-                      <div className="flex gap-2 items-start">
-                        <div className="flex-1">
-                          <Input type="number" value={data.alimonyArrears} onChange={v=>u("alimonyArrears",v)} placeholder="Enter arrears amount" hasError={!!e("alimonyArrears")}/>
-                        </div>
-                        <button type="button" onClick={()=>{u("noAlimonyArrears",true); u("alimonyArrears","0");}} className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap">I don't have this</button>
-                      </div>
-                      <p className="text-[11px] text-blue-400/80 mt-1.5">Arrears will be listed as a priority debt paid through your Ch. 13 plan. Your ongoing monthly payment continues outside the plan.</p>
-                    </Field>
-                  )}
-                </div>
-              )}
-            </div>
-          </SectionCard>
-
           {(totalConsumerDebt()>0 || totalBusinessDebt()>0) && (
             <SectionCard title="Debt Summary" icon="⚖️">
               <div className="grid grid-cols-2 gap-3 mb-4">
@@ -4514,6 +6175,18 @@ export default function BankruptcyIntake({
 
       case 7: return (
         <div>
+          {/* Lookback notice — some SOFA questions reach back as far as
+              10 years (trust transfers). Clients sometimes leave older
+              items off without realizing the lookback windows vary. */}
+          <div className="mb-4 p-5 bg-slate-800/60 border border-amber-400/40 rounded-xl">
+            <p className="text-base font-bold text-amber-400 mb-2 text-center">Heads up — some questions look back up to 10 years</p>
+            <p className="text-base text-white font-bold leading-relaxed">
+              Different questions cover different time windows: <strong className="text-amber-400">prior bankruptcies</strong> (8 years), <strong className="text-amber-400">property transfers</strong> (2–4 years), <strong className="text-amber-400">payments to insiders</strong> (1 year), and <strong className="text-amber-400">trust transfers</strong> (up to 10 years).
+            </p>
+            <p className="text-base text-amber-400 font-bold leading-relaxed mt-2">
+              It is important to list <strong>everything</strong> — even old items. Leaving things off can delay or jeopardize your case.
+            </p>
+          </div>
           <SectionCard title="Prior Bankruptcy Filings — Last 8 Years" icon="📋">
             <Field label="Have you filed for bankruptcy in the last 8 years?" error={e("priorBankruptcy")}>
               <RadioGroup name="priorBk" current={data.priorBankruptcy} onChange={v=>u("priorBankruptcy",v)} error={e("priorBankruptcy")}
@@ -4602,8 +6275,130 @@ export default function BankruptcyIntake({
           </SectionCard>
 
           <SectionCard title="Preferential Payments — Regular Creditors (SOFA § 3)" icon="💸">
-            <p className="text-xs text-slate-400 mb-3">Payments of <strong className="text-slate-300">$600 or more</strong> to regular creditors (banks, credit card companies, lenders) within the <strong className="text-amber-400">last 90 days</strong> may be recoverable by the trustee under § 547.</p>
-            <Field label="Have you paid $600 or more to any regular creditor in the last 90 days?" error={e("preferentialPayments")}>
+            {/* Auto-flagged secured creditors with monthly payment ≥ $600.
+                For each one we already have their monthly amount from earlier
+                sections — show 3 × monthly as the expected 90-day total, ask
+                the client to confirm, and capture the actual amount if not. */}
+            {(() => {
+              const num = (v) => parseFloat(v) || 0;
+              const securedRows = [];
+              if (data.ownsRealEstate === "yes" && num(data.realPropMonthlyPayment) >= 600) {
+                securedRows.push({ key:"primary_mortgage", creditor: data.mortgageLender || "Primary mortgage", monthly: num(data.realPropMonthlyPayment) });
+              }
+              if (data.secondProperty === "yes" && num(data.secondMortgagePayment) >= 600) {
+                securedRows.push({ key:"second_mortgage", creditor: data.secondMortgageLender || "Second-property mortgage", monthly: num(data.secondMortgagePayment) });
+              }
+              if (data.hasVehicles === "yes") {
+                (data.vehicles || []).forEach((v, vi) => {
+                  if (v.hasLoan === "yes" && num(v.monthlyPayment) >= 600) {
+                    const desc = `${v.year || ""} ${v.make || ""} ${v.model || ""}`.trim() || "Vehicle";
+                    securedRows.push({ key:`vehicle:${vi}`, creditor: v.lenderName || "Vehicle lender", collateral: desc, monthly: num(v.monthlyPayment) });
+                  }
+                });
+              }
+              if (data.hasRecreationalVehicles === "yes") {
+                (data.recreationalVehicles || []).forEach((rv, ri) => {
+                  if (rv.hasLoan === "yes" && num(rv.monthlyPayment) >= 600) {
+                    const desc = `${rv.year || ""} ${rv.make || ""} ${rv.model || ""}`.trim() || rv.type || "Recreational vehicle";
+                    securedRows.push({ key:`rv:${ri}`, creditor: rv.lenderName || "Lender", collateral: desc, monthly: num(rv.monthlyPayment) });
+                  }
+                });
+              }
+
+              const setConfirmation = (key, patch) => {
+                u("securedPaymentConfirmations", { ...(data.securedPaymentConfirmations || {}), [key]: { ...((data.securedPaymentConfirmations || {})[key] || {}), ...patch } });
+              };
+
+              if (securedRows.length === 0) return null;
+              return (
+                <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
+                  <p className="text-base font-bold text-amber-400 mb-2">Auto-flagged secured-creditor payments</p>
+                  <p className="text-sm text-white font-bold mb-3 leading-relaxed">
+                    These creditors are <strong className="text-amber-400">paid $600+ per month</strong> based on what you told us earlier. Please confirm whether you actually paid each one over the last 90 days. <em>Example: a $1,500/mo mortgage = $4,500 over 90 days.</em>
+                  </p>
+                  {securedRows.map(row => {
+                    const conf = (data.securedPaymentConfirmations || {})[row.key] || {};
+                    const expected = row.monthly * 3;
+                    return (
+                      <div key={row.key} className="bg-slate-900/60 border border-slate-700 rounded-xl p-3 mb-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <div>
+                            <p className="text-sm font-bold text-white">{row.creditor}{row.collateral ? <span className="text-slate-400 font-normal"> · {row.collateral}</span> : null}</p>
+                            <p className="text-xs text-slate-400">${row.monthly.toLocaleString("en-US",{maximumFractionDigits:2})}/mo × 3 = <strong className="text-amber-400">${expected.toLocaleString("en-US",{maximumFractionDigits:2})}</strong> expected over 90 days</p>
+                          </div>
+                        </div>
+                        <Field label="Did you pay this creditor the expected amount each month over the last 90 days?">
+                          <div className="flex gap-2">
+                            <button type="button"
+                              onClick={()=>setConfirmation(row.key, { matchesExpected:"yes", actualAmount:String(expected) })}
+                              className={`flex-1 text-sm py-2 rounded-lg border font-semibold transition-all ${conf.matchesExpected==="yes" ? "bg-emerald-500/20 border-emerald-500 text-emerald-300" : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500"}`}>
+                              ✓ Yes — paid ${expected.toLocaleString()} (accept)
+                            </button>
+                            <button type="button"
+                              onClick={()=>setConfirmation(row.key, { matchesExpected:"no" })}
+                              className={`flex-1 text-sm py-2 rounded-lg border font-semibold transition-all ${conf.matchesExpected==="no" ? "bg-amber-500/20 border-amber-500 text-amber-400" : "bg-slate-800 border-slate-600 text-slate-300 hover:border-slate-500"}`}>
+                              No — different amount
+                            </button>
+                          </div>
+                        </Field>
+                        {conf.matchesExpected === "no" && (
+                          <Field label="How much did you actually pay this creditor in the last 90 days?">
+                            <Input type="number" value={conf.actualAmount || ""}
+                              onChange={v=>setConfirmation(row.key, { actualAmount: v })}
+                              placeholder="Enter actual total"/>
+                          </Field>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <Field label="Are there any OTHER creditors you paid over $600 to in the last 90 days that aren't listed above?" hint="Example: paid off a credit card balance, made a lump-sum medical bill payment, or sent a large check to a tax authority.">
+                    <RadioGroup name="otherCreditorPaymentsOver600" current={data.otherCreditorPaymentsOver600}
+                      onChange={v=>u("otherCreditorPaymentsOver600", v)}
+                      options={[{value:"yes",label:"Yes — I paid other creditors over $600"},{value:"no",label:"No"}]}/>
+                  </Field>
+                  {data.otherCreditorPaymentsOver600 === "yes" && (
+                    <div className="mt-2 space-y-2">
+                      {(data.otherCreditorPaymentsList || []).map((op, i) => (
+                        <div key={op.id} className="bg-slate-900/60 border border-slate-700 rounded-xl p-3">
+                          <div className="flex items-center justify-between mb-2">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Other Payment #{i+1}</p>
+                            {(data.otherCreditorPaymentsList || []).length > 1 && (
+                              <button type="button"
+                                onClick={()=>u("otherCreditorPaymentsList", data.otherCreditorPaymentsList.filter(x => x.id !== op.id))}
+                                className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                            )}
+                          </div>
+                          <Field label="Who did you pay?">
+                            <Input value={op.creditor || ""}
+                              onChange={v=>u("otherCreditorPaymentsList", data.otherCreditorPaymentsList.map((x,idx)=>idx===i?{...x,creditor:v}:x))}
+                              placeholder="e.g. Capital One, IRS, Dr. Smith"/>
+                          </Field>
+                          <div className="grid grid-cols-2 gap-3">
+                            <Field label="Amount paid">
+                              <Input type="number" value={op.amount || ""}
+                                onChange={v=>u("otherCreditorPaymentsList", data.otherCreditorPaymentsList.map((x,idx)=>idx===i?{...x,amount:v}:x))}
+                                placeholder="e.g. 1200"/>
+                            </Field>
+                            <Field label="When? (MM/YYYY)">
+                              <Input value={op.date || ""}
+                                onChange={v=>u("otherCreditorPaymentsList", data.otherCreditorPaymentsList.map((x,idx)=>idx===i?{...x,date:v}:x))}
+                                placeholder="MM/YYYY"/>
+                            </Field>
+                          </div>
+                        </div>
+                      ))}
+                      <button type="button"
+                        onClick={()=>u("otherCreditorPaymentsList", [...(data.otherCreditorPaymentsList || []), { id: Date.now(), creditor:"", amount:"", date:"" }])}
+                        className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <span className="text-base">+</span> Add Another Payment
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <Field label="Have you paid $600 or more to any regular creditor in the last 90 days?" hint="Example: a one-time payoff to a credit card, a large catch-up payment to a lender, a big payment to a doctor or hospital — anything beyond your normal monthly bills." error={e("preferentialPayments")}>
               <RadioGroup name="prefer" current={data.preferentialPayments} onChange={v=>u("preferentialPayments",v)} error={e("preferentialPayments")}
                 options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
@@ -4637,7 +6432,7 @@ export default function BankruptcyIntake({
                     );
                     if (days !== null && days > 90) return (
                       <div className="mt-1 space-y-2">
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 leading-relaxed">
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400 leading-relaxed">
                           <p className="font-bold mb-1">This payment appears to be more than 90 days ago.</p>
                           <p>The 90-day preference window for regular creditors under § 547 may not apply. Please confirm: was this payment made <strong>within the last 90 days</strong> before your anticipated filing date?</p>
                         </div>
@@ -4664,8 +6459,36 @@ export default function BankruptcyIntake({
           </SectionCard>
 
           <SectionCard title="Preferential Payments — Insiders (SOFA § 3)" icon="👥">
-            <p className="text-xs text-slate-400 mb-3">Payments to <strong className="text-slate-300">insiders</strong> (family members, friends, business partners, or anyone you have a close relationship with) within the <strong className="text-amber-400">last 12 months</strong> may be recoverable by the trustee under § 547, regardless of the amount.</p>
-            <Field label="Have you paid any money to a family member, friend, or other insider in the last 12 months?" error={e("preferentialPaymentsInsider")}>
+            {/* Auto-pulled from Schedule F friends/family debt entries.
+                Anyone the client said they paid > $0 to in the last 12
+                months shows up here for confirmation, so they don't have
+                to re-enter the same names twice. */}
+            {(() => {
+              const ffPaid = (data.friendsFamilyDebtEntries || []).filter(ff => parseFloat(ff.paidLast12Months) > 0);
+              if (data.hasFriendsFamilyDebt !== "yes" || ffPaid.length === 0) return null;
+              return (
+                <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-400/5 p-4">
+                  <p className="text-base font-bold text-amber-400 mb-2">Carried over from Schedule F — please confirm</p>
+                  <p className="text-sm text-white font-bold mb-3 leading-relaxed">
+                    You told us you've paid these friends / family in the last 12 months. Confirm the amounts — they'll be listed as insider payments on the SOFA.
+                  </p>
+                  {ffPaid.map(ff => (
+                    <div key={`ffsofa-${ff.id}`} className="bg-slate-900/60 border border-slate-700 rounded-xl p-3 mb-2">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-bold text-white">{ff.name || "—"}{ff.relationship ? <span className="text-slate-400 font-normal"> · {ff.relationship}</span> : null}</p>
+                          <p className="text-xs text-slate-400">Paid in last 12 months: <strong className="text-amber-400">${parseFloat(ff.paidLast12Months).toLocaleString("en-US",{maximumFractionDigits:2})}</strong></p>
+                        </div>
+                        <span className="text-xs text-slate-500 italic">auto-filled from Schedule F</span>
+                      </div>
+                    </div>
+                  ))}
+                  <p className="text-xs text-slate-400 italic mt-2">If any of these are wrong, edit the friends / family creditors in Schedule F above.</p>
+                </div>
+              );
+            })()}
+
+            <Field label="Have you paid any money to a family member, friend, or other insider in the last 12 months?" hint="Beyond the friends/family creditors above. Example: paying back a parent who lent you money, sending money to a sibling, or paying a business partner." error={e("preferentialPaymentsInsider")}>
               <RadioGroup name="preferInsider" current={data.preferentialPaymentsInsider} onChange={v=>u("preferentialPaymentsInsider",v)} error={e("preferentialPaymentsInsider")}
                 options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
@@ -4689,7 +6512,7 @@ export default function BankruptcyIntake({
                     );
                     if (days !== null && days > 365) return (
                       <div className="mt-1 space-y-2">
-                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-300 leading-relaxed">
+                        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-400 leading-relaxed">
                           <p className="font-bold mb-1">This payment appears to be more than 1 year ago.</p>
                           <p>Insider preference payments under § 547 only need to be listed if made <strong>within the 12 months before filing</strong>. If this payment was over a year ago, you may not need to list it. Please confirm.</p>
                         </div>
@@ -4736,45 +6559,160 @@ export default function BankruptcyIntake({
           </SectionCard>
 
           <SectionCard title="Other Financial History — SOFA" icon="🔍">
-            <Field label="Have you created or transferred assets into a trust in the last 10 years?" error={e("createdTrust")}>
+            <Field label="Have you created or transferred assets into a trust in the last 10 years?" hint="Example: putting your house or savings into a family trust, naming yourself or someone else as trustee." error={e("createdTrust")}>
               <RadioGroup name="createdTrust" current={data.createdTrust} onChange={v=>u("createdTrust",v)} error={e("createdTrust")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
-              {data.createdTrust==="yes" && (
-                <div className="mt-2 space-y-2">
-                  <Input value={data.trustDetails} onChange={v=>u("trustDetails",v)} placeholder="Name of trust, date created, assets transferred, trustee name" hasError={!!e("trustDetails")}/>
-                  {e("trustDetails") && <p className="text-xs text-red-400">⚠ {e("trustDetails")}</p>}
-                  <div className="p-3 bg-slate-900 border border-slate-700 rounded-xl">
-                    <p className="text-xs font-semibold text-slate-300 flex items-center gap-1.5 mb-1.5">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-400"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
-                      General Information — Not Legal Advice
-                    </p>
-                    <p className="text-xs text-slate-400 leading-relaxed">
-                      Under federal bankruptcy law, trustees have the authority to review and potentially avoid certain transfers into trusts made within the 10 years prior to filing, particularly if the transfer was made to hinder, delay, or defraud creditors (11 U.S.C. § 548). This information must be disclosed on your bankruptcy schedules. A licensed bankruptcy attorney will evaluate how trust transfers may affect your case.
-                    </p>
+            </Field>
+            {data.createdTrust === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.trustEntries || []).map((t, i) => (
+                  <div key={t.id} className="bg-slate-900/60 border border-amber-400/30 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-amber-400">Trust #{i+1}</p>
+                      {(data.trustEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("trustEntries", data.trustEntries.filter(x => x.id !== t.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Name of the trust" error={errors[`trust_${i}_trustName`]}>
+                      <Input value={t.trustName || ""}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,trustName:v}:x))}
+                        placeholder="e.g. The Smith Family Living Trust"
+                        hasError={!!errors[`trust_${i}_trustName`]}/>
+                    </Field>
+                    <Field label="What property was transferred into the trust?" error={errors[`trust_${i}_propertyTransferred`]}>
+                      <Input value={t.propertyTransferred || ""}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,propertyTransferred:v}:x))}
+                        placeholder="e.g. Primary residence, $50,000 savings account, vehicle"
+                        hasError={!!errors[`trust_${i}_propertyTransferred`]}/>
+                    </Field>
+                    <Field label="Value of the property transferred" error={errors[`trust_${i}_propertyValue`]}>
+                      <Input type="number" value={t.propertyValue || ""}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,propertyValue:v}:x))}
+                        placeholder="Enter amount"
+                        hasError={!!errors[`trust_${i}_propertyValue`]}/>
+                    </Field>
+                    <Field label="Trustee name (who manages the trust)" error={errors[`trust_${i}_trusteeName`]}>
+                      <Input value={t.trusteeName || ""}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,trusteeName:v}:x))}
+                        placeholder="Full name of the trustee"
+                        hasError={!!errors[`trust_${i}_trusteeName`]}/>
+                    </Field>
+                    <Field label="Beneficiary name(s) (who receives from the trust)" error={errors[`trust_${i}_beneficiaryName`]}>
+                      <Input value={t.beneficiaryName || ""}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,beneficiaryName:v}:x))}
+                        placeholder="Full name(s) of beneficiaries"
+                        hasError={!!errors[`trust_${i}_beneficiaryName`]}/>
+                    </Field>
+                    <Field label="Is the trust revocable or irrevocable?" hint="Revocable = the creator can change or undo it. Irrevocable = once created, it generally cannot be changed." error={errors[`trust_${i}_trustType`]}>
+                      <RadioGroup name={`trust_${i}_trustType`} current={t.trustType}
+                        onChange={v=>u("trustEntries", data.trustEntries.map((x,idx)=>idx===i?{...x,trustType:v}:x))}
+                        error={errors[`trust_${i}_trustType`]}
+                        options={[
+                          {value:"revocable",label:"Revocable"},
+                          {value:"irrevocable",label:"Irrevocable"},
+                          {value:"unsure",label:"I'm not sure"},
+                        ]}/>
+                    </Field>
                   </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("trustEntries", [...(data.trustEntries || []), { id: Date.now(), trustName:"", propertyTransferred:"", propertyValue:"", trusteeName:"", beneficiaryName:"", trustType:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Trust
+                </button>
+                <div className="p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-200"><strong className="text-red-300">⚑ Flagged for attorney review.</strong> Trust transfers within <strong className="text-white">10 years</strong> can be reviewed under § 548 (fraudulent-transfer), and trust assets may still be part of the bankruptcy estate under § 541 depending on the trust type. Your attorney will analyze.</p>
                 </div>
-              )}
-            </Field>
-            <Field label="Any lawsuits filed against you or pending?" error={e("pendingLawsuits")}>
+              </div>
+            )}
+            <Field label="Any lawsuits filed against you or pending?" hint="Example: a creditor suing you for unpaid debt, a personal injury case, divorce or custody proceedings, an HOA lien suit." error={e("pendingLawsuits")}>
               <RadioGroup name="lawsuit" current={data.pendingLawsuits} onChange={v=>u("pendingLawsuits",v)} error={e("pendingLawsuits")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
-              {data.pendingLawsuits==="yes" && <div className="mt-2"><Input value={data.lawsuitDetails} onChange={v=>u("lawsuitDetails",v)} placeholder="Court, plaintiff, amount at issue" hasError={!!e("lawsuitDetails")}/>{e("lawsuitDetails") && <p className="text-xs text-red-400 mt-1">⚠ {e("lawsuitDetails")}</p>}</div>}
             </Field>
-            <Field label="Owned or operated a business in the last 4 years?" error={e("ownedBusiness")}>
-              <RadioGroup name="biz" current={data.ownedBusiness} onChange={v=>u("ownedBusiness",v)} error={e("ownedBusiness")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
-              {data.ownedBusiness==="yes" && <div className="mt-2"><Input value={data.businessDetails} onChange={v=>u("businessDetails",v)} placeholder="Business name, type, dates of operation" hasError={!!e("businessDetails")}/>{e("businessDetails") && <p className="text-xs text-red-400 mt-1">⚠ {e("businessDetails")}</p>}</div>}
-            </Field>
-            <Field label="Expecting a tax refund this year?" error={e("expectedRefund")}>
-              <RadioGroup name="refund" current={data.expectedRefund} onChange={v=>u("expectedRefund",v)} error={e("expectedRefund")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"},{value:"unknown",label:"Don't know"}]}/>
-              {data.expectedRefund==="yes" && <div className="mt-2"><Input type="number" value={data.refundAmount} onChange={v=>u("refundAmount",v)} placeholder="Estimated refund $" hasError={!!e("refundAmount")}/>{e("refundAmount") && <p className="text-xs text-red-400 mt-1">⚠ {e("refundAmount")}</p>}</div>}
-            </Field>
-            <Field label="Do you pay domestic support (child support / alimony)?" error={e("dsoObligation")}>
-              <RadioGroup name="dso" current={data.dsoObligation} onChange={v=>u("dsoObligation",v)} error={e("dsoObligation")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
-              {data.dsoObligation==="yes" && <div className="mt-2"><Input type="number" value={data.dsoAmount} onChange={v=>u("dsoAmount",v)} placeholder="Monthly amount $" hasError={!!e("dsoAmount")}/>{e("dsoAmount") && <p className="text-xs text-red-400 mt-1">⚠ {e("dsoAmount")}</p>}</div>}
-            </Field>
-            <Field label="Luxury purchases over $800 or cash advances over $1,125 in the last 90 days?" error={e("recentLuxury")}>
-              <RadioGroup name="luxury" current={data.recentLuxury} onChange={v=>u("recentLuxury",v)} error={e("recentLuxury")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
-              {data.recentLuxury==="yes" && <div className="mt-2"><Input value={data.luxuryDetails} onChange={v=>u("luxuryDetails",v)} placeholder="Describe the purchases" hasError={!!e("luxuryDetails")}/>{e("luxuryDetails") && <p className="text-xs text-red-400 mt-1">⚠ {e("luxuryDetails")}</p>}</div>}
-            </Field>
-            <Field label="Currently subject to wage garnishment or bank levy?" error={e("garnishment")}>
+            {data.pendingLawsuits==="yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.lawsuitEntries || []).map((ls, i) => (
+                  <div key={ls.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Lawsuit #{i+1}</p>
+                      {(data.lawsuitEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("lawsuitEntries", data.lawsuitEntries.filter(x => x.id !== ls.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Who is suing you?" hint="Example: Capital One, the landlord, a former business partner." error={errors[`lawsuit_${i}_plaintiff`]}>
+                      <Input value={ls.plaintiff || ""}
+                        onChange={v=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,plaintiff:v}:x))}
+                        placeholder="Name of plaintiff / creditor"
+                        hasError={!!errors[`lawsuit_${i}_plaintiff`]}/>
+                    </Field>
+                    <Field label="What is the lawsuit about?" error={errors[`lawsuit_${i}_suitType`]}>
+                      <Select value={ls.suitType}
+                        onChange={v=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,suitType:v}:x))}
+                        hasError={!!errors[`lawsuit_${i}_suitType`]}
+                        options={[
+                          {value:"collection",label:"Collection — a creditor is suing for unpaid debt"},
+                          {value:"broken_lease",label:"Broken lease — a landlord is suing for back rent or damages"},
+                          {value:"other",label:"Other (add details below)"},
+                        ]}
+                        placeholder="Pick a type..."/>
+                    </Field>
+                    {ls.suitType === "other" && (
+                      <Field label="Add details about the type of lawsuit" error={errors[`lawsuit_${i}_suitTypeOther`]}>
+                        <Input value={ls.suitTypeOther || ""}
+                          onChange={v=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,suitTypeOther:v}:x))}
+                          placeholder="e.g. car accident lawsuit, divorce proceeding, HOA lien"
+                          hasError={!!errors[`lawsuit_${i}_suitTypeOther`]}/>
+                      </Field>
+                    )}
+                    <Field label="Value of the claim against you" error={errors[`lawsuit_${i}_claimValue`]}>
+                      {ls.claimValueUnknown ? (
+                        <div className="flex items-center justify-between bg-slate-800/40 border border-slate-600 rounded-xl px-4 py-2.5">
+                          <span className="text-slate-300 text-sm">Value unknown — attorney will estimate</span>
+                          <button type="button"
+                            onClick={()=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,claimValueUnknown:false}:x))}
+                            className="text-xs text-amber-400 hover:text-amber-300 underline">Enter amount instead</button>
+                        </div>
+                      ) : (
+                        <div className="flex gap-2 items-start">
+                          <div className="flex-1">
+                            <Input type="number" value={ls.claimValue || ""}
+                              onChange={v=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,claimValue:v}:x))}
+                              placeholder="Enter dollar amount"
+                              hasError={!!errors[`lawsuit_${i}_claimValue`]}/>
+                          </div>
+                          <button type="button"
+                            onClick={()=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,claimValue:"",claimValueUnknown:true}:x))}
+                            className="flex-shrink-0 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-200 px-3 py-2.5 rounded-xl transition-all whitespace-nowrap">
+                            Unknown
+                          </button>
+                        </div>
+                      )}
+                    </Field>
+                    <Field label="Details — what's happening with the lawsuit?" hint="Example: court case number, current stage (filed, served, in discovery, settled), upcoming hearing date." error={errors[`lawsuit_${i}_details`]}>
+                      <Input value={ls.details || ""}
+                        onChange={v=>u("lawsuitEntries", data.lawsuitEntries.map((x,idx)=>idx===i?{...x,details:v}:x))}
+                        placeholder="Court, case number, status, dates"
+                        hasError={!!errors[`lawsuit_${i}_details`]}/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("lawsuitEntries", [...(data.lawsuitEntries || []), { id: Date.now(), plaintiff:"", suitType:"", suitTypeOther:"", claimValue:"", claimValueUnknown:false, details:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Lawsuit
+                </button>
+                <div className="mt-1 p-2.5 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-200"><strong className="text-red-300">⚑ Flagged for attorney review.</strong> Pending lawsuits against you affect <strong className="text-white">automatic stay</strong> timing, potential <strong className="text-white">non-dischargeability</strong> (e.g., fraud, intentional torts), and how the claim is treated on Schedule E/F.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Garnishment / bank levy — sits with the lawsuits question
+                because garnishments and levies are usually the enforcement
+                step that follows a judgment. */}
+            <Field label="Currently subject to wage garnishment or bank levy?" hint="Example: your paycheck has money taken out before you receive it for a debt, or your bank account was frozen by a creditor." error={e("garnishment")}>
               <RadioGroup name="garnish" current={data.garnishment} onChange={v=>u("garnishment",v)} error={e("garnishment")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
             {data.garnishment==="yes" && (
@@ -4787,25 +6725,300 @@ export default function BankruptcyIntake({
                     <Input type="number" value={data.garnishmentMonthlyAmount} onChange={v=>u("garnishmentMonthlyAmount",v)} placeholder="e.g. 350"/>
                   </Field>
                 </div>
-                <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/25 mt-1">
-                  <p className="text-xs text-blue-300 font-semibold">Important: Once your bankruptcy case is filed, the automatic stay takes effect immediately and stops all wage garnishments and bank levies. Your take-home pay will return to the full amount.</p>
+                <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/25 mt-1">
+                  <p className="text-[11px] text-blue-200"><strong className="text-blue-300">Good news:</strong> Filing bankruptcy <strong className="text-white">stops the garnishment right away</strong>.</p>
                   {parseFloat(data.garnishmentMonthlyAmount)>0 && (
-                    <p className="text-xs text-blue-200 mt-1">Your income will increase by approximately <strong>${parseFloat(data.garnishmentMonthlyAmount||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/month</strong> once the stay is in place.</p>
+                    <p className="text-[11px] text-blue-200 mt-1">Your paycheck will go up by about <strong className="text-green-400">${parseFloat(data.garnishmentMonthlyAmount||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}/month</strong>.</p>
                   )}
                 </div>
               </>
             )}
-            <Field label="Is there an active foreclosure on your home?">
-              <RadioGroup name="foreclosurePending" current={data.foreclosurePending} onChange={v=>u("foreclosurePending",v)} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"},{value:"unknown",label:"Not sure"}]}/>
+
+            <Field label="Owned or operated a business in the last 4 years?" hint="Example: an LLC you started, a sole-proprietorship side gig, a partnership you closed last year." error={e("ownedBusiness")}>
+              <RadioGroup name="biz" current={data.ownedBusiness} onChange={v=>u("ownedBusiness",v)} error={e("ownedBusiness")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
             </Field>
-            {data.foreclosurePending==="yes" && (
-              <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30">
-                <p className="text-xs text-red-300 font-bold mb-2">URGENT — Filing bankruptcy before the foreclosure sale date triggers the automatic stay, which immediately halts the foreclosure. Do not delay.</p>
-                <Field label="Foreclosure sale date (if you know it)">
-                  <Input value={data.foreclosureDate} onChange={v=>u("foreclosureDate",v)} placeholder="MM/DD/YYYY"/>
-                </Field>
+            {data.ownedBusiness === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.businessEntries || []).map((biz, i) => (
+                  <div key={biz.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Business #{i+1}</p>
+                      {(data.businessEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("businessEntries", data.businessEntries.filter(x => x.id !== biz.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Name of the business" error={errors[`biz_${i}_businessName`]}>
+                      <Input value={biz.businessName || ""}
+                        onChange={v=>u("businessEntries", data.businessEntries.map((x,idx)=>idx===i?{...x,businessName:v}:x))}
+                        placeholder="e.g. Smith Consulting LLC"
+                        hasError={!!errors[`biz_${i}_businessName`]}/>
+                    </Field>
+                    <Field label="What type of business entity is it?" error={errors[`biz_${i}_entityType`]}>
+                      <Select value={biz.entityType}
+                        onChange={v=>u("businessEntries", data.businessEntries.map((x,idx)=>idx===i?{...x,entityType:v}:x))}
+                        hasError={!!errors[`biz_${i}_entityType`]}
+                        options={[
+                          {value:"sole_prop",label:"Sole Proprietorship"},
+                          {value:"llc",label:"LLC (Limited Liability Company)"},
+                          {value:"s_corp",label:"S-Corp"},
+                          {value:"c_corp",label:"C-Corp"},
+                          {value:"partnership",label:"Partnership"},
+                          {value:"other",label:"Other"},
+                        ]}
+                        placeholder="Pick a type..."/>
+                    </Field>
+                    <Field label="What state is the business registered in?" hint="Example: Arizona, Delaware, Wyoming. Use 'N/A' if it's a sole proprietorship with no state filing." error={errors[`biz_${i}_stateOfIncorporation`]}>
+                      <Select value={biz.stateOfIncorporation}
+                        onChange={v=>u("businessEntries", data.businessEntries.map((x,idx)=>idx===i?{...x,stateOfIncorporation:v}:x))}
+                        hasError={!!errors[`biz_${i}_stateOfIncorporation`]}
+                        options={US_STATES}
+                        placeholder="Pick a state..."/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("businessEntries", [...(data.businessEntries || []), { id: Date.now(), businessName:"", entityType:"", stateOfIncorporation:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Business
+                </button>
               </div>
             )}
+            {/* Tax refund question removed — already disclosed on Schedule A/B.
+                DSO question removed — already disclosed on Schedule J expenses
+                + Schedule E priority debts. */}
+
+            {/* Tax filing status — bankruptcy requires the most recent returns
+                be filed (§ 1308 / § 521(e)(2)(A)). Any unfiled return is a
+                hard gate; "not required" exemption covers SS-only / no-income
+                clients. Always flagged for attorney follow-up. */}
+            <Field label="Have you filed all of your tax returns?" hint="Federal AND state income tax returns. Example: you filed your 2024, 2023, 2022 returns on time." error={e("hasFiledAllTaxReturns")}>
+              <RadioGroup name="hasFiledAllTaxReturns" current={data.hasFiledAllTaxReturns}
+                onChange={v=>{
+                  u("hasFiledAllTaxReturns", v);
+                  if (v === "yes" || v === "not_required") { u("unfiledTaxYears",""); }
+                  if (v !== "not_required") { u("notRequiredToFile",""); u("notRequiredReason",""); u("notRequiredOtherDetails",""); }
+                }}
+                error={e("hasFiledAllTaxReturns")}
+                options={[
+                  {value:"yes",label:"Yes — all my tax returns are filed"},
+                  {value:"no",label:"No — I have unfiled tax returns"},
+                  {value:"not_required",label:"I am not required to file tax returns"},
+                ]}/>
+            </Field>
+            {data.hasFiledAllTaxReturns === "no" && (
+              <>
+                <Field label="Which years are unfiled?" hint="List every tax year you have not yet filed. Example: '2023, 2022 (federal); 2024 (state)'." error={e("unfiledTaxYears")}>
+                  <Input value={data.unfiledTaxYears}
+                    onChange={v=>u("unfiledTaxYears", v)}
+                    placeholder="e.g. 2024, 2023, 2022"
+                    hasError={!!e("unfiledTaxYears")}/>
+                </Field>
+                <div className="mt-1 mb-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <p className="text-sm text-red-200 leading-relaxed">
+                    <strong className="text-red-300">⚑ Attorney action required.</strong> Bankruptcy generally requires that the <strong className="text-white">most recent tax returns</strong> (typically the last 4 years for the IRS) be <strong className="text-white">filed before filing</strong> your case. Under <strong className="text-amber-400">§ 1308 (Ch.13)</strong> the trustee can move to dismiss if pre-petition returns aren't filed; under <strong className="text-amber-400">§ 521(e)(2)(A)</strong> the most recent return must be provided in Ch.7.
+                  </p>
+                  <p className="text-sm text-red-200 mt-2 leading-relaxed">
+                    Your attorney will work with you to get these filed before your case can move forward.
+                  </p>
+                </div>
+                <Field label="I understand I must file these tax returns and be current before my bankruptcy case can be filed.">
+                  <button type="button"
+                    onClick={()=>u("confirmedMustFileBeforeFiling", !data.confirmedMustFileBeforeFiling)}
+                    className={`w-full flex items-start gap-3 p-3 rounded-xl border-2 text-left transition-all ${data.confirmedMustFileBeforeFiling ? "bg-emerald-500/10 border-emerald-500 text-emerald-300" : "bg-slate-800 border-slate-600 text-slate-300 hover:border-amber-400/60"}`}>
+                    <span className={`w-5 h-5 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 ${data.confirmedMustFileBeforeFiling ? "bg-emerald-500 border-emerald-500" : "border-slate-500"}`}>
+                      {data.confirmedMustFileBeforeFiling && <span className="text-slate-900 text-xs font-black">✓</span>}
+                    </span>
+                    <span className="text-sm font-semibold leading-snug">I acknowledge I must file all required tax returns and be current with my tax filings before my bankruptcy case can be filed.</span>
+                  </button>
+                </Field>
+              </>
+            )}
+            {data.hasFiledAllTaxReturns === "not_required" && (
+              <>
+                <Field label="Why are you not required to file?" error={e("notRequiredReason")}>
+                  <RadioGroup name="notRequiredReason" current={data.notRequiredReason}
+                    onChange={v=>{
+                      u("notRequiredReason", v);
+                      if (v !== "other") u("notRequiredOtherDetails","");
+                    }}
+                    error={e("notRequiredReason")}
+                    options={[
+                      {value:"ss_only",label:"My only income is Social Security"},
+                      {value:"not_employed",label:"I am not employed and have no other income"},
+                      {value:"below_threshold",label:"My income is below the IRS filing threshold"},
+                      {value:"other",label:"Other — please explain"},
+                    ]}/>
+                </Field>
+                {data.notRequiredReason === "other" && (
+                  <Field label="Please explain why you're not required to file" error={e("notRequiredOtherDetails")}>
+                    <Input value={data.notRequiredOtherDetails}
+                      onChange={v=>u("notRequiredOtherDetails", v)}
+                      placeholder="Describe your situation"
+                      hasError={!!e("notRequiredOtherDetails")}/>
+                  </Field>
+                )}
+                <div className="mt-1 mb-3 p-2.5 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-sm text-amber-200"><strong className="text-amber-400">⚑ Flagged for attorney review.</strong> Your attorney will confirm you actually have no filing obligation and document the basis in the case file.</p>
+                </div>
+              </>
+            )}
+
+            {/* Property stored / held by another person — exact wording from
+                the locked client portal questionnaire (Part 4). */}
+            <Field label="Do you have any property you own that is currently being held, stored, or maintained by another person?" hint="Example: a storage unit, a car at a friend's house, items in a relative's garage, jewelry in a safe deposit box, or property at a repair shop." error={e("propertyStoredElsewhere")}>
+              <RadioGroup name="propertyStoredElsewhere" current={data.propertyStoredElsewhere}
+                onChange={v=>u("propertyStoredElsewhere", v)} error={e("propertyStoredElsewhere")}
+                options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.propertyStoredElsewhere === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.storedPropertyEntries || []).map((sp, i) => (
+                  <div key={sp.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Stored Item #{i+1}</p>
+                      {(data.storedPropertyEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("storedPropertyEntries", data.storedPropertyEntries.filter(x => x.id !== sp.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Where is it being held or stored?">
+                      <Select value={sp.locationType}
+                        onChange={v=>u("storedPropertyEntries", data.storedPropertyEntries.map((x,idx)=>idx===i?{...x,locationType:v}:x))}
+                        options={["Storage Unit","At Another Person's Home / Address","Safe Deposit Box","Repair Shop / Mechanic","Other"]}
+                        placeholder="Pick a location..."/>
+                    </Field>
+                    <Field label="Specific location (address, facility name, or person's name)">
+                      <Input value={sp.locationDetails}
+                        onChange={v=>u("storedPropertyEntries", data.storedPropertyEntries.map((x,idx)=>idx===i?{...x,locationDetails:v}:x))}
+                        placeholder="e.g. Public Storage on Camelback, or Mom's house at 123 Main St"/>
+                    </Field>
+                    <Field label="What items are being held there?">
+                      <Input value={sp.items}
+                        onChange={v=>u("storedPropertyEntries", data.storedPropertyEntries.map((x,idx)=>idx===i?{...x,items:v}:x))}
+                        placeholder="e.g. Furniture, boxes of clothes, golf clubs"/>
+                    </Field>
+                    <Field label="Estimated total value">
+                      <Input type="number" value={sp.value}
+                        onChange={v=>u("storedPropertyEntries", data.storedPropertyEntries.map((x,idx)=>idx===i?{...x,value:v}:x))}
+                        placeholder="Enter amount"/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("storedPropertyEntries", [...(data.storedPropertyEntries || []), { id: Date.now(), locationType:"", locationDetails:"", items:"", value:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Location
+                </button>
+              </div>
+            )}
+
+            {/* Reverse — does the client HOLD property belonging to someone
+                else? SOFA Part 9, Question 23. */}
+            <Field label="Do you hold property that belongs to someone else?" hint="Example: a friend's couch in your garage, a relative's car parked at your house, items left behind by a former roommate." error={e("holdsPropertyForOther")}>
+              <RadioGroup name="holdsPropertyForOther" current={data.holdsPropertyForOther}
+                onChange={v=>u("holdsPropertyForOther", v)} error={e("holdsPropertyForOther")}
+                options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.holdsPropertyForOther === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.propertyHeldForOtherEntries || []).map((ph, i) => (
+                  <div key={ph.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Held Item #{i+1}</p>
+                      {(data.propertyHeldForOtherEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("propertyHeldForOtherEntries", data.propertyHeldForOtherEntries.filter(x => x.id !== ph.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="Who do you hold this property for?" error={errors[`heldFor_${i}_ownerName`]}>
+                      <Input value={ph.ownerName || ""}
+                        onChange={v=>u("propertyHeldForOtherEntries", data.propertyHeldForOtherEntries.map((x,idx)=>idx===i?{...x,ownerName:v}:x))}
+                        placeholder="Full name of the owner"
+                        hasError={!!errors[`heldFor_${i}_ownerName`]}/>
+                    </Field>
+                    <Field label="Describe the property" error={errors[`heldFor_${i}_description`]}>
+                      <Input value={ph.description || ""}
+                        onChange={v=>u("propertyHeldForOtherEntries", data.propertyHeldForOtherEntries.map((x,idx)=>idx===i?{...x,description:v}:x))}
+                        placeholder="e.g. 2014 Honda Civic, set of golf clubs, boxes of books"
+                        hasError={!!errors[`heldFor_${i}_description`]}/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("propertyHeldForOtherEntries", [...(data.propertyHeldForOtherEntries || []), { id: Date.now(), ownerName:"", description:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Item
+                </button>
+              </div>
+            )}
+
+            <Field label="Luxury purchases over $800 or cash advances over $1,125 in the last 90 days?" hint="Example: a $1,200 vacation booked on a credit card, a $900 designer handbag, or a $1,500 cash advance against a credit line." error={e("recentLuxury")}>
+              <RadioGroup name="luxury" current={data.recentLuxury} onChange={v=>u("recentLuxury",v)} error={e("recentLuxury")} options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
+              {data.recentLuxury==="yes" && <div className="mt-2"><Input value={data.luxuryDetails} onChange={v=>u("luxuryDetails",v)} placeholder="Describe the purchases" hasError={!!e("luxuryDetails")}/>{e("luxuryDetails") && <p className="text-xs text-red-400 mt-1">⚠ {e("luxuryDetails")}</p>}</div>}
+            </Field>
+            {/* Garnishment / bank levy question moved up — placed directly
+                below the lawsuits question since garnishments typically
+                follow a judgment from a lawsuit. */}
+            {/* Losses to fire / theft / gambling — SOFA Part 8 disclosure. */}
+            <Field label="Have you lost any money to fire, theft, or gambling in the last year?" hint="Things like a house fire, a burglary, or money lost at a casino or sports betting." error={e("hasLosses")}>
+              <RadioGroup name="hasLosses" current={data.hasLosses} onChange={v=>u("hasLosses",v)} error={e("hasLosses")}
+                options={[{value:"yes",label:"Yes"},{value:"no",label:"No"}]}/>
+            </Field>
+            {data.hasLosses === "yes" && (
+              <div className="mt-2 space-y-2">
+                {(data.lossEntries || []).map((ls, i) => (
+                  <div key={ls.id} className="bg-slate-900/60 border border-slate-600 rounded-xl p-3">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">Loss #{i+1}</p>
+                      {(data.lossEntries || []).length > 1 && (
+                        <button type="button"
+                          onClick={()=>u("lossEntries", data.lossEntries.filter(x => x.id !== ls.id))}
+                          className="text-xs text-red-400 hover:text-red-300 underline">Remove</button>
+                      )}
+                    </div>
+                    <Field label="What kind of loss was it?" error={errors[`loss_${i}_type`]}>
+                      <RadioGroup name={`loss_${i}_type`} current={ls.type}
+                        onChange={v=>u("lossEntries", data.lossEntries.map((x,idx)=>idx===i?{...x,type:v}:x))}
+                        error={errors[`loss_${i}_type`]}
+                        options={[
+                          {value:"fire",label:"🔥 Fire (house fire, business fire, etc.)"},
+                          {value:"theft",label:"🚨 Theft (burglary, stolen items, scam)"},
+                          {value:"gambling",label:"🎲 Gambling (casino, sports betting, lottery, etc.)"},
+                        ]}/>
+                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="When did it happen?" error={errors[`loss_${i}_lossDate`]}>
+                        <Input type="date" value={ls.lossDate}
+                          onChange={v=>u("lossEntries", data.lossEntries.map((x,idx)=>idx===i?{...x,lossDate:v}:x))}
+                          hasError={!!errors[`loss_${i}_lossDate`]}/>
+                      </Field>
+                      <Field label="How much did you lose?" error={errors[`loss_${i}_amount`]}>
+                        <Input type="number" value={ls.amount}
+                          onChange={v=>u("lossEntries", data.lossEntries.map((x,idx)=>idx===i?{...x,amount:v}:x))}
+                          placeholder="e.g. 5000" hasError={!!errors[`loss_${i}_amount`]}/>
+                      </Field>
+                    </div>
+                    <Field label="Briefly describe what happened (optional)">
+                      <Input value={ls.description}
+                        onChange={v=>u("lossEntries", data.lossEntries.map((x,idx)=>idx===i?{...x,description:v}:x))}
+                        placeholder="e.g. Kitchen fire, car broken into, blackjack losses"/>
+                    </Field>
+                  </div>
+                ))}
+                <button type="button"
+                  onClick={()=>u("lossEntries", [...(data.lossEntries || []), { id: Date.now(), type:"", lossDate:"", amount:"", description:"" }])}
+                  className="w-full border border-dashed border-amber-400/40 hover:border-amber-400 text-amber-400 text-xs font-semibold py-2.5 rounded-xl transition-all flex items-center justify-center gap-2">
+                  <span className="text-base">+</span> Add Another Loss
+                </button>
+              </div>
+            )}
+
+            {/* Foreclosure question moved to Real Property section so all
+                property-related questions live together. State keys preserved. */}
           </SectionCard>
           <ErrorBanner errors={errors}/>
         </div>
@@ -4813,6 +7026,14 @@ export default function BankruptcyIntake({
 
       case 8: return (
         <div>
+          {!FIRM.enablePersonalInjuryScreening && (
+            <div className="mb-4 p-4 bg-slate-800/60 border border-slate-600 rounded-xl">
+              <p className="text-base text-white font-bold">
+                The <strong className="text-amber-400">Personal Injury Screening</strong> step is turned off for this firm. Click <strong className="text-amber-400">Next →</strong> to continue to Review &amp; Submit.
+              </p>
+            </div>
+          )}
+          {FIRM.enablePersonalInjuryScreening && <>
           <SectionCard title="Personal Injury Screening" icon="⚕️">
             <div className="mb-4 p-3.5 bg-blue-500/8 border border-blue-500/25 rounded-xl">
               <p className="text-xs text-blue-300 leading-relaxed">This section helps us identify whether you may have a separate personal injury or accident claim. Your answers are kept confidential and will only be reviewed by our attorneys.</p>
@@ -4949,7 +7170,7 @@ export default function BankruptcyIntake({
                     {piSubmitStatus === "idle" || piSubmitStatus === "error" ? (
                       <div className="mt-4">
                         <div className="p-4 bg-amber-400/8 border border-amber-400/30 rounded-xl mb-3">
-                          <p className="text-sm font-semibold text-amber-300 mb-1">Submit Your Personal Injury Information</p>
+                          <p className="text-sm font-semibold text-amber-400 mb-1">Submit Your Personal Injury Information</p>
                           <p className="text-xs text-slate-400 leading-relaxed">
                             Our attorney will review the details of your potential personal injury claim and determine if the firm can assist you. You will be notified of the outcome. After submitting, you will continue with the rest of your bankruptcy intake.
                           </p>
@@ -4987,6 +7208,7 @@ export default function BankruptcyIntake({
               <p className="text-sm text-slate-400">No personal injury claim noted. You may continue to the next section.</p>
             </div>
           )}
+          </>}
 
           <ErrorBanner errors={errors}/>
         </div>
@@ -5058,7 +7280,7 @@ export default function BankruptcyIntake({
               <SectionCard title="Certification & Acknowledgment" icon="✍️">
                 <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-4 mb-4 text-xs text-slate-300 leading-relaxed space-y-3">
                   <p>By submitting this form, I certify that all information I have provided is <strong className="text-white">true, correct, and complete</strong> to the best of my knowledge and belief.</p>
-                  <p className="text-amber-300 font-semibold">IMPORTANT — PLEASE READ:</p>
+                  <p className="text-amber-400 font-semibold">IMPORTANT — PLEASE READ:</p>
                   <p>This intake questionnaire is for <strong className="text-white">informational purposes only</strong> and does not constitute legal advice. No <strong className="text-white">attorney-client relationship</strong> is formed by submitting this form. Consult a licensed bankruptcy attorney before making any legal decisions.</p>
                   <div className="border-t border-slate-600 pt-3 mt-3">
                     <p className="text-red-400 font-semibold mb-2">ACCURACY WARNING — PLEASE READ CAREFULLY:</p>
@@ -5070,18 +7292,21 @@ export default function BankruptcyIntake({
                   <span className={`w-6 h-6 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 ${data.confirmedAccurate?"bg-green-400 border-green-400":"border-slate-500"}`}>
                     {data.confirmedAccurate && <span className="text-slate-900 text-xs font-black">✓</span>}
                   </span>
-                  <span className="text-sm font-semibold leading-snug">I certify that all information is true, correct, and complete. I understand this does not constitute legal advice or create an attorney-client relationship.</span>
+                  <span className="text-sm font-semibold leading-snug">{CERT_TEXT}</span>
                 </button>
                 {e("confirmedAccurate") && <p className="text-xs text-red-400 mt-2">⚠ {e("confirmedAccurate")}</p>}
 
-                {/* SMS / email consent — TCPA-aligned; required for submission. */}
+                {/* SMS / email consent — TCPA-aligned; required for submission.
+                    Text comes from FIRM.smsConsentText (with {firmName} sub),
+                    falling back to DEFAULT_SMS_TEXT. Editable in Department
+                    Settings. */}
                 <button onClick={()=>u("smsEmailConsent",!data.smsEmailConsent)}
                   className={`mt-3 w-full flex items-start gap-4 p-4 rounded-xl border-2 text-left transition-all ${data.smsEmailConsent?"bg-amber-400/10 border-amber-400 text-amber-200":"bg-slate-800 border-slate-600 text-slate-300 hover:border-amber-400/60"}`}>
                   <span className={`w-6 h-6 rounded border-2 flex-shrink-0 flex items-center justify-center mt-0.5 ${data.smsEmailConsent?"bg-amber-400 border-amber-400":"border-slate-500"}`}>
                     {data.smsEmailConsent && <span className="text-slate-900 text-xs font-black">✓</span>}
                   </span>
                   <span className="text-xs font-medium leading-snug">
-                    By submitting this form, I agree that Majors Law and its staff may contact me by phone call, text message (including automated and AI-assisted texts), and email at the phone number and email address I provide, to schedule and handle my intake. Message and data rates may apply. I can reply STOP at any time to opt out of texts. Consent is not a condition of receiving legal services.
+                    {SMS_TEXT}
                   </span>
                 </button>
                 {e("smsEmailConsent") && <p className="text-xs text-red-400 mt-2">⚠ {e("smsEmailConsent")}</p>}
@@ -5207,15 +7432,33 @@ export default function BankruptcyIntake({
   };
 
   const stepIntros = [
-    {icon:"👤",title:"Let's start with who is filing",body:"We need your basic contact information and filing type to set up your case file. If you are married and filing individually, your attorney will explain whether your spouse's information is required. Everything you share is kept strictly confidential."},
-    {icon:"👨‍👩‍👧",title:"Tell us about your household",body:"Household size and composition is used as part of the Means Test — the income eligibility analysis required by federal bankruptcy law. The number of people in your household affects the applicable income thresholds that your attorney will use to evaluate your situation."},
-    {icon:"💰",title:"Your income over the past 6 months",body:"Federal bankruptcy law requires full disclosure of all income received in the 6 months before filing. This information is used to calculate your Current Monthly Income (CMI), which is compared against your state's median income as part of the Means Test (Official Form 122A). Your attorney will use this data to complete the full analysis."},
-    {icon:"🏠",title:"Real estate and property you own",body:"All real estate interests must be disclosed. The equity in your property — the difference between its market value and what you owe — is an important factor because it determines whether an exemption may apply. An exemption is a legal protection that may allow you to keep certain property in bankruptcy. Your attorney will review which exemptions are available based on your state's laws."},
-    {icon:"🚗",title:"Your vehicles and personal assets",body:"Every asset you own must be listed on your bankruptcy schedules, regardless of its value. As with real estate, the equity in each asset and whether an exemption applies will be evaluated by your attorney. A bankruptcy trustee — the court-appointed official who administers your case — will review these disclosures to ensure completeness and accuracy."},
-    {icon:"📊",title:"Your monthly living expenses",body:"Your monthly expenses are reported on Official Form 106J (Schedule J) and are required for your court filings. Accurate expense information is also used as part of the Means Test to calculate your disposable income. Please be thorough and honest — your attorney will review these figures with you."},
-    {icon:"💳",title:"What you owe and to whom",body:"All debts must be disclosed on your bankruptcy schedules — this includes credit cards, medical bills, loans, and any other obligations. Your attorney will review the type and composition of your debts, which can affect how they are treated in bankruptcy. No debt should be omitted, even if you intend to continue paying it."},
+    // Case 0 (Filing Type) intentionally null — the styled inline block at the
+    // top of the case-0 render is the single source of truth.
+    null,
+    // Case 1 (Household) intentionally null — the styled inline block at the
+    // top of the case-1 render is the single source of truth so we don't show
+    // the same explanation twice.
+    null,
+    // Case 2 (Income) intentionally null — the styled inline block at the
+    // top of the case-2 render is the single source of truth.
+    null,
+    // Case 3 (Real Estate) intentionally null — the styled inline block at the
+    // top of the case-3 render (with yellow terms + centered title) is the
+    // single source of truth so the same copy doesn't show twice.
+    null,
+    // Case 4 (Personal Property) intentionally null — the styled inline block
+    // at the top of the case-4 render is the single source of truth.
+    null,
+    // Case 5 (Expenses) intentionally null — the styled inline block at the
+    // top of the case-5 render is the single source of truth.
+    null,
+    {icon:"💳",title:"Creditor Information",body:"The Bankruptcy Code requires disclosure of ALL creditors you owe money to. You must provide every secured, priority, and general unsecured (non-priority) creditor — no debt may be omitted, even if you intend to continue paying it."},
     {icon:"📋",title:"Recent financial history",body:"Bankruptcy law requires full disclosure of your recent financial activity, including asset transfers, large payments, and other transactions from the prior 2–4 years. This information is reviewed by the bankruptcy trustee to ensure there are no preferential transfers or other issues that could affect your case."},
-    {icon:"⚕️",title:"Personal injury & accident screening",body:"Before completing your bankruptcy intake, we ask a brief question about whether you may have a personal injury or accident claim against another party. If so, an attorney will separately review those details. This does not affect or delay your bankruptcy intake."},
+    // Case 8 (Personal Injury Screening) intentionally null — the section
+    // header and intro live inside the case-8 SectionCard. Per firm spec,
+    // the PI step also defaults to OFF (firmConfig.enablePersonalInjuryScreening)
+    // so most firms skip the step entirely.
+    null,
     {icon:"✅",title:"Review and submit your information",body:"Please carefully review the summary below before submitting. Your attorney will use this information to prepare your official bankruptcy schedules. Accuracy is essential — errors or omissions may need to be corrected with the court."},
   ];
 
@@ -5224,52 +7467,91 @@ export default function BankruptcyIntake({
       {!started ? (
         <div className="min-h-screen flex flex-col">
           <div className="bg-slate-900 border-b border-slate-800 px-4 py-4">
-            <div className="max-w-lg mx-auto">
-              <span className="font-serif text-lg font-bold text-white">bankruptcy</span>
-              <span className="font-serif text-lg font-bold text-amber-400">.AI</span>
+            <div className="max-w-lg mx-auto flex items-center gap-2">
+              {FIRM.logoUrl ? (
+                <img src={FIRM.logoUrl} alt={FIRM.name} className="h-8 w-auto"/>
+              ) : (
+                <>
+                  <span className="font-serif text-lg font-bold text-white">{FIRM.name}</span>
+                </>
+              )}
             </div>
           </div>
           <div className="flex-1 max-w-xl mx-auto w-full px-4 py-10">
+            {/* Firm logo / brand mark. Default amber-circled ⚖️ glyph until
+                the firm uploads a custom logo via department settings. */}
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-400/10 border-2 border-amber-400/30 mb-5">
-                <span className="text-4xl">⚖️</span>
-              </div>
-              <h1 className="font-serif text-4xl font-bold text-white mb-3">
-                Welcome to <span className="text-amber-400">Bankruptcy.AI</span>
+              {FIRM.logoUrl ? (
+                <img src={FIRM.logoUrl} alt={FIRM.name} className="mx-auto mb-5 max-h-24 w-auto"/>
+              ) : (
+                <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-amber-400/10 border-2 border-amber-400/30 mb-5">
+                  <span className="text-4xl">⚖️</span>
+                </div>
+              )}
+              <h1 className="font-serif text-3xl font-bold text-white mb-3 leading-snug">
+                <span className="text-amber-400">{FIRM.name}</span> invites you to fill out our new client questionnaire
               </h1>
-              <p className="text-slate-400 text-base leading-relaxed">
-                Let us begin gathering the information needed to review your bankruptcy and debt relief options.
-              </p>
+              {FIRM.welcomeMessage && (
+                <p className="text-base text-white font-semibold leading-relaxed mt-3">{FIRM.welcomeMessage}</p>
+              )}
             </div>
-            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 mb-5">
-              <p className="font-semibold text-white text-base mb-4">About This Questionnaire</p>
-              <div className="space-y-3.5 text-sm text-slate-300 leading-relaxed">
-                <div className="flex items-start gap-3"><span className="text-amber-400 text-base flex-shrink-0 mt-0.5">🕐</span><p>This questionnaire takes approximately <strong className="text-white">15 minutes</strong> to complete.</p></div>
-                <div className="flex items-start gap-3"><span className="text-amber-400 text-base flex-shrink-0 mt-0.5">📋</span><p>This tool is designed to <strong className="text-white">gather information</strong> for attorney review. It is not a decision-making tool.</p></div>
-                <div className="flex items-start gap-3"><span className="text-amber-400 text-base flex-shrink-0 mt-0.5">🔒</span><p>Your information is <strong className="text-white">kept confidential</strong> and will only be reviewed by our office.</p></div>
-              </div>
+
+            {/* Consolidated disclosure — replaces the prior About / Important
+                blocks per firm spec. Concise, hits the four required points:
+                (1) no attorney-client relationship from filling this out,
+                (2) info reviewed with an attorney for bankruptcy eligibility,
+                (3) accuracy is important; use the chat if unsure,
+                (4) not legal advice; response comes after attorney review.
+                Body text uses one consistent size (text-base ≈ 16px) for
+                readability. */}
+            <div className="bg-slate-800/60 border border-slate-700 rounded-2xl p-6 mb-6">
+              <p className="text-lg font-bold text-amber-400 mb-4 text-center">Please Read Before You Begin</p>
+              <ol className="space-y-4 text-base text-white font-bold leading-relaxed list-none">
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-400 font-bold flex items-center justify-center text-sm">1</span>
+                  <span>Filling out this questionnaire <strong className="text-amber-400">does not create an attorney-client relationship</strong>.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-400 font-bold flex items-center justify-center text-sm">2</span>
+                  <span>Your information will be reviewed with an attorney to evaluate your <strong className="text-amber-400">bankruptcy eligibility</strong>.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-400 font-bold flex items-center justify-center text-sm">3</span>
+                  <span>It is important that all information is <strong className="text-amber-400">true and accurate</strong>. If you're not sure about a question, use the <strong className="text-amber-400">Ask a Question</strong> chat in the corner to get help.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-400 font-bold flex items-center justify-center text-sm">4</span>
+                  <span>Nothing on this form is <strong className="text-amber-400">legal advice</strong>. Once you finish, your information will be submitted and a response will be provided after attorney review.</span>
+                </li>
+                <li className="flex gap-3">
+                  <span className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-400/15 border border-amber-400/40 text-amber-400 font-bold flex items-center justify-center text-sm">5</span>
+                  <span>Everything you share is <strong className="text-amber-400">strictly confidential</strong> and will only be reviewed by our office.</span>
+                </li>
+              </ol>
             </div>
-            <div className="bg-slate-900/80 border border-slate-700 rounded-2xl p-6 mb-6">
-              <p className="font-semibold text-amber-400 text-sm uppercase tracking-widest mb-3">Important — Please Read Before Continuing</p>
-              <div className="space-y-3 text-sm text-slate-400 leading-relaxed">
-                <p><strong className="text-slate-300">Not Legal Advice.</strong> Nothing on this website or in this questionnaire constitutes legal advice. The information collected is for informational purposes only.</p>
-                <p><strong className="text-slate-300">No Attorney-Client Relationship.</strong> Completing and submitting this questionnaire does not create an attorney-client relationship.</p>
-                <p><strong className="text-slate-300">Bankruptcy.AI is Not a Law Firm.</strong> This tool exists to gather and organize your financial information so that it may be reviewed by a licensed attorney.</p>
-                <p><strong className="text-slate-300">Consult an Attorney.</strong> You are encouraged to consult with a licensed bankruptcy attorney regarding your specific situation before making any decisions.</p>
-              </div>
-            </div>
+
             <div className="mb-8">
-              <p className="text-sm text-slate-500 text-center leading-relaxed mb-5">
-                By clicking "Begin Questionnaire" below, you confirm that you have read and understood the above, and you agree that this tool is for informational purposes only and does not create an attorney-client relationship.
-              </p>
               <button onClick={()=>{ setStarted(true); topRef.current?.scrollIntoView({behavior:"smooth"}); }}
                 className="w-full bg-amber-400 hover:bg-amber-300 text-slate-900 font-bold py-4 rounded-xl text-base uppercase tracking-wider transition-all flex items-center justify-center gap-3 shadow-lg shadow-amber-400/20">
                 <span>⚖️</span> Begin Questionnaire →
               </button>
-              <p className="text-sm text-slate-600 text-center mt-3">Takes approximately 15 minutes — you can go back and edit your answers at any time</p>
+              <p className="text-base text-slate-400 text-center mt-3">Takes about 15 minutes — you can go back and edit your answers at any time.</p>
             </div>
-            <div className="text-center">
-              <p className="text-sm text-slate-600">Questions? Call us at <a href="tel:+18005551234" className="text-slate-500 hover:text-amber-400 transition-colors">(800) 555-1234</a></p>
+
+            {/* Firm contact info — phone is always shown; email line is
+                optional and only renders if the firm configured one in
+                department settings. */}
+            <div className="text-center space-y-1">
+              <p className="text-base text-slate-400">
+                Questions? Call us at{" "}
+                <a href={FIRM.phoneHref} className="text-amber-400 hover:text-amber-400 transition-colors font-semibold">{FIRM.phone}</a>
+              </p>
+              {FIRM.contactEmail && (
+                <p className="text-base text-slate-400">
+                  or email{" "}
+                  <a href={`mailto:${FIRM.contactEmail}`} className="text-amber-400 hover:text-amber-400 transition-colors font-semibold">{FIRM.contactEmail}</a>
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -5310,7 +7592,7 @@ export default function BankruptcyIntake({
                   <div>
                     {isTakeover ? (
                       <>
-                        <p className="text-xs font-bold text-amber-300 mb-0.5 uppercase tracking-wide">Legal Administrator — Staff-Assisted Session</p>
+                        <p className="text-xs font-bold text-amber-400 mb-0.5 uppercase tracking-wide">Legal Administrator — Staff-Assisted Session</p>
                         <p className="text-xs text-amber-200 leading-relaxed">
                           This intake is being completed by <span className="font-bold text-white">{staffMode.staffName}</span>, a Legal Administrator (non-attorney). {staffMode.staffName} is gathering information on behalf of the client to assist with intake completion. All information will be reviewed by a licensed attorney before any case decisions are made. No legal advice is being given, and no attorney-client relationship is formed at this stage.
                         </p>
@@ -5328,30 +7610,25 @@ export default function BankruptcyIntake({
               </PageContainer>
             </div>
           )}
-          <PageContainer width="narrow" className="py-6 pb-28 flex gap-6 items-start">
+          <PageContainer width="narrow" className="py-6 pb-28">
             <div className="flex-1 min-w-0">
-              <h2 className="font-serif text-2xl font-bold text-white mb-2">{SECTIONS[step]}</h2>
+              <h2 className="font-serif text-2xl font-bold text-amber-400 mb-2 whitespace-nowrap">{SECTIONS[step]}</h2>
               {stepIntros[step] && (
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5 mb-6 flex gap-3">
                   <span className="text-2xl flex-shrink-0 mt-0.5">{stepIntros[step].icon}</span>
                   <div>
-                    <p className="text-base font-semibold text-white mb-1.5">{stepIntros[step].title}</p>
-                    <p className="text-sm text-slate-400 leading-relaxed">{stepIntros[step].body}</p>
+                    <p className="text-base font-bold text-amber-400 mb-1.5">{stepIntros[step].title}</p>
+                    <p className="text-sm font-bold text-white leading-relaxed">{stepIntros[step].body}</p>
                   </div>
                 </div>
               )}
               {renderSection()}
             </div>
-            <div className="hidden lg:flex flex-col w-80 flex-shrink-0 sticky top-20" style={{height:"520px"}}>
-              <IntakeChatbot
-                clientId={clientId}
-                clientName={clientName}
-                sessionId={sessionId}
-                isAdmin={false}
-              />
-            </div>
           </PageContainer>
-          <div className="lg:hidden fixed bottom-20 right-4 z-40 w-80">
+          {/* Compact "Ask a Question" chat — always lives in the bottom-right
+              corner. Starts collapsed so clients see the form prompts first;
+              they tap to expand when they actually have a question. */}
+          <div className="fixed bottom-20 right-4 z-40 w-72">
             <IntakeChatbot
               clientId={clientId}
               clientName={clientName}
@@ -5363,7 +7640,17 @@ export default function BankruptcyIntake({
             <div className="fixed bottom-0 left-0 right-0 bg-slate-950 border-t border-slate-800 py-4">
               <PageContainer className="flex gap-3">
                 {step > 0 && (
-                  <button onClick={()=>{setErrors({});setStep(s=>s-1);topRef.current?.scrollIntoView({behavior:"smooth"});}}
+                  <button onClick={()=>{
+                    setErrors({});
+                    // Mirror handleContinue — skip back over step 8 when the
+                    // firm has PI screening disabled.
+                    setStep(s => {
+                      const prev = s - 1;
+                      if (prev === 8 && !FIRM.enablePersonalInjuryScreening) return 7;
+                      return prev;
+                    });
+                    topRef.current?.scrollIntoView({behavior:"smooth"});
+                  }}
                     className="flex-1 border border-slate-600 text-slate-300 hover:border-slate-400 font-semibold py-3.5 rounded-xl transition-colors text-base">
                     ← Back
                   </button>

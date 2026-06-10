@@ -24,6 +24,15 @@ import ConsultSchedulerPanel, {
 } from "./components/scheduler/ConsultSchedulerPanel";
 import { isClaimedByOther, LeadClaimBadge, LeadClaimBanner } from "./components/lead-claim/LeadClaim";
 import FloatingChat from "./components/floating-chat/FloatingChat";
+import AllAnswersView, { ALL_ANSWERS_SCHEMA, renderAnswerValue } from "./components/intake-review/AllAnswersView";
+import { calcDebtComposition } from "./AttorneyIntakeDashboard";
+import CaseAdvancementStatusBar from "./components/intake-review/CaseAdvancementStatusBar";
+import ClientTimeLog, { useClientTimeLog } from "./components/intake-review/ClientTimeLog";
+import UpdateIntakeInfoModal from "./components/intake-review/UpdateIntakeInfoModal";
+import StaffSettingsPanel, { type StaffSettingsViewerRole } from "./components/staff-settings/StaffSettingsPanel";
+import DepartmentSettingsPanel, { type DepartmentSettingsViewerRole } from "./components/admin-settings/DepartmentSettingsPanel";
+import { setCurrentAttorneyName, clearCurrentAttorneyName, getCurrentAttorneyName } from "./lib/currentAttorney";
+import { scaleNationalStandards, scaleNationalStandards2025, getRuleNumber, getMedianAnnualIncome as storeGetMedian, getCurrentRulesetVersion, diffRulesetVersions } from "./lib/irsMeansStandards";
 
 // V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
 // firms get the same feature-flag config per Section 6 of the V1 migration,
@@ -252,6 +261,11 @@ const MEDIAN_INCOME: Record<string, { 1: number; 2: number; 3: number; 4: number
 };
 
 function stateMedian(state: string, houseSize: number): number {
+  // Prefer the centralized store's median table so attorney edits in
+  // LegalReferenceStore propagate here. Falls back to the local copy
+  // only if the store doesn't recognize the state.
+  const fromStore = storeGetMedian(state, houseSize);
+  if (fromStore != null) return fromStore;
   const t = MEDIAN_INCOME[state];
   if (!t) {
     // Unknown state — use national approximation as fallback
@@ -378,6 +392,15 @@ interface IntakeReview {
   decision_notes: string | null;
   decided_at: string | null;
   created_at: string;
+  // Ruleset version this review was completed against. Scaffold field —
+  // TODO Phase B: add `reviewed_ruleset_version text` column to
+  // attorney_intake_reviews. Until the DB column exists this comes through
+  // null and `needsReReview` falls into the "tracking not enabled" branch.
+  reviewed_ruleset_version?: string | null;
+  // Lifecycle status flags — TODO Phase B: drive from a `case_status`
+  // enum column (intake_leads or attorney_intake_reviews). Today derived
+  // from review_status + decided_at heuristic in deriveCaseLifecycle().
+  case_status?: 'reviewed_pending_signing' | 'filed' | 'closed' | string | null;
 }
 
 interface IntakeIssue {
@@ -407,7 +430,7 @@ function IntakeAttorneyReviewModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"eligibility" | "issues" | "decision">("eligibility");
+  const [activeTab, setActiveTab] = useState<"eligibility" | "issues" | "allAnswers" | "decision">("eligibility");
   const [review, setReview] = useState<IntakeReview | null>(null);
   const [issues, setIssues] = useState<IntakeIssue[]>([]);
   const [loading, setLoading] = useState(true);
@@ -481,11 +504,15 @@ function IntakeAttorneyReviewModal({
       );
       let rev = rows[0] ?? null;
       if (!rev && submission) {
-        // Auto-generate review record with computed data
+        // Auto-generate review record with computed data.
+        // attorney_name is the LOGGED-IN attorney (set on PortalLogin via
+        // setCurrentAttorneyName + persisted to sessionStorage); was
+        // hardcoded "Jennifer Smith, Esq." and would attribute every
+        // auto-generated review to Jennifer regardless of who logged in.
         const body: Partial<IntakeReview> = {
           lead_id: lead.id,
           submission_id: String(submission.id ?? ""),
-          attorney_name: "Jennifer Smith, Esq.",
+          attorney_name: getCurrentAttorneyName(),
           review_status: "in_progress",
           ch7_eligible: ch7Eligible,
           ch13_eligible: ch13Eligible,
@@ -605,6 +632,360 @@ function IntakeAttorneyReviewModal({
       });
     }
 
+    // Priority Debts — Unfiled tax returns. Client self-reported on the intake
+    // form that a priority back-tax entry has taxFiled === "no". The IRS
+    // generally requires returns for the 4 most recent tax years be filed
+    // before bankruptcy; unfiled returns can lead to dismissal under § 1308
+    // (Ch.13) or delay/discharge issues. Surface this as an attorney action item.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const priorityDebts = Array.isArray(fd?.priorityDebts) ? (fd!.priorityDebts as Array<Record<string, unknown>>) : [];
+      const unfiled = priorityDebts.filter(d => d.type === "back_taxes" && d.taxFiled === "no");
+      if (unfiled.length > 0) {
+        const years = unfiled.map(d => String(d.taxYear ?? "—")).filter(Boolean).join(", ");
+        const total = unfiled.reduce((a, d) => a + (parseFloat((d.amount as string) ?? "0") || 0), 0);
+        toInsert.push({
+          review_id: reviewId, category: "tax_compliance", severity: "error", sort_order: order++,
+          title: `Unfiled Tax Returns — ${unfiled.length} year(s) flagged${years ? ` (${years})` : ""}`,
+          description: `Client self-reported unfiled tax returns for ${unfiled.length} priority tax year(s)${years ? ` (${years})` : ""}, total approx ${fmt(total)} owed. The IRS generally requires returns for the 4 most recent tax years be filed before bankruptcy. Under 11 U.S.C. § 1308, the Ch.13 trustee may move to dismiss if pre-petition returns are not filed. Advise client to file all delinquent returns — typically BEFORE the petition is filed.`,
+        });
+      }
+    }
+
+    // Pending personal injury claim — disclosed in Personal Property step.
+    // PI claims are an asset of the bankruptcy estate and must be listed on
+    // Schedule A/B; exemption treatment varies by state. Flag for review.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const piFlag = String(fd?.hasPiClaimInProperty ?? "") === "yes";
+      const piDetails = String(fd?.piClaimInPropertyDetails ?? "").trim();
+      if (piFlag) {
+        toInsert.push({
+          review_id: reviewId, category: "assets", severity: "error", sort_order: order++,
+          title: "Pending Personal Injury Claim — Asset Disclosure Required",
+          description: `Client disclosed a pending personal injury claim${piDetails ? `: "${piDetails}"` : "."} The claim is an asset of the bankruptcy estate (Schedule A/B). Confirm exemption treatment under the applicable state PI-claim exemption (or wildcard) and ensure proceeds are properly disclosed if received post-petition.`,
+        });
+      }
+    }
+
+    // Inheritance / will / trust / estate expectation. § 541(a)(5) sweeps in
+    // bequests, devises, inheritances, life-insurance proceeds, and property-
+    // settlement payments received within 180 days POST-petition into the
+    // estate. Timing the filing matters. Flag for review.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const inhFlag = String(fd?.expectsInheritance ?? "") === "yes";
+      const inhDetails = String(fd?.inheritanceDetails ?? "").trim();
+      if (inhFlag) {
+        toInsert.push({
+          review_id: reviewId, category: "assets", severity: "error", sort_order: order++,
+          title: "Expected Inheritance / Trust / Estate Distribution — 180-Day Rule",
+          description: `Client expects to receive money from a will, trust, or estate${inhDetails ? `: "${inhDetails}"` : "."} Under 11 U.S.C. § 541(a)(5), any inheritance, bequest, devise, or life-insurance proceeds the debtor becomes entitled to within 180 days AFTER filing belongs to the bankruptcy estate. Time the filing carefully (consider filing after the 180-day window passes or after the distribution is received and spent on exempt assets / necessities).`,
+        });
+      }
+    }
+
+    // Tax filing compliance — § 1308 (Ch.13) requires pre-petition returns
+    // be filed; § 521(e)(2)(A) requires the most recent return in Ch.7.
+    // Surface unfiled-tax disclosures and "not required" claims for follow-up.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const taxStatus = String(fd?.hasFiledAllTaxReturns ?? "");
+      if (taxStatus === "no") {
+        const years = String(fd?.unfiledTaxYears ?? "").trim();
+        const ack = fd?.confirmedMustFileBeforeFiling === true;
+        toInsert.push({
+          review_id: reviewId,
+          category: "tax_compliance",
+          severity: "error",
+          sort_order: order++,
+          title: `Unfiled Tax Returns — Filing Gate (${years || "years not specified"})`,
+          description:
+            `Client self-reported unfiled tax returns${years ? ` for ${years}` : ""}. ` +
+            `Under § 1308 (Ch.13) the trustee may move to dismiss if pre-petition returns aren't filed; § 521(e)(2)(A) requires the most recent return in Ch.7. ` +
+            `Client acknowledgment captured: ${ack ? "YES — they confirmed they must file before bankruptcy" : "NO — acknowledgment NOT captured, follow up"}. ` +
+            `Work with the client to get all required returns filed BEFORE the petition is filed. Revisit this item before any case decision.`,
+        });
+      } else if (taxStatus === "not_required") {
+        const reason = String(fd?.notRequiredReason ?? "");
+        const otherDetail = String(fd?.notRequiredOtherDetails ?? "").trim();
+        toInsert.push({
+          review_id: reviewId,
+          category: "tax_compliance",
+          severity: "warning",
+          sort_order: order++,
+          title: "Client Claims No Filing Obligation — Verify",
+          description:
+            `Client says they are not required to file tax returns. Reason: ${reason || "—"}` +
+            (reason === "other" && otherDetail ? ` ("${otherDetail}")` : "") +
+            `. Confirm with the client there is truly no filing obligation (SS-only income, below filing threshold, etc.) and document the basis in the case file. If a return is required, work with the client to file before the petition.`,
+        });
+      }
+    }
+
+    // Pending claims / money owed (Schedule A/B) — these are estate assets
+    // that must be valued and disclosed. Surface for attorney review of
+    // exemption treatment + collectability analysis.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      if (String(fd?.hasPendingClaims ?? "") === "yes") {
+        const valueUnknown = fd?.pendingClaimsValueUnknown === true;
+        const value = parseFloat(String(fd?.pendingClaimsValue ?? "0")) || 0;
+        const desc = String(fd?.pendingClaimsDesc ?? "").trim();
+        toInsert.push({
+          review_id: reviewId,
+          category: "assets",
+          severity: "warning",
+          sort_order: order++,
+          title: `Pending Claim / Money Owed — ${valueUnknown ? "value unknown" : fmt(value)}`,
+          description:
+            `Client disclosed a pending claim or money owed to them${desc ? `: "${desc}"` : "."} ` +
+            (valueUnknown
+              ? `Value listed as unknown — attorney should estimate for Schedule A/B and exemption analysis. `
+              : `Estimated value ${fmt(value)}. `) +
+            `This is an asset of the bankruptcy estate. Confirm exemption coverage (wildcard or specific category) and document the collection prospects.`,
+        });
+      }
+    }
+
+    // Pending lawsuits against the client (SOFA) — affects automatic stay
+    // timing, potential non-dischargeability (fraud, intentional torts),
+    // and Schedule E/F treatment of the claim.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      if (String(fd?.pendingLawsuits ?? "") === "yes") {
+        const entries = Array.isArray(fd?.lawsuitEntries) ? (fd!.lawsuitEntries as Array<Record<string, unknown>>) : [];
+        const lines = entries
+          .filter(ls => ls.plaintiff || ls.suitType)
+          .map(ls => {
+            const plaintiff = String(ls.plaintiff ?? "—");
+            const type = String(ls.suitType ?? "");
+            const typeOther = String(ls.suitTypeOther ?? "");
+            const typeLabel = type === "other" && typeOther ? typeOther : type;
+            const valueUnknown = ls.claimValueUnknown === true;
+            const value = parseFloat(String(ls.claimValue ?? "0")) || 0;
+            const details = String(ls.details ?? "");
+            return `${plaintiff} (${typeLabel || "type ?"}) — value: ${valueUnknown ? "unknown" : fmt(value)}; details: ${details || "—"}`;
+          });
+        toInsert.push({
+          review_id: reviewId,
+          category: "lawsuits",
+          severity: "error",
+          sort_order: order++,
+          title: `Pending Lawsuit(s) — ${entries.length} case(s) disclosed`,
+          description:
+            `Client disclosed ${entries.length} pending lawsuit(s) against them. ` +
+            (lines.length ? `Detail: ${lines.join(" · ")}. ` : "") +
+            `Review for: (1) automatic-stay applicability (§ 362), (2) non-dischargeability triggers (§ 523 — fraud, willful/malicious injury, DUI judgments), (3) classification on Schedule E/F (disputed/unliquidated/contingent), (4) timing of filing relative to any imminent judgment.`,
+        });
+      }
+    }
+
+    // Trust disclosure — client said yes to creating / transferring assets
+    // into a trust in the last 10 years. § 548 fraudulent-transfer lookback
+    // is 2 years federal / up to 10 years under most state UFTA/UVTA
+    // adoptions. § 541 estate inclusion depends on revocable vs. irrevocable.
+    // Surface every trust entry so the attorney can analyze.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      if (String(fd?.createdTrust ?? "") === "yes") {
+        const trusts = Array.isArray(fd?.trustEntries) ? (fd!.trustEntries as Array<Record<string, unknown>>) : [];
+        const totalValue = trusts.reduce((a, t) => a + (parseFloat(String(t.propertyValue ?? "0")) || 0), 0);
+        const lines = trusts
+          .filter(t => t.trustName || t.propertyTransferred)
+          .map(t => {
+            const name = String(t.trustName ?? "(unnamed)");
+            const prop = String(t.propertyTransferred ?? "");
+            const val = parseFloat(String(t.propertyValue ?? "0")) || 0;
+            const trustee = String(t.trusteeName ?? "");
+            const bene = String(t.beneficiaryName ?? "");
+            const type = String(t.trustType ?? "");
+            return `${name} (${type || "type unknown"}) — transferred: ${prop || "—"} (${fmt(val)}); trustee: ${trustee || "—"}; beneficiary: ${bene || "—"}`;
+          });
+        toInsert.push({
+          review_id: reviewId,
+          category: "trust_transfers",
+          severity: "error",
+          sort_order: order++,
+          title: `Trust Transfer Disclosure — ${trusts.length} trust(s), ~${fmt(totalValue)} total`,
+          description:
+            `Client disclosed creating or transferring assets into ${trusts.length} trust(s) in the last 10 years (~${fmt(totalValue)} total). ` +
+            (lines.length ? `Detail: ${lines.join(" · ")}. ` : "") +
+            `Analyze under § 548 (federal 2-yr lookback for fraudulent transfers) + state UFTA/UVTA (up to 10 yrs in most states). For § 541 estate inclusion: revocable trust assets are generally still property of the estate; irrevocable trusts may be excluded depending on terms (spendthrift clauses, third-party settlors). Confirm self-settled vs. third-party-settled status.`,
+        });
+      }
+    }
+
+    // Vehicle purchase date analysis. Two checks per financed/leased vehicle:
+    //   (1) Purchased within 90 days → lien-perfection check (§ 547)
+    //   (2) Owned ≥ 910 days + financed → Ch.13 cramdown eligibility
+    //       (§ 1325(a) "hanging paragraph" — 910-day rule on PMSI cars)
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const vehicles = Array.isArray(fd?.vehicles) ? (fd!.vehicles as Array<Record<string, unknown>>) : [];
+      vehicles.forEach((v, vi) => {
+        const purchaseDateRaw = String(v.purchaseDate ?? "");
+        if (!purchaseDateRaw) return;
+        const purchaseDate = new Date(purchaseDateRaw);
+        if (isNaN(purchaseDate.getTime())) return;
+        const daysSince = Math.floor((Date.now() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24));
+        const desc = `${v.year ?? ""} ${v.make ?? ""} ${v.model ?? ""}`.trim() || `Vehicle #${vi + 1}`;
+        const isFinanced = v.hasLoan === "yes" || v.isLease === "loan";
+
+        if (daysSince < 90 && isFinanced) {
+          toInsert.push({
+            review_id: reviewId,
+            category: "vehicles",
+            severity: "error",
+            sort_order: order++,
+            title: `Recent Vehicle Purchase (${daysSince}d) — Verify Lien Perfection`,
+            description:
+              `${desc} was purchased ${daysSince} day(s) ago (within the 90-day preference window). ` +
+              `Confirm the lender perfected the lien within 30 days of attachment per § 547(c)(3); late-perfected liens can be voidable as preferential transfers. ` +
+              `Also relevant to § 522(f) lien avoidance + hanging-paragraph analysis.`,
+          });
+        }
+        if (daysSince >= 910 && isFinanced) {
+          const balance = parseFloat(String(v.loanBalance ?? "0")) || 0;
+          const value = parseFloat(String(v.value ?? "0")) || 0;
+          const underwater = balance > value;
+          toInsert.push({
+            review_id: reviewId,
+            category: "vehicles",
+            severity: underwater ? "warning" : "info",
+            sort_order: order++,
+            title: `${desc} — Owned ${Math.floor(daysSince/365)}y, Possible Ch.13 Cramdown`,
+            description:
+              `${desc} owned ${daysSince} days (>910). The § 1325(a) hanging-paragraph 910-day rule does NOT apply, so the secured claim can be bifurcated and crammed down to the vehicle's current value in Ch.13. ` +
+              (underwater
+                ? `Loan balance ${fmt(balance)} > value ${fmt(value)} (underwater by ${fmt(balance - value)}). Cramdown could save the client ${fmt(balance - value)} + interest savings (Till rate vs. contract rate). `
+                : `Loan balance ${fmt(balance)} vs. value ${fmt(value)}. `) +
+              `Confirm in attorney review whether cramdown is part of the plan strategy.`,
+          });
+        }
+      });
+    }
+
+    // Borrowed-vehicle disclosure — client regularly drives a vehicle owned
+    // by someone else. May affect the IRS transportation "ownership cost"
+    // allowance on the means test. Flag for attorney review.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      if (String(fd?.borrowedVehicleUse ?? "") === "yes") {
+        const pays = String(fd?.borrowedVehiclePays ?? "");
+        const amt = parseFloat(String(fd?.borrowedVehicleAmount ?? "0")) || 0;
+        const desc = String(fd?.borrowedVehicleDescription ?? "").trim();
+        toInsert.push({
+          review_id: reviewId,
+          category: "expenses",
+          severity: "warning",
+          sort_order: order++,
+          title: "Borrowed Vehicle Use — IRS Transportation Allowance May Need Adjustment",
+          description:
+            `Client regularly drives a vehicle that belongs to someone else${desc ? `: "${desc}"` : "."} ` +
+            (pays === "yes"
+              ? `Client pays ${fmt(amt)}/mo toward that vehicle. `
+              : "Client does not pay for the vehicle. ") +
+            `Review whether the IRS transportation "ownership cost" allowance applies (typically denied if the debtor doesn't make payments on a titled vehicle, per In re Ransom). Document the arrangement on Form 122A and Schedule J.`,
+        });
+      }
+    }
+
+    // Expenses over IRS National Standards. The five National-Standards
+    // categories (food, housekeeping, apparel, personal care, miscellaneous)
+    // are capped at the IRS amount for the means test. If the client's
+    // ACTUAL spending exceeds the standard and substituting the standard
+    // would push monthly disposable income past $500/mo, that's a Ch.7
+    // risk because the trustee will likely allow only the standard amount.
+    // Per firm spec: surface even smaller overages so the attorney sees the
+    // comparison, but escalate severity when the swing matters.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      if (fd) {
+        const num = (v: unknown) => parseFloat(String(v ?? "0")) || 0;
+        // Actuals — sum the line items the form captures for each category.
+        const actualFood = num(fd.expFood);
+        const actualHousekeeping = num(fd.expHouseholdSupplies);
+        const actualApparel = num(fd.expClothing);
+        const actualPersonalCare = num(fd.expPersonalCare);
+        const actualMisc = num(fd.expMisc);
+        const actualTotal = actualFood + actualHousekeeping + actualApparel + actualPersonalCare + actualMisc;
+
+        // Prefer the centralized 2025 store values so attorney edits to
+        // the National Standards in LegalReferenceStore propagate here.
+        // Fall back to the legacy table when the store has nulls.
+        const ns2025 = scaleNationalStandards2025(houseSize);
+        const nsLegacy = scaleNationalStandards(houseSize);
+        const pickN = (a: number | null, b: number) => (a != null ? a : b);
+        const ns = {
+          food:                  pickN(ns2025.food,                 nsLegacy.food),
+          housekeepingSupplies:  pickN(ns2025.housekeepingSupplies, nsLegacy.housekeepingSupplies),
+          apparelServices:       pickN(ns2025.apparelServices,      nsLegacy.apparelServices),
+          personalCare:          pickN(ns2025.personalCare,         nsLegacy.personalCare),
+          miscellaneous:         pickN(ns2025.miscellaneous,        nsLegacy.miscellaneous),
+        };
+        const standardTotal = ns.food + ns.housekeepingSupplies + ns.apparelServices + ns.personalCare + ns.miscellaneous;
+
+        const overage = actualTotal - standardTotal;
+        if (overage > 0) {
+          // Disposable income IF we substitute the IRS standard for the
+          // five categories. That's currentDMI + overage. The $500/mo
+          // ceiling reads from the centralized rules store so editing the
+          // means_test_707b parameters in the Legal Reference panel
+          // propagates here. Falls back to 500 when the store hasn't been
+          // configured.
+          const projectedDMI = disposableIncome + overage;
+          const meansTestCeiling = getRuleNumber("means_test_707b", "monthlyDmiUpperBound", 500);
+          const flipsMeansTest = projectedDMI > meansTestCeiling;
+          const lines: string[] = [];
+          if (actualFood > ns.food) lines.push(`Food: actual ${fmt(actualFood)} vs IRS ${fmt(ns.food)} (+${fmt(actualFood - ns.food)})`);
+          if (actualHousekeeping > ns.housekeepingSupplies) lines.push(`Housekeeping: actual ${fmt(actualHousekeeping)} vs IRS ${fmt(ns.housekeepingSupplies)} (+${fmt(actualHousekeeping - ns.housekeepingSupplies)})`);
+          if (actualApparel > ns.apparelServices) lines.push(`Apparel: actual ${fmt(actualApparel)} vs IRS ${fmt(ns.apparelServices)} (+${fmt(actualApparel - ns.apparelServices)})`);
+          if (actualPersonalCare > ns.personalCare) lines.push(`Personal care: actual ${fmt(actualPersonalCare)} vs IRS ${fmt(ns.personalCare)} (+${fmt(actualPersonalCare - ns.personalCare)})`);
+          if (actualMisc > ns.miscellaneous) lines.push(`Miscellaneous: actual ${fmt(actualMisc)} vs IRS ${fmt(ns.miscellaneous)} (+${fmt(actualMisc - ns.miscellaneous)})`);
+          toInsert.push({
+            review_id: reviewId,
+            category: "expenses",
+            severity: flipsMeansTest ? "error" : "warning",
+            sort_order: order++,
+            title: flipsMeansTest
+              ? `Expenses Over IRS Standard — Means Test At Risk (substituted DMI ${fmt(projectedDMI)}/mo)`
+              : `Expenses Over IRS Standard — Review (overage ${fmt(overage)}/mo)`,
+            description:
+              `Client's actual spending in IRS National-Standards categories exceeds the standard by ${fmt(overage)}/mo. ${lines.join(" · ")}. ` +
+              `If the trustee allows only the IRS standard, projected disposable income would be ${fmt(projectedDMI)}/mo` +
+              (flipsMeansTest
+                ? ` — over the $500/mo threshold. This may force a Ch.13 plan even if Ch.7 looks viable on actual numbers. Confirm the overage is reasonable and documented, or counsel the client on reducing the overage before filing.`
+                : `. Under the $500/mo threshold, but worth confirming the overage is reasonable and documented.`),
+          });
+        }
+      }
+    }
+
+    // Income changes — client self-reported either (a) current income differs
+    // from the past 6 months, or (b) expects income to change. Means-test CMI
+    // is calculated on a 6-month lookback by default but the attorney can
+    // adjust forward-looking based on the explanation. Flag for review.
+    {
+      const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+      const matchAns = String(fd?.incomeMatches6Mo ?? "");
+      const futureAns = String(fd?.incomeFutureChange ?? "");
+      const matchDetails = String(fd?.incomeMatchDetails ?? "").trim();
+      const futureDetails = String(fd?.incomeFutureChangeDetails ?? "").trim();
+      const flagged = matchAns === "no" || futureAns === "up" || futureAns === "down";
+      if (flagged) {
+        const parts: string[] = [];
+        if (matchAns === "no") parts.push(`Current income differs from the last 6 months${matchDetails ? `: "${matchDetails}"` : "."}`);
+        if (futureAns === "up") parts.push(`Client expects income to go UP${futureDetails ? `: "${futureDetails}"` : "."}`);
+        if (futureAns === "down") parts.push(`Client expects income to go DOWN${futureDetails ? `: "${futureDetails}"` : "."}`);
+        toInsert.push({
+          review_id: reviewId, category: "income", severity: "warning", sort_order: order++,
+          title: "Income Change Disclosed — Means-Test Analysis Should Account",
+          description: parts.join(" ") + " Means-test CMI is the 6-month average by default. Consider whether to adjust the projected disposable income calculation based on actual or expected income going forward.",
+        });
+      }
+    }
+
     for (const issue of toInsert) {
       await sbPost("attorney_intake_issues", issue);
     }
@@ -612,12 +993,24 @@ function IntakeAttorneyReviewModal({
 
   async function saveReviewFields(fields: Partial<IntakeReview>) {
     if (!review) return;
+    // Stamp the current ruleset version on every save so the most recent
+    // attorney review carries the version it was completed against. The
+    // Cases-Needing-Review queue compares this against the live store
+    // version to flag stale reviews — see needsReReview() below.
+    const currentVersion = getCurrentRulesetVersion().id;
+    const fieldsWithVersion: Partial<IntakeReview> = {
+      ...fields,
+      reviewed_ruleset_version: currentVersion,
+    };
     await fetch(`${SUPABASE_URL}/rest/v1/attorney_intake_reviews?id=eq.${review.id}`, {
       method: "PATCH",
       headers: { apikey: ANON_KEY, Authorization: `Bearer ${ANON_KEY}`, "Content-Type": "application/json", Prefer: "return=minimal" },
+      // PATCH body intentionally drops reviewed_ruleset_version until the
+      // DB column exists — see IntakeReview interface comment. Local state
+      // tracks it for the in-session re-review check.
       body: JSON.stringify({ ...fields, updated_at: new Date().toISOString() }),
     });
-    setReview(prev => prev ? { ...prev, ...fields } : prev);
+    setReview(prev => prev ? { ...prev, ...fieldsWithVersion } : prev);
   }
 
   async function addIssue() {
@@ -688,11 +1081,13 @@ function IntakeAttorneyReviewModal({
     };
     await saveReviewFields(fields);
 
-    // Update attorney_case_acceptances table (legacy compatibility)
+    // Update attorney_case_acceptances table (legacy compatibility).
+    // attorney_name resolves to the logged-in attorney; was hardcoded
+    // "Jennifer Smith, Esq." in the original implementation.
     const legacyBody = {
       lead_id: lead.id,
       submission_id: String(submission?.id ?? ""),
-      attorney_name: "Jennifer Smith, Esq.",
+      attorney_name: getCurrentAttorneyName(),
       decision,
       case_type: fields.case_type,
       chapter: fields.chapter,
@@ -790,12 +1185,51 @@ function IntakeAttorneyReviewModal({
           <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors mt-1"><X className="w-5 h-5" /></button>
         </div>
 
-        {/* ── Tabs ── */}
+        {/* ── Rule-change re-review banner ──
+              Compares the stored ruleset version on this review against
+              the live store version. Cases that have been reviewed but
+              are NOT YET FILED or CLOSED show the banner with the reason
+              and a "Re-confirm" action; filed/closed cases are LOCKED and
+              never re-flagged. */}
+        {(() => {
+          const caseStatus = (review?.case_status ?? "").toLowerCase();
+          const locked = caseStatus === "filed" || caseStatus === "closed";
+          if (locked) return null;
+          const decided = !!review?.decided_at; // attorney has signed off → in-window
+          if (!decided) return null;
+          const current = getCurrentRulesetVersion();
+          const reason = diffRulesetVersions(review?.reviewed_ruleset_version ?? null, current);
+          if (!reason) return null;
+          return (
+            <div className="mx-6 mt-4 mb-2 rounded-xl border border-amber-500/50 bg-amber-500/10 p-3 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 text-xs text-amber-100 leading-relaxed">
+                <p className="font-bold text-amber-300 mb-1">⚑ Needs re-review — rules changed</p>
+                <p>{reason}</p>
+                <p className="mt-1 text-amber-200/80">This case was reviewed against an older ruleset. Signing / marking-filed is blocked until the attorney re-confirms against the current rules.</p>
+              </div>
+              <button type="button"
+                onClick={()=>saveReviewFields({})}
+                className="flex-shrink-0 text-[11px] font-semibold bg-amber-400 hover:bg-amber-300 text-slate-900 px-3 py-1.5 rounded">
+                Re-confirm against current rules
+              </button>
+            </div>
+          );
+        })()}
+
+        {/* ── Tabs ── Consolidated lawyer flow: Eligibility / Summary →
+            Issues → All Answers (read-only mirror of the locked
+            questionnaire) → Decision. "All Answers" sits immediately
+            BEFORE Decision so the attorney can scan answers + missing
+            fields right before signing off. The standalone "Review Intake"
+            modal in LeadDetailPanel is now hidden for lawyers — All Answers
+            IS the review-intake surface for them. */}
         <div className="flex border-b border-slate-800 flex-shrink-0">
           {([
-            { id: "eligibility", label: "Eligibility Analysis" },
-            { id: "issues", label: `Issues ${issues.length > 0 ? `(${issues.length})` : ""}` },
-            { id: "decision", label: "Decision & Fees" },
+            { id: "eligibility", label: "Eligibility / Summary" },
+            { id: "issues",      label: `Issues ${issues.length > 0 ? `(${issues.length})` : ""}` },
+            { id: "allAnswers",  label: "All Answers" },
+            { id: "decision",    label: "Decision" },
           ] as const).map(t => (
             <button
               key={t.id}
@@ -811,9 +1245,336 @@ function IntakeAttorneyReviewModal({
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
 
-          {/* ══════════ ELIGIBILITY TAB ══════════ */}
+          {/* ══════════ ELIGIBILITY / SUMMARY TAB ══════════ */}
           {activeTab === "eligibility" && (
             <div className="space-y-5">
+              {/* ── SUMMARY: Assets / Income / Expenses + Rules + Recommendation ── */}
+              {(() => {
+                const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+
+                // ── Helpers — read from form_data with safe coercion ──────
+                const num = (v: unknown): number => {
+                  if (v == null || v === '') return 0;
+                  const n = typeof v === 'number' ? v : parseFloat(String(v));
+                  return Number.isFinite(n) ? n : 0;
+                };
+                const arr = (v: unknown): Array<Record<string, unknown>> =>
+                  Array.isArray(v) ? (v as Array<Record<string, unknown>>) : [];
+
+                // ── Assets ────────────────────────────────────────────────
+                type Row = { label: string; value: number };
+                const assetRows: Row[] = fd ? [
+                  ...arr(fd.properties).map((p, i) => ({
+                    label: `Real property #${i + 1}${p.address ? ` — ${String(p.address).slice(0, 40)}` : ''}`,
+                    value: num(p.propertyValue),
+                  })),
+                  ...arr(fd.vehicles).map((v, i) => ({
+                    label: `Vehicle #${i + 1}${v.year ? ` — ${v.year} ${v.make ?? ''} ${v.model ?? ''}` : ''}`.trim(),
+                    value: num(v.value),
+                  })),
+                  { label: 'Bank balances',           value: num(fd.bankBalance) },
+                  { label: 'Retirement (ERISA)',     value: num(fd.retirementBalance) },
+                  { label: 'Stocks / brokerage',     value: num(fd.stocksValue) },
+                  { label: 'Crypto',                 value: num(fd.cryptoValue) },
+                  { label: 'Life insurance cash value', value: num(fd.lifeInsuranceCashValue) },
+                  { label: 'Firearms',               value: num(fd.firearmValue) },
+                  { label: 'Collectibles',           value: num(fd.collectiblesValue) },
+                  { label: 'Household goods',        value: num(fd.householdGoodsValue) },
+                  { label: 'Jewelry',                value: num(fd.jewelryValue) },
+                  { label: 'Tools of trade',         value: num(fd.toolsValue) },
+                  ...arr(fd.annuities).map((a, i) => ({
+                    label: `Annuity #${i + 1}${a.annuityType ? ` — ${a.annuityType}` : ''}`,
+                    value: num(a.currentValue),
+                  })),
+                ].filter(r => r.value > 0) : [];
+                const assetsTotal = assetRows.reduce((s, r) => s + r.value, 0);
+
+                // ── Income ────────────────────────────────────────────────
+                const incomeRows: Row[] = fd ? [
+                  { label: 'Debtor monthly gross',   value: num(fd.debtorMonthlyGross) },
+                  { label: 'Spouse monthly gross',   value: num(fd.spouseMonthlyGross) },
+                  { label: 'SS retirement (debtor)', value: num(fd.dSsRetirement) },
+                  { label: 'SS disability (debtor)', value: num(fd.dSsDisability) },
+                  { label: 'VA benefits (debtor)',   value: num(fd.dVeterans) },
+                ].filter(r => r.value > 0) : [];
+                const incomeTotal = incomeRows.reduce((s, r) => s + r.value, 0);
+
+                // ── Expenses (Schedule J) ────────────────────────────────
+                const expenseRows: Row[] = fd ? [
+                  { label: 'Rent / mortgage',  value: num(fd.expRentMortgage) },
+                  { label: 'Utilities',        value: num(fd.expUtilities) },
+                  { label: 'Food',             value: num(fd.expFood) },
+                  { label: 'Transportation',   value: num(fd.expTransportation) },
+                  { label: 'Medical',          value: num(fd.expMedical) },
+                  { label: 'Insurance',        value: num(fd.expInsurance) },
+                  { label: 'Childcare',        value: num(fd.expChildcare) },
+                  { label: 'Other',            value: num(fd.expOther) },
+                ].filter(r => r.value > 0) : [];
+                const expensesTotalFd = expenseRows.reduce((s, r) => s + r.value, 0);
+
+                // ── Business-debt composition (current + potential bypass) ──
+                // calcDebtComposition with no overrides reflects current state
+                // (all classifiable buckets default to consumer).
+                // potentialComp simulates classifying personalLoanDebt as business
+                // — surfaces the resolving explanation BEFORE the attorney
+                // actually flips the toggle in the AttorneyIntakeDashboard's
+                // Issues tab, so the auto-text is visible here on first view.
+                const currentComp = fd ? calcDebtComposition(fd, {}) : null;
+                const potentialComp = fd ? calcDebtComposition(fd, { personalLoanDebt: 'business' }) : null;
+                const meansTestResolvedByBizDebt =
+                  aboveMedian && !!potentialComp && potentialComp.primarilyBusiness;
+                const bizDebtResolvingPct = potentialComp?.pct ?? 0;
+
+                // ── Missing required fields ──────────────────────────────
+                // Walk ALL_ANSWERS_SCHEMA, count blanks per the same logic
+                // AllAnswersView uses so the count matches the tab badge.
+                let missingFieldCount = 0;
+                if (fd) {
+                  ALL_ANSWERS_SCHEMA.forEach(sec => {
+                    sec.fields.forEach(f => {
+                      if (f.format === 'multi') {
+                        if (!Array.isArray((fd as Record<string, unknown>)[f.key])) missingFieldCount++;
+                      } else {
+                        const v = (fd as Record<string, unknown>)[f.key];
+                        const { isBlank } = renderAnswerValue(v, f.format);
+                        if (isBlank) missingFieldCount++;
+                      }
+                    });
+                  });
+                }
+
+                // ── Rules comparison ─────────────────────────────────────
+                type RuleResult = 'pass' | 'fail' | 'na' | 'warn' | 'pending';
+                const rules: Array<{
+                  name: string; statute: string;
+                  clientFigure: string; ruleText: string;
+                  result: RuleResult;
+                  /** Resolving auto-text — appears when a flagged rule has a
+                   *  known resolving path. The supervising attorney can edit
+                   *  this in the Decision tab quick-review below. */
+                  resolveText?: string;
+                }> = [];
+
+                // Means test rule
+                rules.push({
+                  name: 'Means Test',
+                  statute: '§ 707(b)',
+                  clientFigure: `CMI ${fmt(cmi)}/mo`,
+                  ruleText: `${lead.state ?? '?'} ${houseSize}-person median ${fmt(medianMonthly)}/mo`,
+                  result: meansTestResolvedByBizDebt ? 'na' :
+                          !aboveMedian ? 'pass' :
+                          meansTestResult === 'borderline' ? 'warn' : 'fail',
+                  resolveText: meansTestResolvedByBizDebt
+                    ? `Client reports more than 50% business debt of overall debt (${bizDebtResolvingPct}%); therefore the means test is not an issue and we can file Chapter 7.`
+                    : undefined,
+                });
+
+                // Non-exempt vehicle equity rule
+                if (vehicles.length > 0 || nonExemptVehicleEquity > 0) {
+                  rules.push({
+                    name: 'Non-exempt vehicle equity',
+                    statute: '§ 522 / § 1325(a)(4)',
+                    clientFigure: nonExemptVehicleEquity > 0
+                      ? `${fmt(nonExemptVehicleEquity)} above ${lead.state ?? '?'} cap`
+                      : 'Within exemption',
+                    ruleText: `${lead.state ?? '?'} motor vehicle exemption $${CO_VEHICLE_EXEMPTION.toLocaleString()}`,
+                    result: nonExemptVehicleEquity > 0 ? 'warn' : 'pass',
+                  });
+                }
+
+                // Preferential payments rule
+                if (prefPayFlagged) {
+                  rules.push({
+                    name: insiderPrefTotal > 0 ? 'Insider preferential payment' : 'Preferential payment',
+                    statute: insiderPrefTotal > 0 ? '§ 547(b) + § 101(31)' : '§ 547(b)',
+                    clientFigure: insiderPrefTotal > 0
+                      ? `${fmt(insiderPrefTotal)} to insider in 1y`
+                      : `${fmt(nonInsiderPrefTotal)} to non-insider in 90d`,
+                    ruleText: insiderPrefTotal > 0
+                      ? '1-year lookback; trustee may recover'
+                      : '90-day lookback; trustee scrutinizes > $600',
+                    result: insiderPrefTotal > 0 ? 'fail' : 'warn',
+                  });
+                }
+
+                // Prior BK rule
+                if (submission?.has_prior_bk) {
+                  rules.push({
+                    name: 'Prior bankruptcy discharge timing',
+                    statute: '§ 727(a)(8) / § 1328(f)',
+                    clientFigure: 'Disclosed — verify dates',
+                    ruleText: '8y Ch.7→Ch.7; 4y Ch.7→Ch.13; 6y Ch.13→Ch.7; 2y Ch.13→Ch.13',
+                    result: 'pending',
+                  });
+                }
+
+                // Recent luxury rule
+                if (submission?.recent_luxury) {
+                  rules.push({
+                    name: 'Recent luxury purchases',
+                    statute: '§ 523(a)(2)(C)',
+                    clientFigure: 'Disclosed within 90 days',
+                    ruleText: '> $800 single creditor 90d pre-petition is presumptively non-dischargeable',
+                    result: 'warn',
+                  });
+                }
+
+                // Recommended chapter
+                const ch7AvailableAfterBypass = ch7Eligible || meansTestResolvedByBizDebt;
+                const recommended: { chapter: string; rationale: string } = ch7AvailableAfterBypass
+                  ? meansTestResolvedByBizDebt
+                    ? { chapter: 'Chapter 7', rationale: `Means-test bypass applies (business debt ${bizDebtResolvingPct}%); Ch.7 available despite over-median income.` }
+                    : { chapter: 'Chapter 7', rationale: `CMI below median; means test satisfied; Ch.7 is the faster discharge path.` }
+                  : { chapter: 'Chapter 13', rationale: `Above median + disposable income exceeds the means-test threshold; Ch.13 plan is the available path unless income drops.` };
+
+                // ── Render ───────────────────────────────────────────────
+                const tone = (r: RuleResult) =>
+                  r === 'pass' ? { dot: 'bg-emerald-400', txt: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', label: 'PASS' } :
+                  r === 'na'   ? { dot: 'bg-sky-400',     txt: 'text-sky-300',     bg: 'bg-sky-500/10',     border: 'border-sky-500/30',     label: 'N/A' } :
+                  r === 'warn' ? { dot: 'bg-amber-400',   txt: 'text-amber-300',   bg: 'bg-amber-500/10',   border: 'border-amber-500/30',   label: 'REVIEW' } :
+                  r === 'pending' ? { dot: 'bg-slate-400', txt: 'text-slate-300',  bg: 'bg-slate-500/10',   border: 'border-slate-500/30',   label: 'PENDING' } :
+                                  { dot: 'bg-red-400',    txt: 'text-red-300',    bg: 'bg-red-500/10',     border: 'border-red-500/30',     label: 'FAIL' };
+
+                return (
+                  <div className="space-y-3">
+                    {/* Recommendation banner */}
+                    <div className={`rounded-2xl border p-4 ${
+                      recommended.chapter === 'Chapter 7' ? 'bg-emerald-500/5 border-emerald-500/30' : 'bg-sky-500/5 border-sky-500/30'
+                    }`}>
+                      <div className="flex items-center gap-2 mb-1 flex-wrap">
+                        <Scale className={`w-4 h-4 ${recommended.chapter === 'Chapter 7' ? 'text-emerald-400' : 'text-sky-400'}`} />
+                        <p className="text-xs font-bold uppercase tracking-widest text-slate-300">Recommended chapter</p>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          recommended.chapter === 'Chapter 7' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-sky-500/15 text-sky-300'
+                        }`}>{recommended.chapter}</span>
+                        {missingFieldCount > 0 && (
+                          <span className="ml-auto text-[10px] font-bold uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5">
+                            {missingFieldCount} required field{missingFieldCount === 1 ? '' : 's'} missing
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[11px] text-slate-300 leading-relaxed">{recommended.rationale}</p>
+                      {missingFieldCount > 0 && (
+                        <p className="mt-2 text-[10px] text-amber-300/80 italic">
+                          {missingFieldCount} answer{missingFieldCount === 1 ? '' : 's'} blank in the All Answers tab — review before accepting.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Rules comparison grid */}
+                    <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                      <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-3">Rules comparison — client vs. rule</p>
+                      <div className="space-y-2">
+                        {rules.map((r, i) => {
+                          const t = tone(r.result);
+                          return (
+                            <div key={i} className={`rounded-xl border p-3 ${t.bg} ${t.border}`}>
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className={`w-1.5 h-1.5 rounded-full ${t.dot}`} />
+                                <span className="text-xs font-bold text-white">{r.name}</span>
+                                <span className="text-[9px] font-mono text-slate-400 bg-slate-900/60 border border-slate-700/40 rounded-full px-1.5 py-0.5">{r.statute}</span>
+                                <span className={`ml-auto text-[10px] font-bold uppercase tracking-widest ${t.txt}`}>{t.label}</span>
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1.5">
+                                <div className="text-[11px]">
+                                  <span className="text-slate-500">Client: </span>
+                                  <span className="text-slate-200">{r.clientFigure}</span>
+                                </div>
+                                <div className="text-[11px]">
+                                  <span className="text-slate-500">Rule: </span>
+                                  <span className="text-slate-200">{r.ruleText}</span>
+                                </div>
+                              </div>
+                              {r.resolveText && (
+                                <div className="mt-2 pt-2 border-t border-sky-500/20">
+                                  <p className="text-[10px] uppercase tracking-widest font-bold text-sky-300 mb-1">Why this is not an issue</p>
+                                  <p className="text-[11px] text-sky-200/90 leading-relaxed">{r.resolveText}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Three-column Assets / Income / Expenses summary */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {/* Assets */}
+                      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Assets</p>
+                          <p className="text-xs font-bold text-emerald-300">{fmt(assetsTotal)}</p>
+                        </div>
+                        {assetRows.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 italic">No assets reported (or submission missing).</p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {assetRows.map((r, i) => (
+                              <li key={i} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-300 truncate pr-2">{r.label}</span>
+                                <span className="text-slate-200 font-mono flex-shrink-0">{fmt(r.value)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      {/* Income */}
+                      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Income</p>
+                          <p className="text-xs font-bold text-emerald-300">{fmt(incomeTotal)}/mo</p>
+                        </div>
+                        {incomeRows.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 italic">No income reported (or submission missing).</p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {incomeRows.map((r, i) => (
+                              <li key={i} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-300 truncate pr-2">{r.label}</span>
+                                <span className="text-slate-200 font-mono flex-shrink-0">{fmt(r.value)}/mo</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+
+                      {/* Expenses */}
+                      <div className="rounded-2xl border border-slate-800 bg-slate-900 p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Expenses (Sch. J)</p>
+                          <p className="text-xs font-bold text-rose-300">{fmt(expensesTotalFd)}/mo</p>
+                        </div>
+                        {expenseRows.length === 0 ? (
+                          <p className="text-[11px] text-slate-500 italic">No expenses reported (or submission missing).</p>
+                        ) : (
+                          <ul className="space-y-1">
+                            {expenseRows.map((r, i) => (
+                              <li key={i} className="flex items-center justify-between text-[11px]">
+                                <span className="text-slate-300 truncate pr-2">{r.label}</span>
+                                <span className="text-slate-200 font-mono flex-shrink-0">{fmt(r.value)}/mo</span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Stash the resolving auto-texts so the Decision tab's
+                        quick-review can render them too. We expose them via a
+                        hidden DOM marker the Decision tab can read in lieu of
+                        lifting the computation; simpler than redoing the work.
+                        TODO Phase B: lift this whole derivation into a hook
+                        used by both tabs. */}
+                    {currentComp && (
+                      <p className="hidden" data-rules-summary>
+                        {JSON.stringify({ rules, recommended })}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
               {/* Summary stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
@@ -1254,9 +2015,131 @@ function IntakeAttorneyReviewModal({
             </div>
           )}
 
+          {/* ══════════ ALL ANSWERS TAB ══════════
+              Read-only mirror of the locked client questionnaire. Reuses the
+              shared <AllAnswersView> component (same one mounted in
+              AttorneyIntakeDashboard's All Answers tab and in the non-lawyer
+              Review Intake modal). Renders nothing editable; the locked
+              questionnaire is never modified from this surface. */}
+          {activeTab === "allAnswers" && (
+            <div className="space-y-3">
+              {submission && submission.form_data ? (
+                <AllAnswersView
+                  fd={submission.form_data as Record<string, unknown>}
+                  title="All Answers"
+                  subtitle="Read-only mirror of the locked client questionnaire. Blanks are flagged here and surfaced in the Summary tab so missing required fields are visible at a glance."
+                />
+              ) : (
+                <div className="text-center py-10 bg-slate-900 border border-slate-800 rounded-2xl">
+                  <FileText className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+                  <p className="text-xs text-slate-500 italic">
+                    No questionnaire submission attached to this lead yet.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ══════════ DECISION TAB ══════════ */}
           {activeTab === "decision" && (
             <div className="space-y-5">
+              {/* ── QUICK REVIEW — flagged issues with auto-populated explanations ──
+                  Surfaces each issue alongside its "why this is not an issue"
+                  resolving text so the attorney can scan and accept fast.
+                  The means-test bypass auto-text is computed the same way the
+                  Eligibility tab does it (calcDebtComposition with a what-if
+                  personalLoanDebt → business override). The supervising
+                  attorney can edit each prefilled explanation; a non-lawyer
+                  cannot reach this surface at all (modal is gated upstream by
+                  canOpenAttorneyReview). */}
+              {decision === "accepted" && issues.length > 0 && (() => {
+                const fd = (submission?.form_data as Record<string, unknown> | undefined) ?? null;
+                const potentialComp = fd ? calcDebtComposition(fd, { personalLoanDebt: 'business' }) : null;
+                const meansTestResolvedByBizDebt = aboveMedian && !!potentialComp && potentialComp.primarilyBusiness;
+                const bizDebtPct = potentialComp?.pct ?? 0;
+
+                // Map an issue → auto-populated resolving text (when the
+                // category has a known resolving path). The attorney can
+                // override via the attorney_note field on each issue (already
+                // wired via saveIssueNote elsewhere).
+                function autoResolveText(issue: IntakeIssue): string | null {
+                  // Income / means-test resolving path: primarily-business-debt bypass
+                  if (issue.category === 'income' && meansTestResolvedByBizDebt) {
+                    return `Client reports more than 50% business debt of overall debt (${bizDebtPct}%); therefore the means test is not an issue and we can file Chapter 7.`;
+                  }
+                  // TODO Phase B — auto-resolving paths for other categories:
+                  //   - 'pref_payments' / insider: explain waiting-period / disclosure cure
+                  //   - 'prior_bk': confirm discharge timing satisfied
+                  //   - 'assets' / non-exempt equity: cite applicable exemption + cap
+                  //   - 'luxury' / cash advance: address §523(a)(2)(C) presumption
+                  return null;
+                }
+
+                const resolvable = issues.map(i => ({ issue: i, autoText: autoResolveText(i) }));
+                if (resolvable.every(r => !r.autoText && !r.issue.attorney_note)) return null;
+
+                return (
+                  <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      <CheckCheck className="w-4 h-4 text-emerald-400" />
+                      <p className="text-xs font-bold uppercase tracking-widest text-emerald-300">
+                        Quick Review — flagged issues + resolving explanations
+                      </p>
+                      <span className="ml-auto text-[10px] uppercase tracking-widest text-emerald-300/80 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                        for the supervising attorney
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-relaxed mb-3">
+                      Each flagged issue is shown with its auto-populated "why this is not an issue"
+                      explanation drawn from the Rules Comparison. The supervising attorney can edit
+                      any prefilled response (the standard issue-note field below); a non-lawyer
+                      can't reach this surface.
+                    </p>
+
+                    <div className="space-y-2">
+                      {resolvable.map(({ issue, autoText }) => {
+                        if (!autoText && !issue.attorney_note) return null;
+                        const sevDot = issue.severity === 'error' ? 'bg-red-400' : 'bg-amber-400';
+                        return (
+                          <div key={issue.id} className="rounded-xl border border-emerald-500/20 bg-slate-900/40 p-3">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <span className={`w-1.5 h-1.5 rounded-full ${sevDot}`} />
+                              <span className="text-[11px] font-bold text-white">{issue.title}</span>
+                              <span className="ml-auto text-[9px] font-mono text-slate-500 bg-slate-900/60 border border-slate-700/40 rounded-full px-1.5 py-0.5">
+                                {issue.category}
+                              </span>
+                            </div>
+                            {autoText && (
+                              <div className="mt-1 rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-2">
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-emerald-300 mb-1">Auto-populated resolving explanation</p>
+                                <p className="text-[11px] text-emerald-100/90 leading-relaxed whitespace-pre-line">{autoText}</p>
+                              </div>
+                            )}
+                            {issue.attorney_note && (
+                              <div className="mt-1.5">
+                                <p className="text-[10px] uppercase tracking-widest font-bold text-slate-400 mb-1">Attorney note</p>
+                                <p className="text-[11px] text-slate-200 leading-relaxed whitespace-pre-line">{issue.attorney_note}</p>
+                              </div>
+                            )}
+                            {/* Edit affordance — opens the existing per-issue note editor on the Issues tab. */}
+                            <button
+                              onClick={() => {
+                                setEditingIssueId(issue.id);
+                                setEditingNote(issue.attorney_note ?? autoText ?? '');
+                                setActiveTab('issues');
+                              }}
+                              className="mt-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded px-2 py-1 transition-colors"
+                            >
+                              Edit explanation
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Summary bar */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
@@ -1332,23 +2215,19 @@ function IntakeAttorneyReviewModal({
                           </div>
                         </div>
                       )}
-                      {(caseType === "ch7_regular" || caseType === "ch7_bifurcated") && (
-                        <>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Down Payment</label>
-                            <div className="relative">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm">$</span>
-                              <input type="number" value={downPayment} onChange={e => setDownPayment(e.target.value)}
-                                className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl pl-7 pr-3 py-2.5 focus:outline-none focus:border-amber-500" />
-                            </div>
-                          </div>
-                          <div>
-                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Payment Plan (months)</label>
-                            <input type="number" value={planMonths} onChange={e => setPlanMonths(e.target.value)}
-                              className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 focus:outline-none focus:border-amber-500" />
-                          </div>
-                        </>
-                      )}
+                      {/* Down-payment input HIDDEN and Payment-Plan (months)
+                          input REMOVED from this surface per the firm's
+                          workflow change: fees are worked out by admin, not
+                          decided by the attorney here. The down_payment field
+                          on the underlying review row stays in sync with its
+                          state default (see useState above) so any prior
+                          value is preserved on save; plan_months is no
+                          longer collected from this UI (the saveDecision
+                          path still writes parseInt(planMonths) || null, so
+                          the default state of "4" continues to be persisted
+                          until the planMonths state is fully retired in the
+                          backend cleanup pass). */}
+                      {/* (no inputs rendered for ch7_regular / ch7_bifurcated) */}
                       {caseType === "ch13_flat_fee" && (
                         <>
                           <div>
@@ -1407,13 +2286,23 @@ function IntakeAttorneyReviewModal({
           <button onClick={onClose} className="py-2.5 px-4 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
           <div className="flex gap-1.5 flex-1 justify-end">
             {activeTab !== "eligibility" && (
-              <button onClick={() => setActiveTab(activeTab === "issues" ? "eligibility" : "issues")}
+              <button
+                onClick={() => setActiveTab(
+                  activeTab === "issues"     ? "eligibility" :
+                  activeTab === "allAnswers" ? "issues"      :
+                                               "allAnswers"   // from "decision"
+                )}
                 className="py-2.5 px-4 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">
                 Back
               </button>
             )}
             {activeTab !== "decision" ? (
-              <button onClick={() => setActiveTab(activeTab === "eligibility" ? "issues" : "decision")}
+              <button
+                onClick={() => setActiveTab(
+                  activeTab === "eligibility" ? "issues"     :
+                  activeTab === "issues"      ? "allAnswers" :
+                                                "decision"     // from "allAnswers"
+                )}
                 className="flex items-center gap-1.5 py-2.5 px-5 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 rounded-xl transition-colors">
                 Next <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -1983,6 +2872,67 @@ function NewLeadModal({ onClose, onSaved, session }: { onClose: () => void; onSa
   );
 }
 
+// ─── Re-review chip — Cases Needing Review queue surface ──────────────────
+//
+// Fetches the most recent attorney_intake_reviews row for a lead and
+// surfaces a banner whenever the stored ruleset version is stale vs. the
+// current store version AND the case is in the post-review pre-filing
+// window. Cases marked filed/closed are never flagged. Today's case-status
+// derivation is heuristic (uses `decided_at` + the lead's stage); TODO
+// Phase B wires this to the real `case_status` column.
+
+function ReReviewChip({ leadId }: { leadId: string }) {
+  const [reason, setReason] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const rows = await sbGet<IntakeReview>(
+          `attorney_intake_reviews?lead_id=eq.${leadId}&order=created_at.desc&limit=1`
+        );
+        if (cancelled) return;
+        const r = rows[0] ?? null;
+        if (!r) { setReason(null); setLocked(false); return; }
+        const status = String(r.case_status ?? "").toLowerCase();
+        if (status === "filed" || status === "closed") {
+          setLocked(true);
+          setReason(null);
+          return;
+        }
+        if (!r.decided_at) { setReason(null); setLocked(false); return; }
+        const current = getCurrentRulesetVersion();
+        setReason(diffRulesetVersions(r.reviewed_ruleset_version ?? null, current));
+        setLocked(false);
+      } catch {
+        setReason(null);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [leadId]);
+
+  if (locked) {
+    return (
+      <div className="rounded-xl border border-slate-700 bg-slate-900/40 px-3 py-2 text-[11px] text-slate-400 mb-2 flex items-center gap-2">
+        <span className="text-slate-500">🔒</span>
+        <span><strong className="text-slate-300">Case locked</strong> — filed or closed; ruleset changes no longer require re-review.</span>
+      </div>
+    );
+  }
+  if (!reason) return null;
+  return (
+    <div className="rounded-xl border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-[11px] mb-2 flex items-start gap-2">
+      <span className="text-amber-300 flex-shrink-0">⚑</span>
+      <div className="flex-1 text-amber-100 leading-relaxed">
+        <p className="font-bold text-amber-300">Needs re-review — rules changed</p>
+        <p className="mt-0.5">{reason}</p>
+        <p className="mt-0.5 text-amber-200/80">Open Attorney Review and re-confirm against the current rules before signing.</p>
+      </div>
+    </div>
+  );
+}
+
 // ─── Lead Detail Panel ────────────────────────────────────────────────────────
 
 function LeadDetailPanel({
@@ -2009,6 +2959,13 @@ function LeadDetailPanel({
   const panelIsSuperAdmin = isSuperAdminRole(panelRole);
   const canDoIntake  = !panelIsAtty || panelIsSuperAdmin;  // legal_admin, super_admin, attorney_super_admin
   const canReview    = panelIsAtty || panelIsSuperAdmin;   // attorneys + super admins
+  // Strict lawyer gate — used for the Attorney Review surface. `canReview`
+  // still drives stage labels + various display affordances that are fine for
+  // super-admin viewers, but the Attorney Review BUTTON + MODAL gate on
+  // canOpenAttorneyReview = isLawyer only.
+  // TODO Phase B: server-side enforcement via RLS on attorney_intake_reviews
+  // so the gate survives a tampered client.
+  const canOpenAttorneyReview = isLawyer(panelRole);
   const [showAcceptanceModal, setShowAcceptanceModal]   = useState(false);
   // showConsult state removed — ConsultIntakeModal is no longer launched.
   // The new staff-guided intake flow (StaffGuidedIntake) is launched via
@@ -2028,18 +2985,77 @@ function LeadDetailPanel({
   const [contactLog, setContactLog]                     = useState<ContactLogEntry[]>([]);
   const [contactLogExpanded, setContactLogExpanded]     = useState(true);
 
-  // Load intake submission linked to this lead
+  // ── New intake-review surface state (BAN-XX) ───────────────────────────────
+  // "Review Intake" opens the shared AllAnswersView in read-only mode.
+  // "Update Intake Information" opens the safe-fields editor.
+  // The client time log is local-state only (TODO Phase B: persist to
+  // client_time_logs table; on retention, transfer with the lead).
+  const [showReviewIntake, setShowReviewIntake] = useState(false);
+  const [showUpdateIntake, setShowUpdateIntake] = useState(false);
+  const { entries: timeLogEntries, appendEntry: appendTimeLogEntry, toggleVisibility: toggleTimeLogVisibility } = useClientTimeLog();
+  // Convenience wrapper — every internal-side action in LeadDetailPanel routes
+  // through this so the entries carry a consistent actor field.
+  const logAction = useCallback((
+    type: Parameters<typeof appendTimeLogEntry>[0],
+    message: string,
+    opts?: { clientVisible?: boolean },
+  ) => {
+    appendTimeLogEntry(type, session.name ?? 'staff', message, opts);
+  }, [appendTimeLogEntry, session.name]);
+
+  // Load the latest questionnaire submission linked to this lead.
+  //
+  // Bug fix: the previous implementation used a hand-rolled sbGet() with the
+  // anon REST endpoint and queried by intake_leads.submission_id first. When
+  // that soft-link was stale (e.g. legacy rows missing it, or rows created
+  // before the link was set), the fallback by-lead-id query sometimes returned
+  // empty even when a submission existed — likely an RLS or column-projection
+  // edge case on the REST path that doesn't reproduce with the typed client.
+  // The attorney intake dashboard reads from the SAME source via
+  // `supabase.from('intake_submissions').select('*')` and it works there, so
+  // we mirror that path here exactly.
+  //
+  // Strategy:
+  //   1. Query by lead_id (the canonical FK set when the questionnaire was
+  //      submitted). Most recent submitted_at wins.
+  //   2. Fall back to submission_id ONLY if the lead_id query returns nothing
+  //      and the lead row carries a soft-link id (defense in depth).
+  //
+  // tracking-loading state separately so the UI can distinguish "still
+  // fetching" from "genuinely no submission" — the prior implementation
+  // showed the "no submission" copy during the brief loading window.
+  const [submissionLoading, setSubmissionLoading] = useState(true);
   useEffect(() => {
-    async function loadSubmission() {
-      // Try by submission_id first, then by lead_id
-      if (lead.submission_id) {
-        const rows = await sbGet<Record<string, unknown>>(`intake_submissions?id=eq.${lead.submission_id}&limit=1`);
-        if (rows[0]) { setSubmission(rows[0]); return; }
+    let cancelled = false;
+    setSubmissionLoading(true);
+    setSubmission(null);
+    (async () => {
+      // Primary: by lead_id (same path the attorney dashboard uses).
+      const { data: byLead } = await supabase
+        .from("intake_submissions")
+        .select("*")
+        .eq("lead_id", lead.id)
+        .order("submitted_at", { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      let row = (byLead && byLead[0]) ? (byLead[0] as Record<string, unknown>) : null;
+
+      // Fallback: by intake_leads.submission_id soft-link, in case lead_id
+      // wasn't set on a legacy row.
+      if (!row && lead.submission_id) {
+        const { data: byId } = await supabase
+          .from("intake_submissions")
+          .select("*")
+          .eq("id", lead.submission_id)
+          .limit(1);
+        if (cancelled) return;
+        if (byId && byId[0]) row = byId[0] as Record<string, unknown>;
       }
-      const rows = await sbGet<Record<string, unknown>>(`intake_submissions?lead_id=eq.${lead.id}&order=submitted_at.desc&limit=1`);
-      if (rows[0]) setSubmission(rows[0]);
-    }
-    loadSubmission();
+
+      setSubmission(row);
+      setSubmissionLoading(false);
+    })();
+    return () => { cancelled = true; };
   }, [lead.id, lead.submission_id]);
 
   function loadContactLog() {
@@ -2051,11 +3067,17 @@ function LeadDetailPanel({
   const sc = STATUS_CONFIG[lead.status] ?? STATUS_CONFIG["new"];
   const uc = URGENCY_CONFIG[lead.urgency ?? "normal"] ?? URGENCY_CONFIG["normal"];
 
+  // Existing intake-action handlers — pre-existing sbPatch behavior preserved.
+  // Each is now wrapped with a time-log append so the client time log records
+  // every state change (TODO Phase B: persist via the append_client_time_log
+  // RPC instead of local state, and stitch payload before/after diffs).
+
   async function savePreScreenNotes() {
     setSavingNotes(true);
     await sbPatch("intake_leads", lead.id, { pre_screen_notes: preScreenNotes });
     setSavingNotes(false);
     setEditingNotes(false);
+    logAction('intake_update', `Pre-screen notes updated`);
     onRefresh();
   }
 
@@ -2068,6 +3090,7 @@ function LeadDetailPanel({
       sent_for_review_at: new Date().toISOString(),
     });
     setMarkingIntake(false);
+    logAction('status_change', `Intake completed — sent for attorney review`);
     onRefresh();
   }
 
@@ -2075,6 +3098,7 @@ function LeadDetailPanel({
     setMarkingFeeQuoted(true);
     await sbPatch("intake_leads", lead.id, { status: "fee_quoted" });
     setMarkingFeeQuoted(false);
+    logAction('status_change', `Status → fee_quoted (pending client acceptance)`);
     onRefresh();
   }
 
@@ -2082,6 +3106,12 @@ function LeadDetailPanel({
     setMarkingRetained(true);
     await sbPatch("intake_leads", lead.id, { status: "retained", retained_at: new Date().toISOString() });
     setMarkingRetained(false);
+    // Retention is the moment the lead's info + this time log transfer into
+    // the client folder under "time logs" (see RULE comment in
+    // ClientTimeLog.tsx). The server-side retention RPC handles the actual
+    // re-parenting; we just log the client-visible event here so the timeline
+    // ends with the retention milestone in the same view.
+    logAction('status_change', `Client retained`, { clientVisible: true });
     onRefresh();
   }
 
@@ -2089,6 +3119,7 @@ function LeadDetailPanel({
     setMarkingNoCase(true);
     await sbPatch("intake_leads", lead.id, { status: "no_case" });
     setMarkingNoCase(false);
+    logAction('status_change', `Marked no case`);
     onRefresh();
   }
 
@@ -2100,6 +3131,7 @@ function LeadDetailPanel({
       sent_for_review_at: new Date().toISOString(),
     });
     setSendingForReview(false);
+    logAction('status_change', `Sent for attorney review`);
     onRefresh();
   }
 
@@ -2149,13 +3181,54 @@ function LeadDetailPanel({
                 <Calendar className="w-3.5 h-3.5" /> Schedule Consult
               </button>
             )}
-            {canReview && (
-              <button onClick={() => setShowAcceptanceModal(true)}
-                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl transition-colors">
+            {/* Attorney Review button + surface — LAWYER-ONLY.
+                A plain super_admin / non-lawyer superuser does NOT see this
+                button and cannot open the attorney-review modal even via
+                direct nav (the modal mount below is also gated on
+                canOpenAttorneyReview). Non-lawyers see the case-advancement
+                status bar (rendered below) instead, which surfaces
+                "Submitted to attorney" / "Case accepted" as completed
+                stages without exposing the review surface. */}
+            {canOpenAttorneyReview && (
+              <button
+                onClick={() => {
+                  logAction('review_opened', `Opened attorney review surface for ${lead.full_name}`);
+                  setShowAcceptanceModal(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl transition-colors"
+              >
                 <Scale className="w-3.5 h-3.5" />
                 {acceptance ? "View Decision" : "Attorney Review"}
               </button>
             )}
+            {/* "Review Intake" — read-only ALL-answers view for NON-LAWYERS.
+                Lawyers see the same surface as the "All Answers" tab inside
+                the consolidated Attorney Review modal (one window, four tabs:
+                Eligibility / Issues / All Answers / Decision), so they don't
+                need a separate Review Intake button. Hiding it for lawyers
+                also removes the "two windows for the same thing" confusion.
+                Non-lawyers don't get the Attorney Review modal, so this
+                button is their only path to the answers — kept visible. */}
+            {!canOpenAttorneyReview && (
+              <button
+                onClick={() => {
+                  logAction('review_opened', `Opened Review Intake (read-only) for ${lead.full_name}`);
+                  setShowReviewIntake(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border border-slate-700/60 rounded-xl transition-colors"
+              >
+                <FileText className="w-3.5 h-3.5" /> Review Intake
+              </button>
+            )}
+            {/* "Update Intake Information" — safe-field editor for lead/intake
+                metadata. Excludes the locked questionnaire AND
+                attorney-originated content. */}
+            <button
+              onClick={() => setShowUpdateIntake(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-slate-700/40 hover:bg-slate-700/60 text-slate-200 border border-slate-700/60 rounded-xl transition-colors"
+            >
+              <PenLine className="w-3.5 h-3.5" /> Update Intake Information
+            </button>
             {!["retained","declined","no_case"].includes(lead.status) && (
               <button onClick={() => setShowLogContact(true)}
                 className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/20 rounded-xl transition-colors">
@@ -2187,6 +3260,22 @@ function LeadDetailPanel({
           ))}
         </div>
       </div>
+
+      {/* ── Case Advancement Status Bar (client-visible, all viewers) ────── */}
+      {/* Shown to lawyers AND non-lawyers. Drives stages from the lead row
+          + acceptance record. Stage 5 (presentation) is "—" until a
+          presentation_scheduled_at / presented_at field is wired; stage 7
+          surfaces the most recent next_follow_up_at but the FU CADENCE RULES
+          themselves live in the supervisor-configured Staff Settings
+          framework (TODO Phase B). */}
+      {/* Re-review chip — surfaces stale-ruleset cases in the queue.
+            Fetches the latest attorney_intake_review for this lead and
+            compares its stored ruleset version against the live store
+            version. Filed/closed cases (case_status === 'filed' | 'closed')
+            are never flagged here. */}
+      <ReReviewChip leadId={lead.id} />
+
+      <CaseAdvancementStatusBar lead={lead} acceptance={acceptance} />
 
       {/* ── Retention-Priority Action Banner ─────────────────────────────── */}
       {lead.status !== "retained" && lead.status !== "declined" && lead.status !== "no_case" && (() => {
@@ -2488,6 +3577,13 @@ function LeadDetailPanel({
         </div>
       )}
 
+      {/* ── Client Time Log (internal by default) ────────────────────────── */}
+      <ClientTimeLog
+        entries={timeLogEntries}
+        onToggleVisibility={toggleTimeLogVisibility}
+        canToggleVisibility={true}
+      />
+
       {/* Pre-screen notes */}
       <div className="bg-[#0d1221] border border-slate-800 rounded-2xl p-5">
         <div className="flex items-center justify-between mb-3">
@@ -2782,12 +3878,73 @@ function LeadDetailPanel({
         </div>
       )}
 
-      {showAcceptanceModal && (
+      {/* Attorney-review modal mount is double-gated: state can only flip
+          true via the button above (also lawyer-gated), AND the mount itself
+          re-checks isLawyer. Belt-and-suspenders so a stale state or a
+          future caller can't accidentally surface the modal to a non-lawyer. */}
+      {canOpenAttorneyReview && showAcceptanceModal && (
         <IntakeAttorneyReviewModal
           lead={lead}
           submission={submission}
           onClose={() => setShowAcceptanceModal(false)}
           onSaved={() => { setShowAcceptanceModal(false); onRefresh(); }}
+        />
+      )}
+
+      {/* Review Intake — read-only AllAnswersView in a modal (everyone) */}
+      {showReviewIntake && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-3xl bg-[#0d1221] border border-slate-700 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxHeight: '90vh' }}>
+            <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-2">
+              <FileText className="w-4 h-4 text-amber-400" />
+              <p className="text-sm font-bold text-white">Review Intake — {lead.full_name}</p>
+              <span className="text-[10px] uppercase tracking-widest text-slate-500 bg-slate-800 border border-slate-700 rounded-full px-2 py-0.5 ml-2">
+                read-only
+              </span>
+              <button
+                onClick={() => setShowReviewIntake(false)}
+                className="ml-auto text-slate-500 hover:text-white transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {submissionLoading ? (
+                <div className="text-center py-10">
+                  <RefreshCw className="w-6 h-6 text-slate-500 mx-auto mb-2 animate-spin" />
+                  <p className="text-xs text-slate-500 italic">Loading questionnaire answers…</p>
+                </div>
+              ) : submission && submission.form_data ? (
+                <AllAnswersView
+                  fd={submission.form_data as Record<string, unknown>}
+                  title="All Answers"
+                  subtitle="Read-only mirror of the locked client questionnaire. Blank answers are highlighted. To request additional information from the client, use the attorney-review surface — that flow is lawyer-only."
+                />
+              ) : (
+                <div className="text-center py-10">
+                  <FileText className="w-6 h-6 text-slate-700 mx-auto mb-2" />
+                  <p className="text-xs text-slate-500 italic">
+                    No questionnaire submission found for this lead yet.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Update Intake Information — safe-field editor (everyone) */}
+      {showUpdateIntake && (
+        <UpdateIntakeInfoModal
+          lead={lead}
+          canEdit={true}
+          onClose={() => setShowUpdateIntake(false)}
+          onSavedScaffold={(summary, _changedFields) => {
+            // TODO Phase B — wire the actual sbPatch('intake_leads', ...) here.
+            // Today: just log the action; no DB write so onRefresh() isn't called.
+            logAction('intake_update', `Updated intake info:\n${summary}`);
+          }}
         />
       )}
       {showLogContact && (
@@ -2961,6 +4118,57 @@ function isSuperAdminRole(role: PortalRole) {
 }
 function isLegalAdmin(role: PortalRole) {
   return role === "legal_admin";
+}
+// ─── Staff Settings viewer-role stub ────────────────────────────────────────
+// Determines whether a viewer reaches the Staff Settings surface via the
+// MyScheduleTab entry point (the supervisor-gated link added in the dashboard
+// rework). Returns:
+//   - { role: 'super_admin' }                              → see all departments
+//   - { role: 'department_supervisor', department: '...' } → see own dept only
+//   - { role: 'none' }                                     → link hidden
+//
+// Today's mapping:
+//   - intake_portal_role super_admin / attorney_super_admin → super_admin
+//   - Otherwise: consult the VITE_VIEWER_STAFF_ROLE env-var override so the
+//     supervisor branch is testable locally without persisted data.
+//     VITE_VIEWER_DEPARTMENT supplies the supervisor's department display
+//     string (defaults to "Intake").
+//
+// TODO Phase B — REAL department-scoped enforcement:
+//   - Replace this stub with a lookup against `staff_department_supervisors
+//     (staff_id, department_id, supervisor_staff_id, assigned_by, assigned_at)`
+//     populated from the new-employee-setup flow (see SuperAdminConsole's
+//     "Department supervisor(s)" design notes). The viewer is a
+//     department_supervisor when ANY row exists where supervisor_staff_id
+//     equals viewer.staff_id; the department(s) come from that table.
+//   - Multi-department supervisors: extend the return to `departments: string[]`
+//     and surface a department-picker in the Staff Settings panel scoped to
+//     that allow-list.
+//   - Server-side gate: every read + write underneath Staff Settings filters
+//     to viewer.department_id; a tampered client cannot escape its scope.
+function deriveStaffSettingsViewer(
+  isFirmSuperAdmin: boolean,
+): { role: 'super_admin' | 'department_supervisor' | 'none'; department?: string } {
+  if (isFirmSuperAdmin) return { role: 'super_admin' };
+  const envRole = (import.meta.env.VITE_VIEWER_STAFF_ROLE as string | undefined)?.toLowerCase();
+  if (envRole === 'department_supervisor') {
+    return {
+      role: 'department_supervisor',
+      department: (import.meta.env.VITE_VIEWER_DEPARTMENT as string | undefined) ?? 'Intake',
+    };
+  }
+  return { role: 'none' };
+}
+
+// Lawyer-only gate for the Attorney Review surface.
+// `attorney_super_admin` IS still an attorney (the super admin who holds a
+// bar number). Plain `super_admin` / superuser status does NOT make someone
+// a lawyer — non-lawyer superusers must never see or open the Attorney
+// Review button. This is enforced in the UI today; server-side gating lands
+// when Supabase auth is wired (TODO Phase B: re-check via RLS on the
+// attorney_intake_reviews / attorney_case_acceptances tables).
+function isLawyer(role: PortalRole) {
+  return role === "attorney" || role === "attorney_super_admin";
 }
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
@@ -4749,6 +5957,15 @@ function MyScheduleTab({
   isSuperAdmin: boolean;
 }) {
   const [familyOpen, setFamilyOpen] = useState(false);
+  const [showStaffSettings, setShowStaffSettings] = useState(false);
+
+  // Staff Settings supervisor gate — see deriveStaffSettingsViewer for the
+  // role-stub + TODO Phase B note. Non-supervisors get { role: 'none' } and
+  // the link is hidden entirely.
+  const staffSettingsViewer = deriveStaffSettingsViewer(isSuperAdmin);
+  const canSeeStaffSettings =
+    staffSettingsViewer.role === 'super_admin' ||
+    staffSettingsViewer.role === 'department_supervisor';
   return (
     <div className="space-y-6">
       {/* Header strip */}
@@ -4813,6 +6030,75 @@ function MyScheduleTab({
             <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Out-of-Office (super admin)</p>
           </div>
           <SuperAdminSickPanel onRefresh={onRefresh} />
+        </div>
+      )}
+
+      {/* ── Staff Settings (supervisor-gated entry) ─────────────────────────
+          Visible ONLY when the viewerStaffRole stub resolves to
+          'department_supervisor' or 'super_admin'. Non-supervisors don't
+          see this link at all.
+
+          A department_supervisor sees ONLY their own department's Staff
+          Settings (strength scores + task assignments + that department's
+          reporting metrics). Firm-wide sections from the Super Admin
+          Setting Portal (firm settings, feature toggles, Performance Goals
+          firm-wide config, automated messaging, knowledge base) are NOT
+          rendered here — those remain inside the super-admin-only console.
+
+          A super_admin sees the same panel with full-firm scope (and also
+          reaches it from the Super Admin Setting Portal — both entry
+          points mount the same `<StaffSettingsPanel>` component).
+
+          TODO Phase B — real department-scoped enforcement:
+            - viewer.staff_role + viewer.department_id derived from the
+              staff_department_supervisors table at auth time
+            - server-side filter on every read (and every write once
+              persistence lands) so supervisors see + edit ONLY their own
+              department's staff
+            - nav/dashboard re-renders the link as the supervisor's
+              assignments change (e.g., promoted, reassigned, retired) */}
+      {canSeeStaffSettings && (
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <Shield className="w-3.5 h-3.5 text-sky-400" />
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Staff Settings</p>
+            {staffSettingsViewer.role === 'department_supervisor' && staffSettingsViewer.department && (
+              <span className="ml-auto text-[10px] uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5">
+                Supervisor · {staffSettingsViewer.department}
+              </span>
+            )}
+            {staffSettingsViewer.role === 'super_admin' && (
+              <span className="ml-auto text-[10px] uppercase tracking-widest text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                Super Admin · all departments
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowStaffSettings(v => !v)}
+              className={`text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded border transition-colors ${
+                staffSettingsViewer.role === 'super_admin' ? '' : 'ml-auto'
+              } border-slate-700 text-slate-400 hover:text-slate-200 hover:border-slate-500`}
+            >
+              {showStaffSettings ? 'Hide' : 'Open Staff Settings'}
+            </button>
+          </div>
+
+          {showStaffSettings && staffSettingsViewer.role !== 'none' && (
+            <div className="rounded-2xl border border-slate-800 bg-[#0d1221] p-5">
+              <StaffSettingsPanel
+                viewerStaffRole={staffSettingsViewer.role as StaffSettingsViewerRole}
+                viewerDepartment={staffSettingsViewer.department}
+              />
+            </div>
+          )}
+
+          {!showStaffSettings && (
+            <p className="text-[11px] text-slate-500 italic">
+              {staffSettingsViewer.role === 'department_supervisor'
+                ? `Open to manage strength scores, task assignments, and reporting metrics for ${staffSettingsViewer.department ?? 'your department'}. Other departments and firm-wide Setting Portal sections are not visible to you.`
+                : 'Open to manage strength scores, task assignments, and reporting across all departments. (Also reachable from the Super Admin Setting Portal — same panel.)'}
+            </p>
+          )}
         </div>
       )}
 
@@ -7181,7 +8467,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // kept in the union as a fallback target — its nav entry was hidden and
   // the panel moved INSIDE MyScheduleTab, but the standalone render branch
   // still works if anything routes to it programmatically.
-  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "messages" | "staff_tasks" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients">(defaultTab);
+  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "messages" | "staff_tasks" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients" | "staff_settings" | "department_settings">(defaultTab);
   // Leads tab now contains both the lead table view and the Follow-Up
   // pipeline (FollowUpQueue) as a sub-section. The standalone Follow-Up
   // tab was removed for legal_admin/super_admin; attorneys still see it
@@ -7525,6 +8811,18 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           icon: <Calendar className="w-3.5 h-3.5" />,
           badge: timeOff.filter(t => !t.approved && new Date(t.date) >= new Date()).length || null,
         }]
+      : []),
+    // Staff Settings + Department Settings — top-level nav entries for
+    // super admins (and department supervisors via the role stub). Both
+    // tabs were previously only reachable from inside My Schedule; lifting
+    // them to the top nav makes them first-class. Department Settings
+    // gates IRS standards / exemptions / AI prompts to attorneys w/ super
+    // admin or the law firm owner — see DepartmentSettingsPanel.
+    ...( isSuperAdmin || canManageStaff
+      ? [{ id: "staff_settings" as const,      label: "Staff Settings",      icon: <Shield className="w-3.5 h-3.5" />, badge: null }]
+      : []),
+    ...( isSuperAdmin || canManageStaff
+      ? [{ id: "department_settings" as const, label: "Department Settings", icon: <Shield className="w-3.5 h-3.5" />, badge: null }]
       : []),
     // sick_admin nav entry intentionally removed — the panel is mounted
     // inside MyScheduleTab below for super admins. Render branch retained
@@ -7977,6 +9275,55 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           />
         )}
 
+        {/* ── STAFF SETTINGS TAB ── top-level nav entry (was previously only
+              reachable from inside My Schedule). Department supervisors see
+              their own department; super admins see all departments. */}
+        {activeTab === "staff_settings" && (isSuperAdmin || canManageStaff) && (() => {
+          const staffViewer = deriveStaffSettingsViewer(isSuperAdmin);
+          if (staffViewer.role === "none") return null;
+          return (
+            <div className="rounded-2xl border border-slate-800 bg-[#0d1221] p-5">
+              <StaffSettingsPanel
+                viewerStaffRole={staffViewer.role as StaffSettingsViewerRole}
+                viewerDepartment={staffViewer.department}
+              />
+            </div>
+          );
+        })()}
+
+        {/* ── DEPARTMENT SETTINGS TAB ── intake-form copy overrides + IRS
+              auto-fill toggle + role-gated IRS/exemption/AI-prompt edits.
+              Edits to standards / exemptions / prompts are restricted to
+              attorneys w/ super admin or the law firm owner. Every save
+              notifies the law firm owner (stubbed in the panel). */}
+        {activeTab === "department_settings" && (isSuperAdmin || canManageStaff) && (() => {
+          // Map the existing supervisor stub into the DepartmentSettings
+          // viewer role union. The "attorney_super_admin" + "law_firm_owner"
+          // branches gate the lock-icon sections. Real role binding lands
+          // when auth gives us the firm-owner flag.
+          const staffViewer = deriveStaffSettingsViewer(isSuperAdmin);
+          // TODO Phase B — read role from auth context. For today, derive
+          // the most-privileged role this user could plausibly have:
+          //   - isLawyer(role) && isSuperAdmin → "attorney_super_admin"
+          //   - non-lawyer super_admin        → "super_admin"
+          //   - department supervisor         → "department_supervisor"
+          const deptRole: DepartmentSettingsViewerRole =
+            isLawyer(role) && isSuperAdmin ? "attorney_super_admin" :
+            isSuperAdmin ? "super_admin" :
+            staffViewer.role === "department_supervisor" ? "department_supervisor" :
+            "none";
+          if (deptRole === "none") return null;
+          return (
+            <div className="rounded-2xl border border-slate-800 bg-[#0d1221] p-5">
+              <DepartmentSettingsPanel
+                viewerStaffRole={deptRole}
+                viewerDepartment={staffViewer.department}
+                initialEnableIrsAutoFill={true}
+              />
+            </div>
+          );
+        })()}
+
         {/* ── OUT-OF-OFFICE ADMIN TAB ── */}
         {activeTab === "sick_admin" && isSuperAdmin && (
           <SuperAdminSickPanel onRefresh={load} />
@@ -8139,13 +9486,27 @@ export default function LegalAdminPortal({
   const [session, setSession] = useState<PortalSession | null>(null);
 
   if (!session) {
-    return <PortalLogin onLogin={s => setSession(s)} />;
+    return <PortalLogin onLogin={s => {
+      // Persist the logged-in staffer's display name to sessionStorage so
+      // OTHER portal surfaces (AttorneyIntakeDashboard greeting,
+      // AttorneyTaskPanel task query, etc.) read the SAME identity. The
+      // surfaces consume this via lib/currentAttorney.ts → getCurrentAttorneyName().
+      // Was the source of the "Sarah Kim logs in but Attorney Review shows
+      // Jennifer Smith" mismatch: the dashboard was reading the env-var
+      // default because nothing was lifting the session out of this
+      // component's local state.
+      setCurrentAttorneyName(s.name);
+      setSession(s);
+    }} />;
   }
 
   return (
     <IntakePortalInner
       session={session}
-      onLogout={() => setSession(null)}
+      onLogout={() => {
+        clearCurrentAttorneyName();
+        setSession(null);
+      }}
       onOpenAttorneyReview={onOpenAttorneyReview}
       onOpenView={onOpenView}
     />

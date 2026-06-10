@@ -32,18 +32,42 @@ import {
   Shield, Building2, ToggleLeft, Users, ChevronDown, ChevronUp, Info,
   MessageSquare, Sparkles, BookOpen, Mail, Pencil,
   Target, BarChart2, Plus, Save, Calendar,
+  UserCog, Scale,
 } from "lucide-react";
 import SuperAdminPortal from "./SuperAdminPortal";
+import StaffSettingsPanel from "./components/staff-settings/StaffSettingsPanel";
+import LegalReferenceStore from "./components/legal-reference/LegalReferenceStore";
 
 interface SuperAdminConsoleProps {
   /** True when the current viewer is the firm's super admin. */
   isFirmSuperAdmin: boolean;
 }
 
+// TODO Phase B — viewer staff-role enforcement.
+// Replace this stub with viewer.staff_role from the auth context once the
+// staff-setup model lands. Intended values + visibility for Staff Settings:
+//   - 'super_admin'           → sees Staff Settings for ALL departments / staff
+//   - 'department_supervisor' → sees Staff Settings for THEIR department only
+//   - 'none'                  → Staff Settings is NOT rendered
+// Today the SuperAdminConsole page is already gated to firm super-admins by
+// App.tsx, so the stub treats any authorised viewer here as 'super_admin'.
+// The same Staff Settings surface will later be reachable from a separate
+// department-supervisor entry point with viewerStaffRole='department_supervisor'
+// (which scopes every read/write below to the supervisor's department).
+type ViewerStaffRole = 'super_admin' | 'department_supervisor' | 'none';
+
 export default function SuperAdminConsole({ isFirmSuperAdmin }: SuperAdminConsoleProps) {
   // Productivity is collapsed by default so the page loads fast; the embedded
   // SuperAdminPortal does its own fetching when expanded.
   const [productivityOpen, setProductivityOpen] = useState(false);
+
+  // Role stub — see ViewerStaffRole TODO above. Cast prevents the const from
+  // narrowing to its current literal value so the downstream 'department_supervisor'
+  // check still type-checks (it is unreachable today, intentionally — once auth
+  // delivers the real role this branch becomes live without further edits).
+  const viewerStaffRole = (isFirmSuperAdmin ? 'super_admin' : 'none') as ViewerStaffRole;
+  const canSeeStaffSettings =
+    viewerStaffRole === 'super_admin' || viewerStaffRole === 'department_supervisor';
 
   if (!isFirmSuperAdmin) {
     return (
@@ -185,6 +209,53 @@ export default function SuperAdminConsole({ isFirmSuperAdmin }: SuperAdminConsol
                 </ul>
               </div>
 
+              {/* Department supervisor assignment — per department. Supervisors
+                  unlock the Staff Settings + Reporting surface below for their
+                  own department; non-supervisors don't see those at all. */}
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#FAFAF7] mb-1.5">
+                  Department supervisor(s)
+                  <span className="text-[#6B6B66] font-normal normal-case tracking-normal"> (one or more, per department)</span>
+                </p>
+                <p className="text-[11px] text-[#6B6B66] leading-relaxed mb-2">
+                  For each department the employee is assigned to, designate the supervisor(s).
+                  Supervisors unlock the Staff Settings + Reporting surface for their own
+                  department; super admins see all departments.
+                </p>
+                {/* Disabled scaffold picker — illustrative, no submit / state */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <ScaffoldField label="Department">
+                    <select
+                      disabled
+                      className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                    >
+                      <option>— pick department —</option>
+                    </select>
+                  </ScaffoldField>
+                  <ScaffoldField label="Supervisor(s)">
+                    <select
+                      disabled
+                      multiple
+                      className="w-full bg-[#1A1A18] border border-[#2A2A28] text-[#6B6B66] text-[11px] rounded px-2 py-1.5 cursor-not-allowed"
+                    >
+                      <option>— pick supervisor(s) —</option>
+                    </select>
+                  </ScaffoldField>
+                </div>
+                <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
+                  {/* TODO Phase B — supervisor assignment persistence:
+                      - new table `staff_department_supervisors (staff_id, department_id,
+                        supervisor_staff_id, assigned_by, assigned_at)`
+                      - ties to the planned staff-setup model (the same model that backs
+                        the role + department lists above); unique on
+                        (staff_id, department_id, supervisor_staff_id) so multiple
+                        supervisors per department are allowed but never duplicated
+                      - drives the Staff Settings visibility gate (supervisors see their
+                        own department; super admins see all) */}
+                  Reference only — picker + persistence land with the staff-setup model.
+                </p>
+              </div>
+
               {/* Planned fields (left → right) */}
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-widest text-[#FAFAF7] mb-1.5">
@@ -258,6 +329,44 @@ export default function SuperAdminConsole({ isFirmSuperAdmin }: SuperAdminConsol
             </p>
           </div>
         </Subsection>
+
+        {/* State Exemptions & IRS Standards — firms need to keep the
+            exemption tables and IRS-standards tables current. Both
+            publish-twice-a-year (or annually for state exemption updates)
+            so this surface lets the firm super-admin either upload a fresh
+            source document (PDF / CSV) or edit individual amounts inline.
+            Today wired as a scaffold; persistence + ingestion lands in the
+            follow-up build. */}
+        <Subsection
+          icon={<Scale className="w-4 h-4 text-[#B8945F]" />}
+          title="Legal Reference / Rules & Standards"
+          subtitle="Single source of truth: IRS standards, state exemptions, means-test thresholds, and cited statutory parameters. Same component as Department Settings + Law Firm Owner — edits propagate everywhere."
+        >
+          <LegalReferenceStore
+            viewerStaffRole={isFirmSuperAdmin ? "attorney_super_admin" : "super_admin"}
+            surfaceName="super_admin"
+          />
+        </Subsection>
+
+        {/* Staff Settings — supervisor-gated. Department supervisors see their
+            own department; super admins see all. Non-supervisors don't reach
+            this surface at all — the visibility gate is the canSeeStaffSettings
+            check below + the role gate that lives one level up (real wiring
+            lands with the staff-setup model). */}
+        {canSeeStaffSettings && (
+          <Subsection
+            icon={<UserCog className="w-4 h-4 text-[#B8945F]" />}
+            title="Staff Settings"
+            subtitle="Supervisor-gated. Per-employee strength scores + task assignments + department reporting. Non-supervisors don't see this surface."
+          >
+            {/* Extracted into src/components/staff-settings/StaffSettingsPanel.tsx
+                so the same UI is reachable from MyScheduleTab for department
+                supervisors who are NOT full super admins. The SuperAdminConsole
+                ALWAYS sees the panel as super_admin (full-firm visibility);
+                the supervisor branch is exercised via the MyScheduleTab entry. */}
+            <StaffSettingsPanel viewerStaffRole="super_admin" />
+          </Subsection>
+        )}
 
         <Subsection
           icon={<MessageSquare className="w-4 h-4 text-[#B8945F]" />}

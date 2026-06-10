@@ -137,3 +137,92 @@ This matters because a pending claim is treated as an asset in your bankruptcy a
 export function getScriptForStep(step: number): IntakeStepScript | null {
   return STAFF_INTAKE_SCRIPTS.find(s => s.step === step) ?? null;
 }
+
+// ─── Intro (read at the start of the intake call) ────────────────────────────
+//
+// Placeholders are intentionally left as literal `{firmName}` / `{staffName}` /
+// `{staffTitle}` / `{supervisingAttorney}` text — the live build interpolates
+// from firm + auth context. Until that wiring lands, the wrapper renders the
+// placeholders as-is so the staffer reads them verbatim and the firm can
+// validate the script before substitution goes live.
+//
+// TODO Phase B — placeholder resolution:
+//   - firmName              → read from `firms` table by viewer.firm_id
+//   - staffName / staffTitle → from the authenticated session (already on
+//                              StaffGuidedIntakeProps.session — currently
+//                              unused per spec to keep the placeholders literal)
+//   - supervisingAttorney   → lookup the staffer's assigned attorney (the
+//                              Staff Settings supervisor framework — see the
+//                              Super Admin Setting Portal Staff Settings card)
+export const INTAKE_INTRO_SCRIPT = `"Hi, my name is {staffName} and I'm a {staffTitle} here at {firmName}. I'm not an attorney — I work under the supervision of our supervising attorney, {supervisingAttorney}. All legal advice and case-acceptance decisions come from the attorney. I'm here to help guide you through gathering your information and to help you get answers about your bankruptcy eligibility."`;
+
+// ─── Closing (shown BEFORE the submit-for-attorney-review action) ────────────
+//
+// Verbatim sections per firm-approved spec. Each entry is rendered as a
+// heading + read-aloud body in the closing meta-section. Headings remain
+// stable so an attorney can scan-review the script at a glance.
+export interface ClosingScriptBlock {
+  /** Section heading as it appears in the UI (and is read by the staffer). */
+  heading: string;
+  /** Read-aloud body verbatim. */
+  body: string;
+}
+
+/** The closing lead-in line read PROMINENTLY before any body content. */
+export const INTAKE_CLOSING_LEAD_IN =
+  `"We are not lawyers. All information and cases are reviewed by a licensed attorney."`;
+
+/** Visible attorney-reviewed banner under the lead-in. */
+export const INTAKE_CLOSING_BANNER =
+  `General information about the bankruptcy process — reviewed and approved by our attorneys. Not legal or financial advice about your specific case.`;
+
+export const INTAKE_CLOSING_BLOCKS: ClosingScriptBlock[] = [
+  {
+    heading: "WHAT HAPPENS NOW",
+    body:
+`"Here's what happens next:
+1. One of our attorneys is now actively reviewing your case and will determine whether we can accept it.
+2. If your case is accepted, the attorney will let you know which chapter you'll file, the fee, and any legal advice specific to your situation. All legal advice and the decision to accept your case come from the attorney — not from me.
+While the attorney reviews your file, let me walk you through the basics of how a bankruptcy filing works. Everything I'm about to share is general information, reviewed and approved by our attorneys, and is not legal or financial advice about your specific case."`,
+  },
+  {
+    heading: "CHAPTER 7 vs CHAPTER 13",
+    body:
+`"There are two main chapters most individuals file. Chapter 7 is a liquidation — generally available if your income is below the state median or you otherwise pass what's called the 'means test.' It typically moves quickly and can eliminate qualifying unsecured debts. Chapter 13 is a repayment plan that lasts 3 to 5 years; the amount you pay into the plan is based on your income — specifically your disposable income after allowed expenses. Chapter 13 is often used when income is higher, or when you want to catch up on a mortgage or car or keep property that isn't fully protected. Which chapter fits is something the attorney decides after reviewing your full financial picture."`,
+  },
+  {
+    heading: "LISTING EVERYTHING",
+    body:
+`"For either chapter, the law requires you to list all of your income and all of your assets — nothing left off. The attorney will review whether you have any non-exempt assets — property not fully protected by exemptions — or any other issues that could come up, and how to address them."`,
+  },
+  {
+    heading: "FILING, CASE NUMBER & THE AUTOMATIC STAY",
+    body:
+`"Once your documents are finalized and your case is filed, the court generates a case number and the 'automatic stay' goes into effect immediately. The automatic stay is a powerful protection: it stops most collection activity against you. Lawsuits and other legal actions pause, wage garnishments stop, and creditors must stop contacting you to collect."`,
+  },
+  {
+    heading: "YOUR 341 MEETING",
+    body:
+`"After you file, you'll have a 341 meeting — a meeting of creditors, currently held over Zoom. You won't be alone; one of our attorneys will be there with you. You'll need to provide certain documents to the trustee, and our office handles getting those to the trustee — but you must get us your updated records at least 10 days before your hearing, or the meeting may have to be continued. It's important that you attend: if you fail to appear, your case can be dismissed."`,
+  },
+  {
+    heading: "DISCHARGE",
+    body:
+`"After your 341 meeting, it's generally about 60 to 90 days until the court enters your discharge, assuming no creditor raises an objection. The discharge is the court order that releases you from your qualifying debts."`,
+  },
+  {
+    heading: "ESTATE PROPERTY, NO-DISTRIBUTION REPORT & CLOSING",
+    body:
+`"When you file, a 'bankruptcy estate' is created — essentially all of your property interests as of the filing date. In most consumer cases your property is protected by exemptions. If the trustee decides there's no non-exempt property worth collecting for creditors, the trustee files a 'report of no distribution.' After that, the judge typically signs an order closing your case — generally about 90 to 120 days after that report, and sometimes sooner."`,
+  },
+  {
+    heading: "REBUILDING CREDIT",
+    body:
+`"Here's something many people don't realize: once your case is filed, you can begin rebuilding your credit right away. Per our attorneys, we typically see clients rehabilitate their credit within the first year, and within about two years many clients are in a position to buy a home — often through FHA financing — provided they meet the lender's requirements. That's general information based on what we've seen with most clients, not financial advice or a guarantee about your situation."`,
+  },
+  {
+    heading: "NEXT STEP",
+    body:
+`"Once the attorney finishes reviewing your case and it comes back to us, we'll move into the case presentation step, where we go over the attorney's decision, your chapter, and your fee."`,
+  },
+];

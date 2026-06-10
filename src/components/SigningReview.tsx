@@ -4,6 +4,8 @@ import {
   AlertTriangle, ChevronDown, ChevronRight, Pause, Send,
   FileText, User,
 } from 'lucide-react';
+import { getCurrentAttorneyName } from '../lib/currentAttorney';
+import ExemptionsLiquidationPanel from './signing-review/ExemptionsLiquidationPanel';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -11,7 +13,10 @@ const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 // Demo client — replaced by real client context once BAN-40 auth ships.
 const CLIENT_ID = 'client-demo';
 const FIRM_ID = (import.meta.env.VITE_FIRM_ID as string | undefined) ?? '00000000-0000-0000-0000-000000000001';
-const REVIEWER_NAME = 'Jennifer Smith, Esq.';
+// Reviewer name resolves at call time so post-login sessionStorage updates
+// flow through. Was a module-load const "Jennifer Smith, Esq." that would
+// cache the env-var default before any login could populate the session.
+function reviewerName(): string { return getCurrentAttorneyName(); }
 
 const ALLOWED_ROLES = ['attorney', 'legal_admin', 'firm_super_admin', 'super_admin_bankruptcy_ai'];
 
@@ -271,6 +276,12 @@ export default function SigningReview(
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [sessionElapsed, setSessionElapsed] = useState(0);
+  // Client's intake form_data — feeds the Exemptions & Liquidation panel.
+  // Loaded best-effort; if no submission is on file the panel renders an
+  // empty-state notice instead of breaking the signing review.
+  const [intakeFormData, setIntakeFormData] = useState<Record<string, unknown> | null>(null);
+  const [intakeState, setIntakeState] = useState<string | undefined>(undefined);
+  const [intakeCounty, setIntakeCounty] = useState<string | undefined>(undefined);
   const sessionStartRef = useRef<Date>(new Date());
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reviewRowRef = useRef<SigningReviewRow | null>(null);
@@ -292,6 +303,29 @@ export default function SigningReview(
   useEffect(() => {
     loadOrCreate();
   }, []);
+
+  // ── Load the client's intake form_data for the Exemptions panel ───────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/intake_submissions?client_id=eq.${clientId}&order=created_at.desc&limit=1&select=form_data,state,county,exemption_state`,
+          { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } },
+        );
+        const rows = await res.json();
+        if (cancelled) return;
+        const r = Array.isArray(rows) && rows.length > 0 ? rows[0] : null;
+        const fd = (r?.form_data as Record<string, unknown> | undefined) ?? null;
+        setIntakeFormData(fd);
+        setIntakeState(String(r?.exemption_state || r?.state || fd?.state || "") || undefined);
+        setIntakeCounty(String(r?.county || fd?.county || "") || undefined);
+      } catch {
+        // No submission on file — panel renders empty-state.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [clientId]);
 
   async function loadOrCreate() {
     setLoading(true);
@@ -367,7 +401,7 @@ export default function SigningReview(
         [key]: {
           ...prev[key],
           status,
-          reviewed_by: status !== 'not_yet_reviewed' ? REVIEWER_NAME : '',
+          reviewed_by: status !== 'not_yet_reviewed' ? reviewerName() : '',
           reviewed_at: status !== 'not_yet_reviewed' ? now : '',
         },
       };
@@ -441,7 +475,7 @@ export default function SigningReview(
             </div>
             <div>
               <p className="text-sm font-semibold text-white leading-tight">Signing Review Portal</p>
-              <p className="text-xs text-slate-500">{REVIEWER_NAME}</p>
+              <p className="text-xs text-slate-500">{reviewerName()}</p>
             </div>
           </div>
 
@@ -506,10 +540,10 @@ export default function SigningReview(
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
               {[
-                { label: 'Attorney', value: 'Jennifer Smith, Esq.' },
+                { label: 'Attorney', value: reviewerName() },
                 { label: 'Firm', value: 'Majors Law Group' },
                 { label: 'Filing Type', value: 'Individual — Non-Filing Spouse' },
-                { label: 'Reviewer', value: REVIEWER_NAME },
+                { label: 'Reviewer', value: reviewerName() },
                 { label: 'Review Status', value: reviewRow?.status?.replace(/_/g, ' ') ?? 'In Progress' },
                 { label: 'Last Saved', value: reviewRow?.updated_at ? new Date(reviewRow.updated_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '—' },
               ].map(item => (
@@ -560,6 +594,21 @@ export default function SigningReview(
             </div>
             <p className="text-xs text-slate-500">{verifiedCount} of {TOTAL_ITEMS} items reviewed</p>
           </div>
+        </div>
+
+        {/* ── Exemptions & Liquidation Analysis (attorney-facing) ──
+              Same role gate as the rest of the SigningReview surface
+              (controlled by VITE_PLATFORM_ROLE for now; real auth role
+              binding lands when the SigningReview is wired into the
+              attorney session). Attorneys edit; everyone else sees
+              read-only totals. */}
+        <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
+          <ExemptionsLiquidationPanel
+            formData={intakeFormData}
+            clientState={intakeState}
+            clientCounty={intakeCounty}
+            canEdit={role === 'attorney' || role === 'firm_super_admin' || role === 'super_admin_bankruptcy_ai'}
+          />
         </div>
 
         {/* ── Review groups ── */}

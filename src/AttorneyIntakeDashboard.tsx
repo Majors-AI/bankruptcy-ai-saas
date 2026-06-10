@@ -8,6 +8,8 @@ import CaseActivityLog from "./components/admin/CaseActivityLog";
 import IncomeExpenseModal from "./components/admin/IncomeExpenseModal";
 import { getApplicableExemptions, getCaHomesteadByCounty, getWaHomesteadEligibility } from "./components/admin/exemptions";
 import ExemptionQuickView, { buildAssetRows } from "./components/admin/ExemptionQuickView";
+import AllAnswersView from "./components/intake-review/AllAnswersView";
+import { getCurrentAttorneyName } from "./lib/currentAttorney";
 
 // Statutory court filing fees — current as of 2026, verify periodically.
 const COURT_FILING_FEES = { 7: 338, 13: 313 } as const;
@@ -177,8 +179,12 @@ function normalizeFormData(fd: Record<string, unknown>): Record<string, unknown>
       props.push({
         propertyValue: String(fd.secondPropValue ?? "0"),
         loanBalance: String(fd.secondMortgage ?? "0"),
-        monthlyPayment: "0",
-        arrearsAmount: "0",
+        // Was hardcoded "0" — now pulls the second-property monthly payment
+        // and arrears the client entered in the property section. These
+        // flow into the Ch.7/Ch.13 eligibility analysis (analyzeChapter7
+        // arrears warning + analyzeChapter13 plan-funding total).
+        monthlyPayment: String(fd.secondMortgagePayment ?? "0"),
+        arrearsAmount: String(fd.secondMortgageArrears ?? "0"),
         lenderName: "Second Property Lender",
         address: String(fd.secondPropAddress ?? ""),
         propType: "Investment/Rental Property",
@@ -410,8 +416,30 @@ const STATE_MEDIAN_INCOME: Record<string, number[]> = {
   WI:[61020,78756,93576,107100,120384], WY:[59604,77088,90408,104016,117468], DC:[82200,107220,126156,145080,162996],
 };
 
+// Median income lookup — prefers the centralized legal-reference store so
+// the value in use is always current. Falls back to the local
+// STATE_MEDIAN_INCOME table when the store doesn't recognize the input
+// (e.g., state passed as abbreviation while the store keys on full names).
+import { getMedianAnnualIncome as storeGetMedian } from "./lib/irsMeansStandards";
+const STATE_ABBR_TO_NAME: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
+  FL: "Florida", GA: "Georgia", HI: "Hawaii", ID: "Idaho", IL: "Illinois",
+  IN: "Indiana", IA: "Iowa", KS: "Kansas", KY: "Kentucky", LA: "Louisiana",
+  ME: "Maine", MD: "Maryland", MA: "Massachusetts", MI: "Michigan", MN: "Minnesota",
+  MS: "Mississippi", MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada",
+  NH: "New Hampshire", NJ: "New Jersey", NM: "New Mexico", NY: "New York",
+  NC: "North Carolina", ND: "North Dakota", OH: "Ohio", OK: "Oklahoma",
+  OR: "Oregon", PA: "Pennsylvania", RI: "Rhode Island", SC: "South Carolina",
+  SD: "South Dakota", TN: "Tennessee", TX: "Texas", UT: "Utah", VT: "Vermont",
+  VA: "Virginia", WA: "Washington", WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming",
+};
 function getStateMedian(state: string, householdSize: number): number {
-  const medians = STATE_MEDIAN_INCOME[state?.toUpperCase()] ?? STATE_MEDIAN_INCOME["TX"];
+  const up = (state || "").toUpperCase();
+  const fullName = STATE_ABBR_TO_NAME[up] ?? state;
+  const fromStore = storeGetMedian(fullName, householdSize);
+  if (fromStore != null) return fromStore;
+  const medians = STATE_MEDIAN_INCOME[up] ?? STATE_MEDIAN_INCOME["TX"];
   const idx = Math.min(Math.max(householdSize - 1, 0), medians.length - 1);
   return medians[idx];
 }
@@ -451,21 +479,104 @@ function calcTotalBusinessDebt(fd: Record<string, unknown>): number {
   );
 }
 
-function calcTotalConsumerDebt(fd: Record<string, unknown>): number {
-  const vehicles = (fd.vehicles as Array<Record<string, unknown>>) ?? [];
+// The legacy `calcTotalConsumerDebt(fd)` helper was removed in favor of the
+// override-aware `calcDebtComposition(fd, overrides).consumer` below — the
+// composition function is the single source of truth for business/consumer
+// classification across the attorney review surface.
+
+// ─── § 707(b) business-debt classification (attorney-overridable) ─────────────
+//
+// BAPCPA § 707(b)(1) excludes "non-consumer debtors" from the means test. A
+// debtor is non-consumer when more than 50% of total debt is non-consumer
+// (typically business obligations + personal guarantees on business loans
+// like SBA 7(a), and most business-tax debt).
+//
+// The intake questionnaire does NOT yet capture a per-debt consumer/business
+// flag, so amounts that may be business sit in ambiguous buckets like
+// `personalLoanDebt` (where seed cases stash SBA loans today) and `taxDebt`
+// (which may be income-tax on business income). The attorney is asked on the
+// review surface to classify each non-zero ambiguous bucket — until the
+// attorney acts, defaults are CONSERVATIVE (consumer). No fabrication: the
+// case shows as means-test-applicable unless the attorney affirmatively
+// classifies debt as business.
+//
+// TODO Phase B — questionnaire schema:
+//   - extend each unsecured-debt entry on the intake form with an explicit
+//     'is_business_debt' boolean (e.g. on `intake_submissions.form_data`
+//     line-item arrays for credit cards / loans / taxes)
+//   - persist the attorney's classification overrides to
+//     `attorney_intake_reviews` so they survive a page reload + flow into
+//     downstream surfaces (the recommendation grid + decision card)
+//
+// `creditCardDebt` and `medicalDebt` are listed for completeness (a small
+// business operated on personal cards can be non-consumer too), even though
+// their default is consumer.
+export type DebtBucketClass = 'business' | 'consumer';
+export const CLASSIFIABLE_DEBT_BUCKETS: ReadonlyArray<{
+  key: string; label: string; hint: string; defaultClass: DebtBucketClass;
+}> = [
+  { key: 'creditCardDebt',   label: 'Credit cards',          hint: 'Consumer by default; non-consumer if business-purpose charges on personal cards.',                   defaultClass: 'consumer' },
+  { key: 'medicalDebt',      label: 'Medical debt',          hint: 'Always consumer.',                                                                                    defaultClass: 'consumer' },
+  { key: 'studentLoanDebt',  label: 'Student loan debt',     hint: 'Consumer (educational debt is consumer under § 101(8)).',                                             defaultClass: 'consumer' },
+  { key: 'personalLoanDebt', label: 'Personal / unsecured (incl. SBA)', hint: 'SBA loans (personal guarantee on a business venture) are NON-CONSUMER — classify accordingly. Seed cases stash SBA in this bucket today.', defaultClass: 'consumer' },
+  { key: 'taxDebt',          label: 'Tax debt',              hint: 'Income tax on business income, payroll tax, B&O tax = non-consumer. Personal income tax on wages = consumer.', defaultClass: 'consumer' },
+  { key: 'otherUnsecured',   label: 'Other unsecured',       hint: 'Classify per the underlying debt purpose.',                                                            defaultClass: 'consumer' },
+];
+
+export function calcDebtComposition(
+  fd: Record<string, unknown>,
+  overrides: Record<string, DebtBucketClass> = {},
+): {
+  business: number; consumer: number; total: number;
+  primarilyBusiness: boolean; pct: number;
+  // Buckets the attorney still needs to confirm (non-zero amount, no override).
+  awaiting: Array<{ key: string; label: string; amount: number; defaultClass: DebtBucketClass }>;
+} {
+  // Start with the explicit-business fields already wired (supplyVendorDebt etc.)
+  let business = calcTotalBusinessDebt(fd);
+  // Mortgage + vehicle loans = consumer secured. Always.
   const properties = (fd.properties as Array<Record<string, unknown>>) ?? [];
-  return (
-    (parseFloat((fd.creditCardDebt as string) ?? "0") || 0) +
-    (parseFloat((fd.medicalDebt as string) ?? "0") || 0) +
-    (parseFloat((fd.studentLoanDebt as string) ?? "0") || 0) +
-    (parseFloat((fd.personalLoanDebt as string) ?? "0") || 0) +
-    (parseFloat((fd.otherDebt as string) ?? "0") || 0) +
+  const vehicles = (fd.vehicles as Array<Record<string, unknown>>) ?? [];
+  let consumer =
     properties.reduce((a, p) => a + (parseFloat((p.loanBalance as string) ?? "0") || 0), 0) +
-    vehicles.reduce((a, v) => a + (parseFloat((v.loanBalance as string) ?? "0") || 0), 0)
-  );
+    vehicles.reduce((a, v) => a + (parseFloat((v.loanBalance as string) ?? "0") || 0), 0);
+
+  const awaiting: Array<{ key: string; label: string; amount: number; defaultClass: DebtBucketClass }> = [];
+  CLASSIFIABLE_DEBT_BUCKETS.forEach(b => {
+    const amt = parseFloat((fd[b.key] as string) ?? "0") || 0;
+    if (amt <= 0) return;
+    const klass = overrides[b.key] ?? b.defaultClass;
+    if (klass === 'business') business += amt;
+    else consumer += amt;
+    if (!(b.key in overrides)) {
+      awaiting.push({ key: b.key, label: b.label, amount: amt, defaultClass: b.defaultClass });
+    }
+  });
+
+  // `otherDebt` is a legacy field still read by calcTotalConsumerDebt; mirror it
+  // here as consumer (no override path until it's promoted to a classifiable bucket).
+  consumer += (parseFloat((fd.otherDebt as string) ?? "0") || 0);
+
+  const total = business + consumer;
+  const primarilyBusiness = total > 0 && business / total > 0.50;
+  const pct = total > 0 ? Math.round((business / total) * 100) : 0;
+  return { business, consumer, total, primarilyBusiness, pct, awaiting };
 }
 
-function analyzeChapter7(fd: Record<string, unknown>): EligibilityResult {
+// ─── All Answers schema + view ───────────────────────────────────────────────
+// Extracted to src/components/intake-review/AllAnswersView.tsx so the legal-
+// admin lead-detail screen can mount the same read-only listing via a
+// "Review Intake" action without duplicating the schema or rendering logic.
+//
+// This file imports the shared `AllAnswersView` component and renders it in
+// attorney-review mode (per-section flag toggles + bottom submit-back).
+
+// (schema body removed — see src/components/intake-review/AllAnswersView.tsx)
+
+function analyzeChapter7(
+  fd: Record<string, unknown>,
+  debtClassOverrides: Record<string, DebtBucketClass> = {},
+): EligibilityResult {
   const grossIncome = calcTotalGrossIncome(fd);
   const income = calcTotalIncome(fd);
   const expenses = calcTotalExpenses(fd);
@@ -479,10 +590,12 @@ function analyzeChapter7(fd: Record<string, unknown>): EligibilityResult {
   const medianAnnual = getStateMedian(state, householdSize);
   const passesMeansTest = annualIncome <= medianAnnual;
 
-  const totalBusinessDebt = calcTotalBusinessDebt(fd);
-  const totalConsumerDebt = calcTotalConsumerDebt(fd);
-  const totalAllDebt = totalBusinessDebt + totalConsumerDebt;
-  const primarylyBusinessDebt = totalAllDebt > 0 && totalBusinessDebt / totalAllDebt > 0.50;
+  // § 707(b) bypass: > 50% non-consumer (business) debt → means test does not
+  // apply, so the over-median branch below does NOT set eligible=false on income.
+  const composition = calcDebtComposition(fd, debtClassOverrides);
+  const totalBusinessDebt = composition.business;
+  const totalAllDebt = composition.total;
+  const primarylyBusinessDebt = composition.primarilyBusiness;
 
   const vehicles = (fd.vehicles as Array<Record<string, unknown>>) ?? [];
   const properties = (fd.properties as Array<Record<string, unknown>>) ?? [];
@@ -2185,10 +2298,23 @@ function CaseSummaryGrid({ fd: fdProp, submissionId, draftId, clientName, client
                 </div>
               </div>
 
-              {/* UNSECURED COLUMN */}
+              {/* UNSECURED COLUMN — split into Consumer + Business subsections
+                  so the §707(b)(1) bypass categories are always visible.
+                  Empty buckets render as muted "NO" rows (existing pattern)
+                  so the attorney can confirm at a glance that nothing was
+                  missed; previously the Business Debts row was hidden
+                  entirely whenever totalBusinessDebtDisplay === 0, which
+                  made the category invisible for cases like Mickey Rourke's
+                  where the SBA sits in `personalLoanDebt` (the classifiable
+                  bucket) and the five explicit business-debt buckets are
+                  zero by default. Now the section is always present and
+                  carries an inline classification hint when personalLoanDebt
+                  is non-zero. */}
               <div>
                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Unsecured Debts</p>
                 <div className="space-y-2">
+                  {/* ── Consumer unsecured ─────────────────────────────── */}
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mt-1">Consumer</p>
                   {([
                     { label: "Credit Cards", key: "creditCardDebt", badge: "bg-slate-700/80 text-slate-300" },
                     { label: "Medical", key: "medicalDebt", badge: "bg-blue-500/15 text-blue-300" },
@@ -2209,15 +2335,62 @@ function CaseSummaryGrid({ fd: fdProp, submissionId, draftId, clientName, client
                       </div>
                     );
                   })}
-                  {totalBusinessDebtDisplay > 0 && (
-                    <div className="flex justify-between items-center text-xs bg-orange-500/10 rounded-xl border border-orange-500/30 px-3 py-2.5">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-orange-500/20 text-orange-300 w-fit">Business Debt</span>
-                        {(fd.businessDebtDesc as string) && <span className="text-[9px] text-slate-500 max-w-[160px] truncate">{fd.businessDebtDesc as string}</span>}
-                      </div>
-                      <span className="text-orange-300 font-semibold">{fmt(totalBusinessDebtDisplay)}</span>
+
+                  {/* Hint: when personalLoanDebt is non-zero, it commonly
+                      includes SBA / personally-guaranteed business loans
+                      that should be reclassified as business debt to engage
+                      the §707(b)(1) bypass. */}
+                  {(parseFloat((fd.personalLoanDebt as string) ?? "0") || 0) > 0 && (
+                    <div className="rounded-xl border border-amber-500/30 bg-amber-500/8 px-3 py-2 flex items-start gap-2">
+                      <span className="text-[10px] font-bold text-amber-300 uppercase tracking-widest flex-shrink-0">Tip</span>
+                      <span className="text-[10px] text-amber-200/85 leading-snug">
+                        Personal Loans ({fmt(parseFloat((fd.personalLoanDebt as string) ?? "0") || 0)}) may include SBA or
+                        business-guaranteed loans. Reclassify in the Issues tab's Debt Classification card to engage the
+                        §707(b)(1) means-test bypass.
+                      </span>
                     </div>
                   )}
+
+                  {/* ── Business unsecured — ALWAYS RENDERED ───────────── */}
+                  <p className="text-[9px] font-bold text-orange-300 uppercase tracking-widest mt-3 flex items-center gap-1.5">
+                    <Briefcase className="w-3 h-3" /> Business debts
+                    <span className="text-orange-200/60 normal-case tracking-normal font-normal">
+                      (§707(b)(1) bypass — &gt;50% of total flips means test to N/A)
+                    </span>
+                  </p>
+                  {([
+                    { label: "SBA / Other business loan",   key: "otherBusinessDebt",       badge: "bg-orange-500/15 text-orange-300" },
+                    { label: "Business credit cards",        key: "businessCreditCardDebt",  badge: "bg-orange-500/15 text-orange-300" },
+                    { label: "Business real-estate mortgage", key: "businessMortgageDebt",   badge: "bg-orange-500/15 text-orange-300" },
+                    { label: "Business equipment financing", key: "businessEquipmentDebt",   badge: "bg-orange-500/15 text-orange-300" },
+                    { label: "Supply / vendor / trade payables", key: "supplyVendorDebt",    badge: "bg-orange-500/15 text-orange-300" },
+                  ] as { label: string; key: string; badge: string }[]).map(({ label, key, badge }) => {
+                    const val = parseFloat((fd[key] as string) ?? "0") || 0;
+                    return val > 0 ? (
+                      <div key={key} className="flex justify-between items-center text-xs bg-orange-500/10 rounded-xl border border-orange-500/30 px-3 py-2.5">
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${badge}`}>{label}</span>
+                        <span className="text-orange-300 font-semibold">{fmt(val)}</span>
+                      </div>
+                    ) : (
+                      <div key={key} className="flex items-center gap-2 text-xs text-slate-600 bg-slate-800/20 rounded-xl border border-slate-700/20 px-3 py-2.5">
+                        <span className="text-[9px] bg-slate-800 text-slate-600 px-1.5 py-0.5 rounded font-bold">NO</span>
+                        {label}
+                      </div>
+                    );
+                  })}
+                  {(fd.businessDetails as string) && (
+                    <p className="text-[10px] text-slate-500 italic px-1">{fd.businessDetails as string}</p>
+                  )}
+
+                  {/* Subtotals + unsecured grand total */}
+                  <div className="flex justify-between text-xs pt-1 mt-1">
+                    <span className="text-slate-500">Business subtotal</span>
+                    <span className="text-orange-300 font-semibold">{fmt(totalBusinessDebtDisplay)}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-slate-500">Consumer subtotal</span>
+                    <span className="text-white font-semibold">{fmt(totalUnsecured - totalBusinessDebtDisplay)}</span>
+                  </div>
                   <div className="flex justify-between text-xs pt-1 border-t border-slate-700/40 mt-1">
                     <span className="text-slate-400 font-semibold">Unsecured Total</span>
                     <span className="text-white font-bold">{fmt(totalUnsecured)}</span>
@@ -2403,9 +2576,27 @@ export default function AttorneyIntakeDashboard({
   const [selected, setSelected] = useState<Submission | null>(null);
   // Detail-panel tab — Overview / Eligibility (with Ch.7/Ch.13 sub-tabs) /
   // Issues / Decision & fees. Reset to Overview every time a new case is picked.
-  const [activeTab, setActiveTab] = useState<'overview' | 'eligibility' | 'issues' | 'decision'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'eligibility' | 'issues' | 'decision' | 'allAnswers'>('overview');
   const [elgSubTab, setElgSubTab] = useState<'ch7' | 'ch13'>('ch7');
   useEffect(() => { if (selected) { setActiveTab('overview'); setElgSubTab('ch7'); } }, [selected?.id]);
+
+  // Per-section "request additional information" — flagged section ids + notes,
+  // accumulated locally during review. Bundled by the bottom "Submit back to
+  // client" action.
+  // TODO Phase B — persistence + send pipeline:
+  //   - persist to a new table `attorney_intake_info_requests
+  //     (review_id, section_id, note, requested_by, requested_at, resolved_at)`
+  //   - on submit-back, queue an outbound message via the firm's configured
+  //     Twilio (SMS) / SendGrid (email) integration; record the queue id +
+  //     status on the row above
+  //   - flip intake_submissions.review_status to 'info_requested' (new value
+  //     to add to the CHECK constraint) and notify the client via the
+  //     existing comms surface (CommsPillBar / FloatingChat)
+  // Reset every time a new case is picked.
+  const [infoRequests, setInfoRequests] = useState<Record<string, { note: string }>>({});
+  useEffect(() => { setInfoRequests({}); }, [selected?.id]);
+  const [infoSubmitState, setInfoSubmitState] = useState<'idle' | 'sending' | 'queued' | 'error'>('idle');
+  useEffect(() => { setInfoSubmitState('idle'); }, [selected?.id]);
   const [review, setReview] = useState<Review | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2477,6 +2668,34 @@ export default function AttorneyIntakeDashboard({
   const [expandNonCMICh13SchedI, setExpandNonCMICh13SchedI] = useState(false);
   const gridTillRate = gridPrimeRate != null ? gridPrimeRate + 3 : null;
   const [showTaskPanel, setShowTaskPanel] = useState(false);
+
+  // § 707(b) means-test bypass: attorney-set classification of ambiguous debt
+  // buckets (personalLoanDebt for SBA, taxDebt for business taxes, etc.). When
+  // the attorney flips a bucket to 'business', that amount moves from consumer
+  // → business in calcDebtComposition; if business share crosses 50%, the
+  // means test does not apply and Ch.7 is available regardless of income.
+  // Local state only — TODO Phase B: persist to attorney_intake_reviews
+  // (new column `debt_class_overrides jsonb`) so the classification survives
+  // page reloads + flows into the recommendation grid downstream.
+  // Reset to {} every time a new case is picked so prior overrides don't
+  // leak across submissions.
+  // Debt classification is determined by FIELD PLACEMENT (firm decision):
+  // anything entered in a business-debt bucket counts as non-consumer; the
+  // consumer-unsecured fields count as consumer. The override map is
+  // therefore permanently empty — kept as a const for back-compat with the
+  // existing calcDebtComposition / analyzeChapter7 call signatures so we
+  // don't have to chase down every call site.
+  const debtClassOverride: Record<string, DebtBucketClass> = {};
+
+  // Compliance gate stub — the supervising attorney may edit prefilled issue
+  // answers (incl. debt classification); a non-lawyer reviewer (intake /
+  // legal admin) sees the same surface but with edit controls disabled.
+  // TODO Phase B: replace this stub with the real PlatformRole-derived
+  // viewer role once the AttorneyIntakeDashboard is mounted with an auth-
+  // aware role prop. Today the surface is reachable from a nav entry already
+  // gated to attorney-tier, so we default the gate OPEN; the read-only path
+  // is wired so the non-lawyer entry point becomes a one-line prop flip.
+  const viewerCanEditAttorneyContent = true;
 
   useEffect(() => { loadSubmissions(); fetchGridPrimeRate(); }, []);
 
@@ -2811,10 +3030,19 @@ export default function AttorneyIntakeDashboard({
   const sortedFiltered = useMemo(() => {
     return submissions
       .filter(s => {
-        const fd = s.form_data as Record<string, unknown>;
+        // form_data may be null on legacy rows; coerce safely.
+        const fd = (s.form_data ?? {}) as Record<string, unknown>;
         const name = `${fd.firstName ?? ""} ${fd.lastName ?? ""}`.toLowerCase();
-        const ref = s.reference_number.toLowerCase();
-        const q = searchQuery.toLowerCase();
+        // reference_number is nullable on intake_submissions (no NOT NULL
+        // constraint; the field was added later via
+        // 20260527000000_maj61_phase1_schema_unification.sql with no
+        // backfill). Coerce to empty string so search still works on rows
+        // that don't carry one — this was the crash source on the Review
+        // Queue: every render's useMemo filtered the list and the first
+        // null reference_number threw "Cannot read properties of null
+        // (reading 'toLowerCase')", blanking the whole dashboard.
+        const ref = (s.reference_number ?? "").toLowerCase();
+        const q = (searchQuery ?? "").toLowerCase();
         const matchesSearch = !q || name.includes(q) || ref.includes(q);
         const matchesTab = tab === "pending" ? (s.status === "pending_review" || s.status === "submitted_for_review") : tab === "accepted" ? s.status === "accepted" : s.status === "declined";
         return matchesSearch && matchesTab;
@@ -2837,7 +3065,7 @@ export default function AttorneyIntakeDashboard({
   const selectedIssues = fd ? detectIssues(fd) : [];
   const selectedChapter = fd ? suggestChapter(fd) : "either";
   const acp: 36 | 60 = fd ? deriveAcp(fd) : 60;
-  const ch7Analysis = fd ? analyzeChapter7(fd) : null;
+  const ch7Analysis = fd ? analyzeChapter7(fd, debtClassOverride) : null;
   const ch13Analysis = fd ? analyzeChapter13(fd, acp) : null;
 
   const greeting = (() => {
@@ -2865,7 +3093,7 @@ export default function AttorneyIntakeDashboard({
               <div className="flex items-center gap-1.5 min-w-0">
                 <greeting.Icon size={13} className="text-amber-400/70 flex-shrink-0" />
                 <span className="text-slate-300 text-sm font-medium whitespace-nowrap">
-                  {greeting.text}, <span className="text-white font-semibold">Dominic Majors</span>
+                  {greeting.text}, <span className="text-amber-300 font-bold">{getCurrentAttorneyName()}</span>
                 </span>
               </div>
             </div>
@@ -3054,6 +3282,7 @@ export default function AttorneyIntakeDashboard({
                           { id: 'overview' as const,    label: 'Overview' },
                           { id: 'eligibility' as const, label: 'Eligibility' },
                           { id: 'issues' as const,      label: 'Issues' },
+                          { id: 'allAnswers' as const,  label: 'All Answers' },
                           { id: 'decision' as const,    label: 'Decision & fees' },
                         ]).map(t => (
                           <button
@@ -3424,11 +3653,14 @@ export default function AttorneyIntakeDashboard({
                       const medianRec = getStateMedian(stateRec, hsRec);
                       const overMedianRec = annualIncRec > medianRec;
 
-                      const recBizDebt = calcTotalBusinessDebt(fd ?? {});
-                      const recConsumerDebt = calcTotalConsumerDebt(fd ?? {});
-                      const recAllDebt = recBizDebt + recConsumerDebt;
-                      const primarylyBizDebt = recAllDebt > 0 && recBizDebt / recAllDebt > 0.50;
-                      const bizDebtPct = recAllDebt > 0 ? Math.round((recBizDebt / recAllDebt) * 100) : 0;
+                      // Override-aware composition — reflects the attorney's
+                      // classifications in debtClassOverride. Same source of
+                      // truth as ch7Analysis above.
+                      const recComposition = calcDebtComposition(fd ?? {}, debtClassOverride);
+                      const recBizDebt = recComposition.business;
+                      const recAllDebt = recComposition.total;
+                      const primarylyBizDebt = recComposition.primarilyBusiness;
+                      const bizDebtPct = recComposition.pct;
 
                       const ch7EligibleForRec = ch7Analysis.eligible && (!overMedianRec || primarylyBizDebt);
 
@@ -5539,11 +5771,74 @@ export default function AttorneyIntakeDashboard({
                       }
                     }
 
+                    // ── § 707(b) DEBT CLASSIFICATION — attorney confirm/edit ──
+                    // Bug fix: the questionnaire stashes SBA loans + business taxes in
+                    // ambiguous buckets (personalLoanDebt, taxDebt). Until the schema
+                    // captures a per-debt business/consumer flag, the attorney must
+                    // classify each non-zero ambiguous bucket. When non-consumer share
+                    // crosses 50%, § 707(b) means test does not apply and the Ch.7
+                    // verdict pill flips to "Eligible — Business Debt" (already wired
+                    // via composition.primarilyBusiness flowing into ch7Analysis).
+                    // Debt classification is now determined by FIELD PLACEMENT
+                    // (firm decision). The five business-debt buckets the
+                    // determination questionnaire captures (`otherBusinessDebt`,
+                    // `businessCreditCardDebt`, `businessMortgageDebt`,
+                    // `businessEquipmentDebt`, `supplyVendorDebt`) are
+                    // automatically classified as NON-CONSUMER. The consumer-
+                    // unsecured fields (`creditCardDebt`, `medicalDebt`,
+                    // `studentLoanDebt`, `personalLoanDebt`, `taxDebt`,
+                    // `otherUnsecured`) are automatically classified as
+                    // CONSUMER. No attorney override needed; calcDebtComposition
+                    // is invoked with no overrides so the default
+                    // classification (which matches field placement) flows
+                    // through to the eligibility engine.
+                    const composition = calcDebtComposition(fd);
+
                     return (
                       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
                         <h3 className="text-base font-bold text-white flex items-center gap-2 mb-4">
                           <AlertTriangle size={16} className="text-amber-400" /> Issues — {issues.length}
                         </h3>
+
+                        {/* ── DEBT COMPOSITION STATUS (read-only) ─────────────
+                            Replaces the prior interactive Debt Classification
+                            card. Field placement IS the classification:
+                              • Business bucket → business
+                              • Consumer bucket (credit card, personal loan, etc.) → consumer
+                            The card shows the resulting business-share % so the
+                            attorney sees whether §707(b)(1) bypass triggers
+                            without any toggle action. */}
+                        {composition.total > 0 && (
+                          <div className={`rounded-xl border p-4 mb-3 ${composition.primarilyBusiness ? 'bg-green-500/8 border-green-500/30' : 'bg-amber-500/8 border-amber-500/30'}`}>
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                              <Briefcase size={14} className={composition.primarilyBusiness ? 'text-green-400' : 'text-amber-400'} />
+                              <span className="text-xs font-bold text-white">Debt composition — § 707(b)(1) bypass</span>
+                              <span className="ml-auto text-[9px] font-mono font-bold px-2 py-0.5 rounded-full bg-slate-900/60 border border-slate-700/50 text-slate-400">
+                                auto-classified
+                              </span>
+                            </div>
+                            <p className="text-[11px] leading-relaxed text-slate-300 mb-2">
+                              {composition.primarilyBusiness ? (
+                                <>
+                                  <span className="text-green-300 font-semibold">Means test N/A — primarily non-consumer (business) debt: {composition.pct}%.</span>{' '}
+                                  § 707(b) presumption of abuse does not apply. Ch.7 available regardless of income.
+                                </>
+                              ) : (
+                                <>
+                                  Non-consumer share: <span className="text-white font-semibold">{composition.pct}%</span> ({fmt(composition.business)} of {fmt(composition.total)}).
+                                  Bypass requires more than 50% business debt.
+                                </>
+                              )}
+                            </p>
+                            <p className="text-[10px] text-slate-500 leading-snug italic">
+                              Classification is determined by where the staffer entered each amount: any value in a
+                              business-debt bucket (SBA, business credit card, business RE mortgage, equipment financing,
+                              vendor payables) counts as non-consumer; values in the credit card / personal loan / medical /
+                              student loan / tax / other-unsecured buckets count as consumer.
+                            </p>
+                          </div>
+                        )}
+
                         {issues.length === 0 ? (
                           <div className="text-center py-10">
                             <CheckCircle size={28} className="text-green-500/50 mx-auto mb-2" />
@@ -5574,6 +5869,50 @@ export default function AttorneyIntakeDashboard({
                       </div>
                     );
                   })()}
+
+                  {/* ── ALL ANSWERS TAB — read-only listing of every captured ── */}
+                  {/*    questionnaire answer, grouped by section, with per-     */}
+                  {/*    section "Request additional information" controls and  */}
+                  {/*    a bottom "Submit back to client" action. The locked    */}
+                  {/*    questionnaire content itself is NEVER edited from this */}
+                  {/*    surface — answers display only.                        */}
+                  {activeTab === 'allAnswers' && fd && (
+                    <AllAnswersView
+                      fd={fd}
+                      subtitle="Read-only mirror of the locked client questionnaire. Blank answers are highlighted — use the per-section &quot;Request additional information&quot; control to flag what's needed."
+                      attorneyReview={{
+                        infoRequests,
+                        onInfoRequestsChange: setInfoRequests,
+                        submitState: infoSubmitState,
+                        canEdit: viewerCanEditAttorneyContent,
+                        onSubmit: () => {
+                          // TODO Phase B — real send pipeline:
+                          //   1. POST to a server-side handler (Supabase Edge Function
+                          //      `submit-intake-info-request`) that:
+                          //        a. inserts one row per flagged section into
+                          //           `attorney_intake_info_requests`
+                          //        b. composes the consolidated client message from
+                          //           the firm's `firm_message_templates` (template
+                          //           key 'intake_info_request') with section labels
+                          //           + notes interpolated
+                          //        c. dispatches via the firm's configured Twilio
+                          //           (SMS) + SendGrid (email) integration, gated by
+                          //           the consent system's opt-out flag
+                          //        d. updates `intake_submissions.review_status` to
+                          //           'info_requested' (CHECK constraint must be
+                          //           extended to include this value)
+                          //   2. surface send status in the UI; on success, clear
+                          //      local flags + show a "queued for client" toast.
+                          //
+                          // Today (scaffold): we mark the local UI state as 'queued'
+                          // so the reviewer can see the flow, but no DB write and no
+                          // real send happen.
+                          setInfoSubmitState('sending');
+                          window.setTimeout(() => setInfoSubmitState('queued'), 400);
+                        },
+                      }}
+                    />
+                  )}
 
                   {activeTab === 'decision' && (
                   <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">

@@ -501,7 +501,7 @@ function App() {
               Back to Portal
             </button>
             <span className="text-xs text-slate-500 font-medium" style={{ fontFamily: "'Georgia', serif" }}>
-              bankruptcy<span className="text-amber-400">.AI</span> — New Client Intake
+              <span className="text-amber-400">(Insert Law Firm Name)</span> — New Client Intake
             </span>
           </div>
           <div className="pt-12">

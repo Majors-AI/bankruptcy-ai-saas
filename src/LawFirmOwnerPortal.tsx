@@ -18,8 +18,9 @@
 
 import { useState } from "react";
 import {
-  Crown, Building2, ToggleLeft, Users, BarChart3, Coins, KeyRound, Info,
+  Crown, Building2, ToggleLeft, Users, BarChart3, Coins, KeyRound, Info, Scale,
 } from "lucide-react";
+import LegalReferenceStore from "./components/legal-reference/LegalReferenceStore";
 
 interface LawFirmOwnerPortalProps {
   /** True when the current viewer is the firm's law-firm-owner role. */
@@ -101,6 +102,20 @@ export default function LawFirmOwnerPortal({ isLawFirmOwner }: LawFirmOwnerPorta
             subtitle="Add, deactivate, and assign intake-portal roles + PINs for firm staff."
           >
             <ComingSoon note="CRUD on staff_members + intake_portal_role assignment. Today managed manually via SQL / Supabase dashboard." />
+          </Subsection>
+
+          {/* Legal Reference / Rules & Standards — shared store. Identical
+              component mounts in Department Settings and Super Admin Setting
+              Portal. The Law Firm Owner has full edit rights system-wide. */}
+          <Subsection
+            icon={<Scale className="w-4 h-4 text-[#B8945F]" />}
+            title="Legal Reference / Rules & Standards"
+            subtitle="IRS standards, state exemptions, means-test thresholds, and cited statutory parameters. Edits propagate everywhere."
+          >
+            <LegalReferenceStore
+              viewerStaffRole="law_firm_owner"
+              surfaceName="law_firm_owner"
+            />
           </Subsection>
         </SectionGroup>
 
