@@ -505,32 +505,31 @@ export default function ClientRegistration({ onComplete }: Props) {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* 1 — General Legal Disclosures [REPLACED — Dom's Sections 1 + 4 + 9] */}
-            <DisclosureSection num={1} title="General Legal Disclosures" needsReview>
-              <DisclosureBody>
-                <p><strong style={{ color: '#FAFAF7' }}>{firmName}</strong> is your attorney and legal representative for your bankruptcy matter. All legal advice, decisions, counsel, and filings are the exclusive responsibility of {firmName} and its licensed attorneys.</p>
-                <p style={{ marginTop: 8 }}><strong style={{ color: '#FAFAF7' }}>bankruptcy.ai</strong> is the software platform that {firmName} uses to manage your case. bankruptcy.ai is not a law firm and is not your attorney. bankruptcy.ai does not provide legal advice of any kind. Your attorney-client relationship is with <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> — not with bankruptcy.ai.</p>
-                <p style={{ marginTop: 8 }}>All information you provide through this portal is obtained by and belongs to <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> as part of its legal representation of you. bankruptcy.ai accesses your information solely to provide platform services to {firmName} on your behalf and has no independent right to use, access, or retain your information beyond what is necessary to deliver those services.</p>
-                <p style={{ marginTop: 8 }}>Bankruptcy filings are public record. Certain financial information will be disclosed to the U.S. Bankruptcy Court, trustees, and creditors as required by 11 U.S.C. § 521 and applicable Federal Rules of Bankruptcy Procedure. Your attorney at {firmName} will advise you on all required disclosures.</p>
+            {/* 1 — Who you are working with + ownership + use of information */}
+            <DisclosureSection num={1} title="Who You Are Working With" needsReview>
+              <DisclosureBody uncapped>
+                <p><strong style={{ color: '#FAFAF7' }}>{firmName}</strong> ("the Firm," "we," "us") is the law firm you have retained for your bankruptcy matter. The Firm uses a secure technology platform owned and operated by <strong style={{ color: '#FAFAF7' }}>Bankruptcy.AI, LLC</strong> ("Bankruptcy.AI") to collect, manage, and prepare your information. Bankruptcy.AI is the Firm's technology service provider — it is not your attorney and does not provide legal advice.</p>
+                <p style={{ marginTop: 8 }}><strong style={{ color: '#FAFAF7' }}>Who obtains and owns your information.</strong> All information obtained through the platform — including any credit report, financial-account data, documents, and questionnaire responses — is obtained for and belongs to {firmName}. Bankruptcy.AI operates the platform on the Firm's behalf and does not own your information.</p>
+                <p style={{ marginTop: 8 }}><strong style={{ color: '#FAFAF7' }}>How your information is used.</strong> Your information is used only in connection with your engagement with the Firm and the preparation and handling of your bankruptcy matter, in accordance with the Firm's privacy practices and applicable law (including the Gramm-Leach-Bliley Act).</p>
+                <p style={{ marginTop: 8 }}><strong style={{ color: '#FAFAF7' }}>Your choices and E-SIGN.</strong> Withdrawal of any consent is voluntary — contact the Firm. Withdrawal may limit preparation of your matter, and some data is retained as required by law. You consent to receive disclosures and records electronically under the E-SIGN Act; paper copies are available from the Firm on request. The platform is software. All legal advice and representation come solely from {firmName} and its licensed attorneys.</p>
               </DisclosureBody>
               <Checkbox
                 checked={consentGeneral}
                 onChange={setConsentGeneral}
-                label={<>I have read, understand, and agree to the General Legal Disclosures above. I understand that <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> is my attorney and that bankruptcy.ai is the platform — not my attorney.</>}
+                label={<>I have read and understand the above. I understand that <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> is my attorney and that Bankruptcy.AI is the Firm's technology service provider — not my attorney.</>}
               />
             </DisclosureSection>
 
-            {/* 2 — Credit Report Authorization — iSoftpull [NEW — Dom's Section 2] */}
+            {/* 2 — Credit report authorization — TransUnion via iSoftpull (soft inquiry) */}
             <DisclosureSection num={2} title="Authorization to Obtain Your Credit Report (Soft Inquiry)" needsReview>
               <DisclosureBody uncapped>
-                <p>You authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its approved service providers to obtain your TransUnion consumer credit report through <strong style={{ color: '#FAFAF7' }}>iSoftpull, Inc.</strong> This report is used solely to assist in assessing your bankruptcy filing options and preparing your case.</p>
-                <p style={{ marginTop: 8 }}>This is a <strong style={{ color: '#FAFAF7' }}>soft inquiry</strong> — it will not affect your credit score and will not appear on your credit report as viewed by lenders or other creditors.</p>
-                <p style={{ marginTop: 8 }}>The credit report is obtained by <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> under a permissible purpose as defined by the Fair Credit Reporting Act (FCRA), 15 U.S.C. § 1681 et seq. Your authorization here constitutes the written instruction required by the FCRA. The report is accessed by bankruptcy.ai solely to provide platform services to {firmName}.</p>
+                <p>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its technology service provider, <strong style={{ color: '#FAFAF7' }}>Bankruptcy.AI</strong>, to obtain my consumer credit report from <strong style={{ color: '#FAFAF7' }}>TransUnion</strong>, through <strong style={{ color: '#FAFAF7' }}>iSoftpull</strong>, to prepare my bankruptcy matter.</p>
+                <p style={{ marginTop: 8 }}>I understand the report is transmitted through and stored by the Bankruptcy.AI platform and made available to the Firm, that the report is obtained by the Firm under the Firm's permissible purpose based on this written authorization, and that this is a <strong style={{ color: '#FAFAF7' }}>soft inquiry that will not affect my credit score</strong>.</p>
               </DisclosureBody>
               <Checkbox
                 checked={consentCreditPull}
                 onChange={setConsentCreditPull}
-                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its approved service providers to obtain my TransUnion consumer credit report via iSoftpull as a soft inquiry for the purpose of preparing my bankruptcy case. I understand this will not affect my credit score.</>}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its technology service provider Bankruptcy.AI to obtain my TransUnion consumer credit report through iSoftpull to prepare my bankruptcy matter. I understand this is a soft inquiry and will not affect my credit score.</>}
               />
             </DisclosureSection>
 
@@ -550,27 +549,27 @@ export default function ClientRegistration({ onComplete }: Props) {
               <Checkbox checked={consentTwilio} onChange={setConsentTwilio} label="I consent to receiving SMS and/or voice communications via Twilio as described above." />
             </DisclosureSection>
 
-            {/* 5 — Plaid Bank [CHANGED — affirmative checkbox, unchecked by default] */}
-            <DisclosureSection num={5} title="Bank Account Access — Plaid (90-Day Bank Statements)" needsReview>
+            {/* 5 — Plaid bank — affirmative checkbox, unchecked by default */}
+            <DisclosureSection num={5} title="Bank Account Connection — Plaid" needsReview>
               <DisclosureBody>
-                <p>By checking the box below, you authorize bankruptcy.ai and {firmName} to access your bank account information through <strong style={{ color: '#FAFAF7' }}>Plaid Technologies, Inc.</strong> for the purpose of generating <strong style={{ color: '#FAFAF7' }}>90-day bank statements</strong>. This access includes: account balances and transaction history for up to 90 days. This information is used solely to prepare your bankruptcy petition and schedules as required by 11 U.S.C. § 521 and the Federal Rules of Bankruptcy Procedure. Plaid uses 256-bit encryption and does not store your banking credentials.</p>
+                <p>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its service providers to connect to my financial accounts through <strong style={{ color: '#FAFAF7' }}>Plaid</strong> to retrieve the account and transaction information needed to prepare my bankruptcy schedules. This connection is initiated by me, I can disconnect at any time, and the information is retrieved for the Firm.</p>
               </DisclosureBody>
               <Checkbox
                 checked={consentPlaidBank}
                 onChange={setConsentPlaidBank}
-                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and <strong style={{ color: '#FAFAF7' }}>Plaid Technologies, Inc.</strong> to access my bank account information to retrieve 90-day bank statements for my bankruptcy filing. I have read and understand the disclosure above.</>}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its service providers to connect to my financial accounts through Plaid to retrieve account and transaction information for the Firm.</>}
               />
             </DisclosureSection>
 
-            {/* 6 — Plaid Payroll [CHANGED — affirmative checkbox, unchecked by default] */}
-            <DisclosureSection num={6} title="Payroll & Income Records — Plaid Income" needsReview>
+            {/* 6 — Plaid payroll/income — affirmative checkbox, unchecked by default */}
+            <DisclosureSection num={6} title="Payroll & Income Connection — Plaid" needsReview>
               <DisclosureBody>
-                <p>By checking the box below, you authorize bankruptcy.ai and {firmName} to access your payroll and income records through <strong style={{ color: '#FAFAF7' }}>Plaid Income</strong>. This access includes: digital paystubs and W-2 records retrieved directly from your payroll provider. This information is used solely to verify income for your bankruptcy means test (Official Form 122A-1) and Schedules I and J, as required by applicable bankruptcy rules. Plaid does not store your payroll provider credentials.</p>
+                <p>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its service providers to connect to my payroll and income records through <strong style={{ color: '#FAFAF7' }}>Plaid</strong> to retrieve the payroll and income information needed to prepare my bankruptcy schedules. This connection is initiated by me, I can disconnect at any time, and the information is retrieved for the Firm.</p>
               </DisclosureBody>
               <Checkbox
                 checked={consentPlaidPayroll}
                 onChange={setConsentPlaidPayroll}
-                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and <strong style={{ color: '#FAFAF7' }}>Plaid Income</strong> to access my payroll and income records (paystubs and W-2s) for my bankruptcy filing. I have read and understand the disclosure above.</>}
+                label={<>I authorize <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> and its service providers to connect to my payroll and income records through Plaid to retrieve income information for the Firm.</>}
               />
             </DisclosureSection>
 
@@ -583,30 +582,33 @@ export default function ClientRegistration({ onComplete }: Props) {
               <Checkbox checked={consentDataRetention} onChange={setConsentDataRetention} label={`I understand and consent to the 30-day post-closing data retention and copy-and-purge policy described above.`} />
             </DisclosureSection>
 
-            {/* 8 — AI & Automation [ENHANCED — integrated with Dom's Section 5 data-handling] */}
-            <DisclosureSection num={8} title="AI & Automation Disclosure" needsReview>
-              <DisclosureBody>
-                <p>bankruptcy.ai uses <strong style={{ color: '#FAFAF7' }}>automated processing</strong> to assist with document organization, case data extraction, and workflow management. Automated tools do not replace the legal judgment of your attorney at {firmName}. Specifically:</p>
+            {/* 8 — How Bankruptcy.AI handles your information + AI-training opt-in
+                Required toggle covers Bankruptcy.AI's data-handling commitments.
+                AI-training opt-in described in prose; per-client opt-in capture is
+                a follow-up (would need its own toggle + DB column — flagged for Dom). */}
+            <DisclosureSection num={8} title="How Bankruptcy.AI Handles Your Information" needsReview>
+              <DisclosureBody uncapped>
+                <p>Bankruptcy.AI operates the platform on behalf of <strong style={{ color: '#FAFAF7' }}>{firmName}</strong>. Bankruptcy.AI:</p>
                 <ul style={{ marginTop: 8, paddingLeft: 16 }}>
-                  <li>AI tools may assist in organizing documents and flagging potential issues for attorney review.</li>
-                  <li>All legal decisions — including which exemptions to claim, what to disclose, and how to characterize assets — are made by your attorney, not by automated software.</li>
-                  <li>No AI-generated content constitutes legal advice.</li>
-                  <li>{firmName} is solely responsible for the accuracy and legal sufficiency of all filed documents.</li>
+                  <li>Obtains, has access to, stores, and relays your information to {firmName} so the Firm can prepare your matter.</li>
+                  <li>Does not use your information for its own purposes; does not sell, rent, or share it; and does not use it for advertising.</li>
+                  <li>Accesses your information only to operate the platform, provide the services you and the Firm use, and provide technical support to the Firm at the Firm's request — limited to what is necessary and logged.</li>
+                  <li>Stores your information securely (encrypted in transit and at rest, on infrastructure configured to SOC 2 control standards) and keeps each firm's information separate.</li>
+                  {SHOW_AI_NO_TRAINING && (
+                    <li>May use information from your case, only in <strong style={{ color: '#FAFAF7' }}>de-identified</strong> form and only if you separately opt in, to develop, train, and improve its artificial-intelligence models and services. This does not change the Firm's ownership of your information or the limits above.</li>
+                  )}
                 </ul>
-                <p style={{ marginTop: 10 }}><strong style={{ color: '#FAFAF7' }}>Data handling by bankruptcy.ai:</strong></p>
-                <ul style={{ marginTop: 6, paddingLeft: 16 }}>
-                  <li>bankruptcy.ai does not access your information for its own independent purposes.</li>
-                  <li>bankruptcy.ai does not use, sell, share, or monetize your information in any way except to deliver platform services to {firmName}.</li>
-                  {SHOW_AI_NO_TRAINING && <li>bankruptcy.ai does not use your information to train AI or machine learning models.</li>}
-                  <li>All bankruptcy.ai support-staff access to client data is limited to support purposes and is logged.</li>
-                  <li>Your case data is encrypted in transit and at rest.</li>
-                  <li>Your case data is logically segregated by firm — only authorized staff at {firmName} can access your records.</li>
-                </ul>
+                <p style={{ marginTop: 10 }}>The platform also uses <strong style={{ color: '#FAFAF7' }}>automated processing</strong> to help organize your documents and surface items for the Firm's review. <strong style={{ color: '#FAFAF7' }}>All legal decisions, advice, and filings remain solely the responsibility of {firmName} and its licensed attorneys</strong> — no automated tool replaces your attorney's judgment.</p>
+                {SHOW_AI_NO_TRAINING && (
+                  <p style={{ marginTop: 10, padding: 10, border: '1px dashed #3A3A36', borderRadius: 4, color: '#94a3b8' }}>
+                    <strong style={{ color: '#FAFAF7' }}>AI-training opt-in (optional, not required to proceed):</strong> <em>"I consent to Bankruptcy.AI using de-identified information from my case to develop, train, and improve its artificial-intelligence models and services."</em> Your firm will collect this opt-in from you separately if you wish to participate. Declining does not affect representation.
+                  </p>
+                )}
               </DisclosureBody>
               <Checkbox
                 checked={consentAiDisclosure}
                 onChange={setConsentAiDisclosure}
-                label={<>I understand that bankruptcy.ai uses automated processing tools, that my attorney at <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> remains solely responsible for all legal decisions in my case, and that bankruptcy.ai's data handling commitments are as described above.</>}
+                label={<>I understand how Bankruptcy.AI handles my information as described above, and that my attorney at <strong style={{ color: '#FAFAF7' }}>{firmName}</strong> remains solely responsible for all legal decisions in my case.</>}
               />
             </DisclosureSection>
 

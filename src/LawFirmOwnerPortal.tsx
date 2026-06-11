@@ -3,7 +3,7 @@
 // Hierarchy:
 //   Law Firm Owner ⊃ Super Admin ⊃ Attorney
 //
-// The Owner sees EVERYTHING the Super Admin Setting Portal exposes (firm
+// The Owner sees EVERYTHING the Law Firm Settings exposes (firm
 // settings, feature toggles, staff & roles) PLUS owner-only sections:
 //   - Accounting reporting (firm-wide P&L, AR, trust account oversight)
 //   - Productivity reporting (firm-wide rollup across staff)
@@ -18,9 +18,10 @@
 
 import { useState } from "react";
 import {
-  Crown, Building2, ToggleLeft, Users, BarChart3, Coins, KeyRound, Info, Scale,
+  Crown, Building2, ToggleLeft, Users, BarChart3, Coins, KeyRound, Info, Scale, Network,
 } from "lucide-react";
 import LegalReferenceStore from "./components/legal-reference/LegalReferenceStore";
+import DepartmentManagement from "./components/department-management/DepartmentManagement";
 
 interface LawFirmOwnerPortalProps {
   /** True when the current viewer is the firm's law-firm-owner role. */
@@ -75,9 +76,9 @@ export default function LawFirmOwnerPortal({ isLawFirmOwner }: LawFirmOwnerPorta
       <div className="mx-auto w-full max-w-5xl px-6 py-8 lg:px-8 lg:py-10 space-y-6">
         <ScaffoldBanner />
 
-        {/* ── Inherited from Super Admin Setting Portal ──────────────────── */}
+        {/* ── Inherited from Law Firm Settings ──────────────────── */}
         <SectionGroup
-          label="Super Admin capabilities"
+          label="Law Firm Settings capabilities"
           sublabel="Everything the firm's super-admin sees, plus the owner-only sections below."
         >
           <Subsection
@@ -93,7 +94,7 @@ export default function LawFirmOwnerPortal({ isLawFirmOwner }: LawFirmOwnerPorta
             title="Feature toggles"
             subtitle="Per-firm enable / disable for nav-level features. Drives Intake Portal nav visibility."
           >
-            <ComingSoon note="Toggle list backed by firm_features. Productivity is currently hosted inside the Super Admin Setting Portal." />
+            <ComingSoon note="Toggle list backed by firm_features. Productivity is currently hosted inside the Law Firm Settings." />
           </Subsection>
 
           <Subsection
@@ -116,6 +117,16 @@ export default function LawFirmOwnerPortal({ isLawFirmOwner }: LawFirmOwnerPorta
               viewerStaffRole="law_firm_owner"
               surfaceName="law_firm_owner"
             />
+          </Subsection>
+
+          {/* Department Management — same surface the super admin sees, but
+              the owner can configure approval gates (owner-only). */}
+          <Subsection
+            icon={<Network className="w-4 h-4 text-[#B8945F]" />}
+            title="Department Management"
+            subtitle="Departments + staff roster + per-department panels + auto-assign + approval gates + audit log + Collections shell. Owner can configure approval gates."
+          >
+            <DepartmentManagement viewerRole="law_firm_owner" />
           </Subsection>
         </SectionGroup>
 
@@ -185,7 +196,7 @@ export default function LawFirmOwnerPortal({ isLawFirmOwner }: LawFirmOwnerPorta
             </div>
             <p className="mt-3 text-[10px] text-[#6B6B66] italic">
               Toggles are local-state only in the scaffold. Real persistence + enforcement (the super-admin's
-              Super Admin Setting Portal honoring these grants) lands in the follow-up build.
+              Law Firm Settings honoring these grants) lands in the follow-up build.
             </p>
           </Subsection>
         </SectionGroup>
@@ -204,7 +215,7 @@ function ScaffoldBanner() {
         <div>
           <p className="text-xs font-semibold text-amber-300">Coming soon — scaffold only</p>
           <p className="text-[11px] text-amber-200/80 mt-0.5">
-            Owner-tier portal. Inherits everything from the Super Admin Setting Portal (#19) plus owner-only sections
+            Owner-tier portal. Inherits everything from the Law Firm Settings (#19) plus owner-only sections
             below. The "Grant features to Super Admin" controls decide what the super-admin sees in their portal;
             every grant defaults OFF.
           </p>

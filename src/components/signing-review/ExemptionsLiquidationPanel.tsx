@@ -24,8 +24,16 @@ import {
   EXEMPTIONS_BY_JURISDICTION,
   getExemptionsFor,
   getWaHomesteadCap,
+  getCa704HomesteadCap,
+  filterBySystem,
   type ExemptionItem,
+  type ExemptionsJurisdiction,
 } from "../../lib/irsMeansStandards";
+import {
+  findRowByStatute,
+  type JurisdictionCode,
+  type CaSystem,
+} from "../../data/exemptions";
 
 interface Asset {
   id: string;
@@ -269,21 +277,52 @@ function suggestExemption(asset: Asset, items: ReadonlyArray<ExemptionItem>): Ex
     case "rec_vehicle":     return find("motor vehicle") || find("other personal");
     case "household":       return find("household") || find("furnishings");
     case "electronics":     return find("household") || find("electron");
-    case "jewelry":         return find("jewelry") || find("ring");
+    case "jewelry":         return find("jewelry") || find("ring") || find("wearing apparel");
     case "tools":           return find("tools");
-    case "firearms":        return find("firearm");
+    case "firearms":        return find("firearm") || find("other personal");
     case "collectibles":    return find("other personal") || find("household");
     case "bank":            return find("bank account") || find("other personal");
-    case "retirement":      return find("retirement");
-    case "life_insurance":  return find("life insurance");
+    case "retirement":      return find("retirement") || find("pension") || find("ira");
+    case "life_insurance":  return find("life insurance") || find("cash surrender");
     case "annuity":         return find("annuity");
-    case "claims":          return find("personal injury") || find("crime victim") || find("wrongful death");
+    case "claims":          return find("personal injury") || find("crime victim") || find("wrongful death") || find("bodily injury");
     case "hsa_fsa":         return find("health aid") || find("other personal");
     case "crypto":          return find("other personal");
     case "stocks":          return find("other personal");
     case "business_asset":  return find("tools");
     default:                return null;
   }
+}
+
+// Effective items list for a jurisdiction in the debtor's county. When the
+// jurisdiction tags homestead at the jurisdiction-level (WA: homesteadStatute
+// + homesteadByCounty) but does NOT list a homestead row in items, we
+// synthesize a homestead ExemptionItem here so the suggester / lookup paths
+// see it like any other item. The cap is the debtor's county cap; if the
+// county isn't loaded the synthetic item carries null (so the panel falls
+// back to "no fixed limit" UI rather than fabricating a number).
+function getEffectiveItems(
+  jur: ExemptionsJurisdiction,
+  clientCounty?: string,
+): ReadonlyArray<ExemptionItem> {
+  const hasHomesteadRow = jur.items.some(i => i.label.toLowerCase().includes("homestead"));
+  if (hasHomesteadRow || !jur.homesteadStatute || !jur.homesteadByCounty) {
+    return jur.items;
+  }
+  const cap = clientCounty ? jur.homesteadByCounty[clientCounty] ?? null : null;
+  const synthetic: ExemptionItem = {
+    label: clientCounty
+      ? `Homestead (${clientCounty} County)`
+      : "Homestead (county-specific)",
+    statute: jur.homesteadStatute,
+    limit: cap,
+    note: clientCounty == null
+      ? "Pick the debtor's county on the case record to populate the cap."
+      : cap == null
+        ? "County not loaded; verify against current statute."
+        : undefined,
+  };
+  return [synthetic, ...jur.items];
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -293,47 +332,130 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
     const s = (clientState || "").toUpperCase();
     if (s === "AZ") return "AZ";
     if (s === "WA") return "WA";
+    if (s === "CA") return "CA";
     return "Federal";
   }, [clientState]);
 
   const [jurisdiction, setJurisdiction] = useState<string>(defaultJurisdiction);
   const jur = getExemptionsFor(jurisdiction);
 
+  // CA-only: §703 vs §704 sub-election. Required when the jurisdiction
+  // carries requiresSystemElection. Until elected, the panel shows no
+  // exemption rows — forcing the attorney to make the all-or-nothing
+  // call per § 522(b)(1) before claims compute.
+  const [caSystem, setCaSystem] = useState<CaSystem | null>(null);
+  const requiresSystemElection = !!jur?.requiresSystemElection;
+
+  // Joint case → per-debtor exemptions double under § 522(m). Read the
+  // filing type from the intake form_data the panel was handed; the panel
+  // is non-authoritative for this flag (the case record will be once
+  // persistence lands) — keep it derived so attorney can override via the
+  // intake form rather than a separate setting here.
+  const isJointCase = useMemo<boolean>(() => {
+    const filingType = String((formData?.filingType ?? "") as string).toLowerCase();
+    return filingType.includes("joint");
+  }, [formData]);
+
+  // Map the store's jurisdiction key to the typed exemptions-data
+  // JurisdictionCode so findRowByStatute() can look up per-debtor flags
+  // for joint-case doubling.
+  const jurisdictionCode: JurisdictionCode | null = useMemo(() => {
+    if (jurisdiction === "Federal") return "FED";
+    if (jurisdiction === "AZ") return "AZ";
+    if (jurisdiction === "WA") return "WA";
+    if (jurisdiction === "CA") return "CA";
+    return null;
+  }, [jurisdiction]);
+
+  /** Apply joint-case doubling to a cap when the statute is per-debtor.
+   *  Returns the same cap unchanged when the case is individual or the
+   *  statute is single-cap. null caps (unlimited) stay null. */
+  function effectiveCap(cap: number | null, statute: string): number | null {
+    if (cap == null || !isJointCase || !jurisdictionCode) return cap;
+    const row = findRowByStatute(jurisdictionCode, statute);
+    if (!row || !row.perDebtor) return cap;
+    return cap * 2;
+  }
+
   const assets = useMemo(() => extractAssets(formData, clientCounty), [formData, clientCounty]);
+
+  // Effective items = jur.items + a synthetic homestead row when the
+  // jurisdiction stores homestead at the top level (WA + CA §704
+  // county-specific). For CA we ALSO filter by the elected system
+  // (§703 vs §704) before the homestead resolution runs.
+  const effectiveItems = useMemo<ReadonlyArray<ExemptionItem>>(() => {
+    if (!jur) return [];
+    // CA: require the system election. Until elected, no rows.
+    if (requiresSystemElection && !caSystem) return [];
+    const baseItems = requiresSystemElection
+      ? filterBySystem(jur.items, caSystem)
+      : jur.items;
+    // Reconstruct a jurisdiction-shaped wrapper so getEffectiveItems can
+    // synthesize the WA/CA-§704 county homestead row from the filtered
+    // set. The wrapper carries the same homesteadStatute/County map.
+    const wrapped: ExemptionsJurisdiction = { ...jur, items: baseItems };
+    return getEffectiveItems(wrapped, clientCounty);
+  }, [jur, clientCounty, requiresSystemElection, caSystem]);
 
   // Per-asset attorney selections — local state only today.
   // TODO: persist to signing_reviews row or a new exemptions_workspace table.
   const [selections, setSelections] = useState<Record<string, { exemptionStatute: string; claimed: number }>>({});
 
-  // Re-seed defaults when jurisdiction or assets change.
+  // Re-seed defaults when jurisdiction, assets, or joint-case status change.
   useEffect(() => {
     if (!jur) return;
     const next: Record<string, { exemptionStatute: string; claimed: number }> = {};
     for (const a of assets) {
       const equity = Math.max(0, a.value - a.liens);
-      const suggested = suggestExemption(a, jur.items);
+      const suggested = suggestExemption(a, effectiveItems);
       let claimed = 0;
-      let statute = suggested?.statute ?? "";
+      const statute = suggested?.statute ?? "";
       if (suggested) {
         let cap = suggested.limit;
-        // WA homestead — per-county cap override.
+        // WA homestead — per-county cap override (handles assets that carry
+        // their own county hint even when the synthetic item used clientCounty).
         if (jurisdiction === "WA" && suggested.statute.includes("6.13") && (a.county || clientCounty)) {
           const c = a.county || clientCounty || "";
           const wa = getWaHomesteadCap(c);
           if (wa != null) cap = wa;
         }
+        // CA §704.730 homestead — clamp(county median, floor, ceiling).
+        // homesteadByCounty is the operator-published clamp result; falls
+        // back to the indexed floor for unlisted counties.
+        if (jurisdiction === "CA" && suggested.statute.includes("§ 704.730")) {
+          const ca = getCa704HomesteadCap(a.county || clientCounty || null);
+          if (ca != null) cap = ca;
+        }
+        // CA §703.140(b)(5) wildcard rollup — base + UNUSED §703.140(b)(1)
+        // homestead. Reads the §703 homestead row's cap (the unused
+        // portion is the entire cap since no homestead claim is being
+        // made in the seeding pass; the panel computes the actual unused
+        // amount per claim at row-render time).
+        if (jurisdiction === "CA" && suggested.unusedFromStatute) {
+          const homesteadRow = effectiveItems.find(it => it.statute === suggested.unusedFromStatute);
+          if (homesteadRow && cap != null && homesteadRow.limit != null) {
+            cap = cap + homesteadRow.limit;
+          }
+        }
+        // Joint-case doubling — applied AFTER the WA-county lookup so the
+        // county-resolved cap gets the §522(m) per-debtor multiplier when
+        // applicable.
+        cap = effectiveCap(cap, suggested.statute);
         claimed = cap == null ? equity : Math.min(cap, equity);
       }
       next[a.id] = { exemptionStatute: statute, claimed };
     }
     setSelections(next);
-  }, [jurisdiction, assets, jur, clientCounty]);
+    // effectiveCap is a closure over isJointCase + jurisdictionCode; both
+    // are already in the dep list so re-seeds fire on joint-flag toggles.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jurisdiction, assets, jur, effectiveItems, clientCounty, isJointCase, jurisdictionCode]);
 
   const rows = useMemo(() => {
     return assets.map(a => {
       const equity = Math.max(0, a.value - a.liens);
       const sel = selections[a.id] || { exemptionStatute: "", claimed: 0 };
-      const exemptItem = jur?.items.find(it => it.statute === sel.exemptionStatute);
+      const exemptItem = effectiveItems.find(it => it.statute === sel.exemptionStatute);
       // For WA homestead, the cap depends on county.
       let cap: number | null = exemptItem?.limit ?? null;
       if (jurisdiction === "WA" && exemptItem?.statute.includes("6.13")) {
@@ -341,12 +463,40 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
         const wa = getWaHomesteadCap(c);
         if (wa != null) cap = wa;
       }
+      // CA §704.730 homestead — county-banded clamp.
+      if (jurisdiction === "CA" && exemptItem?.statute.includes("§ 704.730")) {
+        const ca = getCa704HomesteadCap(a.county || clientCounty || null);
+        if (ca != null) cap = ca;
+      }
+      // CA §703.140(b)(5) wildcard rollup — base + unused §703.140(b)(1)
+      // homestead. The "unused" portion is the homestead cap minus the
+      // amount claimed against the homestead row across all assets; we
+      // compute it row-by-row using `claimed` from selections so the
+      // wildcard ceiling tracks what the attorney actually claimed.
+      if (jurisdiction === "CA" && exemptItem?.unusedFromStatute && exemptItem.limit != null) {
+        const homesteadRow = effectiveItems.find(it => it.statute === exemptItem.unusedFromStatute);
+        if (homesteadRow && homesteadRow.limit != null) {
+          // Sum claims already allocated to the homestead row (any
+          // selection pointing at it).
+          const claimedAgainstHomestead = assets.reduce((acc, x) => {
+            const s = selections[x.id];
+            return acc + (s?.exemptionStatute === homesteadRow.statute ? (s.claimed || 0) : 0);
+          }, 0);
+          const unused = Math.max(0, homesteadRow.limit - claimedAgainstHomestead);
+          cap = exemptItem.limit + unused;
+        }
+      }
+      // Joint-case doubling — per-debtor exemptions × 2 under § 522(m).
+      if (exemptItem) cap = effectiveCap(cap, exemptItem.statute);
       const maxClaimable = cap == null ? equity : Math.min(cap, equity);
       const claimed = Math.min(Math.max(0, sel.claimed), maxClaimable);
       const nonExempt = Math.max(0, equity - claimed);
       return { asset: a, equity, exemptItem, cap, claimed, nonExempt };
     });
-  }, [assets, selections, jur, jurisdiction, clientCounty]);
+    // effectiveCap depends on isJointCase + jurisdictionCode (closures);
+    // include them so cap recomputes when joint-flag toggles.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assets, selections, jur, effectiveItems, jurisdiction, clientCounty, isJointCase, jurisdictionCode]);
 
   const totals = useMemo(() => {
     return rows.reduce(
@@ -391,7 +541,10 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
         )}
       </div>
 
-      {/* Jurisdiction selector */}
+      {/* Jurisdiction selector — scoped by client state per election rules:
+            AZ → AZ only (opt-out; federal not available)
+            WA → WA + Federal (debtor may elect)
+            other / unset → all loaded jurisdictions */}
       <div className="flex items-center gap-2 flex-wrap">
         <label className="text-xs text-slate-400">Exemption set:</label>
         <select
@@ -400,9 +553,16 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
           disabled={!canEdit || (clientState?.toUpperCase() === "AZ")}
           className="bg-slate-800 border border-slate-600 rounded px-2 py-1.5 text-sm text-white disabled:opacity-60"
         >
-          {Object.keys(EXEMPTIONS_BY_JURISDICTION).map(k => (
-            <option key={k} value={k}>{EXEMPTIONS_BY_JURISDICTION[k].jurisdiction}</option>
-          ))}
+          {Object.keys(EXEMPTIONS_BY_JURISDICTION)
+            .filter(k => {
+              const s = clientState?.toUpperCase();
+              if (s === "AZ") return k === "AZ";
+              if (s === "WA") return k === "WA" || k === "Federal";
+              return true;
+            })
+            .map(k => (
+              <option key={k} value={k}>{EXEMPTIONS_BY_JURISDICTION[k].jurisdiction}</option>
+            ))}
         </select>
         <span className="text-[10px] uppercase tracking-widest text-slate-400 bg-slate-800 border border-slate-700 rounded-full px-2 py-0.5">
           Election: {jur.election}
@@ -423,6 +583,42 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
       )}
       {clientState?.toUpperCase() === "WA" && (
         <p className="text-[11px] text-slate-500 italic">Washington allows election of state OR federal. Toggle above to compare.</p>
+      )}
+      {clientState?.toUpperCase() === "CA" && (
+        <p className="text-[11px] text-slate-500 italic">
+          California is opt-out and requires an all-or-nothing election between
+          §703.140(b) (bankruptcy-only set, large wildcard) and §704.xxx (homestead-heavy).
+        </p>
+      )}
+
+      {/* CA system picker — required before any exemption rows compute. */}
+      {requiresSystemElection && (
+        <div className="flex items-center gap-2 flex-wrap rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+          <Scale className="w-4 h-4 text-amber-400" />
+          <span className="text-xs font-semibold text-amber-200">
+            Elect a California system (all-or-nothing per § 522(b)(1)):
+          </span>
+          {(["703", "704"] as const).map(s => (
+            <button
+              key={s}
+              type="button"
+              disabled={!canEdit}
+              onClick={() => setCaSystem(s)}
+              className={`text-xs font-semibold px-3 py-1 rounded-lg border ${
+                caSystem === s
+                  ? "bg-amber-500 text-slate-900 border-amber-500"
+                  : "bg-slate-800 text-slate-300 border-slate-600 hover:border-amber-500"
+              } disabled:opacity-60 disabled:cursor-not-allowed`}
+            >
+              § {s === "703" ? "703.140(b)" : "704.xxx"}
+            </button>
+          ))}
+          {caSystem == null && (
+            <span className="text-[10px] uppercase tracking-widest text-amber-300 ml-auto">
+              <AlertTriangle className="w-3 h-3 inline" /> Election required
+            </span>
+          )}
+        </div>
       )}
 
       {/* Assets table */}
@@ -462,7 +658,7 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
                       className="bg-slate-800 border border-slate-600 rounded px-2 py-1 text-xs text-white w-full max-w-[22rem] disabled:opacity-60"
                     >
                       <option value="">— pick an exemption —</option>
-                      {jur.items.map((it, idx) => {
+                      {effectiveItems.map((it, idx) => {
                         const capLabel = it.limit == null ? "no fixed limit" : `$${it.limit.toLocaleString()}`;
                         return (
                           <option key={`${it.statute}-${idx}`} value={it.statute}>
@@ -509,18 +705,28 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
         </div>
       )}
 
-      {/* Outcome block */}
+      {/* Joint-case badge — visible whenever §522(m) doubling is being
+          applied so the attorney sees the multiplier without reading code. */}
+      {isJointCase && (
+        <p className="text-[10px] uppercase tracking-widest text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-1 inline-flex items-center gap-1 self-start">
+          Joint case — per-debtor exemptions doubled (§ 522(m))
+        </p>
+      )}
+
+      {/* Outcome block — labeled "gross of trustee costs" until the
+          waterfall TODO ships (trustee fees + admin claims + costs of sale
+          + present-value discount over plan term). */}
       <div className={`rounded-xl border p-4 ${totals.nonExempt > 0 ? "border-red-500/30 bg-red-500/5" : "border-emerald-500/30 bg-emerald-500/5"}`}>
         {totals.nonExempt > 0 ? (
           <>
             <p className="text-sm font-bold text-red-300 mb-1">
-              ⚠ Non-exempt equity: <span className="tabular-nums">{fmt(totals.nonExempt)}</span>
+              ⚠ Non-exempt equity (gross of trustee costs): <span className="tabular-nums">{fmt(totals.nonExempt)}</span>
             </p>
             <p className="text-xs text-red-200 leading-relaxed">
-              In a <strong>Chapter 7 liquidation</strong>, approximately <strong>{fmt(totals.nonExempt)}</strong> of non-exempt equity would be available to the trustee for unsecured creditors.
+              In a <strong>Chapter 7 liquidation</strong>, approximately <strong>{fmt(totals.nonExempt)}</strong> of non-exempt equity would be available to the trustee for unsecured creditors (before deduction of trustee fees, administrative / priority claims, and costs of sale — see TODO below).
             </p>
             <p className="text-xs text-red-200 leading-relaxed mt-1">
-              For <strong>Chapter 13</strong>, this <strong>{fmt(totals.nonExempt)}</strong> is the <strong>§ 1325(a)(4) best-interests-of-creditors floor</strong> — the plan must pay general unsecured creditors <em>at least this amount</em>.
+              For <strong>Chapter 13</strong>, this <strong>{fmt(totals.nonExempt)}</strong> is the <strong>§ 1325(a)(4) best-interests-of-creditors floor</strong> — the plan must pay general unsecured creditors <em>at least this amount</em>, undiscounted (present-value discounting over the plan term is a separate § 1325(a)(5) computation — TODO below).
             </p>
             <div className="mt-2 text-[11px] text-red-200/80">
               Assets with non-exempt exposure:
@@ -533,18 +739,20 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
           </>
         ) : (
           <p className="text-sm font-bold text-emerald-300">
-            ✓ All scheduled assets appear fully exempt; no non-exempt equity for liquidation.
+            ✓ All scheduled assets appear fully exempt; no non-exempt equity for liquidation
+            {isJointCase && <span className="font-normal text-emerald-300/80"> (joint-case per-debtor doubling applied where eligible)</span>}.
           </p>
         )}
       </div>
 
       {/* TODO / scaffold disclaimers */}
       <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-[11px] text-slate-400 leading-relaxed space-y-1">
-        <p className="flex items-center gap-1.5 font-semibold text-slate-300"><Info className="w-3 h-3" /> First-pass scope — TODO:</p>
+        <p className="flex items-center gap-1.5 font-semibold text-slate-300"><Info className="w-3 h-3" /> First-pass scope — TODO (refinements; do not block):</p>
         <ul className="list-disc pl-5 space-y-0.5">
-          <li>Trustee fees, administrative / priority claims, and costs of sale in the liquidation waterfall.</li>
+          <li>Hypothetical Chapter 7 trustee fees + costs of sale in the liquidation waterfall — current figure is non-exempt equity GROSS of trustee costs.</li>
+          <li>§ 1325(a)(5) present-value discounting of the best-interests floor over the plan term — current figure is undiscounted.</li>
           <li>Wildcard allocation across multiple assets (e.g., applying § 522(d)(5) unused homestead to other personal property).</li>
-          <li>Joint-debtor exemption doubling (jurisdiction-specific rules).</li>
+          <li>Joint-debtor exemption doubling — wired via src/data/exemptions.ts perDebtor flag; confirm the per-statute PER_DEBTOR_OVERRIDES matrix matches the firm's interpretation.</li>
           <li>Full state-vs-federal election rules (residency / domicile checks, opt-out matrix).</li>
           <li>Persistence of the attorney's exemption selections — today: component state only.</li>
         </ul>

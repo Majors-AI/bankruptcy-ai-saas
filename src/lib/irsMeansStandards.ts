@@ -914,9 +914,38 @@ export interface ExemptionItem {
   limit: number | null;
   /** Optional note when the limit is null or has special rules. */
   note?: string;
+  /** Election system dimension — used only by jurisdictions that require
+   *  the debtor to elect between two mutually-exclusive sets. Today this
+   *  is California (§703.140(b) vs §704.xxx). Undefined elsewhere. */
+  system?: '703' | '704';
+  /** When set, the row links its cap to UNUSED equity from another row's
+   *  cap (referenced by statute). Used by CA §703.140(b)(5) wildcard which
+   *  rolls in unused §703.140(b)(1) homestead. The panel reads this to
+   *  compute the rolled-up cap at render time. */
+  unusedFromStatute?: string;
 }
 
 export type ExemptionElectionRule = 'opt-out' | 'state-or-federal' | 'federal-only';
+
+/** Index-band config for jurisdictions whose homestead is county-banded +
+ *  indexed annually (CA §704.730: clamp(county prior-year median, floor,
+ *  ceiling); floor + ceiling index annually from a base year). When set,
+ *  the panel computes `effective = clamp(county_median, floor, ceiling)`
+ *  per debtor county, where the floor/ceiling come from this band config
+ *  inflated to the current effective date. */
+export interface HomesteadIndexBand {
+  /** Base floor $ at baseYear. */
+  floorBase: number;
+  /** Base ceiling $ at baseYear. */
+  ceilingBase: number;
+  /** Reference year for the indexing math. */
+  baseYear: number;
+  /** Annual indexation rate (decimal, e.g. 0.03 for 3%). null = TODO
+   *  inflation lookup (the panel falls back to base values). */
+  indexationRate?: number | null;
+  /** Source citation for the band rule. */
+  source?: string;
+}
 
 export interface ExemptionsJurisdiction {
   /** Display name (e.g., "Federal", "Arizona", "Washington"). */
@@ -931,14 +960,25 @@ export interface ExemptionsJurisdiction {
   verified: boolean;
   /** Jurisdiction election rule (see comment above). */
   election: ExemptionElectionRule;
+  /** True when the jurisdiction requires the debtor to elect one of two
+   *  mutually-exclusive sets (CA §703 vs §704). The panel surfaces a
+   *  system picker; until elected, no rows are selectable. */
+  requiresSystemElection?: boolean;
   /** Items. */
   items: ReadonlyArray<ExemptionItem>;
-  /** WA homestead — by county. Key = county name, value = $ cap.
-   *  When present, the WA homestead item's `limit` is the floor / null
-   *  and the per-county cap is read from here for the debtor's county. */
+  /** Homestead by county (used by WA and CA §704). Key = county name,
+   *  value = $ cap. When present, the homestead item's `limit` is null
+   *  and the per-county cap is read from here for the debtor's county.
+   *  For CA §704 the cap is the clamp of the county prior-year median
+   *  against `homesteadBand.floor/ceiling`; this map already encodes
+   *  that clamp result so reads stay O(1). */
   homesteadByCounty?: Readonly<Record<string, number>>;
-  /** WA homestead statute citation (when homesteadByCounty present). */
+  /** Homestead statute citation (when homesteadByCounty is present). */
   homesteadStatute?: string;
+  /** Indexed floor/ceiling band — drives the clamp + annual reindex on
+   *  homesteadByCounty for CA §704. WA does not currently index (the
+   *  per-county figures are republished annually). */
+  homesteadBand?: HomesteadIndexBand;
 }
 
 export const EXEMPTIONS_BY_JURISDICTION: Readonly<Record<string, ExemptionsJurisdiction>> = {
@@ -974,7 +1014,9 @@ export const EXEMPTIONS_BY_JURISDICTION: Readonly<Record<string, ExemptionsJuris
       { label: 'Wrongful death payments',                            statute: '11 U.S.C. § 522(d)(11)(B)', limit: null },
     ],
   },
-  // ── Arizona (opt-out) ────────────────────────────────────────────────────
+  // ── Arizona (opt-out — state exemptions only) ────────────────────────────
+  // Loaded from the firm's canonical AZ list (asOf 2026-02-23). Citations
+  // are exact; null = no fixed dollar cap (unlimited / 100% / formula).
   AZ: {
     jurisdiction: 'Arizona',
     effectiveDate: '2026-02-23',
@@ -1002,40 +1044,15 @@ export const EXEMPTIONS_BY_JURISDICTION: Readonly<Record<string, ExemptionsJuris
       { label: 'Library/books/manuals/personal documents',                          statute: 'A.R.S. § 33-1125(5)',         limit: 250 },
       { label: 'Watch (one)',                                                       statute: 'A.R.S. § 33-1125(6)',         limit: 250 },
       { label: 'Annuity',                                                           statute: 'A.R.S. § 33-1126(A)(7)',      limit: null },
-      { label: 'Arms/uniforms required by law',                                     statute: 'A.R.S. § 33-1130(3)',         limit: null },
-      { label: 'Fraternal benefit society benefits',                                statute: 'A.R.S. § 20-877',             limit: null },
       { label: 'Cash surrender value of life insurance',                            statute: 'A.R.S. § 33-1126(A)(6)',      limit: null },
+      { label: 'Life insurance proceeds (exempt from creditors of insured)',        statute: 'A.R.S. § 20-1131(A)',         limit: null },
       { label: 'Child support/spousal maintenance 100%',                            statute: 'A.R.S. § 33-1126(A)(3)',      limit: null },
       { label: '529 college savings (excl. contributions within 2 yrs)',            statute: 'A.R.S. § 33-1126(A)(10)',     limit: null },
-      { label: 'Disability benefits — public officers/employees 100%',              statute: 'A.R.S. § 38-797.11',          limit: null },
-      { label: 'Domestic animals / household pets',                                 statute: 'A.R.S. § 33-1125(11)',        limit: null },
-      { label: 'Earnings of a minor child',                                         statute: 'A.R.S. § 33-1126(A)(2)',      limit: null },
       { label: 'Earnings — greater of 90% or 60× min hourly wage',                  statute: 'A.R.S. § 33-1131(B)',         limit: null, note: 'formula' },
-      { label: 'Fed/state EITC & child tax credits',                                statute: 'A.R.S. § 33-1126(A)(11)',     limit: null },
-      { label: 'Food/fuel/provisions for six months',                               statute: 'A.R.S. § 33-1124',            limit: null },
-      { label: 'Group life insurance policy/proceeds',                              statute: 'A.R.S. § 20-1132(A)',         limit: null },
-      { label: 'Health/accident/disability insurance benefits',                     statute: 'A.R.S. § 33-1126(A)(4)',      limit: null },
-      { label: 'Life insurance proceeds & cash value',                              statute: 'A.R.S. § 20-1131(A)',         limit: null },
-      { label: 'Partnership property',                                              statute: 'A.R.S. § 29-1041',            limit: null },
-      { label: 'Payment for wrongful taking of exempt property',                    statute: 'A.R.S. § 33-1126(A)(8)',      limit: null },
-      { label: 'Payments for destruction/damage to exempt property 100%',           statute: 'A.R.S. § 33-1126(A)(5)',      limit: null },
-      { label: 'Pension — firemen 100%',                                            statute: 'A.R.S. § 9-968',              limit: null },
-      { label: 'Pension — police 100%',                                             statute: 'A.R.S. § 9-931',              limit: null },
-      { label: 'Prescribed prostheses incl. wheelchair/mobility device',            statute: 'A.R.S. § 33-1125(9)',         limit: null },
-      { label: 'Proceeds from sale of homestead (18 mos.)',                         statute: 'A.R.S. § 33-1101(C)',         limit: null },
       { label: 'Qualified retirement plans',                                        statute: 'A.R.S. § 33-1126(B)',         limit: null },
-      { label: 'Real/personal property of judgment debtor',                         statute: 'A.R.S. § 33-1151',            limit: null },
       { label: 'Retirement — ASRS',                                                 statute: 'A.R.S. § 38-792',             limit: null },
-      { label: 'Retirement — judges',                                               statute: 'A.R.S. §§ 38-807, 38-809(B)', limit: null },
-      { label: 'Retirement — elected officials',                                    statute: 'A.R.S. § 38-811',             limit: null },
-      { label: 'Retirement — public safety personnel',                              statute: 'A.R.S. § 38-850',             limit: null },
-      { label: 'Retirement — corrections officers',                                 statute: 'A.R.S. § 38-897',             limit: null },
-      { label: 'Retirement — rangers',                                              statute: 'A.R.S. § 41-955',             limit: null },
-      { label: 'Retirement — taxing district employees 100%',                       statute: 'A.R.S. § 48-227',             limit: null },
-      { label: 'School equipment/books/apparatus for teaching',                     statute: 'A.R.S. § 33-1127',            limit: null },
       { label: 'Unemployment comp 100% (except necessaries)',                       statute: 'A.R.S. § 23-783(A)',          limit: null },
       { label: 'Wages — $50/week + $15/wk per dependent',                           statute: 'A.R.S. § 23-755(D)',          limit: null, note: 'formula' },
-      { label: 'Welfare 100%',                                                      statute: 'A.R.S. § 46-208',             limit: null },
       { label: "Worker's compensation",                                             statute: 'A.R.S. § 23-1068(B)',         limit: null },
       { label: 'Wrongful death benefits',                                           statute: 'A.R.S. § 12-592',             limit: null },
     ],
@@ -1059,50 +1076,121 @@ export const EXEMPTIONS_BY_JURISDICTION: Readonly<Record<string, ExemptionsJuris
       Snohomish: 781700, Spokane: 437900, Stevens: 340300, Thurston: 518400, Wahkiakum: 455000,
       'Walla Walla': 429900, Whatcom: 639900, Whitman: 426500, Yakima: 364400,
     },
+    // WA homestead is COUNTY-SPECIFIC under one statute (RCW §§ 6.13.010 /
+    // .020 / .030) — keyed by county above; the ExemptionsLiquidationPanel
+    // synthesizes a homestead suggestion from `homesteadStatute` +
+    // `homesteadByCounty` for the debtor's county. The items list below
+    // contains only the personal-property exemptions per the firm's
+    // canonical WA list (asOf 2026-02-23).
     items: [
-      { label: 'Homestead — varies by county',                                              statute: 'Wash. Rev. Code §§ 6.13.010, 6.13.020, 6.13.030', limit: null, note: 'See homesteadByCounty — picks debtor county' },
       { label: 'Tools/supplies used in trade',                                              statute: 'RCW § 6.15.010(1)(e)',          limit: 15000 },
       { label: 'Motor vehicle',                                                             statute: 'RCW § 6.15.010(1)(d)(iv)',      limit: 15000 },
       { label: 'Other personal property (except earnings)',                                 statute: 'RCW § 6.15.010(1)(d)(ii)',      limit: 10000 },
       { label: 'Household goods/furnishings incl. provisions',                              statute: 'RCW § 6.15.010(1)(d)(i)',       limit: 6500 },
       { label: 'Annuity contract benefits',                                                 statute: 'RCW § 48.18.430',               limit: null,  note: '$3,000/month' },
-      { label: 'Personal bodily injury payments',                                           statute: 'RCW § 6.15.010(1)(d)(vii)',     limit: 20000, note: 'up to $20,000; or loss-of-future-earnings' },
-      { label: 'Private library incl. electronic media',                                    statute: 'RCW § 6.15.010(1)(b)',          limit: 3500,  note: '$3,500 per individual; plus family pictures' },
-      { label: 'Wearing apparel',                                                           statute: 'RCW § 6.15.010(1)(a)',          limit: 3500,  note: '$3,500 cap on furs/jewelry/ornaments per individual' },
-      { label: 'Burial grounds (nonprofit cemetery assns.)',                                statute: 'RCW §§ 68.20.120, 68.24.220',   limit: null },
-      { label: 'Cell phone/personal computer/printer',                                      statute: 'RCW § 6.15.010(1)(c)',          limit: null },
+      { label: 'Personal bodily injury payments',                                           statute: 'RCW § 6.15.010(1)(d)(vii)',     limit: 20000, note: 'up to $20,000' },
+      { label: 'Private library incl. electronic media',                                    statute: 'RCW § 6.15.010(1)(b)',          limit: 3500,  note: '$3,500 per individual' },
+      { label: 'Wearing apparel',                                                           statute: 'RCW § 6.15.010(1)(a)',          limit: 3500,  note: '$3,500 cap on furs/jewelry/ornaments' },
+      { label: 'Federal/state pensions, IRAs, Keogh, retirement plans',                     statute: 'RCW § 6.15.020',                limit: null },
       { label: 'Child support',                                                             statute: 'RCW § 6.15.010(1)(d)(v)',       limit: null },
-      { label: "Crime victim's compensation",                                               statute: 'RCW § 7.68.033',                limit: null },
-      { label: 'Disability benefits',                                                       statute: 'RCW § 48.18.400',               limit: null },
-      { label: 'Earnings from work release',                                                statute: 'RCW § 72.65.060',               limit: null },
-      { label: 'Federal/state pensions, IRAs, Keogh, employee benefit/retirement plans',    statute: 'RCW § 6.15.020',                limit: null },
-      { label: 'Fire insurance proceeds from exempt property',                              statute: 'RCW § 6.15.030',                limit: null },
-      { label: 'Fraternal benefit society benefits',                                        statute: 'RCW § 48.36A.180',              limit: null },
-      { label: 'Funds of children in child welfare services',                               statute: 'RCW § 74.13.070',               limit: null },
-      { label: 'Life insurance proceeds',                                                   statute: 'RCW § 48.18.410',               limit: null },
-      { label: 'Life insurance proceeds — group',                                           statute: 'RCW § 48.18.420',               limit: null },
-      { label: 'Personal injury and/or loss of future earnings',                            statute: 'RCW § 6.15.010(1)(d)(viii)',    limit: null },
-      { label: 'Proceeds of sale of homestead / insurance',                                 statute: 'RCW § 6.13.070',                limit: null, note: 'to amount homestead is exempt' },
-      { label: 'Professionally prescribed health aids',                                     statute: 'RCW § 6.15.010(1)(d)(vi)',      limit: null },
-      { label: 'Property issued to state militia',                                          statute: 'RCW § 38.40.150',               limit: null },
-      { label: 'Property of incompetent held by guardian',                                  statute: 'RCW § 11.92.060',               limit: null },
-      { label: 'Public assistance',                                                         statute: 'RCW §§ 74.04.280, 74.08.210',   limit: null },
-      { label: 'Retirement — police and fire',                                              statute: 'RCW §§ 41.26.053, 41.20.180, 41.24.240, 43.43.310', limit: null },
-      { label: 'Retirement — judges',                                                       statute: 'RCW §§ 2.10.180, 2.12.090',     limit: null },
-      { label: 'Retirement — teachers',                                                     statute: 'RCW § 41.32.052',               limit: null },
-      { label: 'Retirement — state employees',                                              statute: 'RCW § 41.40.052',               limit: null },
-      { label: 'Retirement — city employees',                                               statute: 'RCW §§ 41.44.240, 41.28.200',   limit: null },
-      { label: 'Separate property of spouse (certain circumstances)',                       statute: 'RCW §§ 6.15.040, 26.16.200',    limit: null },
-      { label: 'Spendthrift trust',                                                         statute: 'RCW § 6.32.250',                limit: null },
-      { label: 'Tuition units (ch. 28B.95 RCW, >2 yrs prior)',                              statute: 'RCW § 6.15.010(1)(f)',          limit: null },
-      { label: 'Unemployment compensation',                                                 statute: 'RCW § 50.40.020',               limit: null },
       { label: 'Wages/salary/compensation for personal services',                           statute: 'RCW § 6.27.150',                limit: null },
+      { label: 'Unemployment compensation',                                                 statute: 'RCW § 50.40.020',               limit: null },
       { label: "Worker's comp (industrial insurance law)",                                  statute: 'RCW § 51.32.040',               limit: null },
+      { label: 'Public assistance',                                                         statute: 'RCW §§ 74.04.280, 74.08.210',   limit: null },
+      { label: 'Cell phone/personal computer/printer',                                      statute: 'RCW § 6.15.010(1)(c)',          limit: null },
+    ],
+  },
+  // ── California (opt-out — debtor elects §703 OR §704 system) ─────────────
+  // CA opted out of federal § 522(d). The debtor must elect one of two
+  // mutually-exclusive state sets per § 522(b)(1) all-or-nothing:
+  //   - §703.140(b) — bankruptcy-only set with a large wildcard ((b)(5))
+  //     that ROLLS IN any UNUSED §703.140(b)(1) homestead. Best for
+  //     non-homeowners or low-equity homeowners.
+  //   - §704.xxx — general-creditors set with the homestead-heavy
+  //     §704.730 county-banded + indexed cap (clamp(county_median, floor,
+  //     ceiling)). Best for homeowners with significant equity.
+  //
+  // Items below carry a `system` field so the panel filters to the elected
+  // set. The wildcard's `unusedFromStatute` links it to the §703 homestead
+  // for the roll-up. Amounts are VERIFY:FALSE — CONFIRM the figures
+  // against the operative table (CA Judicial Council triennial adjustment
+  // + AB-1885 indexing) before relying on them.
+  CA: {
+    jurisdiction: 'California',
+    effectiveDate: '2026-02-23',
+    nextAdjustment: null,
+    source: 'Cal. Code Civ. Proc. — CONFIRM all figures against current Judicial Council table',
+    verified: false,
+    election: 'opt-out',
+    requiresSystemElection: true,
+    homesteadStatute: 'Cal. Code Civ. Proc. § 704.730',
+    homesteadBand: {
+      // Per AB-1885 (effective 2021) the homestead floor is $300,000 and
+      // ceiling is $600,000, BOTH indexed annually for CPI from 2022. The
+      // panel clamps the county prior-year median single-family home sale
+      // price to this band. indexationRate is null = TODO; the panel falls
+      // back to the band values stored in homesteadByCounty below (which
+      // are the operator-published clamped results).
+      floorBase: 300000,
+      ceilingBase: 600000,
+      baseYear: 2021,
+      indexationRate: null,
+      source: 'Cal. Code Civ. Proc. § 704.730 + AB-1885 (2021) — CONFIRM',
+    },
+    homesteadByCounty: {
+      // Values mirror the prior CA_704 county table; CONFIRM against the
+      // current operator table before relying on them. Counties not
+      // listed default to the indexed floor.
+      Alameda:746375, Alpine:746375, 'Contra Costa':746375, 'Los Angeles':746375, Marin:746375,
+      Mono:746375, Monterey:746375, Napa:746375, Orange:746375, 'San Diego':746375,
+      'San Francisco':746375, 'San Luis Obispo':746375, 'San Mateo':746375, 'Santa Barbara':746375,
+      'Santa Clara':746375, 'Santa Cruz':746375, Ventura:746375,
+      'El Dorado':635000, Placer:660000, 'San Benito':715000, Sonoma:735000, Yolo:590000,
+      Nevada:575000, Solano:555000, Sacramento:535000, Mendocino:535000, Riverside:545000,
+      'San Joaquin':515000, Stanislaus:460000, 'San Bernardino':470000, Amador:455000,
+      Calaveras:435000, Tuolumne:395000, Sutter:395000, Humboldt:390000, Inyo:390000,
+      Butte:385000, Fresno:385000, Kern:378000, Madera:383000, Merced:383000,
+      Shasta:380000, Yuba:385000,
+      Colusa:373188, 'Del Norte':373188, Glenn:373188, Imperial:373188, Kings:373188,
+      Lake:373188, Lassen:373188, Mariposa:373188, Modoc:373188, Plumas:373188,
+      Sierra:373188, Siskiyou:373188, Tehama:373188, Trinity:373188, Tulare:373188,
+    },
+    items: [
+      // ── §703.140(b) — bankruptcy-only set (large wildcard) ──────────────
+      { label: 'Homestead (residence) — §703',                          statute: 'Cal. Code Civ. Proc. § 703.140(b)(1)', limit: 36750,  system: '703', note: 'CONFIRM' },
+      { label: 'Motor vehicle — §703',                                  statute: 'Cal. Code Civ. Proc. § 703.140(b)(2)', limit: 8625,   system: '703', note: 'CONFIRM' },
+      { label: 'Household goods (per item $925 cap) — §703',            statute: 'Cal. Code Civ. Proc. § 703.140(b)(3)', limit: null,   system: '703', note: 'No aggregate; $925 per-item — CONFIRM' },
+      { label: 'Jewelry — §703',                                        statute: 'Cal. Code Civ. Proc. § 703.140(b)(4)', limit: 2175,   system: '703', note: 'CONFIRM' },
+      { label: 'Wildcard (+ unused homestead) — §703',                  statute: 'Cal. Code Civ. Proc. § 703.140(b)(5)', limit: 1950,   system: '703', unusedFromStatute: 'Cal. Code Civ. Proc. § 703.140(b)(1)', note: '$1,950 base + UNUSED §703.140(b)(1) homestead (up to $36,750) — CONFIRM' },
+      { label: 'Tools of trade — §703',                                 statute: 'Cal. Code Civ. Proc. § 703.140(b)(6)', limit: 10950,  system: '703', note: 'CONFIRM' },
+      { label: 'Unmatured life insurance (non-credit) — §703',          statute: 'Cal. Code Civ. Proc. § 703.140(b)(7)', limit: null,   system: '703', note: 'CONFIRM' },
+      { label: 'Life insurance loan/accrued dividend value — §703',     statute: 'Cal. Code Civ. Proc. § 703.140(b)(8)', limit: 19625,  system: '703', note: 'CONFIRM' },
+      { label: 'Health aids — §703',                                    statute: 'Cal. Code Civ. Proc. § 703.140(b)(9)', limit: null,   system: '703' },
+      { label: 'Public assistance / SS / unemployment — §703',          statute: 'Cal. Code Civ. Proc. § 703.140(b)(10)(A)', limit: null, system: '703' },
+      { label: 'Veterans’ benefits — §703',                             statute: 'Cal. Code Civ. Proc. § 703.140(b)(10)(B)', limit: null, system: '703' },
+      { label: 'Disability / illness / unemployment benefits — §703',   statute: 'Cal. Code Civ. Proc. § 703.140(b)(10)(C)', limit: null, system: '703' },
+      { label: 'Alimony / child support (needed for support) — §703',   statute: 'Cal. Code Civ. Proc. § 703.140(b)(10)(D)', limit: null, system: '703' },
+      { label: 'Pension / retirement (needed for support) — §703',      statute: 'Cal. Code Civ. Proc. § 703.140(b)(10)(E)', limit: null, system: '703' },
+      { label: 'Personal-injury compensation — §703',                   statute: 'Cal. Code Civ. Proc. § 703.140(b)(11)(D)', limit: 36750, system: '703', note: 'CONFIRM' },
+      // ── §704.xxx — general-creditors set (homestead-heavy) ──────────────
+      { label: 'Homestead — §704 (county-banded; see homesteadByCounty)', statute: 'Cal. Code Civ. Proc. § 704.730',     limit: null,   system: '704', note: 'Clamp(county prior-year median, $300k floor, $600k ceiling), both indexed — CONFIRM' },
+      { label: 'Motor vehicle — §704',                                  statute: 'Cal. Code Civ. Proc. § 704.010',        limit: 8625,   system: '704', note: 'CONFIRM' },
+      { label: 'Household furnishings (reasonable) — §704',             statute: 'Cal. Code Civ. Proc. § 704.020',        limit: null,   system: '704', note: 'No stated cap — reasonable amount, CONFIRM' },
+      { label: 'Jewelry / heirlooms / art — §704',                      statute: 'Cal. Code Civ. Proc. § 704.040',        limit: 10950,  system: '704', note: 'CONFIRM' },
+      { label: 'Tools of trade — §704',                                 statute: 'Cal. Code Civ. Proc. § 704.060',        limit: 10950,  system: '704', note: 'CONFIRM' },
+      { label: 'Bank account from public benefit / SS deposits — §704', statute: 'Cal. Code Civ. Proc. § 704.080',        limit: null,   system: '704', note: 'CONFIRM' },
+      { label: 'Life insurance loan/cash value — §704',                 statute: 'Cal. Code Civ. Proc. § 704.100',        limit: 17525,  system: '704', note: '$17,525 ind / $35,050 joint — CONFIRM' },
+      { label: 'Public retirement benefits — §704',                     statute: 'Cal. Code Civ. Proc. § 704.110',        limit: null,   system: '704' },
+      { label: 'Private retirement / IRA (necessary for support) — §704', statute: 'Cal. Code Civ. Proc. § 704.115',      limit: null,   system: '704' },
+      { label: 'Unemployment benefits — §704',                          statute: 'Cal. Code Civ. Proc. § 704.120',        limit: null,   system: '704' },
+      { label: 'Public assistance — §704',                              statute: 'Cal. Code Civ. Proc. § 704.170',        limit: null,   system: '704' },
+      { label: 'Wages — paid earnings (last 30 days, 75%) — §704',      statute: 'Cal. Code Civ. Proc. § 704.070',        limit: null,   system: '704', note: 'Formula — CONFIRM' },
     ],
   },
 };
 
-/** Look up the exemptions for a jurisdiction key ("Federal" | "AZ" | "WA"). */
+/** Look up the exemptions for a jurisdiction key
+ *  ("Federal" | "AZ" | "WA" | "CA"). */
 export function getExemptionsFor(jurisdictionKey: string): ExemptionsJurisdiction | undefined {
   return EXEMPTIONS_BY_JURISDICTION[jurisdictionKey];
 }
@@ -1112,6 +1200,30 @@ export function getWaHomesteadCap(county: string): number | null {
   const wa = EXEMPTIONS_BY_JURISDICTION.WA;
   if (!wa?.homesteadByCounty) return null;
   return wa.homesteadByCounty[county] ?? null;
+}
+
+/** CA §704.730 homestead — clamp(county prior-year median, indexed floor,
+ *  indexed ceiling). Reads from homesteadByCounty when populated; falls
+ *  back to the indexed floor when the county isn't loaded. Returns null
+ *  when the band isn't configured. */
+export function getCa704HomesteadCap(county: string | null | undefined): number | null {
+  const ca = EXEMPTIONS_BY_JURISDICTION.CA;
+  if (!ca?.homesteadByCounty || !ca?.homesteadBand) return null;
+  if (county && ca.homesteadByCounty[county] != null) return ca.homesteadByCounty[county];
+  // Unknown county → use the floor (most conservative). TODO: apply
+  // indexationRate to floorBase when persistence advances the year.
+  return ca.homesteadBand.floorBase;
+}
+
+/** Filter CA items to a single elected system. Returns the items
+ *  unchanged for non-CA jurisdictions (which have no system dimension). */
+export function filterBySystem(
+  items: ReadonlyArray<ExemptionItem>,
+  system: '703' | '704' | null,
+): ReadonlyArray<ExemptionItem> {
+  if (!items.some(i => i.system)) return items;        // no system dim → pass-through
+  if (!system) return [];                              // not yet elected → empty
+  return items.filter(i => !i.system || i.system === system);
 }
 
 // ─── Legal Rules (citations + editable parameters) ──────────────────────────

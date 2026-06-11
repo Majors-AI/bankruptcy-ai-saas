@@ -14,6 +14,7 @@
 import { useEffect, useCallback, useState } from 'react';
 import CommunicationsTab from './CommunicationsTab';
 import FirmBrandingPanel from './FirmBrandingPanel';
+import ReferenceRulesTab from './ReferenceRulesTab';
 import {
   Shield,
   AlertTriangle,
@@ -33,6 +34,7 @@ import {
   RefreshCw,
   Palette,
   Mail,
+  BookOpen,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -51,7 +53,7 @@ interface Props {
   currentUserRole?: PlatformRole | null;
 }
 
-type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications';
+type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications' | 'reference_rules';
 
 interface Firm {
   id: string;
@@ -222,14 +224,17 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
   }, []);
 
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'firms',          label: 'Firms',          icon: <Building2 className="w-3.5 h-3.5" /> },
-    { id: 'pricing',        label: 'Pricing',        icon: <DollarSign className="w-3.5 h-3.5" /> },
-    { id: 'features',       label: 'Features',       icon: <ToggleRight className="w-3.5 h-3.5" /> },
-    { id: 'discounts',      label: 'Discounts',      icon: <Tag className="w-3.5 h-3.5" /> },
-    { id: 'tier_templates', label: 'Tier Templates', icon: <Layers className="w-3.5 h-3.5" /> },
-    { id: 'usage',          label: 'Usage & Billing', icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: 'branding',       label: 'Branding',        icon: <Palette className="w-3.5 h-3.5" /> },
-    { id: 'communications', label: 'Communications',  icon: <Mail className="w-3.5 h-3.5" /> },
+    { id: 'firms',           label: 'Firms',           icon: <Building2 className="w-3.5 h-3.5" /> },
+    { id: 'pricing',         label: 'Pricing',         icon: <DollarSign className="w-3.5 h-3.5" /> },
+    { id: 'features',        label: 'Features',        icon: <ToggleRight className="w-3.5 h-3.5" /> },
+    { id: 'discounts',       label: 'Discounts',       icon: <Tag className="w-3.5 h-3.5" /> },
+    { id: 'tier_templates',  label: 'Tier Templates',  icon: <Layers className="w-3.5 h-3.5" /> },
+    { id: 'usage',           label: 'Usage & Billing', icon: <Activity className="w-3.5 h-3.5" /> },
+    { id: 'branding',        label: 'Branding',        icon: <Palette className="w-3.5 h-3.5" /> },
+    { id: 'communications',  label: 'Communications',  icon: <Mail className="w-3.5 h-3.5" /> },
+    // Reference Rules — canonical edit home for every legal-reference
+    // dataset. Distinct from the firm-side rule pages (which are read-only).
+    { id: 'reference_rules', label: 'Reference Rules', icon: <BookOpen className="w-3.5 h-3.5" /> },
   ];
 
   const selectedFirmName = allFirms.find((f) => f.id === selectedFirmId)?.name ?? selectedFirmId.slice(0, 8);
@@ -250,8 +255,10 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
               Platform-level controls — multi-firm tenant management
             </p>
           </div>
-          {/* Firm picker — applies to Pricing / Features / Discounts tabs */}
-          {activeTab !== 'firms' && activeTab !== 'tier_templates' && (
+          {/* Firm picker — applies to Pricing / Features / Discounts tabs.
+              Reference Rules is firm-agnostic (canonical for every firm)
+              and Tier Templates / Firms are list-level views. */}
+          {activeTab !== 'firms' && activeTab !== 'tier_templates' && activeTab !== 'reference_rules' && (
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-slate-500">Firm:</span>
               <select
@@ -265,9 +272,9 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
               </select>
             </div>
           )}
-          {(activeTab === 'firms' || activeTab === 'tier_templates') && (
+          {(activeTab === 'firms' || activeTab === 'tier_templates' || activeTab === 'reference_rules') && (
             <div className="ml-auto text-xs text-slate-600">
-              All firms
+              {activeTab === 'reference_rules' ? 'All firms (canonical)' : 'All firms'}
             </div>
           )}
         </div>
@@ -304,6 +311,7 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
         {activeTab === 'communications' && (
           <CommunicationsTab firmId={selectedFirmId} firmName={selectedFirmName} />
         )}
+        {activeTab === 'reference_rules' && <ReferenceRulesTab />}
       </div>
     </div>
   );

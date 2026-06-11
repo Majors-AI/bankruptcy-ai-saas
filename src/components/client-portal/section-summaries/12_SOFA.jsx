@@ -177,7 +177,6 @@ export default function SOFAReview({ data = {}, onChange, confirmed, onConfirm }
 
   const patch = (p) => { const next = { ...sofa, ...p }; setSofa(next); onChange && onChange({ ...saved, ...next }); };
   const setMarital = (m) => patch({ marital: m });
-  const setDebtType = (t) => patch({ debtType: t });
   const setYes = (id, yes) => patch({ answers: { ...sofa.answers, [id]: { ...sofa.answers[id], yes } } });
   const setDetail = (id, detail) => patch({ answers: { ...sofa.answers, [id]: { ...sofa.answers[id], detail } } });
   const confirmRow = (qid, key) => patch({ imports: { ...sofa.imports, [qid]: { ...sofa.imports[qid], confirmed: { ...sofa.imports[qid]?.confirmed, [key]: !sofa.imports[qid]?.confirmed?.[key] } } } });
@@ -194,10 +193,10 @@ export default function SOFAReview({ data = {}, onChange, confirmed, onConfirm }
       <Style />
       <h1><ScrollText size={21} style={{ verticalAlign: -3, marginRight: 8 }} />Statement of Financial Affairs</h1>
       <div className="form">Official Form 107 · answer every question in order</div>
-      <div className="dtype"><span>Debts are primarily:</span>
-        {["consumer", "non-consumer"].map((t) => <button type="button" key={t} className={sofa.debtType === t ? "on" : ""} onClick={() => setDebtType(t)}>{t}</button>)}
-        <span className="dthint">sets the 90-day payment threshold ({sofa.debtType === "non-consumer" ? "$8,575" : "$600"})</span>
-      </div>
+      {/* Debts-are-primarily consumer/non-consumer toggle is hidden client-side.
+          Attorney sets and adjusts this on the Signing Review surface; the
+          seeded value (from petition.debtNature) drives the threshold shown
+          in import intros without exposing the classification to the debtor. */}
 
       {PARTS.map((p) => (
         <div className="card" key={p.n}>

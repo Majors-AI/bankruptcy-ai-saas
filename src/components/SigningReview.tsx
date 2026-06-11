@@ -2,10 +2,12 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   CheckCircle2, XCircle, Clock, Shield, RefreshCw, CheckCheck,
   AlertTriangle, ChevronDown, ChevronRight, Pause, Send,
-  FileText, User,
+  FileText, User, Tags,
 } from 'lucide-react';
 import { getCurrentAttorneyName } from '../lib/currentAttorney';
 import ExemptionsLiquidationPanel from './signing-review/ExemptionsLiquidationPanel';
+import MaritalAdjustmentPanel from './signing-review/MaritalAdjustmentPanel';
+import LongFormDeductionPanel from './signing-review/LongFormDeductionPanel';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -282,6 +284,12 @@ export default function SigningReview(
   const [intakeFormData, setIntakeFormData] = useState<Record<string, unknown> | null>(null);
   const [intakeState, setIntakeState] = useState<string | undefined>(undefined);
   const [intakeCounty, setIntakeCounty] = useState<string | undefined>(undefined);
+  // Attorney-controlled consumer/non-consumer determination. The client-side
+  // SOFA toggle was hidden — classification is set here at signing review.
+  // Seeded from intake form_data.debtNature when present; otherwise defaults
+  // to "consumer" (most common Ch.7 case). Local state today; persistence to
+  // signing_reviews (or a dedicated case_classification row) is TODO.
+  const [attorneyDebtType, setAttorneyDebtType] = useState<'consumer' | 'non-consumer'>('consumer');
   const sessionStartRef = useRef<Date>(new Date());
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reviewRowRef = useRef<SigningReviewRow | null>(null);
@@ -320,6 +328,13 @@ export default function SigningReview(
         setIntakeFormData(fd);
         setIntakeState(String(r?.exemption_state || r?.state || fd?.state || "") || undefined);
         setIntakeCounty(String(r?.county || fd?.county || "") || undefined);
+        const seedDebt =
+          (fd as Record<string, unknown> | null)?.debtNature ??
+          ((fd as Record<string, unknown> | null)?.sofa as Record<string, unknown> | undefined)?.debtType ??
+          ((fd as Record<string, unknown> | null)?.petition as Record<string, unknown> | undefined)?.debtNature;
+        if (seedDebt === 'non-consumer' || seedDebt === 'consumer') {
+          setAttorneyDebtType(seedDebt);
+        }
       } catch {
         // No submission on file — panel renders empty-state.
       }
@@ -596,20 +611,150 @@ export default function SigningReview(
           </div>
         </div>
 
-        {/* ── Exemptions & Liquidation Analysis (attorney-facing) ──
-              Same role gate as the rest of the SigningReview surface
-              (controlled by VITE_PLATFORM_ROLE for now; real auth role
-              binding lands when the SigningReview is wired into the
-              attorney session). Attorneys edit; everyone else sees
-              read-only totals. */}
-        <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
-          <ExemptionsLiquidationPanel
-            formData={intakeFormData}
-            clientState={intakeState}
-            clientCounty={intakeCounty}
-            canEdit={role === 'attorney' || role === 'firm_super_admin' || role === 'super_admin_bankruptcy_ai'}
-          />
-        </div>
+        {/* ── Debt classification (attorney-set) ──
+              Replaces the client-side SOFA "debts are primarily" toggle —
+              attorney sets the consumer vs. non-consumer determination
+              here at signing. Drives § 707(b) means-test scope, the SOFA
+              Part 3 90-day payment threshold ($600 vs. $8,575), and the
+              petition's nature-of-debts box. Local state today; persist
+              alongside the signing_reviews row when the rest of the panel
+              data persists. */}
+        {(() => {
+          const canEditDebt = role === 'attorney' || role === 'firm_super_admin' || role === 'super_admin_bankruptcy_ai';
+          const threshold = attorneyDebtType === 'non-consumer' ? '$8,575' : '$600';
+          return (
+            <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-start gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-sky-500/10 border border-sky-500/30 flex items-center justify-center flex-shrink-0">
+                    <Tags className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-white">Debt Classification</h3>
+                    <p className="text-xs text-slate-400 mt-0.5 leading-relaxed max-w-xl">
+                      Set whether the debtor's obligations are primarily consumer or non-consumer.
+                      This drives § 707(b) means-test scope and the SOFA Part 3 90-day payment threshold ({threshold}).
+                    </p>
+                  </div>
+                </div>
+                <div className="inline-flex gap-1.5">
+                  {(['consumer', 'non-consumer'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => canEditDebt && setAttorneyDebtType(t)}
+                      disabled={!canEditDebt}
+                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border capitalize transition disabled:opacity-60 ${
+                        attorneyDebtType === t
+                          ? 'bg-amber-500 text-amber-950 border-amber-500'
+                          : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
+                      }`}
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {!canEditDebt && (
+                <p className="text-[11px] uppercase tracking-widest text-slate-500 mt-3">Read-only — attorney edit required</p>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── Exemptions & Liquidation Analysis (attorney-only) ──
+              ATTORNEY-ONLY surface — non-lawyers (legal_admin,
+              firm_super_admin without a bar number) do NOT see this panel
+              at all. The gate keys specifically on the attorney/lawyer flag,
+              NOT on admin role. `super_admin_bankruptcy_ai` is the platform-
+              tier ops bypass for testing only.
+              TODO Phase B: server-side enforcement via RLS on the
+              exemptions_workspace persistence so the gate survives a
+              tampered client. */}
+        {(() => {
+          const isLawyer = role === 'attorney' || role === 'super_admin_bankruptcy_ai';
+          if (!isLawyer) return null;
+          // Marital-adjustment preconditions read off the same form_data the
+          // panel already consumes. The component itself enforces the gates
+          // again (defense in depth).
+          const filingType = String((intakeFormData?.filingType ?? '') as string);
+          const isIndividualWithNFS = filingType === 'individual-nonfiling-spouse';
+          // NFS income inclusion: any income source with owner === 'nfs'
+          // OR the legacy `spouseSources` populated on an individual-NFS
+          // filing counts. Conservative — defer to the attorney's
+          // judgment on edge cases via the panel's own UI.
+          const nfsSources = Array.isArray(intakeFormData?.spouseSources)
+            ? (intakeFormData!.spouseSources as Array<unknown>)
+            : [];
+          const incomeSources = Array.isArray((intakeFormData as Record<string, unknown> | null)?.income_sources_json)
+            ? ((intakeFormData as Record<string, unknown>).income_sources_json as Array<{ owner?: string }>)
+            : [];
+          const nfsIncomeIncludedInCMI = isIndividualWithNFS && (
+            nfsSources.length > 0
+            || incomeSources.some(s => s?.owner === 'nfs')
+          );
+
+          return (
+            <>
+              <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
+                <ExemptionsLiquidationPanel
+                  formData={intakeFormData}
+                  clientState={intakeState}
+                  clientCounty={intakeCounty}
+                  canEdit={isLawyer}
+                />
+              </div>
+
+              {/* Marital adjustment — Form 122A-1 line 17a. Attorney-only.
+                  Itemized NFS non-contribution deduction. CLIENTS DO NOT
+                  ENTER THIS — there is no intake/questionnaire field. The
+                  panel itself enforces the precondition gates again
+                  (individual-NFS filing + NFS income included in CMI) and
+                  renders an N/A notice if either fails. */}
+              <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
+                <MaritalAdjustmentPanel
+                  isLawyer={isLawyer}
+                  isIndividualWithNonFilingSpouse={isIndividualWithNFS}
+                  nfsIncomeIncludedInCMI={nfsIncomeIncludedInCMI}
+                  onSave={(_items, _total) => {
+                    // TODO Phase B — persist via the existing
+                    // attorney_intake_reviews edit path:
+                    //   saveReviewFields({
+                    //     marital_adjustment_items: items,
+                    //     marital_adjustment_total_cents: Math.round(total * 100),
+                    //   })
+                    void _items; void _total;
+                  }}
+                />
+              </div>
+
+              {/* Long-form means-test deductions — Form 122A-2 / 122C-2.
+                  IRS-allowable deduction breakdown with per-line attorney
+                  override + the existing re-review trigger. */}
+              <div className="border border-slate-800 rounded-xl bg-slate-900/30 p-5">
+                <LongFormDeductionPanel
+                  isLawyer={isLawyer}
+                  caseId={CLIENT_ID}
+                  formData={(intakeFormData as Record<string, unknown> | null) ?? {}}
+                  householdSize={
+                    (intakeFormData?.filingType === 'joint' ? 2 : 1)
+                    + (parseInt(String((intakeFormData as Record<string, unknown> | null)?.numDependents ?? '0')) || 0)
+                  }
+                  state={intakeState}
+                  county={intakeCounty}
+                  metroOrRegion={(intakeFormData as Record<string, unknown> | null)?.metroOrRegion as string | undefined}
+                  vehicleCount={
+                    Array.isArray((intakeFormData as Record<string, unknown> | null)?.vehicles)
+                      ? ((intakeFormData as Record<string, unknown>).vehicles as Array<unknown>).length
+                      : 0
+                  }
+                  projectedPlanPaymentMonthly={0}
+                  cmi={(parseFloat(String((intakeFormData as Record<string, unknown> | null)?.cmiMonthly ?? '0')) || 0)}
+                />
+              </div>
+            </>
+          );
+        })()}
 
         {/* ── Review groups ── */}
         {REVIEW_GROUPS.map(group => {

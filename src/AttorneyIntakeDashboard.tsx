@@ -283,21 +283,26 @@ function srcMonthlyGrossNoExpDeduction(s: Record<string, unknown>): number {
   return base;
 }
 
+// CMI-aligned: SS + VA benefits are EXCLUDED from these totals because every
+// downstream consumer feeds them into the means-test / over-median /
+// disposable-income screens. SS still appears on Schedule I (the at-filing
+// income snapshot) — Schedule I displays should NOT consume these helpers;
+// they target CMI math. The shared FIELDS_INCLUDED_IN_CMI list in
+// src/lib/cmi.ts is the single source of truth for which "other income"
+// fields count.
+//
+// Also includes regular household-member contributions per § 101(10A)(B)
+// (SS-sourced contributions are dropped by sumHouseholdContributionsForCMI).
 function calcTotalGrossIncome(data: Record<string, unknown>): number {
   const isJoint = data.filingType === "joint" || data.filingType === "individual-nonfiling-spouse";
   const debtorSources = (data.debtorSources as Array<Record<string, unknown>>) ?? [];
   const spouseSources = isJoint ? ((data.spouseSources as Array<Record<string, unknown>>) ?? []) : [];
   const debtorTotal = debtorSources.reduce((acc, s) => acc + srcMonthlyGrossNoExpDeduction(s), 0);
   const spouseTotal = spouseSources.reduce((acc, s) => acc + srcMonthlyGrossNoExpDeduction(s), 0);
-  const otherIncome = (parseFloat(data.dSsRetirement as string) || 0) + (parseFloat(data.dSsDisability as string) || 0)
-    + (parseFloat(data.dVeterans as string) || 0) + (parseFloat(data.dVeteransRetirement as string) || 0)
-    + (parseFloat(data.dUnemployment as string) || 0)
-    + (parseFloat(data.dWorkersComp as string) || 0) + (parseFloat(data.dPension as string) || 0)
-    + (parseFloat(data.dRental as string) || 0) + (parseFloat(data.dAlimony as string) || 0)
-    + (parseFloat(data.dChildSupport as string) || 0) + (parseFloat(data.dFamilySupport as string) || 0)
-    + (parseFloat(data.dRoyalties as string) || 0) + (parseFloat(data.dInvestment as string) || 0)
-    + (parseFloat(data.dOtherIncome as string) || 0);
-  return debtorTotal + spouseTotal + otherIncome;
+  const otherIncome = sumOtherIncomeIncludedInCMI(data);
+  const dependents = (data.dependents as HouseholdContributor[] | null) ?? [];
+  const contribCMI = sumHouseholdContributionsForCMI(dependents);
+  return debtorTotal + spouseTotal + otherIncome + contribCMI;
 }
 
 function calcTotalIncome(data: Record<string, unknown>): number {
@@ -306,15 +311,10 @@ function calcTotalIncome(data: Record<string, unknown>): number {
   const spouseSources = isJoint ? ((data.spouseSources as Array<Record<string, unknown>>) ?? []) : [];
   const debtorTotal = debtorSources.reduce((acc, s) => acc + srcMonthlyGrossAtty(s), 0);
   const spouseTotal = spouseSources.reduce((acc, s) => acc + srcMonthlyGrossAtty(s), 0);
-  const otherIncome = (parseFloat(data.dSsRetirement as string) || 0) + (parseFloat(data.dSsDisability as string) || 0)
-    + (parseFloat(data.dVeterans as string) || 0) + (parseFloat(data.dVeteransRetirement as string) || 0)
-    + (parseFloat(data.dUnemployment as string) || 0)
-    + (parseFloat(data.dWorkersComp as string) || 0) + (parseFloat(data.dPension as string) || 0)
-    + (parseFloat(data.dRental as string) || 0) + (parseFloat(data.dAlimony as string) || 0)
-    + (parseFloat(data.dChildSupport as string) || 0) + (parseFloat(data.dFamilySupport as string) || 0)
-    + (parseFloat(data.dRoyalties as string) || 0) + (parseFloat(data.dInvestment as string) || 0)
-    + (parseFloat(data.dOtherIncome as string) || 0);
-  return debtorTotal + spouseTotal + otherIncome;
+  const otherIncome = sumOtherIncomeIncludedInCMI(data);
+  const dependents = (data.dependents as HouseholdContributor[] | null) ?? [];
+  const contribCMI = sumHouseholdContributionsForCMI(dependents);
+  return debtorTotal + spouseTotal + otherIncome + contribCMI;
 }
 
 function calcTotalDebt(data: Record<string, unknown>): number {
@@ -396,31 +396,18 @@ function suggestChapter(fd: Record<string, unknown>): "7" | "13" | "either" {
   return "either";
 }
 
-const STATE_MEDIAN_INCOME: Record<string, number[]> = {
-  AL:[47292,61140,71424,83412,93360], AK:[68196,90432,104520,114564,124608], AZ:[57132,74412,86136,100308,107532],
-  AR:[44544,57792,68196,79308,91476], CA:[67884,88596,101616,116724,128316], CO:[70308,92064,103908,118416,130716],
-  CT:[72576,95496,113268,130500,147732], DE:[62616,79776,94620,108648,116124], FL:[55236,69084,79392,91200,103116],
-  GA:[55836,70716,82332,96252,107724], HI:[71736,97092,118248,135360,153972], ID:[54372,70716,83532,96672,107748],
-  IL:[63540,81660,96156,110424,123048], IN:[55236,69876,81456,94560,106740], IA:[59736,76272,89784,102600,115416],
-  KS:[58524,75348,88944,101136,113844], KY:[48384,62256,73392,85068,97164], LA:[48276,60396,73068,84756,96888],
-  ME:[57480,72768,86604,99816,112872], MD:[82260,106440,124848,141528,157176], MA:[76140,99636,118200,134760,151080],
-  MI:[57036,73092,86160,99876,112296], MN:[71556,93072,107748,122484,137940], MS:[43260,55380,66564,78996,89772],
-  MO:[54168,68772,81132,93240,105456], MT:[53784,68880,82236,95652,107508], NE:[59616,77388,91668,103956,117252],
-  NV:[58344,75528,88380,102756,115212], NH:[78324,101244,118308,135396,151128], NJ:[80016,103740,121212,139416,154896],
-  NM:[45576,58884,71076,83568,93420], NY:[66876,87888,104208,120528,135588], NC:[54024,68244,80064,93576,105456],
-  ND:[63924,83316,97644,111852,126288], OH:[56340,71424,83964,97884,109500], OK:[51516,65892,77604,90804,102300],
-  OR:[63228,82512,96696,110340,123768], PA:[62244,79980,94572,108192,121584], RI:[68064,88572,104772,119808,134952],
-  SC:[51204,64764,76716,90168,102384], SD:[57144,73824,87576,100764,114552], TN:[51840,65628,76860,90288,101736],
-  TX:[57648,73680,86244,99372,111396], UT:[66576,87024,100356,113772,126312], VT:[65280,84060,100272,116952,131484],
-  VA:[74064,96216,111576,127392,142848], WA:[75816,98904,113700,128916,143148], WV:[43728,55920,67704,79848,90468],
-  WI:[61020,78756,93576,107100,120384], WY:[59604,77088,90408,104016,117468], DC:[82200,107220,126156,145080,162996],
-};
-
-// Median income lookup — prefers the centralized legal-reference store so
-// the value in use is always current. Falls back to the local
-// STATE_MEDIAN_INCOME table when the store doesn't recognize the input
-// (e.g., state passed as abbreviation while the store keys on full names).
+// Median income lookup — reads LIVE from the centralized legal-reference
+// store (src/lib/irsMeansStandards.ts → MEDIAN_INCOME_BY_STATE). The old
+// hardcoded STATE_MEDIAN_INCOME fallback table was removed; the store
+// covers all 50 states + DC + territories from the 4/1/2026 UST table,
+// and applies the per-person add-on for households > 4. When the store
+// returns null (unrecognized state), this returns 0 so callers can flag
+// the missing data rather than silently using a stale fallback.
 import { getMedianAnnualIncome as storeGetMedian } from "./lib/irsMeansStandards";
+import {
+  sumOtherIncomeIncludedInCMI, sumHouseholdContributionsForCMI,
+  type HouseholdContributor,
+} from "./lib/cmi";
 const STATE_ABBR_TO_NAME: Record<string, string> = {
   AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
   CO: "Colorado", CT: "Connecticut", DE: "Delaware", DC: "District of Columbia",
@@ -437,11 +424,9 @@ const STATE_ABBR_TO_NAME: Record<string, string> = {
 function getStateMedian(state: string, householdSize: number): number {
   const up = (state || "").toUpperCase();
   const fullName = STATE_ABBR_TO_NAME[up] ?? state;
-  const fromStore = storeGetMedian(fullName, householdSize);
-  if (fromStore != null) return fromStore;
-  const medians = STATE_MEDIAN_INCOME[up] ?? STATE_MEDIAN_INCOME["TX"];
-  const idx = Math.min(Math.max(householdSize - 1, 0), medians.length - 1);
-  return medians[idx];
+  // Single source of truth. Returns 0 when the state isn't loaded — caller
+  // surfaces a "median not loaded" flag rather than fabricating a number.
+  return storeGetMedian(fullName, householdSize) ?? 0;
 }
 
 interface EligibilityResult {
@@ -2567,11 +2552,41 @@ export default function AttorneyIntakeDashboard({
   onSwitchToCaseManagement,
   preselectLeadId,
   onPreselectConsumed,
+  viewerIsLawyer = false,
 }: {
   onSwitchToCaseManagement?: () => void;
   preselectLeadId?: string | null;
   onPreselectConsumed?: () => void;
+  /** True when the viewer holds a bar number (attorney / attorney_super_admin
+   *  / platform-tier super_admin_bankruptcy_ai for ops testing). Defaults to
+   *  false so the surface fails CLOSED — a forgotten prop means non-lawyer
+   *  treatment, not the other way around. Non-lawyers see an access-denied
+   *  screen; lawyers see the full dashboard. */
+  viewerIsLawyer?: boolean;
 } = {}) {
+  // Belt-and-suspenders: even if a non-lawyer somehow reaches this route
+  // (stale state, deep-link, future caller), the surface refuses to render.
+  // The App.tsx route and the LegalAdminPortal queue both gate upstream;
+  // this is the third layer in front of the consolidated attorney review.
+  if (!viewerIsLawyer) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-slate-100 p-8" style={{ background: "#0F0F0E" }}>
+        <div className="max-w-md text-center">
+          <p className="text-[10px] uppercase tracking-widest text-rose-400 mb-2">Access restricted</p>
+          <h1 className="text-lg font-semibold text-[#FAFAF7] mb-2">Attorney Review</h1>
+          <p className="text-sm text-[#6B6B66] leading-relaxed">
+            The consolidated attorney review (Eligibility / Issues / All Answers / Decision)
+            is restricted to attorneys. A super-admin or legal-admin role alone does not
+            authorize this surface — the gate is on the attorney/lawyer flag specifically.
+          </p>
+          <p className="mt-4 text-[11px] text-[#6B6B66]">
+            Non-lawyers retain the case-advancement status bar, read-only Review Intake,
+            and Update Intake from the lead-detail panel.
+          </p>
+        </div>
+      </div>
+    );
+  }
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selected, setSelected] = useState<Submission | null>(null);
   // Detail-panel tab — Overview / Eligibility (with Ch.7/Ch.13 sub-tabs) /
@@ -2687,15 +2702,17 @@ export default function AttorneyIntakeDashboard({
   // don't have to chase down every call site.
   const debtClassOverride: Record<string, DebtBucketClass> = {};
 
-  // Compliance gate stub — the supervising attorney may edit prefilled issue
-  // answers (incl. debt classification); a non-lawyer reviewer (intake /
-  // legal admin) sees the same surface but with edit controls disabled.
-  // TODO Phase B: replace this stub with the real PlatformRole-derived
-  // viewer role once the AttorneyIntakeDashboard is mounted with an auth-
-  // aware role prop. Today the surface is reachable from a nav entry already
-  // gated to attorney-tier, so we default the gate OPEN; the read-only path
-  // is wired so the non-lawyer entry point becomes a one-line prop flip.
-  const viewerCanEditAttorneyContent = true;
+  // Edit gate — the supervising attorney may edit prefilled issue answers
+  // (incl. debt classification). A non-lawyer reviewer would see the same
+  // surface read-only, but the component already refuses to render above
+  // when `viewerIsLawyer` is false, so this expression is effectively
+  // always true on the live path. Kept as a named flag so future read-only
+  // entry points (e.g. a supervising-attorney "preview as paralegal" mode)
+  // can flip it without restructuring the surface.
+  // TODO Phase B: server-side enforcement via RLS on
+  // attorney_intake_reviews / attorney_case_acceptances so the gate
+  // survives a tampered client.
+  const viewerCanEditAttorneyContent = viewerIsLawyer;
 
   useEffect(() => { loadSubmissions(); fetchGridPrimeRate(); }, []);
 

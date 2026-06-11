@@ -15,7 +15,7 @@ import SuperAdminPortal from './SuperAdminPortal';
 import StaffCommHub from './StaffCommHub';
 import TrusteeDocumentPortal from './TrusteeDocumentPortal';
 import Training from './Training';
-import SuperAdminConsole from './SuperAdminConsole';
+import LawFirmSettings from './LawFirmSettings';
 import LawFirmOwnerPortal from './LawFirmOwnerPortal';
 import LegalAdminPortal from './LegalAdminPortal';
 import AttorneyIntakeDashboard from './AttorneyIntakeDashboard';
@@ -140,13 +140,23 @@ function App() {
   // BAN-40 phase 2 stubs — replace with auth-derived firm role lookup.
   // Role hierarchy: law_firm_owner ⊃ super_admin ⊃ attorney
   //   VITE_FIRM_ROLE='law_firm_owner' → firm owner (sees Law Firm Owner Portal + everything below)
-  //   VITE_FIRM_ROLE='super_admin'    → firm super admin (sees Super Admin Setting Portal + Training)
+  //   VITE_FIRM_ROLE='super_admin'    → firm super admin (sees Law Firm Settings + Training)
   //   VITE_FIRM_ROLE='attorney'       → attorney-tier staff (sees Training)
   // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops testing.
   const firmRole = (import.meta.env.VITE_FIRM_ROLE as string | undefined);
   const isLawFirmOwner   = firmRole === 'law_firm_owner' || isSuperAdmin;
   const isFirmSuperAdmin = firmRole === 'super_admin' || isLawFirmOwner;
   const isAttorneyRole   = firmRole === 'attorney' || isFirmSuperAdmin;
+  // STRICT lawyer gate — the consolidated attorney review (Eligibility /
+  // Issues / All Answers / Decision) is restricted to viewers who hold a bar
+  // number. Includes `attorney`, `law_firm_owner` (the firm's lead attorney),
+  // and the platform-tier bankruptcy.ai super_admin (ops testing). Crucially
+  // EXCLUDES the firm-tier `super_admin` — that role is administrative and
+  // not automatically a lawyer per the firm-role spec.
+  const isLawyerViewer =
+    firmRole === 'attorney'
+    || firmRole === 'law_firm_owner'
+    || isSuperAdmin;
 
   const flags = useFirmFlags(firmId, isSuperAdmin);
 
@@ -352,17 +362,18 @@ function App() {
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 14l9-5-9-5-9 5 9 5zm0 0l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14zm-4 6v-7.5l4-2.222"/></svg>,
     },
     {
-      // #19 — Super Admin Setting Portal. Firm-facing platform adjustments
-      // (firm settings, feature toggles, staff & roles). Visible to firm
-      // super-admin and Law Firm Owner. Distinct from bankruptcy.ai Admin.
-      id: 'firm_super_admin_console', label: '19. Super Admin Setting Portal',
+      // #19 — Law Firm Settings. Firm-facing platform adjustments + per-firm
+      // branding, exemptions/median/standards rule stores, departments.
+      // Visible to firm super-admin and Law Firm Owner. Distinct from
+      // bankruptcy.ai Admin (the platform-operator console).
+      id: 'law_firm_settings', label: '19. Law Firm Settings',
       hidden: !isFirmSuperAdmin,
       activeClass: 'bg-rose-600 text-white shadow-rose-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>,
     },
     {
       // #20 — Law Firm Owner Portal. Owner-tier role. Inherits everything from
-      // Super Admin Setting Portal PLUS owner-only sections (accounting +
+      // Law Firm Settings PLUS owner-only sections (accounting +
       // productivity reporting, feature-grant controls). Hidden unless the
       // viewer is the firm owner.
       id: 'law_firm_owner_portal', label: '20. Law Firm Owner Portal',
@@ -421,7 +432,7 @@ function App() {
     },
     {
       // Productivity top-level nav HIDDEN — now hosted inside the firm-facing
-      // Super Admin Console (src/SuperAdminConsole.tsx) as a feature-toggle
+      // Law Firm Settings (src/LawFirmSettings.tsx) as a feature-toggle
       // subsection. Route + component (SuperAdminPortal) preserved so the
       // embed inside the console keeps working.
       id: 'superadmin', label: 'Productivity', flagKey: 'feature_productivity',
@@ -573,7 +584,17 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><AttorneyIntakeDashboard preselectLeadId={preselectLeadId} onPreselectConsumed={() => setPreselectLeadId(null)} /></div>
+        <div className="pb-24">
+          {/* STRICT lawyer gate — non-lawyer super_admins / legal admins
+              cannot reach the consolidated attorney review even via a stale
+              setView('attorney') call. AttorneyIntakeDashboard re-checks the
+              flag internally as a third layer of defense. */}
+          <AttorneyIntakeDashboard
+            preselectLeadId={preselectLeadId}
+            onPreselectConsumed={() => setPreselectLeadId(null)}
+            viewerIsLawyer={isLawyerViewer}
+          />
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -820,11 +841,11 @@ function App() {
     );
   }
 
-  if (view === 'firm_super_admin_console') {
+  if (view === 'law_firm_settings') {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SuperAdminConsole isFirmSuperAdmin={isFirmSuperAdmin} /></div>
+        <div className="pb-24"><LawFirmSettings isFirmSuperAdmin={isFirmSuperAdmin} isLawFirmOwner={isLawFirmOwner} /></div>
         <PortalToggle />
       </ErrorBoundary>
     );

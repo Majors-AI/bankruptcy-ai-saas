@@ -32,7 +32,14 @@ import UpdateIntakeInfoModal from "./components/intake-review/UpdateIntakeInfoMo
 import StaffSettingsPanel, { type StaffSettingsViewerRole } from "./components/staff-settings/StaffSettingsPanel";
 import DepartmentSettingsPanel, { type DepartmentSettingsViewerRole } from "./components/admin-settings/DepartmentSettingsPanel";
 import { setCurrentAttorneyName, clearCurrentAttorneyName, getCurrentAttorneyName } from "./lib/currentAttorney";
-import { scaleNationalStandards, scaleNationalStandards2025, getRuleNumber, getMedianAnnualIncome as storeGetMedian, getCurrentRulesetVersion, diffRulesetVersions } from "./lib/irsMeansStandards";
+import { scaleNationalStandards2025, getMedianAnnualIncome as storeGetMedian, getCurrentRulesetVersion, diffRulesetVersions } from "./lib/irsMeansStandards";
+import { getEffectiveLivingStandard } from "./components/law-firm-settings/livingStandardsOverlay";
+import { useFirmDmiTriageThreshold, useFirmMinimumDebtThreshold } from "./lib/firmPolicy";
+import {
+  isExcludedFromCMI, sumHouseholdContributionsForCMI,
+  type HouseholdContributor,
+} from "./lib/cmi";
+import { classifyCommitmentPeriod } from "./lib/ch13Commitment";
 
 // V1 TODO BAN-40 phase 2: thread firm_id from auth/firm context. Both pilot
 // firms get the same feature-flag config per Section 6 of the V1 migration,
@@ -201,105 +208,37 @@ const URGENCY_CONFIG: Record<string, { label: string; color: string; bg: string 
   emergency: { label: "Emergency", color: "text-red-400",   bg: "bg-red-500/15" },
 };
 
-// ─── Colorado Means Test Data ─────────────────────────────────────────────────
-// Annual median income by state + household size (2024 Census data for Form 122A-1)
-// CO figures used here; extend as needed for other states
-// Full 50-state + DC median income table — November 1, 2025 (DOJ Form 122A-1 data)
-// Structure: { 1–4: annual for household size 1–4, extra: per additional person above 4 }
-const MEDIAN_INCOME: Record<string, { 1: number; 2: number; 3: number; 4: number; extra: number }> = {
-  "Alabama":        { 1:62672,  2:75465,  3:90321,  4:104003, extra:11100 },
-  "Alaska":         { 1:83617,  2:109882, 3:109882, 4:138492, extra:11100 },
-  "Arizona":        { 1:72039,  2:86745,  3:102274, 4:118067, extra:11100 },
-  "Arkansas":       { 1:56923,  2:71742,  3:80218,  4:94586,  extra:11100 },
-  "California":     { 1:77221,  2:100161, 3:113553, 4:135505, extra:11100 },
-  "Colorado":       { 1:85685,  2:106890, 3:127495, 4:149566, extra:11100 },
-  "Connecticut":    { 1:82141,  2:103501, 3:131022, 4:155834, extra:11100 },
-  "Delaware":       { 1:67733,  2:92445,  3:108420, 4:128854, extra:11100 },
-  "District of Columbia": { 1:93588, 2:120000, 3:140000, 4:165000, extra:11100 },
-  "Florida":        { 1:68085,  2:84385,  3:95039,  4:111819, extra:11100 },
-  "Georgia":        { 1:66722,  2:82787,  3:98877,  4:120315, extra:11100 },
-  "Hawaii":         { 1:83068,  2:103479, 3:120289, 4:138536, extra:11100 },
-  "Idaho":          { 1:71531,  2:83951,  3:95859,  4:116594, extra:11100 },
-  "Illinois":       { 1:71304,  2:91526,  3:110712, 4:134366, extra:11100 },
-  "Indiana":        { 1:62808,  2:79884,  3:93175,  4:112691, extra:11100 },
-  "Iowa":           { 1:65883,  2:86523,  3:101463, 4:122826, extra:11100 },
-  "Kansas":         { 1:67423,  2:85199,  3:101189, 4:122741, extra:11100 },
-  "Kentucky":       { 1:60071,  2:71998,  3:83027,  4:108637, extra:11100 },
-  "Louisiana":      { 1:57923,  2:70493,  3:82433,  4:100971, extra:11100 },
-  "Maine":          { 1:73946,  2:88126,  3:104083, 4:128204, extra:11100 },
-  "Maryland":       { 1:84699,  2:111673, 3:132464, 4:161913, extra:11100 },
-  "Massachusetts":  { 1:85941,  2:109818, 3:135837, 4:173947, extra:11100 },
-  "Michigan":       { 1:65625,  2:81293,  3:100797, 4:134254, extra:11100 },
-  "Minnesota":      { 1:75704,  2:95807,  3:123244, 4:146039, extra:11100 },
-  "Mississippi":    { 1:52594,  2:68525,  3:80722,  4:94965,  extra:11100 },
-  "Missouri":       { 1:63306,  2:79971,  3:97658,  4:115491, extra:11100 },
-  "Montana":        { 1:69482,  2:88107,  3:100637, 4:118578, extra:11100 },
-  "Nebraska":       { 1:65206,  2:88402,  3:100754, 4:121867, extra:11100 },
-  "Nevada":         { 1:65868,  2:85860,  3:99032,  4:111184, extra:11100 },
-  "New Hampshire":  { 1:85049,  2:106521, 3:137902, 4:151224, extra:11100 },
-  "New Jersey":     { 1:84938,  2:104138, 3:133620, 4:163817, extra:11100 },
-  "New Mexico":     { 1:64537,  2:77534,  3:85784,  4:96074,  extra:11100 },
-  "New York":       { 1:71393,  2:90520,  3:112616, 4:135475, extra:11100 },
-  "North Carolina": { 1:65396,  2:82221,  3:98932,  4:113744, extra:11100 },
-  "North Dakota":   { 1:71683,  2:93882,  3:103951, 4:134254, extra:11100 },
-  "Ohio":           { 1:64541,  2:81578,  3:99876,  4:120531, extra:11100 },
-  "Oklahoma":       { 1:59611,  2:75229,  3:84618,  4:99188,  extra:11100 },
-  "Oregon":         { 1:77061,  2:91268,  3:113736, 4:136434, extra:11100 },
-  "Pennsylvania":   { 1:70378,  2:85290,  3:107327, 4:132379, extra:11100 },
-  "Rhode Island":   { 1:75662,  2:96205,  3:116357, 4:133954, extra:11100 },
-  "South Carolina": { 1:63140,  2:81614,  3:93219,  4:113332, extra:11100 },
-  "South Dakota":   { 1:67415,  2:87598,  3:88297,  4:127386, extra:11100 },
-  "Tennessee":      { 1:62339,  2:80722,  3:95011,  4:106775, extra:11100 },
-  "Texas":          { 1:65123,  2:84491,  3:96728,  4:114938, extra:11100 },
-  "Utah":           { 1:85644,  2:93302,  3:109860, 4:128363, extra:11100 },
-  "Vermont":        { 1:70603,  2:94477,  3:111150, 4:134056, extra:11100 },
-  "Virginia":       { 1:76479,  2:98577,  3:120001, 4:141113, extra:11100 },
-  "Washington":     { 1:86314,  2:104354, 3:128369, 4:152553, extra:11100 },
-  "West Virginia":  { 1:62270,  2:66833,  3:89690,  4:91270,  extra:11100 },
-  "Wisconsin":      { 1:69343,  2:87938,  3:105734, 4:129964, extra:11100 },
-  "Wyoming":        { 1:69906,  2:88156,  3:95951,  4:107469, extra:11100 },
-};
-
+// Means-test median income — reads LIVE from the centralized legal-reference
+// store (src/lib/irsMeansStandards.ts → MEDIAN_INCOME_BY_STATE). The old
+// hardcoded MEDIAN_INCOME fallback table was removed; the store covers all
+// 50 states + DC + territories from the 4/1/2026 UST table and applies the
+// per-person add-on for households > 4. Editing the median page propagates
+// here automatically because every call goes through storeGetMedian().
 function stateMedian(state: string, houseSize: number): number {
-  // Prefer the centralized store's median table so attorney edits in
-  // LegalReferenceStore propagate here. Falls back to the local copy
-  // only if the store doesn't recognize the state.
-  const fromStore = storeGetMedian(state, houseSize);
-  if (fromStore != null) return fromStore;
-  const t = MEDIAN_INCOME[state];
-  if (!t) {
-    // Unknown state — use national approximation as fallback
-    const fallback: Record<number, number> = { 1:66000, 2:84000, 3:99000, 4:118000 };
-    const size = Math.min(houseSize, 4);
-    const base = fallback[size] ?? fallback[4];
-    return base + (houseSize > 4 ? (houseSize - 4) * 11100 : 0);
-  }
-  return houseSize <= 4
-    ? (t[houseSize as 1|2|3|4] || t[4])
-    : t[4] + (houseSize - 4) * t.extra;
+  // Single source of truth. Returns 0 when the state isn't loaded — callers
+  // should treat 0 as "median not loaded" and surface the verification flag
+  // rather than silently using a stale fallback.
+  return storeGetMedian(state, houseSize) ?? 0;
 }
 
-// Income source types excluded from CMI per 11 U.S.C. § 101(10A) and Form 122A-1.
-// Social Security (all types) and VA benefits are not "current monthly income."
-const CMI_EXCLUDED_SOURCE_TYPES = new Set([
-  // ClientIntakeForm.tsx full-string labels
-  "Social Security – Retirement",
-  "Social Security – Disability (SSDI)",
-  "Supplemental Security Income (SSI)",
-  "VA Benefits",
-  // Dependent income short codes (ClientIntakeForm.tsx)
-  "social_security",
-  "ssdi",
-  "ssi",
-  "va_benefits",
-]);
+// CMI excluded sources + helpers — now consumed from the centralized
+// src/lib/cmi.ts module so every CMI-consuming surface (LegalAdminPortal,
+// AttorneyIntakeDashboard) reads the same SS-exclusion list. SS is
+// statutorily excluded; this is enforced, NOT a firm setting. SS still
+// appears on Schedule I (current-monthly-income-at-filing snapshot) —
+// the exclusion applies only to CMI / means-test / over-median checks.
+// (See src/lib/cmi.ts header for the full contract.)
 
 // Compute current monthly income per Form 122A-1 (6-month lookback ÷ 6).
-// Excludes SS and VA benefits as required by statute.
-// For individual filers with a non-filing spouse (filing_type = "individual-nonfiling-spouse"),
-// NFS income (owner: "nfs") is INCLUDED per 11 U.S.C. § 101(10A). A marital adjustment
-// deduction for NFS expenses not benefiting the household is applied separately by the attorney
-// on Form 122A-1 Part 2 — that adjustment is NOT reflected in this CMI figure.
+// Excludes SS and VA benefits as required by statute via isExcludedFromCMI().
+// Includes regular household-member contributions per § 101(10A)(B); SS-
+// sourced contributions are excluded via the shared SS-exclusion logic.
+//
+// For individual filers with a non-filing spouse (filing_type =
+// "individual-nonfiling-spouse"), NFS income (owner: "nfs") is INCLUDED
+// per § 101(10A). The marital adjustment deduction for NFS expenses not
+// benefiting the household is applied separately at the Signing Review
+// attorney surface (Form 122A-1 line 17a) — see MaritalAdjustmentPanel.
 function computeCMI(sub: Record<string, unknown>): number {
   const sources = (sub.income_sources_json as {
     grossPerPeriod?: number | string;
@@ -309,13 +248,9 @@ function computeCMI(sub: Record<string, unknown>): number {
   }[] | null) ?? [];
   let monthly = 0;
   for (const s of sources) {
-    // Skip SS / VA — excluded from CMI per Form 122A-1
-    if (s.sourceType && CMI_EXCLUDED_SOURCE_TYPES.has(s.sourceType)) continue;
-    // NFS income (owner: "nfs") is included per § 101(10A) for married individual filers.
-    // Debtor (owner: "debtor") and joint co-debtor (owner: "spouse") income are always included.
-    // Records without owner field (older submissions, BankruptcyIntake.jsx) are included by default.
+    // Skip SS / VA — excluded from CMI per Form 122A-1 (centralized in cmi.ts).
+    if (isExcludedFromCMI(s.sourceType)) continue;
     const gp = Number(s.grossPerPeriod ?? 0);
-    // Normalize frequency to lowercase-hyphenated for consistent matching
     const freq = (s.payFrequency ?? "").toLowerCase().replace(/[\s/]+/g, "-");
     switch (freq) {
       case "weekly":        monthly += gp * 4.333; break;
@@ -329,6 +264,15 @@ function computeCMI(sub: Record<string, unknown>): number {
   }
   // Fallback to legacy debtor_gross_monthly if no income_sources_json stored
   if (monthly === 0) monthly = Number(sub.debtor_gross_monthly ?? 0);
+
+  // § 101(10A)(B) — regular household-member contributions toward the
+  // debtor's household expenses count toward CMI as the contribution
+  // amount. SS-sourced contributions are dropped by
+  // sumHouseholdContributionsForCMI per Part B spec.
+  const dependents = (sub.dependents_json as HouseholdContributor[] | null) ?? [];
+  const contribCMI = sumHouseholdContributionsForCMI(dependents);
+  monthly += contribCMI;
+
   return Math.round(monthly * 100) / 100;
 }
 
@@ -401,6 +345,13 @@ interface IntakeReview {
   // enum column (intake_leads or attorney_intake_reviews). Today derived
   // from review_status + decided_at heuristic in deriveCaseLifecycle().
   case_status?: 'reviewed_pending_signing' | 'filed' | 'closed' | string | null;
+  // Per-case attorney override on the firm DMI triage flag. Attorney-only
+  // edit; audit-logged via the existing saveReviewFields path. Toggling
+  // ON proceeds under Ch.7 despite the triage flag; the warning and the
+  // seeded Issue STAY visible by design — the override does not erase
+  // the screen, it just records the attorney's call. TODO Phase B —
+  // add `attorney_override_dmi_triage boolean` column.
+  attorney_override_dmi_triage?: boolean | null;
 }
 
 interface IntakeIssue {
@@ -458,6 +409,20 @@ function IntakeAttorneyReviewModal({
   const [showAddIssue, setShowAddIssue] = useState(false);
 
   // ── Computed eligibility from submission ──
+  //
+  // FIRM DMI TRIAGE SCREEN (NOT the statutory § 707(b)(2) presumption).
+  // This is the firm-policy screen that routes intake between Ch.7 and
+  // Ch.13 attorney review. The threshold is firm-set (default $500/mo)
+  // and adjusted in Law Firm Settings → Firm Policy. The statutory
+  // means-test two-bracket presumption + IRS-allowable long-form
+  // deductions are a SEPARATE evaluation (the #6/#7 build).
+  //
+  // Income side: CMI per Form 122A-1 (6-mo lookback ÷ 6). NOTE — what we
+  // really want for triage is the Schedule J net (Schedule I current
+  // monthly income at filing − Schedule J expenses). Schedule I (current
+  // at filing) is NOT computed in the codebase yet — see Part C gap
+  // report in PROMPT 5. We use CMI − actual expenses as the interim
+  // disposable-income proxy.
   const cmi = submission ? computeCMI(submission) : (lead.income_estimate ?? 0);
   const houseSize = submission ? computeHouseholdSize(submission) : 1 + (Number(submission?.num_dependents ?? 0));
   const medianAnnual = stateMedian(lead.state ?? "CO", houseSize);
@@ -465,12 +430,35 @@ function IntakeAttorneyReviewModal({
   const aboveMedian = cmi > medianMonthly;
   const totalExpenses = submission ? computeTotalExpenses(submission) : 0;
   const disposableIncome = cmi - totalExpenses;
+  const firmDmiThreshold = useFirmDmiTriageThreshold();
+  const firmMinDebt = useFirmMinimumDebtThreshold();
+  // Triage routing: ≤ threshold → Ch.7 path; > threshold → Ch.13 review
+  // path. Non-blocking — both chapters stay available; the warning + the
+  // seeded Issue surface the recommended path, and the attorney decides.
+  const overFirmDmiThreshold = disposableIncome > firmDmiThreshold;
+  // Total debt for the firm-minimum-debt check (Part B). Same composition
+  // as the existing Est. Total Debt display sites in this file.
+  const totalDebt = submission
+    ? (Number(submission.credit_card_debt ?? 0)
+       + Number(submission.medical_debt ?? 0)
+       + Number(submission.secured_debt ?? 0)
+       + Number(submission.personal_loan_debt ?? 0)
+       + Number(submission.other_unsecured ?? 0))
+    : (Number(lead.debt_estimate ?? 0));
+  const belowFirmMinDebt = totalDebt > 0 && totalDebt < firmMinDebt;
+  // Both chapters remain available; the screen never blocks acceptance.
+  const ch7Eligible = true;
+  const ch13Eligible = true;
+  // Downstream `meansTestResult` consumers (DB write, decision badge,
+  // qualify-target callout) still receive the same "pass" | "borderline" |
+  // "fail" enum so we don't churn the database column and the existing UI.
+  // The enum is now derived from the FIRM TRIAGE screen — copy elsewhere
+  // is relabeled as firm intake-triage, NOT § 707(b)(2) statutory
+  // presumption.
   const meansTestResult: "pass" | "fail" | "borderline" =
     !aboveMedian ? "pass"
-    : disposableIncome > 214 ? "fail"
+    : overFirmDmiThreshold ? "fail"
     : "borderline";
-  const ch7Eligible = meansTestResult !== "fail";
-  const ch13Eligible = true; // always available
 
   // Income-to-qualify projection (if borderline/fail — what they need to avg)
   const qualifyTargetMonthly = medianMonthly * 0.98; // slight margin below median
@@ -579,17 +567,44 @@ function IntakeAttorneyReviewModal({
     const toInsert: Partial<IntakeIssue>[] = [];
     let order = 0;
 
-    if (meansTestResult === "fail") {
-      toInsert.push({
-        review_id: reviewId, category: "income", severity: "error", sort_order: order++,
-        title: "Income Exceeds State Median — Chapter 7 Means Test Fails",
-        description: `Client's current monthly income of ${fmt(cmi)} exceeds the ${lead.state ?? "CO"} ${houseSize}-person median of ${fmt(medianMonthly)}/mo ($${(medianAnnual / 1000).toFixed(0)}k/yr). Disposable income after expenses is approximately ${fmt(disposableIncome)}/mo, which exceeds the $214/mo Chapter 7 threshold.`,
-      });
-    } else if (meansTestResult === "borderline") {
+    // ── Firm minimum-debt threshold Issue (Part B) ──
+    //
+    // Fires when the case's total debt falls below the firm-policy
+    // minimum. Non-blocking — the firm can still accept; the warning +
+    // Issue persist so the attorney addresses it on review. Reuses the
+    // Part E attorney-review Issue pattern.
+    if (belowFirmMinDebt) {
       toInsert.push({
         review_id: reviewId, category: "income", severity: "warning", sort_order: order++,
-        title: "Income Borderline — Means Test Analysis Required",
-        description: `Client's CMI of ${fmt(cmi)}/mo is ${aboveMedian ? "above" : "below"} the ${lead.state ?? "CO"} ${houseSize}-person median of ${fmt(medianMonthly)}/mo. Detailed expense analysis needed to confirm Chapter 7 eligibility.`,
+        title: `Total debt ${fmt(totalDebt)} below firm minimum ${fmt(firmMinDebt)} — review case acceptance`,
+        description:
+          `Total debt of approximately ${fmt(totalDebt)} is below the firm's case-acceptance ` +
+          `minimum of ${fmt(firmMinDebt)}. This is a firm-policy threshold, not a statutory ` +
+          `bar — the case is still acceptable. Confirm with the attorney whether the case ` +
+          `warrants firm representation at this debt level (or consider a referral / brief- ` +
+          `service alternative). Adjust the threshold in Law Firm Settings → Firm Policy.`,
+      });
+    }
+
+    // ── Firm DMI triage Issue (NOT § 707(b)(2) statutory presumption) ──
+    //
+    // Fires when the case's positive monthly disposable income exceeds the
+    // firm-set threshold (default $500/mo, configurable in Law Firm
+    // Settings → Firm Policy). Routes the case to Ch.13 attorney-review.
+    // Non-blocking: the case is still accepted; the Issue and the warning
+    // STAY even if the attorney toggles the per-case override.
+    if (overFirmDmiThreshold) {
+      toInsert.push({
+        review_id: reviewId, category: "income", severity: "warning", sort_order: order++,
+        title: `Positive disposable income more than $${firmDmiThreshold.toLocaleString()}`,
+        description:
+          `Disposable income ≈ ${fmt(disposableIncome)}/mo exceeds the firm's intake-triage ` +
+          `threshold of $${firmDmiThreshold.toLocaleString()}/mo — routing to Chapter 13 ` +
+          `attorney-review. This is the firm's intake screen, NOT the statutory § 707(b)(2) ` +
+          `means-test presumption; the formal two-bracket presumption (with IRS allowable ` +
+          `long-form deductions on Form 122A-2 / 122C-2) is a separate evaluation. ` +
+          `CMI ${fmt(cmi)} vs ${lead.state ?? "CO"} ${houseSize}-person median ${fmt(medianMonthly)}/mo. ` +
+          `The case remains acceptable; the attorney decides whether to proceed under Ch.13 or override.`,
       });
     }
 
@@ -911,31 +926,43 @@ function IntakeAttorneyReviewModal({
         const actualMisc = num(fd.expMisc);
         const actualTotal = actualFood + actualHousekeeping + actualApparel + actualPersonalCare + actualMisc;
 
-        // Prefer the centralized 2025 store values so attorney edits to
-        // the National Standards in LegalReferenceStore propagate here.
-        // Fall back to the legacy table when the store has nulls.
+        // Read the EFFECTIVE National Standards for this household size:
+        // canonical (from scaleNationalStandards2025) layered with the
+        // firm overlay (set in Law Firm Settings → Living Standards by an
+        // attorney supervisor/owner). The static reader works across
+        // provider trees, so an overlay set in LawFirmSettings flows into
+        // this means-test substitution in LegalAdminPortal.
+        //
+        // The stale May-2024 `scaleNationalStandards` legacy fallback was
+        // removed — null cells from the 2025 publication (e.g.
+        // outOfPocketHealth) stay null and the line drops out of the
+        // standard total rather than being filled with stale numbers.
         const ns2025 = scaleNationalStandards2025(houseSize);
-        const nsLegacy = scaleNationalStandards(houseSize);
-        const pickN = (a: number | null, b: number) => (a != null ? a : b);
+        const sizeKey = houseSize <= 4 ? houseSize : -1;
+        const effectiveStd = (field: keyof typeof ns2025, canonical: number | null): number => {
+          const path = `living_standards.national.${field}.size${sizeKey}`;
+          return getEffectiveLivingStandard(path, canonical) ?? 0;
+        };
         const ns = {
-          food:                  pickN(ns2025.food,                 nsLegacy.food),
-          housekeepingSupplies:  pickN(ns2025.housekeepingSupplies, nsLegacy.housekeepingSupplies),
-          apparelServices:       pickN(ns2025.apparelServices,      nsLegacy.apparelServices),
-          personalCare:          pickN(ns2025.personalCare,         nsLegacy.personalCare),
-          miscellaneous:         pickN(ns2025.miscellaneous,        nsLegacy.miscellaneous),
+          food:                  effectiveStd("food",                 ns2025.food),
+          housekeepingSupplies:  effectiveStd("housekeepingSupplies", ns2025.housekeepingSupplies),
+          apparelServices:       effectiveStd("apparelServices",      ns2025.apparelServices),
+          personalCare:          effectiveStd("personalCare",         ns2025.personalCare),
+          miscellaneous:         effectiveStd("miscellaneous",        ns2025.miscellaneous),
         };
         const standardTotal = ns.food + ns.housekeepingSupplies + ns.apparelServices + ns.personalCare + ns.miscellaneous;
 
         const overage = actualTotal - standardTotal;
         if (overage > 0) {
           // Disposable income IF we substitute the IRS standard for the
-          // five categories. That's currentDMI + overage. The $500/mo
-          // ceiling reads from the centralized rules store so editing the
-          // means_test_707b parameters in the Legal Reference panel
-          // propagates here. Falls back to 500 when the store hasn't been
-          // configured.
+          // five National-Standards categories. That's currentDMI + overage.
+          // We compare against the FIRM DMI TRIAGE THRESHOLD (firm-policy,
+          // not statutory) — the same cutoff that routes the intake screen
+          // between Ch.7 and Ch.13. The hardcoded $500 "means_test_707b"
+          // fallback was removed (Part E #5); the threshold now reads from
+          // Law Firm Settings → Firm Policy.
           const projectedDMI = disposableIncome + overage;
-          const meansTestCeiling = getRuleNumber("means_test_707b", "monthlyDmiUpperBound", 500);
+          const meansTestCeiling = firmDmiThreshold;
           const flipsMeansTest = projectedDMI > meansTestCeiling;
           const lines: string[] = [];
           if (actualFood > ns.food) lines.push(`Food: actual ${fmt(actualFood)} vs IRS ${fmt(ns.food)} (+${fmt(actualFood - ns.food)})`);
@@ -946,17 +973,17 @@ function IntakeAttorneyReviewModal({
           toInsert.push({
             review_id: reviewId,
             category: "expenses",
-            severity: flipsMeansTest ? "error" : "warning",
+            severity: flipsMeansTest ? "warning" : "warning",
             sort_order: order++,
             title: flipsMeansTest
-              ? `Expenses Over IRS Standard — Means Test At Risk (substituted DMI ${fmt(projectedDMI)}/mo)`
+              ? `Expenses Over IRS Standard — Triage At Risk (substituted DMI ${fmt(projectedDMI)}/mo)`
               : `Expenses Over IRS Standard — Review (overage ${fmt(overage)}/mo)`,
             description:
               `Client's actual spending in IRS National-Standards categories exceeds the standard by ${fmt(overage)}/mo. ${lines.join(" · ")}. ` +
               `If the trustee allows only the IRS standard, projected disposable income would be ${fmt(projectedDMI)}/mo` +
               (flipsMeansTest
-                ? ` — over the $500/mo threshold. This may force a Ch.13 plan even if Ch.7 looks viable on actual numbers. Confirm the overage is reasonable and documented, or counsel the client on reducing the overage before filing.`
-                : `. Under the $500/mo threshold, but worth confirming the overage is reasonable and documented.`),
+                ? ` — over the firm's $${firmDmiThreshold.toLocaleString()}/mo intake-triage threshold. This is the firm screen (NOT § 707(b)(2) statutory presumption); the substituted DMI may route the case to Ch.13 review even when actual numbers point to Ch.7. Confirm the overage is reasonable and documented, or counsel the client on reducing the overage before filing.`
+                : `. Under the firm's $${firmDmiThreshold.toLocaleString()}/mo intake-triage threshold, but worth confirming the overage is reasonable and documented.`),
           });
         }
       }
@@ -1578,18 +1605,69 @@ function IntakeAttorneyReviewModal({
               {/* Summary stats */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
-                  { label: "Current Monthly Income", val: fmt(cmi), sub: "CMI per Form 122A-1" },
+                  { label: "Current Monthly Income", val: fmt(cmi), sub: "CMI per Form 122A-1 (interim — Sched. I gap)" },
                   { label: `${lead.state ?? "CO"} Median (${houseSize}-person)`, val: fmt(medianMonthly)+"/mo", sub: fmt(medianAnnual)+"/yr" },
                   { label: "Monthly Expenses", val: fmt(totalExpenses), sub: "Reported by client" },
-                  { label: "Disposable Income", val: fmt(disposableIncome), sub: "After expenses" },
+                  { label: "Disposable Income", val: fmt(disposableIncome), sub: `Firm triage threshold $${firmDmiThreshold.toLocaleString()}/mo` },
                 ].map(s => (
                   <div key={s.label} className="bg-slate-800/40 rounded-xl p-3 text-center">
                     <p className="text-[9px] text-slate-500 leading-tight mb-1">{s.label}</p>
-                    <p className={`text-sm font-bold ${s.label.includes("Disposable") && disposableIncome > 214 ? "text-red-400" : "text-white"}`}>{s.val}</p>
+                    <p className={`text-sm font-bold ${s.label.includes("Disposable") && overFirmDmiThreshold ? "text-amber-300" : "text-white"}`}>{s.val}</p>
                     <p className="text-[9px] text-slate-600 mt-0.5">{s.sub}</p>
                   </div>
                 ))}
               </div>
+
+              {/* Firm DMI triage warning — non-blocking. Stays visible
+                  even when the per-case attorney override is toggled. */}
+              {overFirmDmiThreshold && (
+                <div className="rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-amber-200">
+                        Positive disposable income more than ${firmDmiThreshold.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-amber-200/80 mt-1 leading-relaxed">
+                        DMI ≈ <strong>{fmt(disposableIncome)}/mo</strong> exceeds the firm&apos;s
+                        intake-triage threshold of <strong>${firmDmiThreshold.toLocaleString()}/mo</strong> —
+                        routing to <strong>Chapter 13</strong> attorney-review. The case is still
+                        acceptable; the attorney decides whether to proceed under Ch.13 or apply
+                        the per-case override.
+                      </p>
+                      <p className="text-[10px] text-amber-200/60 italic mt-2">
+                        Firm intake triage, NOT § 707(b)(2) statutory presumption. The formal
+                        presumption (two-bracket; IRS allowable long-form deductions) is a separate
+                        evaluation. Adjust the firm threshold in Law Firm Settings → Firm Policy.
+                      </p>
+
+                      {/* Per-case attorney override — toggles routing but does
+                          NOT clear this warning or the seeded Issue. Audit-logged
+                          via the existing review-edit path (saveReviewFields).
+                          The modal mount is already lawyer-gated upstream via
+                          LeadDetailPanel.canOpenAttorneyReview, so no extra
+                          isAtty check needed here. */}
+                      <label className="mt-3 inline-flex items-center gap-2 text-[11px] text-amber-200 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={!!review?.attorney_override_dmi_triage}
+                          onChange={async (e) => {
+                            const next = e.target.checked;
+                            await saveReviewFields({ attorney_override_dmi_triage: next });
+                          }}
+                          className="rounded border-amber-500/50"
+                        />
+                        <span>
+                          Attorney override — proceed under Ch.7 despite firm triage flag
+                          {review?.attorney_override_dmi_triage && (
+                            <span className="ml-1 text-amber-300 font-semibold">(audit-logged)</span>
+                          )}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Chapter 7 eligibility card */}
               <div className={`rounded-2xl border p-4 ${ch7Eligible ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/25"}`}>
@@ -1648,6 +1726,39 @@ function IntakeAttorneyReviewModal({
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400">ELIGIBLE</span>
                 </div>
+
+                {/* § 1325(b)(4) applicable commitment period — emit-only,
+                    derived from CMI vs state median (by household size).
+                    Display only; no statutory math altered. */}
+                {(() => {
+                  const cmt = classifyCommitmentPeriod({ cmiMonthly: cmi, medianAnnual });
+                  return (
+                    <div className="mt-3 rounded-xl border border-sky-500/20 bg-sky-950/30 p-2.5">
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-[11px] font-bold text-sky-300">
+                          Applicable commitment period · {cmt.period.months}-month
+                          {cmt.period.basis === "below_median_minimum" && (
+                            <span className="text-[10px] text-sky-400/80 font-normal"> (60-month always electable)</span>
+                          )}
+                        </p>
+                        <span className={`text-[9px] uppercase tracking-widest font-bold px-1.5 py-0.5 rounded border ${
+                          cmt.aboveMedian
+                            ? "border-amber-500/40 bg-amber-500/10 text-amber-300"
+                            : "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                        }`}>
+                          {cmt.aboveMedian ? "Above median" : "Below median"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 leading-relaxed mt-1">{cmt.period.description}</p>
+                      <p className="text-[9px] text-slate-600 italic mt-1">
+                        § 1325(b)(1)(A): a plan that pays 100% of allowed unsecured claims satisfies the
+                        all-DMI-devotion requirement; surplus income is permitted. Many districts allow a 100% plan
+                        to complete in fewer than {cmt.period.months} months — confirm local rules + trustee
+                        position before assuming a shorter term.
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="mt-2 grid grid-cols-3 gap-2">
                   {[
                     { label: "Est. Unsecured Debt", val: fmt((Number(submission?.credit_card_debt ?? 0) + Number(submission?.medical_debt ?? 0) + Number(submission?.other_unsecured ?? 0))) },
@@ -3389,8 +3500,10 @@ function LeadDetailPanel({
           };
         }
 
-        // Stage 5 — Pending attorney review (attorney sees this)
-        else if (lead.status === "sent_for_attorney_review" && canReview) {
+        // Stage 5 — Pending attorney review. LAWYER-ONLY: the CTA opens the
+        // consolidated attorney review modal, so non-lawyer super_admins are
+        // explicitly excluded (canOpenAttorneyReview, not canReview).
+        else if (lead.status === "sent_for_attorney_review" && canOpenAttorneyReview) {
           stage = {
             icon: <Scale className="w-5 h-5 text-amber-300" />,
             title: "Your Review Needed — Accept or Decline",
@@ -3568,12 +3681,17 @@ function LeadDetailPanel({
           {acceptance.decision_notes && (
             <p className="text-xs text-slate-400 leading-relaxed">{acceptance.decision_notes}</p>
           )}
-          <button
-            onClick={() => setShowAcceptanceModal(true)}
-            className="mt-3 text-xs font-semibold text-slate-400 hover:text-white transition-colors flex items-center gap-1"
-          >
-            <Edit3 className="w-3 h-3" /> Edit Decision
-          </button>
+          {/* Edit Decision re-opens the consolidated attorney review modal —
+              lawyer-only. Non-lawyer super_admins see the recorded decision
+              read-only without the edit affordance. */}
+          {canOpenAttorneyReview && (
+            <button
+              onClick={() => setShowAcceptanceModal(true)}
+              className="mt-3 text-xs font-semibold text-slate-400 hover:text-white transition-colors flex items-center gap-1"
+            >
+              <Edit3 className="w-3 h-3" /> Edit Decision
+            </button>
+          )}
         </div>
       )}
 
@@ -4110,15 +4228,25 @@ const ROLE_CONFIG: Record<PortalRole, {
   },
 };
 
-function isAttorney(role: PortalRole) {
+// Lawyer / super-admin gates — single source of truth for the intake portal.
+// isLawyer is the AUTHORITATIVE gate for the Attorney Review surface; both
+// `attorney` and `attorney_super_admin` carry a bar number. A plain
+// `super_admin` / superuser is NOT automatically a lawyer — they're an
+// admin tier without a bar number and must NOT see the attorney review.
+//
+// `isLegalAdmin` is the legal-admin tier check (non-lawyer paralegal-tier).
+export function isLawyer(role: PortalRole) {
   return role === "attorney" || role === "attorney_super_admin";
 }
-function isSuperAdminRole(role: PortalRole) {
+export function isSuperAdminRole(role: PortalRole) {
   return role === "attorney_super_admin" || role === "super_admin";
 }
 function isLegalAdmin(role: PortalRole) {
   return role === "legal_admin";
 }
+// Back-compat shim: internal callsites used isAttorney() identically — alias
+// to the canonical isLawyer() so the lawyer gate has one source.
+const isAttorney = isLawyer;
 // ─── Staff Settings viewer-role stub ────────────────────────────────────────
 // Determines whether a viewer reaches the Staff Settings surface via the
 // MyScheduleTab entry point (the supervisor-gated link added in the dashboard
@@ -4160,16 +4288,11 @@ function deriveStaffSettingsViewer(
   return { role: 'none' };
 }
 
-// Lawyer-only gate for the Attorney Review surface.
-// `attorney_super_admin` IS still an attorney (the super admin who holds a
-// bar number). Plain `super_admin` / superuser status does NOT make someone
-// a lawyer — non-lawyer superusers must never see or open the Attorney
-// Review button. This is enforced in the UI today; server-side gating lands
-// when Supabase auth is wired (TODO Phase B: re-check via RLS on the
-// attorney_intake_reviews / attorney_case_acceptances tables).
-function isLawyer(role: PortalRole) {
-  return role === "attorney" || role === "attorney_super_admin";
-}
+// isLawyer is defined once above (next to isAttorney + isSuperAdminRole) and
+// exported as the single source of truth for the lawyer gate on the
+// Attorney Review surface. Server-side gating lands when Supabase auth is
+// wired (TODO Phase B: re-check via RLS on the attorney_intake_reviews /
+// attorney_case_acceptances tables).
 
 // ─── Login Screen ─────────────────────────────────────────────────────────────
 
@@ -9232,7 +9355,16 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 }
               }} />
             : <FollowUpQueue leads={leads} currentSessionId={session.id} onSelect={l => {
-                if (l.status === 'sent_for_attorney_review' && l.submission_id && onOpenAttorneyReview) {
+                // LAWYER-GATED: routing to AttorneyIntakeDashboard would
+                // surface the consolidated attorney review to a non-lawyer.
+                // Non-lawyers always fall back to LeadDetailPanel (which
+                // itself gates the modal mount on isLawyer).
+                if (
+                  l.status === 'sent_for_attorney_review'
+                  && l.submission_id
+                  && onOpenAttorneyReview
+                  && isLawyer(role)
+                ) {
                   onOpenAttorneyReview(l.id);
                 } else {
                   requestOpenLead(l);
