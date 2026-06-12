@@ -4,9 +4,12 @@ import DepartmentPortalLogin, {
   classifyAccountingStaff,
   type DepartmentPortalSession,
 } from "./components/department-portal/DepartmentPortalLogin";
-import DepartmentTaskBoard, {
-  ACCOUNTING_TASK_STUBS,
-} from "./components/department-portal/DepartmentTaskBoard";
+// Slice 2 (Prompt 55) — Accounting Department Dashboard. Mounts the
+// shared department-dashboard shell on the "tasks" tab; replaces the
+// earlier DepartmentTaskBoard stub. ACCOUNTING_TASK_STUBS + the stub
+// board live in src/components/department-portal/DepartmentTaskBoard.tsx
+// and are no longer imported here (Slice 3 supplies a real task pool).
+import AccountingDashboard from "./components/accounting/AccountingDashboard";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -10729,6 +10732,12 @@ export default function AccountingPortal() {
   const [cancelTasks, setCancelTasks] = useState<CancelRequestTask[]>([]);
   const [disengagementNotices, setDisengagementNotices] = useState<DisengagementNotice[]>([]);
   const [batchRequests, setBatchRequests] = useState<BatchTransferRequest[]>([]);
+  // Slice 5 (Prompt 58) — IOLTA balance log hoisted to the AccountingPortal
+  // mount level so the Trust Snapshot bubble + the RED IOLTA-discrepancy
+  // task tier can read it. TrustTransferHub still loads its own filtered
+  // window separately (200-row limit) — that read stays unchanged. This
+  // mount-level load is a single new fetch, not a duplicate.
+  const [ioltaBalanceLog, setIoltaBalanceLog] = useState<IoltaBalanceLog[]>([]);
   const [holdRequests, setHoldRequests] = useState<HoldRequest[]>([]);
   const [timeLog, setTimeLog] = useState<TimeLogEntry[]>([]);
   const [firmStaff, setFirmStaff] = useState<FirmStaff[]>([]);
@@ -10743,7 +10752,7 @@ export default function AccountingPortal() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [c, f, p, s, ta, tr, nt, fr, so, ma, ae, pr, cr, br, hr, tl, st, am, sm, la, ct, dn] = await Promise.all([
+    const [c, f, p, s, ta, tr, nt, fr, so, ma, ae, pr, cr, br, hr, tl, st, am, sm, la, ct, dn, ibl] = await Promise.all([
       api.get("accounting_clients?order=created_at.desc"),
       api.get("accounting_fee_structures"),
       api.get("accounting_payments?order=payment_date.desc"),
@@ -10766,6 +10775,10 @@ export default function AccountingPortal() {
       api.get("client_lifecycle_alerts?order=triggered_at.desc"),
       api.get("cancel_request_tasks?order=created_at.desc"),
       api.get("disengagement_notices?order=created_at.desc"),
+      // Slice 5 (Prompt 58) — IOLTA balance log for the Trust Snapshot
+      // bubble + RED IOLTA discrepancy detection. trust_account_id is
+      // the join key against accounting_trust_accounts.id.
+      api.get("accounting_iolta_balance_log?order=recorded_at.desc&limit=500"),
     ]);
     setClients(c ?? []);
     setFeeStructures(f ?? []);
@@ -10789,6 +10802,7 @@ export default function AccountingPortal() {
     setLifecycleAlerts((la as LifecycleAlert[]) ?? []);
     setCancelTasks((ct as CancelRequestTask[]) ?? []);
     setDisengagementNotices((dn as DisengagementNotice[]) ?? []);
+    setIoltaBalanceLog((ibl as IoltaBalanceLog[]) ?? []);
     setLoading(false);
   }, []);
 
@@ -10944,14 +10958,27 @@ export default function AccountingPortal() {
           </div>
         </div>
       ) : tab === "tasks" ? (
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-3xl mx-auto">
-            <DepartmentTaskBoard
-              session={session}
-              tasksByUserType={ACCOUNTING_TASK_STUBS}
-              accent="#B91C1C"
-            />
-          </div>
+        <div className="flex-1 overflow-auto">
+          {/* Slice 2 (Prompt 55) — Accounting Department Dashboard mounted
+              from the shared department-dashboard shell. Slice 3 (Prompt 56)
+              wires the LEFT widget against the same arrays AccountingPortal
+              already loads at mount; no duplicate fetches. */}
+          <AccountingDashboard
+            session={session}
+            paymentRetries={paymentRetries}
+            lifecycleAlerts={lifecycleAlerts}
+            cancelRequests={cancelRequests}
+            filedRegistry={filedRegistry}
+            batchRequests={batchRequests}
+            scheduleEntries={scheduleEntries}
+            cancelTasks={cancelTasks}
+            clients={clients}
+            // Slice 5 (Prompt 58) — TOP bubble inputs.
+            trustAccounts={trustAccounts}
+            ioltaBalanceLog={ioltaBalanceLog}
+            payments={payments}
+            autopayEnrollments={autopayEnrollments}
+          />
         </div>
       ) : tab === "reports" ? (
         (role === "super_admin" || role === "accounting_super_admin") ? (
