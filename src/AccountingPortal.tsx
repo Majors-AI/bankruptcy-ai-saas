@@ -10978,6 +10978,9 @@ export default function AccountingPortal() {
             ioltaBalanceLog={ioltaBalanceLog}
             payments={payments}
             autopayEnrollments={autopayEnrollments}
+            // Slice 6 (Prompt 59) — RIGHT-column money-comms inputs.
+            transferNotifications={notifications}
+            disengagementNotices={disengagementNotices}
           />
         </div>
       ) : tab === "reports" ? (
