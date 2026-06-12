@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, User, MapPin, Calendar, CheckCircle2, AlertTriangle, Coffee, Briefcase, Scale, FileText, Users, Bell, Filter, RefreshCw, ChevronDown, Info, Lock, Send, Thermometer, Building2, CreditCard as Edit2, Trash2, Check, XCircle, Shield, ArrowRight, Settings, CalendarDays, ListChecks, LayoutGrid, Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, User, MapPin, Calendar, CheckCircle2, AlertTriangle, Coffee, Briefcase, Scale, FileText, Users, Bell, Filter, RefreshCw, ChevronDown, Info, Lock, Send, Thermometer, Building2, CreditCard as Edit2, Trash2, Check, XCircle, Shield, ArrowRight, Settings, CalendarDays, ListChecks, LayoutGrid, Layers, Phone } from "lucide-react";
+import { useFirmCalendarConfig, useFirmAdmittedStates, type CalendarDepartmentId, type CalendarAppointmentType } from "./lib/firmPolicy";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -2161,6 +2162,20 @@ export default function FirmCalendar() {
         <aside className="hidden lg:flex flex-col w-56 bg-[#0d1221] border-r border-slate-800 flex-shrink-0 overflow-y-auto">
           <div className="p-4 space-y-5">
 
+            {/* Locations filter — multi-select chip strip reading from
+                useFirmAdmittedStates (AZ/WA today). Both can be selected
+                simultaneously. Today this is UI-only scaffold; event
+                filtering by location wires up once events carry a
+                location tag. */}
+            <LocationsFilterList />
+
+            {/* Departments — firm-configured. Each department's appointment
+                types live in Law Firm Settings → Calendar Configuration.
+                Court Calendar splits per admitted state. Colored swatches
+                per appointment type. Per-department staff sub-list is a
+                scaffold — wires up when the roster query lands. */}
+            <DepartmentCalendarsList />
+
             {/* Calendars filter */}
             <div>
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2.5">Calendars</p>
@@ -2393,6 +2408,228 @@ export default function FirmCalendar() {
           onClose={() => setShowUpcoming(false)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── Department calendars sidebar block ─────────────────────────────────────
+//
+// Reads firmCalendarConfig + firmAdmittedStates from firm-policy and
+// renders a department chip strip with appointment-type counts. Court
+// Calendar (splitByAdmittedState=true) expands a per-state sub-list of
+// admitted-state chips.
+
+const DEPT_ICON_FOR_LIST: Record<CalendarDepartmentId, React.FC<{ className?: string }>> = {
+  intake:           Users,
+  accounting:       Briefcase,
+  client_relations: Phone,
+  court:            Scale,
+  legal:            FileText,
+};
+
+/** Locations filter — multi-select chips for the firm's admitted states.
+ *  Both AZ and WA can be active simultaneously. Today this drives no
+ *  filtering — events don't yet carry a `location` tag — but the selection
+ *  state is real so wiring up event filtering becomes a one-line addition
+ *  once events get tagged. */
+function LocationsFilterList() {
+  const admittedStates = useFirmAdmittedStates();
+  // Default: every admitted state selected. The user toggles individual
+  // chips off; "All" resets to all-on.
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(admittedStates));
+  // Keep `selected` in sync if admittedStates changes (e.g. firm adds a
+  // new jurisdiction in Firm Policy while the calendar is open).
+  useEffect(() => {
+    setSelected(prev => {
+      const next = new Set<string>();
+      admittedStates.forEach(s => {
+        // Preserve prior choice if state was previously seen.
+        next.add(prev.has(s) ? s : s);
+      });
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admittedStates.join("|")]);
+
+  function toggle(s: string) {
+    setSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s); else next.add(s);
+      return next;
+    });
+  }
+  function selectAll() { setSelected(new Set(admittedStates)); }
+
+  if (admittedStates.length === 0) {
+    return (
+      <div>
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2.5">Locations</p>
+        <p className="text-[10px] text-amber-300/70 italic">
+          No admitted states — add in Firm Policy → Practice Jurisdictions.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Locations</p>
+        <button
+          type="button"
+          onClick={selectAll}
+          className="text-[9px] text-slate-500 hover:text-slate-300 uppercase tracking-widest"
+          title="Select every location"
+        >
+          All
+        </button>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {admittedStates.map(s => {
+          const on = selected.has(s);
+          return (
+            <button
+              key={s}
+              type="button"
+              onClick={() => toggle(s)}
+              className={`inline-flex items-center gap-1 text-[10px] font-semibold border rounded-full px-2 py-0.5 transition-colors ${
+                on
+                  ? "border-amber-500/40 text-amber-300 bg-amber-500/10"
+                  : "border-slate-700 text-slate-500 hover:text-slate-300"
+              }`}
+              title={on ? `Hide ${s}` : `Show ${s}`}
+            >
+              <MapPin className="w-2.5 h-2.5" />
+              {s}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[9px] text-slate-600 italic mt-1.5 leading-snug">
+        {/* TODO: filter events by event.location once that field lands. */}
+        Multi-select · scaffold filter
+      </p>
+    </div>
+  );
+}
+
+function DepartmentCalendarsList() {
+  const cfg = useFirmCalendarConfig();
+  const admittedStates = useFirmAdmittedStates();
+  const [expanded, setExpanded] = useState<Set<CalendarDepartmentId>>(() => new Set());
+
+  function toggle(id: CalendarDepartmentId) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2.5">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Departments</p>
+        <span className="text-[9px] text-slate-600" title="Configured in Law Firm Settings → Calendar Configuration">
+          configured
+        </span>
+      </div>
+      <div className="space-y-1">
+        {cfg.departments.map(d => {
+          const Icon = DEPT_ICON_FOR_LIST[d.id];
+          const isOpen = expanded.has(d.id);
+          return (
+            <div key={d.id} className="space-y-1">
+              <button
+                type="button"
+                onClick={() => toggle(d.id)}
+                className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-xs font-semibold bg-slate-800/40 hover:bg-slate-800/70 transition-colors"
+                aria-expanded={isOpen}
+              >
+                <Icon className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                <span className="text-slate-200 truncate flex-1 text-left">{d.label}</span>
+                <span className="text-[9px] text-slate-500 tabular-nums">
+                  {d.appointmentTypes.length}
+                </span>
+                <ChevronDown className={`w-3 h-3 text-slate-500 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+              </button>
+              {isOpen && (
+                <div className="pl-2 space-y-2 pb-1">
+                  {/* Appointment-type list with colored swatches */}
+                  <div className="space-y-1">
+                    {d.appointmentTypes.length === 0 ? (
+                      <p className="text-[9px] text-slate-600 italic pl-1">
+                        No appointment types — configure in Law Firm Settings.
+                      </p>
+                    ) : (
+                      d.appointmentTypes.map((t: CalendarAppointmentType) => (
+                        <div key={t.id} className="flex items-center gap-2 pl-1 text-[10px] text-slate-300">
+                          <span
+                            className="w-2.5 h-2.5 rounded-full border border-slate-700 flex-shrink-0"
+                            style={{ background: t.color }}
+                          />
+                          <span className="truncate">{t.label}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Court Calendar — per admitted-state sub-chips */}
+                  {d.splitByAdmittedState && (
+                    <div className="pl-1">
+                      <p className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">Per state</p>
+                      <div className="flex flex-wrap gap-1">
+                        {admittedStates.length === 0 ? (
+                          <span className="text-[9px] text-amber-300/70 italic">
+                            no admitted states
+                          </span>
+                        ) : (
+                          admittedStates.map(s => (
+                            <span
+                              key={s}
+                              className="inline-flex items-center gap-1 text-[9px] font-semibold border border-amber-500/30 text-amber-300/90 bg-amber-500/5 rounded-full px-1.5 py-0.5"
+                            >
+                              <MapPin className="w-2 h-2" />
+                              {s}
+                            </span>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Per-department staff sub-list scaffold. The real list
+                      reads from the department roster (existing
+                      department-management store). For now this surfaces
+                      the placeholder so the structure is visible. */}
+                  <div className="pl-1">
+                    <p className="text-[9px] uppercase tracking-widest text-slate-500 mb-1">Staff calendars</p>
+                    <p className="text-[9px] text-slate-600 italic">
+                      Per-staff sub-calendars render here (settings inherit from {d.label}).
+                    </p>
+                  </div>
+
+                  {/* Flag indicators */}
+                  <div className="flex flex-wrap gap-1 pl-1">
+                    {d.supervisorReassignEnabled && (
+                      <span className="text-[8px] uppercase tracking-widest border border-slate-700 text-slate-400 rounded-full px-1.5 py-0.5">supervisor reassign</span>
+                    )}
+                    {d.sickAutoRescheduleEnabled && (
+                      <span className="text-[8px] uppercase tracking-widest border border-slate-700 text-slate-400 rounded-full px-1.5 py-0.5">sick auto</span>
+                    )}
+                    {d.taskListFeedEnabled !== false && (
+                      <span className="text-[8px] uppercase tracking-widest border border-slate-700 text-slate-400 rounded-full px-1.5 py-0.5">task feed</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <p className="text-[9px] text-slate-600 italic mt-2 leading-snug">
+        Edit in Law Firm Settings → Calendar Configuration.
+      </p>
     </div>
   );
 }

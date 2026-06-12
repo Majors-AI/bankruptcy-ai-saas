@@ -59,12 +59,20 @@ export function getCaseDeductionOverrides(caseId: string): ReadonlyMap<string, n
   return _byCase.get(caseId) ?? new Map();
 }
 
-/** Set or clear an override. Pass null to remove. Returns the new value. */
+/** Set or clear an override. Pass null to remove. Returns the new value.
+ *  Optional `reason` is informational — when passed, surfaces in the
+ *  rulesAuditStore.recordChange `source` string so audit reviewers see
+ *  why the attorney departed from the canonical value. */
 export function setCaseDeductionOverride(
   caseId: string,
   path: string,
   value: number | null | undefined,
+  _reason?: string,
 ): number | null {
+  // _reason is accepted but stored only in the audit log (the caller
+  // passes it through to recordChange). The override map itself doesn't
+  // persist the reason today — that's a per-override-history schema
+  // change that lands with the firm_per_case_deduction_overrides table.
   let lines = _byCase.get(caseId);
   if (!lines) {
     lines = new Map();

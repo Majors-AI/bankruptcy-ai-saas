@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { COURTS_BY_STATE, type CourtDistrict } from "../../data/courts";
 import CanonicalMaintenanceBanner from "./CanonicalMaintenanceBanner";
+import RuleSectionMeta from "./RuleSectionMeta";
 import RulesSectionAudit from "./RulesSectionAudit";
 import ReReviewQueue from "./ReReviewQueue";
 import { useRulesAudit } from "./rulesAuditStore";
@@ -126,6 +127,12 @@ export default function LocalRulesPage() {
         datasetLabel="Local Bankruptcy Rules"
         version="0.1-scaffold"
         updatedOn="—"
+      />
+
+      <RuleSectionMeta
+        changeSection="local_rules"
+        datasetDate="0.1-scaffold"
+        headingOverride="Local Rules"
       />
 
       {/* Local Rules diff feeds the SAME rulesAuditStore re-review queue —

@@ -25,10 +25,11 @@
 
 import { useMemo, useState } from "react";
 import {
-  BookOpen, Send, History, AlertTriangle, RefreshCw, Layers, MapPin,
+  BookOpen, Send, History, AlertTriangle, RefreshCw, Layers, MapPin, Upload,
 } from "lucide-react";
 import LegalReferenceStore from "../components/legal-reference/LegalReferenceStore";
 import LocalRulesAdminPanel from "./LocalRulesAdminPanel";
+import PerSectionUploadsPanel from "./PerSectionUploadsPanel";
 import {
   RulesAuditProvider, useRulesAudit, type RulesSection, type PublishEvent,
 } from "../components/law-firm-settings/rulesAuditStore";
@@ -56,7 +57,7 @@ export default function ReferenceRulesTab() {
 
 function ReferenceRulesTabInner() {
   const audit = useRulesAudit();
-  const [activePanel, setActivePanel] = useState<"core" | "local_rules">("core");
+  const [activePanel, setActivePanel] = useState<"core" | "uploads" | "local_rules">("core");
   const [publishing, setPublishing] = useState<RulesSection[] | "all" | null>(null);
   const [lastPublish, setLastPublish] = useState<PublishEvent | null>(null);
   // TODO Phase B — replace with a real firm-id list from the Firms tab /
@@ -120,13 +121,20 @@ function ReferenceRulesTabInner() {
         <PublishReceipt event={lastPublish} />
       )}
 
-      {/* Section picker — Core (LegalReferenceStore) vs Local Rules */}
+      {/* Section picker — Core (LegalReferenceStore inline editor) vs
+          Per-section uploads (CSV/PDF for every section) vs Local Rules. */}
       <div className="flex items-center gap-1 border-b border-slate-800">
         <SectionBtn
           active={activePanel === "core"}
           onClick={() => setActivePanel("core")}
           icon={<Layers className="w-3.5 h-3.5" />}
           label="Standards / Median / Exemptions / Means-Test"
+        />
+        <SectionBtn
+          active={activePanel === "uploads"}
+          onClick={() => setActivePanel("uploads")}
+          icon={<Upload className="w-3.5 h-3.5" />}
+          label="Per-section Uploads (CSV / PDF)"
         />
         <SectionBtn
           active={activePanel === "local_rules"}
@@ -166,6 +174,8 @@ function ReferenceRulesTabInner() {
           </div>
         </div>
       )}
+
+      {activePanel === "uploads" && <PerSectionUploadsPanel />}
 
       {activePanel === "local_rules" && (
         <LocalRulesAdminPanel onAfterUpload={() => { /* edits land via audit.recordChange inside the panel */ }} />

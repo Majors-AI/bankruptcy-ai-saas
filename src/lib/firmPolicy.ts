@@ -397,3 +397,284 @@ export function useFirmAdmittedStateCodes(): ReadonlyArray<string> {
   const names = useFirmAdmittedStates();
   return names.map(n => STATE_NAME_TO_CODE_INTERNAL[n] ?? n);
 }
+
+// ─── Firm Calendar Configuration ───────────────────────────────────────────
+//
+// The firm decides which department calendars exist and which appointment
+// types each calendar offers. Court Calendar is special — its appointment
+// types apply uniformly across every admitted state (the per-state split
+// is rendered at the calendar UI layer, reading useFirmAdmittedStates()).
+//
+// Drives:
+//   - Law Firm Settings → Calendar Configuration editor
+//   - FirmCalendar department filter strip + appointment-type dropdown in
+//     the New Event modal
+//
+// Storage: in-memory + per-tab localStorage. TODO Phase B —
+// firm_calendar_config(firm_id, departments_jsonb, court_state_types_jsonb,
+// set_by_user_id, set_at).
+
+/** Department identifier — short stable string keyed by the calendar UI. */
+export type CalendarDepartmentId = "intake" | "accounting" | "client_relations" | "court" | "legal";
+
+/** A single appointment type within a department. The color drives the
+ *  event-pill background on the calendar grid and the swatch on the
+ *  configuration editor. */
+export interface CalendarAppointmentType {
+  /** Stable slug — keys events to this type so renames don't orphan
+   *  existing events. Auto-derived from label on create. */
+  id: string;
+  /** Human-readable label rendered in the dropdown + event pill. */
+  label: string;
+  /** Hex color (e.g. "#3b82f6"). */
+  color: string;
+}
+
+export interface CalendarDepartmentConfig {
+  /** Stable id — used as the foreign key for events. */
+  id: CalendarDepartmentId;
+  /** Human-readable label rendered on the filter chip + section header. */
+  label: string;
+  /** Appointment types this department offers. The New Event modal reads
+   *  this list for its appointment-type dropdown. Free-form, firm-
+   *  edited in Calendar Configuration. */
+  appointmentTypes: CalendarAppointmentType[];
+  /** When true, the calendar UI splits this calendar by admitted state
+   *  (reads from useFirmAdmittedStates) rather than rendering one
+   *  combined list. Today only "court" sets this true. */
+  splitByAdmittedState?: boolean;
+  /** Per Dom's spec — these flags decorate the department; the actual
+   *  mechanics are scaffold-only and flagged for follow-up wiring.
+   *    - allowAdditionalTypes: users in the department can add appointment
+   *      types beyond this list (default true).
+   *    - supervisorReassignEnabled: department supervisors / super-admins
+   *      may reassign appointments on demand.
+   *    - sickAutoRescheduleEnabled: when a staff member calls out sick,
+   *      their appointments auto-reschedule via the department's rules.
+   *    - taskListFeedEnabled: appointments in this department auto-
+   *      generate "upcoming" rows on the assigned staff member's task
+   *      list. */
+  allowAdditionalTypes?: boolean;
+  supervisorReassignEnabled?: boolean;
+  sickAutoRescheduleEnabled?: boolean;
+  taskListFeedEnabled?: boolean;
+}
+
+export interface FirmCalendarConfig {
+  departments: CalendarDepartmentConfig[];
+}
+
+const STORAGE_KEY_CAL_CFG = "firmPolicy.firmCalendarConfig";
+
+/** Helper — derives a stable slug from a label so appointment-type ids
+ *  stay readable + URL-safe. */
+function slugifyAppointmentType(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function appt(label: string, color: string): CalendarAppointmentType {
+  return { id: slugifyAppointmentType(label), label, color };
+}
+
+// Defaults reflect Dom's spec verbatim:
+//   - Intake: new consult, follow up, out of office per employee
+//   - Accounting: open list (firm customizes — empty default)
+//   - Client Relations: general questions (non-legal)
+//   - Court Calendar: ECF notices, hearings, Ch.13 deadlines, others
+//   - Legal: signing review (paralegal), signing appointment with client,
+//     existing client call, out of office
+const DEFAULT_FIRM_CALENDAR_CONFIG: FirmCalendarConfig = {
+  departments: [
+    {
+      id: "intake",
+      label: "Intake",
+      allowAdditionalTypes: true,
+      supervisorReassignEnabled: true,
+      sickAutoRescheduleEnabled: true,
+      taskListFeedEnabled: true,
+      appointmentTypes: [
+        appt("New consult",                "#3b82f6"), // blue
+        appt("Follow-up",                  "#06b6d4"), // cyan
+        appt("Out of office",              "#94a3b8"), // slate
+      ],
+    },
+    {
+      id: "accounting",
+      label: "Accounting",
+      allowAdditionalTypes: true,
+      supervisorReassignEnabled: true,
+      sickAutoRescheduleEnabled: false,
+      taskListFeedEnabled: true,
+      // Open for firm customization — Dom: "just leave open for customization"
+      appointmentTypes: [],
+    },
+    {
+      id: "client_relations",
+      label: "Client Relations",
+      allowAdditionalTypes: true,
+      supervisorReassignEnabled: true,
+      sickAutoRescheduleEnabled: true,
+      taskListFeedEnabled: true,
+      appointmentTypes: [
+        appt("General question (non-legal)", "#a855f7"), // purple
+      ],
+    },
+    {
+      id: "court",
+      label: "Court Calendar",
+      splitByAdmittedState: true,
+      allowAdditionalTypes: true,
+      supervisorReassignEnabled: false, // court appointments aren't reassignable by firm supervisors
+      sickAutoRescheduleEnabled: false, // sick days don't reschedule court dates
+      taskListFeedEnabled: true,
+      appointmentTypes: [
+        appt("ECF notice",                  "#ef4444"), // red
+        appt("Scheduled hearing",           "#dc2626"), // red-600
+        appt("Ch.13 deadline",              "#f97316"), // orange
+        appt("Other deadline",              "#f59e0b"), // amber
+      ],
+    },
+    {
+      id: "legal",
+      label: "Legal",
+      allowAdditionalTypes: true,
+      supervisorReassignEnabled: true,
+      sickAutoRescheduleEnabled: true,
+      taskListFeedEnabled: true,
+      appointmentTypes: [
+        appt("Signing review (paralegal)",  "#10b981"), // emerald
+        appt("Signing appointment (client)", "#059669"), // emerald-600
+        appt("Existing-client call",        "#0ea5e9"), // sky
+        appt("Out of office",               "#94a3b8"), // slate
+      ],
+    },
+  ],
+};
+
+/** Default color used to backfill appointment types that come back as
+ *  plain strings from older localStorage payloads (pre-schema-upgrade). */
+const APPT_TYPE_FALLBACK_COLOR = "#64748b"; // slate-500
+
+let _firmCalendarConfig: FirmCalendarConfig = (() => {
+  try {
+    const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY_CAL_CFG) : null;
+    if (raw) {
+      const parsed = JSON.parse(raw) as { departments?: unknown };
+      if (parsed && Array.isArray(parsed.departments)) {
+        // Tolerant parse — accept either the new {id,label,color} shape OR
+        // the legacy string[] shape (migrated in-place at first read).
+        const cleaned = parsed.departments
+          .map((rawDept): CalendarDepartmentConfig | null => {
+            const d = rawDept as Partial<CalendarDepartmentConfig> & { appointmentTypes?: unknown };
+            if (!d || typeof d.id !== "string" || typeof d.label !== "string") return null;
+            const apptsRaw = Array.isArray(d.appointmentTypes) ? d.appointmentTypes : [];
+            const appointmentTypes: CalendarAppointmentType[] = apptsRaw
+              .map((t): CalendarAppointmentType | null => {
+                if (typeof t === "string") {
+                  return { id: slugifyAppointmentType(t), label: t, color: APPT_TYPE_FALLBACK_COLOR };
+                }
+                if (t && typeof t === "object") {
+                  const obj = t as Partial<CalendarAppointmentType>;
+                  if (typeof obj.label !== "string") return null;
+                  return {
+                    id: typeof obj.id === "string" && obj.id ? obj.id : slugifyAppointmentType(obj.label),
+                    label: obj.label,
+                    color: typeof obj.color === "string" && obj.color ? obj.color : APPT_TYPE_FALLBACK_COLOR,
+                  };
+                }
+                return null;
+              })
+              .filter((x): x is CalendarAppointmentType => x !== null);
+            return {
+              id: d.id as CalendarDepartmentId,
+              label: d.label,
+              appointmentTypes,
+              splitByAdmittedState: d.splitByAdmittedState === true,
+              allowAdditionalTypes:        d.allowAdditionalTypes        !== false, // default true
+              supervisorReassignEnabled:   d.supervisorReassignEnabled   === true,
+              sickAutoRescheduleEnabled:   d.sickAutoRescheduleEnabled   === true,
+              taskListFeedEnabled:         d.taskListFeedEnabled         !== false, // default true
+            };
+          })
+          .filter((x): x is CalendarDepartmentConfig => x !== null);
+        if (cleaned.length > 0) return { departments: cleaned };
+      }
+    }
+  } catch { /* ignore */ }
+  // Deep clone so callers can't mutate the default tree.
+  return JSON.parse(JSON.stringify(DEFAULT_FIRM_CALENDAR_CONFIG)) as FirmCalendarConfig;
+})();
+
+export function getFirmCalendarConfig(): FirmCalendarConfig { return _firmCalendarConfig; }
+export function getFirmCalendarConfigDefault(): FirmCalendarConfig {
+  return JSON.parse(JSON.stringify(DEFAULT_FIRM_CALENDAR_CONFIG)) as FirmCalendarConfig;
+}
+
+/** Replace the whole config (editor save). */
+export function setFirmCalendarConfig(next: FirmCalendarConfig): void {
+  _firmCalendarConfig = next;
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(STORAGE_KEY_CAL_CFG, JSON.stringify(next));
+    }
+  } catch { /* ignore */ }
+  _notify();
+}
+
+/** Convenience — update one department's appointment-type list. */
+export function setDepartmentAppointmentTypes(
+  departmentId: CalendarDepartmentId,
+  appointmentTypes: ReadonlyArray<CalendarAppointmentType>,
+): void {
+  const next: FirmCalendarConfig = {
+    departments: _firmCalendarConfig.departments.map(d =>
+      d.id === departmentId
+        ? { ...d, appointmentTypes: appointmentTypes.slice() }
+        : d,
+    ),
+  };
+  setFirmCalendarConfig(next);
+}
+
+/** Patch one department's flag fields (supervisor / sick / task-feed / allow-additional). */
+export function setDepartmentFlags(
+  departmentId: CalendarDepartmentId,
+  flags: Partial<Pick<
+    CalendarDepartmentConfig,
+    "supervisorReassignEnabled" | "sickAutoRescheduleEnabled" | "taskListFeedEnabled" | "allowAdditionalTypes"
+  >>,
+): void {
+  const next: FirmCalendarConfig = {
+    departments: _firmCalendarConfig.departments.map(d =>
+      d.id === departmentId ? { ...d, ...flags } : d,
+    ),
+  };
+  setFirmCalendarConfig(next);
+}
+
+/** Add a single appointment type to a department. No-ops on duplicate id. */
+export function addDepartmentAppointmentType(
+  departmentId: CalendarDepartmentId,
+  type: CalendarAppointmentType,
+): void {
+  const dept = _firmCalendarConfig.departments.find(d => d.id === departmentId);
+  if (!dept) return;
+  if (dept.appointmentTypes.some(t => t.id === type.id)) return;
+  setDepartmentAppointmentTypes(departmentId, [...dept.appointmentTypes, type]);
+}
+
+/** Helper exposed so the editor can derive a stable id from a fresh label. */
+export const buildAppointmentTypeFromLabel = (
+  label: string,
+  color: string,
+): CalendarAppointmentType => appt(label, color);
+
+export function useFirmCalendarConfig(): FirmCalendarConfig {
+  const [v, setV] = useState<FirmCalendarConfig>(_firmCalendarConfig);
+  useEffect(() => {
+    const sync = () => setV(_firmCalendarConfig);
+    _subscribers.add(sync);
+    return () => { _subscribers.delete(sync); };
+  }, []);
+  return v;
+}

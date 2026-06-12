@@ -66,6 +66,11 @@ import ConsultSchedulerPanel, {
 import ClientSearchBar from "../client-search/ClientSearchBar";
 import PostCallScheduledModal from "../lead-comms/PostCallScheduledModal";
 import CommsPillBar from "../comms-pill/CommsPillBar";
+import {
+  currentMonthIso, getCurrentStaffId,
+  useCurrentMonthActuals, useEmployeeGoals,
+  type PerfMetricKey,
+} from "../../lib/perfGoalsStore";
 
 // ─── Types (kept local to avoid coupling to LegalAdminPortal) ────────────────
 
@@ -3233,16 +3238,41 @@ function RetentionBubble() {
           ))}
         </div>
 
-        <div className="rounded border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-2.5 py-2">
-          <p className="text-[11px] text-[#6B6B66] italic leading-snug">
-            Numbers + goals populate once the Performance Goals backend lands —
-            see the
-            <span className="text-[#FAFAF7] font-semibold"> Super Admin Setting Portal → Performance Goals</span>
-            {" "}surface where supervisors set per-employee monthly targets.
-          </p>
-        </div>
+        <GoalsFooterNote />
       </div>
     </BubbleCard>
+  );
+}
+
+/** Renders one of two footer states for the Performance / Goals card:
+ *    1. EMPTY  → no goals set for the staffer this month. Direct them
+ *                to Law Firm Settings → Performance Goals.
+ *    2. ACTIVE → at least one target is set. Show a brief "set in
+ *                Performance Goals" reference so the source is clear. */
+function GoalsFooterNote() {
+  const staffId = getCurrentStaffId();
+  const month = currentMonthIso();
+  const goals = useEmployeeGoals(staffId, month);
+  const anyGoalSet = (Object.keys(goals) as PerfMetricKey[]).some(k => goals[k] != null);
+  if (!anyGoalSet) {
+    return (
+      <div className="rounded border border-dashed border-amber-500/40 bg-amber-500/5 px-2.5 py-2">
+        <p className="text-[11px] text-amber-200 italic leading-snug">
+          No monthly target set — set one in
+          <span className="text-amber-100 font-semibold"> Law Firm Settings → Performance Goals</span>
+          {" "}for {month}.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded border border-[#2A2A28] bg-[#0F0F0E] px-2.5 py-2">
+      <p className="text-[10px] text-[#6B6B66] italic leading-snug">
+        Targets sourced from
+        <span className="text-[#FAFAF7] font-semibold"> Law Firm Settings → Performance Goals</span>
+        {" "}for {month}. Actuals refresh from the lead/case event aggregator.
+      </p>
+    </div>
   );
 }
 
@@ -3276,23 +3306,52 @@ function DepartmentGoalColumn({ dept }: { dept: DeptMetricSet }) {
 }
 
 function GoalMetricRow({ metric }: { metric: DeptMetricDef }) {
-  // Single source of the placeholder copy so the tooltip is consistent
-  // everywhere this surface is reused.
-  const tooltip = "Placeholder — wired by the Performance Goals backend (firm_perf_goals + firm_perf_goal_results).";
-  // For percentage metrics, render "—%" rather than just "—" so the unit
-  // is visible to the reader even before real values land.
-  const dash = metric.isPercentage ? "—%" : "—";
+  // Performance Goals backend (in-memory + per-tab localStorage today):
+  //   - NOW    ← getCurrentMonthActuals(staffId)[metric] from perfGoalsStore
+  //   - GOAL   ← getGoal(staffId, currentMonthIso(), metric) from same
+  //   - NEEDED ← max(0, GOAL − NOW) when GOAL is set; "—" when not set
+  // Tooltip explains the wiring so anyone hovering knows the source.
+  const staffId = getCurrentStaffId();
+  const month = currentMonthIso();
+  const actuals = useCurrentMonthActuals(staffId);
+  const goals = useEmployeeGoals(staffId, month);
+
+  const nowRaw = actuals[metric.key as PerfMetricKey];
+  const goalRaw = goals[metric.key as PerfMetricKey];
+  const neededRaw = goalRaw != null ? Math.max(0, goalRaw - nowRaw) : null;
+
+  const fmt = (v: number | null) => {
+    if (v == null) return metric.isPercentage ? "—%" : "—";
+    if (metric.isPercentage) return `${v}%`;
+    return String(v);
+  };
+
+  const tooltipNow =
+    "Current-month actual — sum of qualifying events tied to this staffer "
+    + "(seed today; wired by lead/case event aggregation in Phase B).";
+  const tooltipGoal = goalRaw != null
+    ? `Monthly target for ${month} — set in Law Firm Settings → Performance Goals.`
+    : "No monthly target set. Set one in Law Firm Settings → Performance Goals.";
+  const tooltipNeeded =
+    goalRaw != null
+      ? "Math.max(0, GOAL − NOW) — what's still required to hit target."
+      : "Pending — set a monthly target first.";
+
   return (
     <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center py-0.5">
       <dt className="text-[10px] text-[#6B6B66] truncate">{metric.label}</dt>
       <dd className="text-[10px] text-right w-10">
-        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+        <span title={tooltipNow} className="text-[#FAFAF7] tabular-nums">{fmt(nowRaw)}</span>
       </dd>
       <dd className="text-[10px] text-right w-10">
-        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+        {goalRaw != null
+          ? <span title={tooltipGoal} className="text-[#FAFAF7] tabular-nums">{fmt(goalRaw)}</span>
+          : <PlaceholderValue title={tooltipGoal}>{metric.isPercentage ? "—%" : "—"}</PlaceholderValue>}
       </dd>
       <dd className="text-[10px] text-right w-12">
-        <PlaceholderValue title={tooltip}>{dash}</PlaceholderValue>
+        {neededRaw != null
+          ? <span title={tooltipNeeded} className={`tabular-nums ${neededRaw === 0 ? "text-emerald-400" : "text-amber-300"}`}>{fmt(neededRaw)}</span>
+          : <PlaceholderValue title={tooltipNeeded}>{metric.isPercentage ? "—%" : "—"}</PlaceholderValue>}
       </dd>
     </div>
   );

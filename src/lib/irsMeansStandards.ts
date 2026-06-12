@@ -1195,11 +1195,19 @@ export function getExemptionsFor(jurisdictionKey: string): ExemptionsJurisdictio
   return EXEMPTIONS_BY_JURISDICTION[jurisdictionKey];
 }
 
-/** WA-specific: read homestead cap for the debtor's county. */
+/** WA-specific: read homestead cap for the debtor's county. Applies the
+ *  RCW 6.13.030 statutory floor — the homestead is the GREATER of the
+ *  county median figure and $125,000. Every county currently loaded
+ *  exceeds the floor, so this is defensive against future data loads or
+ *  sub-floor county figures. Returns null when the county is not in the
+ *  map (caller surfaces the unknown-county warning). */
+const WA_HOMESTEAD_FLOOR = 125_000;
 export function getWaHomesteadCap(county: string): number | null {
   const wa = EXEMPTIONS_BY_JURISDICTION.WA;
   if (!wa?.homesteadByCounty) return null;
-  return wa.homesteadByCounty[county] ?? null;
+  const county_value = wa.homesteadByCounty[county];
+  if (county_value == null) return null;
+  return Math.max(WA_HOMESTEAD_FLOOR, county_value);
 }
 
 /** CA §704.730 homestead — clamp(county prior-year median, indexed floor,

@@ -12,7 +12,7 @@
 //   - useRulesAudit              (re-review trigger via recordChange)
 //   - the existing isLawyer gate (host enforces; panel re-checks)
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useCaseDeductionOverrides, setCaseDeductionOverride } from "../../lib/meansTestOverrides";
 import { computeLongFormDeductions, type DeductionEngineInput, type DeductionLine } from "../../lib/meansTestDeductions";
 import { useRulesAudit } from "../law-firm-settings/rulesAuditStore";
@@ -68,10 +68,16 @@ function Inner({
   const result = useMemo(() => computeLongFormDeductions(input), [input]);
   const dmi = Math.round((cmi - result.totalAllowableMonthly) * 100) / 100;
 
+  // Per-line reason capture. Local UI state only — the reason flows into
+  // rulesAuditStore.recordChange's `source` so audit reviewers see why
+  // the attorney departed from the canonical value.
+  const [reasons, setReasons] = useState<Record<string, string>>({});
+
   function setLine(line: DeductionLine, raw: string) {
     const v = raw === "" ? null : parseFloat(raw);
     const nextValue = v == null || !Number.isFinite(v) ? null : v;
-    setCaseDeductionOverride(caseId, line.path, nextValue ?? undefined);
+    const reason = (reasons[line.path] ?? "").trim();
+    setCaseDeductionOverride(caseId, line.path, nextValue ?? undefined, reason || undefined);
     // Feed the audit/re-review trigger — same path-keyed entry pattern
     // used by the firm overlay + the rule pages. In-window cases
     // re-flag automatically via diffStampedVsCurrent.
@@ -81,12 +87,19 @@ function Inner({
       path: line.path,
       oldValue: line.effectiveValue,
       newValue: nextValue,
-      source: "long-form deduction override",
+      source: reason
+        ? `long-form deduction override — reason: ${reason}`
+        : "long-form deduction override",
     });
   }
 
   function resetLine(line: DeductionLine) {
     setCaseDeductionOverride(caseId, line.path, undefined);
+    setReasons(prev => {
+      const next = { ...prev };
+      delete next[line.path];
+      return next;
+    });
     audit.recordChange({
       section: "living_standards",
       actor: "attorney_signing_review",
@@ -150,6 +163,8 @@ function Inner({
                 onSet={(raw) => setLine(line, raw)}
                 onReset={() => resetLine(line)}
                 hasOverride={overrides.has(line.path)}
+                reason={reasons[line.path] ?? ""}
+                onReasonChange={(next) => setReasons(prev => ({ ...prev, [line.path]: next }))}
               />
             ))}
           </ul>
@@ -170,12 +185,14 @@ function Inner({
 }
 
 function LineRow({
-  line, onSet, onReset, hasOverride,
+  line, onSet, onReset, hasOverride, reason, onReasonChange,
 }: {
   line: DeductionLine;
   onSet: (raw: string) => void;
   onReset: () => void;
   hasOverride: boolean;
+  reason: string;
+  onReasonChange: (next: string) => void;
 }) {
   return (
     <li className="px-4 py-3 grid grid-cols-1 sm:grid-cols-[1fr_140px_140px_auto] gap-3 items-start">
@@ -191,6 +208,15 @@ function LineRow({
           <p className="text-[10px] text-amber-300 mt-0.5 leading-snug">
             <AlertTriangle className="w-3 h-3 inline mr-1" />Pending: {line.gap}
           </p>
+        )}
+        {hasOverride && (
+          <input
+            type="text"
+            value={reason}
+            onChange={e => onReasonChange(e.target.value)}
+            placeholder="Reason for override (logged to audit)"
+            className="mt-1.5 w-full bg-slate-800 border border-amber-500/40 text-amber-100 text-[10px] rounded px-2 py-1 placeholder:text-slate-500"
+          />
         )}
       </div>
       <div>

@@ -11,10 +11,12 @@
 // Distinct from src/SuperAdminPortal.tsx (firm-level staff productivity).
 // Gated to platform_role = 'super_admin_bankruptcy_ai'.
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useMemo } from 'react';
 import CommunicationsTab from './CommunicationsTab';
 import FirmBrandingPanel from './FirmBrandingPanel';
 import ReferenceRulesTab from './ReferenceRulesTab';
+import LawFirmSettings from '../LawFirmSettings';
+import { Eye } from 'lucide-react';
 import {
   Shield,
   AlertTriangle,
@@ -35,9 +37,19 @@ import {
   Palette,
   Mail,
   BookOpen,
+  LayoutDashboard,
+  ChevronRight,
+  ArrowLeft,
+  Briefcase,
+  Scale,
+  Receipt,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
 import { supabase } from '../lib/supabase';
+import {
+  OPERATOR_SEED_FIRMS, computeOperatorMetrics, mergeSeedWithLive,
+  type OperatorSeedFirm,
+} from './operatorSeed';
 
 const MLG_FIRM_ID = '00000000-0000-0000-0000-000000000001';
 
@@ -53,7 +65,7 @@ interface Props {
   currentUserRole?: PlatformRole | null;
 }
 
-type AdminTab = 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications' | 'reference_rules';
+type AdminTab = 'dashboard' | 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications' | 'reference_rules';
 
 interface Firm {
   id: string;
@@ -210,10 +222,20 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
 // ─── Root component ───────────────────────────────────────────────────────────
 
 export default function SuperAdminPage({ currentUserRole }: Props) {
+  void currentUserRole; // gate enforced via route + RLS; prop retained for future use
   // All hooks before any early return (rules-of-hooks).
-  const [activeTab, setActiveTab] = useState<AdminTab>('firms');
+  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard');
   const [selectedFirmId, setSelectedFirmId] = useState<string>(MLG_FIRM_ID);
   const [allFirms, setAllFirms] = useState<Pick<Firm, 'id' | 'name'>[]>([]);
+  // When set, the page renders the firm-profile shell instead of the tab
+  // body. Set by row clicks on the Firms / Dashboard surfaces; cleared by
+  // the profile's back button.
+  const [selectedFirmProfileId, setSelectedFirmProfileId] = useState<string | null>(null);
+  // Slice 2 — "View as <Firm>" read-only operator support view. When set,
+  // the page renders the firm's Law Firm Settings in a fieldset-disabled
+  // wrapper with a persistent operator banner. Exit returns to the firm
+  // profile.
+  const [viewAsFirmId, setViewAsFirmId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase
@@ -223,7 +245,15 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
       .then(({ data }) => { if (data) setAllFirms(data as Pick<Firm, 'id' | 'name'>[]); });
   }, []);
 
+  // Firm picker dropdown should reflect both live and seed firms so the
+  // operator can pick MLG / Neeley even when the live query returns empty.
+  const firmPickerOptions = useMemo(() => {
+    const merged = mergeSeedWithLive(allFirms, OPERATOR_SEED_FIRMS);
+    return merged.map(f => ({ id: f.id, name: f.name }));
+  }, [allFirms]);
+
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'dashboard',       label: 'Dashboard',       icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
     { id: 'firms',           label: 'Firms',           icon: <Building2 className="w-3.5 h-3.5" /> },
     { id: 'pricing',         label: 'Pricing',         icon: <DollarSign className="w-3.5 h-3.5" /> },
     { id: 'features',        label: 'Features',        icon: <ToggleRight className="w-3.5 h-3.5" /> },
@@ -238,6 +268,30 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
   ];
 
   const selectedFirmName = allFirms.find((f) => f.id === selectedFirmId)?.name ?? selectedFirmId.slice(0, 8);
+
+  // Resolve the display name for the firm currently being view-as'd,
+  // preferring live firm data and falling back to the operator seed so the
+  // banner reads "Majors Law Group" even when the unauthenticated dev
+  // session can't load firms via RLS.
+  const viewAsFirmName = useMemo(() => {
+    if (!viewAsFirmId) return null;
+    const live = allFirms.find(f => f.id === viewAsFirmId);
+    if (live) return live.name;
+    const seed = OPERATOR_SEED_FIRMS.find(f => f.id === viewAsFirmId);
+    return seed?.name ?? viewAsFirmId.slice(0, 8);
+  }, [viewAsFirmId, allFirms]);
+
+  // Slice 2 — read-only "View as <Firm>" support view. Takes precedence
+  // over everything else on the operator surface; exits to the firm
+  // profile.
+  if (viewAsFirmId) {
+    return (
+      <OperatorViewAs
+        firmName={viewAsFirmName ?? viewAsFirmId.slice(0, 8)}
+        onExit={() => setViewAsFirmId(null)}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -257,8 +311,10 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
           </div>
           {/* Firm picker — applies to Pricing / Features / Discounts tabs.
               Reference Rules is firm-agnostic (canonical for every firm)
-              and Tier Templates / Firms are list-level views. */}
-          {activeTab !== 'firms' && activeTab !== 'tier_templates' && activeTab !== 'reference_rules' && (
+              and Dashboard / Tier Templates / Firms are list-level views.
+              Hidden during firm-profile rendering — the profile owns the
+              firm context. */}
+          {!selectedFirmProfileId && activeTab !== 'dashboard' && activeTab !== 'firms' && activeTab !== 'tier_templates' && activeTab !== 'reference_rules' && (
             <div className="ml-auto flex items-center gap-2">
               <span className="text-xs text-slate-500">Firm:</span>
               <select
@@ -266,21 +322,34 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
                 onChange={(e) => setSelectedFirmId(e.target.value)}
                 className="bg-slate-800 border border-slate-700 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-amber-500/60 transition-colors"
               >
-                {allFirms.map((f) => (
+                {firmPickerOptions.map((f) => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
               </select>
             </div>
           )}
-          {(activeTab === 'firms' || activeTab === 'tier_templates' || activeTab === 'reference_rules') && (
+          {!selectedFirmProfileId && (activeTab === 'dashboard' || activeTab === 'firms' || activeTab === 'tier_templates' || activeTab === 'reference_rules') && (
             <div className="ml-auto text-xs text-slate-600">
-              {activeTab === 'reference_rules' ? 'All firms (canonical)' : 'All firms'}
+              {activeTab === 'reference_rules' ? 'All firms (canonical)'
+                : activeTab === 'dashboard' ? 'Platform-level'
+                : 'All firms'}
             </div>
           )}
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-8 py-6">
+        {/* When a firm profile is open, the tabs collapse and the profile
+            shell takes the full content area. Back button restores the
+            previous tab. */}
+        {selectedFirmProfileId ? (
+          <FirmProfileShell
+            firmId={selectedFirmProfileId}
+            onBack={() => setSelectedFirmProfileId(null)}
+            onEnterViewAs={() => setViewAsFirmId(selectedFirmProfileId)}
+          />
+        ) : (
+          <>
         {/* Tab nav */}
         <div className="flex items-center gap-1 mb-6 border-b border-slate-800">
           {TABS.map((t) => (
@@ -299,7 +368,8 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
           ))}
         </div>
 
-        {activeTab === 'firms'          && <FirmsTab />}
+        {activeTab === 'dashboard'      && <OperatorDashboard onOpenFirm={setSelectedFirmProfileId} />}
+        {activeTab === 'firms'          && <FirmsTab onOpenFirm={setSelectedFirmProfileId} />}
         {activeTab === 'pricing'        && <PricingTab firmId={selectedFirmId} firmName={selectedFirmName} />}
         {activeTab === 'features'       && <FeaturesTab firmId={selectedFirmId} firmName={selectedFirmName} />}
         {activeTab === 'discounts'      && <DiscountsTab firmId={selectedFirmId} firmName={selectedFirmName} />}
@@ -312,7 +382,302 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
           <CommunicationsTab firmId={selectedFirmId} firmName={selectedFirmName} />
         )}
         {activeTab === 'reference_rules' && <ReferenceRulesTab />}
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─── Operator dashboard — metric cards (Part 1) ───────────────────────────────
+//
+// Extensible card grid keyed by metric name. Adding a new card = appending
+// to the METRIC_CARDS array — no further rendering changes.
+
+function OperatorDashboard({ onOpenFirm }: { onOpenFirm: (firmId: string) => void }) {
+  // Live firms (currently empty under the unauthenticated dev session); seed
+  // fills in MLG + Neeley so the dashboard renders sensibly.
+  const [liveFirms, setLiveFirms] = useState<ReadonlyArray<Pick<Firm, 'id' | 'name'>>>([]);
+  useEffect(() => {
+    supabase.from('firms').select('id, name').then(({ data }) => {
+      if (data) setLiveFirms(data as Pick<Firm, 'id' | 'name'>[]);
+    });
+  }, []);
+  const merged = useMemo(() => mergeSeedWithLive(liveFirms, OPERATOR_SEED_FIRMS), [liveFirms]);
+  // Live firms don't carry the case counts; for the metrics we sum the
+  // seed entries (the real query goes here once the case_count aggregate
+  // is exposed). TODO: wire from real aggregates.
+  const metrics = useMemo(() => computeOperatorMetrics(OPERATOR_SEED_FIRMS), []);
+  // Add new entries here — the grid renders them in order.
+  const METRIC_CARDS: { key: string; label: string; value: string | number; icon: React.ReactNode; tone: string }[] = [
+    { key: 'total_firms',       label: 'Total Firms',                                value: metrics.totalFirms,      icon: <Building2 className="w-4 h-4" />, tone: 'amber' },
+    { key: 'cases_on_platform', label: 'Cases on Platform (using Bankruptcy.AI)',    value: metrics.casesOnPlatform, icon: <Briefcase className="w-4 h-4" />, tone: 'sky' },
+    { key: 'cases_filed',       label: 'Cases Filed',                                value: metrics.casesFiled,      icon: <CheckCircle2 className="w-4 h-4" />, tone: 'emerald' },
+  ];
+
+  return (
+    <section className="space-y-6">
+      {/* Metric card grid — extensible. */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {METRIC_CARDS.map(({ key, label, value, icon, tone }) => (
+          <MetricCard key={key} label={label} value={value} icon={icon} tone={tone} />
+        ))}
+      </div>
+
+      {/* Quick firm roll-up — same data, click to open profile. */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800 flex items-center justify-between">
+          <p className="text-sm font-bold text-white">Active firms</p>
+          <p className="text-[10px] uppercase tracking-widest text-slate-500">
+            {merged.length} firm{merged.length === 1 ? '' : 's'} · seed + live merged
+          </p>
+        </div>
+        <ul className="divide-y divide-slate-800/60">
+          {OPERATOR_SEED_FIRMS.map(f => (
+            <li key={f.id}>
+              <button
+                type="button"
+                onClick={() => onOpenFirm(f.id)}
+                className="w-full px-5 py-3 flex items-center justify-between gap-3 text-left hover:bg-slate-900/80"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white truncate">{f.name}</p>
+                  <p className="text-[10px] text-slate-500 font-mono truncate">{f.id}</p>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-slate-400 flex-shrink-0">
+                  <span><span className="text-slate-500">Signed up</span> {f.signupDate}</span>
+                  <span><span className="text-slate-500">Filed</span> <span className="text-emerald-300 font-bold tabular-nums">{f.casesFiled}</span></span>
+                  <ChevronRight className="w-3.5 h-3.5 text-slate-500" />
+                </div>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <p className="text-[10px] text-slate-600 italic">
+        Counts shown are the operator seed (// TODO: wire from real aggregates — see
+        src/admin/operatorSeed.ts). Live firm-name + status data flows in from <code>firms</code>
+        when the operator session is authenticated.
+      </p>
+    </section>
+  );
+}
+
+function MetricCard({ label, value, icon, tone }: { label: string; value: string | number; icon: React.ReactNode; tone: string }) {
+  const toneClass =
+    tone === 'amber'    ? 'border-amber-500/30 bg-amber-500/5  text-amber-300' :
+    tone === 'sky'      ? 'border-sky-500/30   bg-sky-500/5    text-sky-300'  :
+    tone === 'emerald'  ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-300' :
+                          'border-slate-700   bg-slate-900/40 text-slate-300';
+  return (
+    <div className={`rounded-2xl border ${toneClass} p-5`}>
+      <div className="flex items-center gap-2 mb-2 opacity-80">
+        {icon}
+        <p className="text-[10px] uppercase tracking-widest font-semibold">{label}</p>
+      </div>
+      <p className="text-3xl font-bold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+// ─── Firm-profile shell (Part 3) ──────────────────────────────────────────────
+//
+// Per-firm header with cases-filed + trend placeholders + four clearly-
+// labeled placeholder sections for the upcoming slices. The shell exists
+// so Slices 2–5 drop in without a structural refactor.
+
+function FirmProfileShell({
+  firmId, onBack, onEnterViewAs,
+}: {
+  firmId: string;
+  onBack: () => void;
+  onEnterViewAs: () => void;
+}) {
+  const seed = OPERATOR_SEED_FIRMS.find(f => f.id === firmId);
+  return (
+    <section className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onBack}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-lg px-3 py-1.5"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Back
+        </button>
+        <p className="text-[10px] uppercase tracking-widest text-slate-500">
+          Firm profile · operator view
+        </p>
+      </div>
+
+      {/* Header */}
+      <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-6">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="min-w-0">
+            <h2 className="text-2xl font-bold text-white">{seed?.name ?? 'Unknown firm'}</h2>
+            <p className="text-[11px] text-slate-500 font-mono mt-0.5">{firmId}</p>
+            {seed && (
+              <p className="text-xs text-slate-400 mt-2">
+                Signed up <span className="text-slate-200">{seed.signupDate}</span> · status
+                <span className="ml-1 text-emerald-300">{seed.status}</span>
+              </p>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <MiniStat label="Cases on platform" value={seed?.casesOnPlatform ?? 0} />
+            <MiniStat label="Cases filed" value={seed?.casesFiled ?? 0} accent="emerald" />
+          </div>
+        </div>
+
+        {/* Trend placeholder — sparkline + week-over-week. */}
+        <div className="mt-5 rounded-xl border border-dashed border-slate-700 bg-slate-900/40 p-4 flex items-center gap-3">
+          <TrendingUp className="w-4 h-4 text-sky-400" />
+          <div>
+            <p className="text-xs font-semibold text-white">Filing trend</p>
+            <p className="text-[10px] text-slate-500">Sparkline + week-over-week delta — wires up with real case aggregates (// TODO).</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Slice 2 — "View as <Firm>" read-only support view */}
+      <ViewAsSection firmName={seed?.name ?? 'this firm'} onEnter={onEnterViewAs} />
+      <ProfileSection
+        slice="Slice 3"
+        title="Comparison"
+        icon={<Activity className="w-4 h-4" />}
+        body="Side-by-side metrics against peer firms in the cohort (similar size, jurisdiction, or platform-tenure). Wiring lands with Slice 3."
+      />
+      <ProfileSection
+        slice="Slice 4"
+        title="Billing — service plan"
+        icon={<Receipt className="w-4 h-4" />}
+        body="Current service plan, vendor pass-through state, MRR, invoice history. Pricing-tab content gets a firm-scoped surface here. Wiring lands with Slice 4."
+      />
+      <ProfileSection
+        slice="Slice 5"
+        title="Update Rules"
+        icon={<BookOpen className="w-4 h-4" />}
+        body="Push canonical reference-rule updates (Living Standards, Median Income, Exemptions, Local Rules) to this firm, with re-review fan-out across in-window cases. Wiring lands with Slice 5."
+      />
+    </section>
+  );
+}
+
+function MiniStat({ label, value, accent }: { label: string; value: number; accent?: 'emerald' }) {
+  const color = accent === 'emerald' ? 'text-emerald-300' : 'text-white';
+  return (
+    <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-3 py-2 min-w-[140px]">
+      <p className="text-[9px] uppercase tracking-widest text-slate-500">{label}</p>
+      <p className={`text-xl font-bold tabular-nums ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+// ─── Slice 2 — "View as <Firm>" entry card on the firm profile ────────────────
+function ViewAsSection({ firmName, onEnter }: { firmName: string; onEnter: () => void }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <div className="flex items-center gap-2">
+          <Scale className="w-4 h-4" />
+          <p className="text-sm font-bold text-white">View as / Law Firm Settings</p>
+        </div>
+        <span className="text-[9px] uppercase tracking-widest border rounded-full px-2 py-0.5 border-sky-500/40 text-sky-300 bg-sky-500/5">
+          Slice 2 · scaffold
+        </span>
+      </div>
+      <p className="text-xs text-slate-400 leading-relaxed mb-3">
+        Open this firm's Law Firm Settings in operator support view. Renders the firm-side
+        components in <strong className="text-white">read-only</strong> mode — every form
+        control is disabled and save handlers are unreachable. Use this to troubleshoot what
+        the firm sees without risking edits to their policy or rule overlays.
+      </p>
+      <button
+        type="button"
+        onClick={onEnter}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-700/30 text-sky-200 border border-sky-600/40 hover:bg-sky-700/50"
+      >
+        <Eye className="w-3.5 h-3.5" />
+        View as {firmName} (read-only)
+      </button>
+    </div>
+  );
+}
+
+// ─── Slice 2 — read-only Law Firm Settings render ─────────────────────────────
+//
+// Defense in depth:
+//   1. <fieldset disabled> — disables every native form control inside
+//      (input, select, textarea, button). Save handlers can't be reached
+//      because the buttons that trigger them are disabled.
+//   2. Operator banner with persistent exit control — the operator is
+//      reminded they're in support view at all times.
+//   3. CSS `cursor: not-allowed` on hover within the fieldset so the
+//      operator visibly sees the read-only state.
+//
+// LawFirmSettings is mounted with isFirmSuperAdmin=true (so it doesn't
+// render its "Access Restricted" gate) and isLawFirmOwner=false (so its
+// own edit gates fall back to the non-owner read-only path). The double
+// gate at the fieldset level is the belt-and-suspenders.
+
+function OperatorViewAs({ firmName, onExit }: { firmName: string; onExit: () => void }) {
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      {/* Persistent operator banner — sticky top, exit control on the right. */}
+      <div
+        className="sticky top-0 z-50 bg-amber-500/15 border-b border-amber-500/40 backdrop-blur"
+        role="alert"
+      >
+        <div className="max-w-screen-xl mx-auto px-5 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-amber-200">
+            <Eye className="w-4 h-4" />
+            <p className="text-xs font-semibold">
+              Operator view — viewing <span className="text-white">{firmName}</span>, read-only.
+              Edits disabled.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onExit}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1 rounded-lg border border-amber-400/50 text-amber-100 bg-amber-500/10 hover:bg-amber-500/20"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Exit view-as
+          </button>
+        </div>
+      </div>
+
+      {/* Read-only render. fieldset[disabled] disables every native form
+          control inside; the [disabled] cursor styling reinforces the
+          state visually. LawFirmSettings's internal navigation tabs are
+          implemented as <button> elements, so they too disable inside —
+          that's a known trade-off of the scaffold; a follow-up can add
+          a non-disabled-by-fieldset nav if support-view exploration
+          becomes a frequent operator task. */}
+      <fieldset
+        disabled
+        className="border-0 p-0 m-0 [&_*]:cursor-not-allowed"
+      >
+        <LawFirmSettings isFirmSuperAdmin={true} isLawFirmOwner={false} />
+      </fieldset>
+    </div>
+  );
+}
+
+function ProfileSection({ slice, title, icon, body }: { slice: string; title: string; icon: React.ReactNode; body: string }) {
+  return (
+    <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-5">
+      <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+        <div className="flex items-center gap-2">
+          {icon}
+          <p className="text-sm font-bold text-white">{title}</p>
+        </div>
+        <span className="text-[9px] uppercase tracking-widest border rounded-full px-2 py-0.5 border-amber-500/40 text-amber-300 bg-amber-500/5">
+          {slice} · placeholder
+        </span>
+      </div>
+      <p className="text-xs text-slate-400 leading-relaxed">{body}</p>
     </div>
   );
 }
@@ -321,7 +686,11 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
 
 const FIRM_STATUSES = ['lead', 'trial', 'active', 'suspended', 'churned'] as const;
 
-function FirmsTab() {
+interface FirmsTabProps {
+  onOpenFirm: (firmId: string) => void;
+}
+
+function FirmsTab({ onOpenFirm }: FirmsTabProps) {
   const [rows, setRows] = useState<Firm[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -368,6 +737,26 @@ function FirmsTab() {
     setEditingId(null);
   }
 
+  // Merge the live Supabase result with the operator seed so MLG + Neeley
+  // appear even when the unauthenticated dev query returns nothing. Seed
+  // entries are read-only (no Supabase row to edit); the edit pencil
+  // hides on those rows.
+  const seedById = useMemo(() => {
+    const m = new Map<string, OperatorSeedFirm>();
+    OPERATOR_SEED_FIRMS.forEach(f => m.set(f.id, f));
+    return m;
+  }, []);
+  const displayRows = useMemo(() => {
+    const live = rows ?? [];
+    return mergeSeedWithLive(live, OPERATOR_SEED_FIRMS);
+  }, [rows]);
+
+  function metaFor(id: string): { signupDate: string | null; casesFiled: number | null } {
+    const s = seedById.get(id);
+    if (!s) return { signupDate: null, casesFiled: null };
+    return { signupDate: s.signupDate, casesFiled: s.casesFiled };
+  }
+
   return (
     <section>
       {err && <ErrorRow message={err} />}
@@ -380,17 +769,32 @@ function FirmsTab() {
                 <th className="text-left px-5 py-3">Name</th>
                 <th className="text-left px-4 py-3">Slug</th>
                 <th className="text-left px-4 py-3">Status</th>
-                <th className="text-left px-4 py-3">Created</th>
+                <th className="text-left px-4 py-3">Signed up</th>
+                <th className="text-right px-4 py-3">Cases filed</th>
                 <th className="px-4 py-3 w-24" />
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/40">
-              {rows.length === 0 && (
-                <tr><td colSpan={5} className="text-center py-10 text-xs text-slate-600">No firms found.</td></tr>
+              {displayRows.length === 0 && (
+                <tr><td colSpan={6} className="text-center py-10 text-xs text-slate-600">No firms found.</td></tr>
               )}
-              {rows.map((f) => {
-                const isEditing = editingId === f.id;
-                const isSaving  = savingId  === f.id;
+              {displayRows.map((row) => {
+                const isSeedOnly = !(rows ?? []).some(r => r.id === row.id);
+                // Build a Firm-like view object so the existing edit
+                // markup keeps reading the same field names regardless
+                // of source.
+                const f: Firm = isSeedOnly
+                  ? {
+                      id:         row.id,
+                      name:       row.name,
+                      slug:       (row as OperatorSeedFirm).slug,
+                      status:     (row as OperatorSeedFirm).status,
+                      created_at: (row as OperatorSeedFirm).signupDate,
+                    }
+                  : (row as Firm);
+                const meta = metaFor(f.id);
+                const isEditing = !isSeedOnly && editingId === f.id;
+                const isSaving  = !isSeedOnly && savingId  === f.id;
                 return (
                   <tr key={f.id} className={`transition-colors ${isEditing ? 'bg-slate-800/50' : 'hover:bg-slate-800/30'}`}>
                     <td className="px-5 py-3">
@@ -402,7 +806,15 @@ function FirmsTab() {
                           autoFocus
                         />
                       ) : (
-                        <span className="text-sm font-semibold text-white">{f.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => onOpenFirm(f.id)}
+                          className="text-sm font-semibold text-white hover:text-amber-300 inline-flex items-center gap-1.5 text-left"
+                          title="Open firm profile"
+                        >
+                          {f.name}
+                          <ChevronRight className="w-3.5 h-3.5 opacity-60" />
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -434,7 +846,14 @@ function FirmsTab() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(f.created_at)}</td>
+                    <td className="px-4 py-3 text-xs text-slate-500">
+                      {meta.signupDate ?? fmtDate(f.created_at)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-right tabular-nums">
+                      {meta.casesFiled != null
+                        ? <span className="text-emerald-300 font-bold">{meta.casesFiled}</span>
+                        : <span className="text-slate-600">—</span>}
+                    </td>
                     <td className="px-4 py-3">
                       {isEditing ? (
                         <div className="flex items-center gap-1.5">
@@ -453,6 +872,10 @@ function FirmsTab() {
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
+                      ) : isSeedOnly ? (
+                        <span className="text-[9px] uppercase tracking-widest text-amber-300/70 border border-amber-500/30 rounded-full px-2 py-0.5">
+                          seed
+                        </span>
                       ) : (
                         <button
                           onClick={() => startEdit(f)}

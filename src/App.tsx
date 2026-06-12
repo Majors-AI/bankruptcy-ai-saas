@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, Component, ReactNode } from 'react';
+import { supabase } from './lib/supabase';
 import BankruptcyIntake from './BankruptcyIntake';
 import ClientDashboard from './ClientDashboard';
 import BankruptcyDocumentQuestionnaire from './bankruptcy-information-and-document-questionnaire(1).jsx';
@@ -29,6 +30,7 @@ import LegacyClientImport from './LegacyClientImport';
 import SuperAdminPage from './admin/SuperAdminPage';
 import LegalDepartmentPortal from './LegalDepartmentPortal';
 import SigningApptPortal from './SigningApptPortal';
+import Ch13PlanPortal from './components/signing-review/Ch13PlanPortal';
 import EFilingPortal from './EFilingPortal';
 import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
@@ -55,7 +57,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_appt_portal' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_review_ch13' | 'signing_appt_portal' | 'signing_appt_portal_ch13' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal' | 'law_firm_settings';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -72,6 +74,7 @@ const VIEW_FLAGS: Partial<Record<View, keyof NavFlags>> = {
   paralegal:             'feature_paralegal_review',
   attorney_sign:         'feature_attorney_review',
   signing_review:        'feature_signing_review',
+  signing_review_ch13:   'feature_signing_review',
   file_a_case:           'feature_file_a_case',
   ecf_notices:           'feature_ecf_notices',
   creditor_verification: 'feature_creditor_verification',
@@ -91,6 +94,27 @@ const VIEW_FLAGS: Partial<Record<View, keyof NavFlags>> = {
 // Redirect target when a gated view is blocked. feature_file_cabinet defaults
 // true for all firms so this is always a safe landing spot.
 const FALLBACK_VIEW: View = 'file_cabinet';
+
+// Per-user operator allowlist for the Bankruptcy.AI Admin tab.
+//
+// IMPORTANT: this list controls CLIENT-SIDE TAB VISIBILITY ONLY. It is
+// NOT a security boundary. A motivated user can edit their own bundle
+// and bypass this check trivially. Actual operator-data protection MUST
+// be Supabase RLS on the canonical / operator-only tables before launch
+// (firms, firm_pricing, firm_features, communications, reference_rules,
+// etc.). Treat this purely as a convenience for surfacing the operator
+// nav entry to recognized accounts in dev / pre-RLS environments.
+//
+// Supplements VITE_PLATFORM_ROLE — env wins when set, allowlist fills in
+// for authenticated users whose email matches without a per-machine env
+// override. Lowercased comparison.
+const OPERATOR_EMAILS: ReadonlyArray<string> = [
+  'dominic@majorslawgroup.com',  // TODO: confirm Dom's operator email
+];
+function isOperatorEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return OPERATOR_EMAILS.includes(email.toLowerCase());
+}
 
 // ── Theme hook ────────────────────────────────────────────────────────────────
 function useTheme() {
@@ -136,7 +160,21 @@ function App() {
   // BAN-40 phase 2 will replace these with values from the Supabase auth context.
   // Until auth is wired, read from env vars so each deployment is configured per firm.
   const firmId = (import.meta.env.VITE_FIRM_ID as string | undefined) ?? '00000000-0000-0000-0000-000000000001';
-  const isSuperAdmin = (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) === 'super_admin_bankruptcy_ai';
+  // Per-user operator allowlist (UI tab visibility only — see OPERATOR_EMAILS
+  // comment above). Authenticated user email is fetched once on mount; the
+  // env-based VITE_PLATFORM_ROLE check still wins when set so operators on
+  // shared dev boxes can short-circuit the auth round-trip.
+  const [authedEmail, setAuthedEmail] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    supabase.auth.getUser().then(({ data }) => {
+      if (!cancelled) setAuthedEmail(data.user?.email ?? null);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  const isSuperAdmin =
+    (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) === 'super_admin_bankruptcy_ai'
+    || isOperatorEmail(authedEmail);
   // BAN-40 phase 2 stubs — replace with auth-derived firm role lookup.
   // Role hierarchy: law_firm_owner ⊃ super_admin ⊃ attorney
   //   VITE_FIRM_ROLE='law_firm_owner' → firm owner (sees Law Firm Owner Portal + everything below)
@@ -317,14 +355,35 @@ function App() {
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>,
     },
     {
-      id: 'signing_review', label: '11. Signing Review Portal', flagKey: 'feature_signing_review',
+      // Two adjacent Signing Review entries — Ch.7 + Ch.13. Each routes
+      // through the same SigningReview component with a different
+      // portalChapter prop; the component dispatches to the correct
+      // surface (Ch.7 body or Ch13SigningReview) based on the case's
+      // actual form_data.chapter. Same flag (feature_signing_review)
+      // gates both — they are facets of the same #11 portal.
+      id: 'signing_review', label: '11. Ch. 7 Signing Review Portal', flagKey: 'feature_signing_review',
       activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
     },
     {
-      // NEW placeholder — schedules / manages signing appointments. No functionality yet.
-      id: 'signing_appt_portal', label: '12. Signing Appt. Portal',
+      id: 'signing_review_ch13', label: '11. Ch. 13 Signing Review Portal', flagKey: 'feature_signing_review',
+      activeClass: 'bg-sky-700 text-white shadow-sky-700/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>,
+    },
+    {
+      // Two adjacent Signing Appt. Portal entries — Ch.7 + Ch.13. Both
+      // render the SAME SigningApptPortal surface; the Ch.13 entry
+      // additionally mounts the existing Ch13PlanPortal underneath
+      // (three sequential touchpoints: Paralegal Signing Review →
+      // Attorney Pre-Signing → Client Signing). Same #12 slot, no rail
+      // renumber. Ungated (no flagKey) — matches the prior single entry.
+      id: 'signing_appt_portal', label: '12. Ch. 7 Signing Appt. Portal',
       activeClass: 'bg-sky-500 text-white shadow-sky-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 16l2 2 4-4"/></svg>,
+    },
+    {
+      id: 'signing_appt_portal_ch13', label: '12. Ch. 13 Signing Appt. Portal',
+      activeClass: 'bg-sky-600 text-white shadow-sky-600/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2zM9 16l2 2 4-4"/></svg>,
     },
     {
@@ -380,6 +439,18 @@ function App() {
       hidden: !isLawFirmOwner,
       activeClass: 'bg-rose-500 text-white shadow-rose-500/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l3.057 3.057a2 2 0 002.828 0L12 5l1.115 1.057a2 2 0 002.828 0L19 3l1.5 6.5L18 21H6L3.5 9.5 5 3z"/></svg>,
+    },
+    {
+      // #21 — Platform-operator console (bankruptcy.ai Admin). Placed at the
+      // tail of the visible rail, after #20. Restricted to
+      // super_admin_bankruptcy_ai — operator gate fires when EITHER
+      //   (a) VITE_PLATFORM_ROLE === 'super_admin_bankruptcy_ai', OR
+      //   (b) supabase.auth.getUser() returns an email in OPERATOR_EMAILS.
+      // Both conditions feed the same isSuperAdmin flag — see App.tsx top.
+      id: 'bankruptcy_ai_admin', label: '21. Bankruptcy.AI Admin',
+      hidden: !isSuperAdmin,
+      activeClass: 'bg-amber-500 text-slate-950 shadow-amber-500/20',
+      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
     },
     // ── Hidden — route + component intact ─────────────────────────────────
     {
@@ -445,11 +516,6 @@ function App() {
       hidden: true,
       activeClass: 'bg-violet-700 text-white shadow-violet-700/20',
       icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>,
-    },
-    {
-      id: 'bankruptcy_ai_admin', label: 'bankruptcy.ai Admin',
-      activeClass: 'bg-amber-500 text-slate-950 shadow-amber-500/20',
-      icon: <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>,
     },
   ];
 
@@ -614,7 +680,17 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SigningReview /></div>
+        <div className="pb-24"><SigningReview portalChapter="7" /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'signing_review_ch13') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24"><SigningReview portalChapter="13" /></div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -675,6 +751,26 @@ function App() {
       <ErrorBoundary>
         <GateToastOverlay />
         <div className="pb-24"><SigningApptPortal /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  if (view === 'signing_appt_portal_ch13') {
+    // Ch.13 Signing Appt. Portal — same surface as Ch.7 PLUS the
+    // Ch13PlanPortal mounted underneath. Plan portal exposes the three
+    // sequential Ch.13 touchpoints (paralegal review → attorney pre-
+    // signing → client signing) for lawyers; non-lawyers get the
+    // sanitized status-bar fallback inside the component itself.
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <div className="pb-24 space-y-4">
+          <SigningApptPortal />
+          <div className="max-w-screen-xl mx-auto px-5">
+            <Ch13PlanPortal isLawyer={isLawyerViewer} />
+          </div>
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );

@@ -8,6 +8,8 @@ import { getCurrentAttorneyName } from '../lib/currentAttorney';
 import ExemptionsLiquidationPanel from './signing-review/ExemptionsLiquidationPanel';
 import MaritalAdjustmentPanel from './signing-review/MaritalAdjustmentPanel';
 import LongFormDeductionPanel from './signing-review/LongFormDeductionPanel';
+import Ch13SigningReview from './signing-review/Ch13SigningReview';
+import PreFilingGateBadge from './firm-rule-updates/PreFilingGateBadge';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
@@ -259,10 +261,18 @@ interface SigningReviewProps {
    * impersonateClient or a future session/selection context.
    */
   clientId?: string;
+  /**
+   * Which Signing Review portal the user entered through. Drives the
+   * default render when case.chapter is unset and powers the
+   * "wrong-portal" notice when the case's actual chapter differs from
+   * the portal that opened it. Does NOT override the case's actual
+   * chapter — the dispatch routes to the correct surface either way.
+   */
+  portalChapter?: '7' | '13';
 }
 
 export default function SigningReview(
-  { layout = 'full', clientId = 'client-demo' }: SigningReviewProps = {},
+  { layout = 'full', clientId = 'client-demo', portalChapter = '7' }: SigningReviewProps = {},
 ) {
   const role = (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) ?? 'legal_admin';
 
@@ -284,6 +294,11 @@ export default function SigningReview(
   const [intakeFormData, setIntakeFormData] = useState<Record<string, unknown> | null>(null);
   const [intakeState, setIntakeState] = useState<string | undefined>(undefined);
   const [intakeCounty, setIntakeCounty] = useState<string | undefined>(undefined);
+  // Chapter routing — read case.chapter from intake form_data. '7' →
+  // existing Ch.7 surface (below); '13' → Ch13SigningReview surface
+  // (dispatched a few lines below). Unset → defaults to '7' with a small
+  // "chapter not set" note rendered in the Ch.7 header.
+  const [caseChapter, setCaseChapter] = useState<'7' | '13' | null>(null);
   // Attorney-controlled consumer/non-consumer determination. The client-side
   // SOFA toggle was hidden — classification is set here at signing review.
   // Seeded from intake form_data.debtNature when present; otherwise defaults
@@ -335,6 +350,19 @@ export default function SigningReview(
         if (seedDebt === 'non-consumer' || seedDebt === 'consumer') {
           setAttorneyDebtType(seedDebt);
         }
+        // Case chapter — looks at form_data.chapter or the nested
+        // petition.chapter. Tolerates strings, numbers, and "Chapter 13"
+        // / "Ch. 13" / "13" variants. Anything we can't classify leaves
+        // caseChapter null → the Ch.7 surface renders a "chapter not
+        // set" notice.
+        const rawChapter =
+          (fd as Record<string, unknown> | null)?.chapter ??
+          ((fd as Record<string, unknown> | null)?.petition as Record<string, unknown> | undefined)?.chapter ??
+          null;
+        const chapterStr = String(rawChapter ?? "").toLowerCase();
+        if (chapterStr.includes("13") || chapterStr === "ch13") setCaseChapter("13");
+        else if (chapterStr.includes("7") || chapterStr === "ch7") setCaseChapter("7");
+        else setCaseChapter(null);
       } catch {
         // No submission on file — panel renders empty-state.
       }
@@ -467,6 +495,31 @@ export default function SigningReview(
     );
   }
 
+  // ── Chapter dispatch ──────────────────────────────────────────────────────
+  // The case's ACTUAL chapter (read from form_data) wins over the portal
+  // entry. portalChapter is the default when the case has no chapter set
+  // (i.e. demo/empty data) and powers the "wrong-portal" notice when the
+  // case's chapter conflicts with where the user came from.
+  //
+  // Routing:
+  //   case.chapter === '13'  → Ch13SigningReview (regardless of portal)
+  //   case.chapter === '7'   → Ch.7 body (regardless of portal)
+  //   case.chapter unset     → render the portal's default surface
+  const wrongPortal =
+    caseChapter !== null && caseChapter !== portalChapter;
+  const effectiveChapter: '7' | '13' = caseChapter ?? portalChapter;
+  if (effectiveChapter === '13') {
+    return (
+      <Ch13SigningReview
+        role={role}
+        intakeFormData={intakeFormData}
+        intakeState={intakeState}
+        intakeCounty={intakeCounty}
+        wrongPortalNotice={wrongPortal ? `This case is Ch. 13 — opened from the Ch. 7 portal.` : undefined}
+      />
+    );
+  }
+
   const progressPct = Math.round((verifiedCount / TOTAL_ITEMS) * 100);
   const circumference = 2 * Math.PI * 26;
 
@@ -489,8 +542,20 @@ export default function SigningReview(
               <FileText className="w-4 h-4 text-sky-400" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-white leading-tight">Signing Review Portal</p>
+              <p className="text-sm font-semibold text-white leading-tight">Ch. 7 Signing Review Portal</p>
               <p className="text-xs text-slate-500">{reviewerName()}</p>
+              {wrongPortal && (
+                <p className="text-[10px] text-amber-300 mt-0.5">
+                  <AlertTriangle className="w-3 h-3 inline mr-1" />
+                  This case is Ch. 7 — opened from the Ch. 13 portal.
+                </p>
+              )}
+              {!wrongPortal && caseChapter === null && (
+                <p className="text-[10px] text-amber-300 mt-0.5">
+                  <AlertTriangle className="w-3 h-3 inline mr-1" />
+                  case.chapter not set — defaulting to Ch. {portalChapter}
+                </p>
+              )}
             </div>
           </div>
 
@@ -539,6 +604,19 @@ export default function SigningReview(
       </header>
 
       <div className="max-w-screen-xl mx-auto px-5 py-6 space-y-6">
+
+        {/* Slice 5 — pre-filing rules gate. Compares case.lastReviewedRulesVersion
+            vs firm.appliedRulesVersion (firmRuleUpdates). caseStampedVersionId
+            is `null` today — wiring it to the actual AttorneyReviewRecord
+            stamp on this case is a follow-up (the engine already records
+            stamps via rulesAuditStore.reviews; the SigningReview just
+            needs to thread the lookup through here). */}
+        <PreFilingGateBadge
+          firmId={FIRM_ID}
+          caseId={CLIENT_ID}
+          caseStampedVersionId={null /* TODO: wire from AttorneyReviewRecord.stampedVersionId */}
+          isLawyer={role === 'attorney' || role === 'super_admin_bankruptcy_ai'}
+        />
 
         {/* ── Progress card ── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

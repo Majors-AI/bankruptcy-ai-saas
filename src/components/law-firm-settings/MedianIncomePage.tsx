@@ -14,6 +14,7 @@ import { useRulesAudit } from "./rulesAuditStore";
 import RulesSectionAudit from "./RulesSectionAudit";
 import ReReviewQueue from "./ReReviewQueue";
 import CanonicalMaintenanceBanner from "./CanonicalMaintenanceBanner";
+import RuleSectionMeta from "./RuleSectionMeta";
 import type { ViewerRole } from "../department-management/types";
 import { useFirmAdmittedStates } from "../../lib/firmPolicy";
 
@@ -128,6 +129,13 @@ export default function MedianIncomePage({ viewerRole }: Props) {
         version={MEDIAN_INCOME_META.effectiveDate}
         updatedOn={MEDIAN_INCOME_META.effectiveDate}
         unverified={!MEDIAN_INCOME_META.verified}
+      />
+
+      <RuleSectionMeta
+        changeSection="median_income"
+        auditSection="median_income"
+        datasetDate={MEDIAN_INCOME_META.effectiveDate}
+        headingOverride="Median Income"
       />
 
       {/* Meta */}

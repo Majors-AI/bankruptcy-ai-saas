@@ -13,13 +13,14 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Scale, MapPin, Lock, Upload, Edit3, AlertTriangle, ChevronRight,
-  History, Send, Save, Database,
+  History, Save, Database,
 } from "lucide-react";
 import { EXEMPTIONS_BY_JURISDICTION } from "../../lib/irsMeansStandards";
 import { useRulesAudit } from "./rulesAuditStore";
 import RulesSectionAudit from "./RulesSectionAudit";
 import ReReviewQueue from "./ReReviewQueue";
 import CanonicalMaintenanceBanner from "./CanonicalMaintenanceBanner";
+import RuleSectionMeta from "./RuleSectionMeta";
 import type { ViewerRole } from "../department-management/types";
 import { useFirmAdmittedStates } from "../../lib/firmPolicy";
 
@@ -134,6 +135,13 @@ export default function BankruptcyExemptionsPage({ viewerRole }: Props) {
         version={active?.effectiveDate ?? "—"}
         updatedOn={active?.effectiveDate ?? "—"}
         unverified={active != null && !active.verified}
+      />
+
+      <RuleSectionMeta
+        changeSection="exemptions"
+        auditSection="exemptions"
+        datasetDate={active?.effectiveDate ?? "—"}
+        headingOverride={`Bankruptcy Exemptions${active ? ` — ${active.jurisdiction}` : ""}`}
       />
 
       {showQueue && <ReReviewQueue section="exemptions" />}
@@ -323,7 +331,8 @@ function StateExemptions({ stateKey, canEdit }: { stateKey: string; canEdit: boo
           <Lock className="w-3.5 h-3.5 text-[#6B6B66] mt-0.5" />
           <p className="text-[11px] text-[#6B6B66] leading-relaxed">
             Read-only. Only an attorney with super-admin (or the law firm owner) may modify
-            exemptions. Submit a <button className="underline" onClick={() => alert("Propose — routes to attorney super-admin. Scaffold.")}><Send className="w-3 h-3 inline" /> proposed change</button> per row.
+            exemptions. Use the <strong className="text-amber-200">Request a change</strong> button
+            in the header above to flag a value, issue, or suggested correction.
           </p>
         </div>
       )}

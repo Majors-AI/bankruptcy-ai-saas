@@ -22,6 +22,7 @@ import { useRulesAudit } from "./rulesAuditStore";
 import RulesSectionAudit from "./RulesSectionAudit";
 import ReReviewQueue from "./ReReviewQueue";
 import CanonicalMaintenanceBanner from "./CanonicalMaintenanceBanner";
+import RuleSectionMeta from "./RuleSectionMeta";
 import {
   LivingStandardsOverlayProvider, useLivingStandardsOverlay,
   canAdjustLivingStandards,
@@ -235,6 +236,14 @@ function NationalSub({ canEdit, initialOpen = true }: { canEdit: boolean; initia
         </div>
       )}
     >
+      <div className="mb-3">
+        <RuleSectionMeta
+          changeSection="living_standards.national"
+          auditSection="living_standards"
+          datasetDate={NATIONAL_STANDARDS_2025_META.effectiveDate}
+          headingOverride="Living Standards — National Standards"
+        />
+      </div>
       <div className="overflow-x-auto rounded border border-[#2A2A28] bg-[#1A1A18]">
         <table className="min-w-full text-[11px]">
           <thead className="bg-[#0F0F0E]">
@@ -373,6 +382,14 @@ function HousingSub({ canEdit, initialOpen = false }: { canEdit: boolean; initia
         </div>
       )}
     >
+      <div className="mb-3">
+        <RuleSectionMeta
+          changeSection="living_standards.housing"
+          auditSection="living_standards"
+          datasetDate={NATIONAL_STANDARDS_2025_META.effectiveDate}
+          headingOverride="Living Standards — Local Housing & Utilities"
+        />
+      </div>
       {/* Empty-state when no admitted states overlap with the loaded
           Housing & Utilities datasets. Surfaces the same Firm Policy
           guidance as the other reference pages. */}
@@ -475,6 +492,15 @@ function TransportationSub({ canEdit, initialOpen = false }: { canEdit: boolean;
       open={open}
       onToggle={() => setOpen(o => !o)}
     >
+      <div className="mb-3">
+        <RuleSectionMeta
+          changeSection="living_standards.transportation"
+          auditSection="living_standards"
+          datasetDate={NATIONAL_STANDARDS_2025_META.effectiveDate}
+          headingOverride="Living Standards — Transportation"
+        />
+      </div>
+      <>
       {/* Top-line constants */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
         <Stat label="Ownership — one car" value={`$${IRS_TRANSPORTATION_2025.ownershipNational.one}`} />
@@ -538,6 +564,7 @@ function TransportationSub({ canEdit, initialOpen = false }: { canEdit: boolean;
         national reference data; the per-metro list filters to the firm's admitted jurisdictions.
         Transportation inline edits land in the follow-up build.
       </p>
+      </>
     </SubBlock>
   );
 }

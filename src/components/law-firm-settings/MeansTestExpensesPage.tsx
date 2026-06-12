@@ -11,6 +11,8 @@
 // IRS table and points at the canonical store it reads from.
 
 import { Calculator, Home, Car, Heart, FileText, DollarSign, ExternalLink } from "lucide-react";
+import RuleSectionMeta from "./RuleSectionMeta";
+import { NATIONAL_STANDARDS_2025_META } from "../../lib/irsMeansStandards";
 
 interface ExpenseLine {
   label: string;
@@ -117,6 +119,12 @@ export default function MeansTestExpensesPage() {
   return (
     <div className="space-y-4">
       <PageHeader />
+
+      <RuleSectionMeta
+        changeSection="means_test_figures"
+        datasetDate={NATIONAL_STANDARDS_2025_META.effectiveDate}
+        headingOverride="Means-Test Figures (Form 122A-2 / 122C-2 catalog)"
+      />
 
       <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
         <p className="text-xs text-amber-200 leading-relaxed">

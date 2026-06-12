@@ -58,6 +58,11 @@ interface Props {
   clientCounty?: string;
   /** Attorney edit rights. */
   canEdit: boolean;
+  /** Emits the running totals object whenever the computation re-runs. The
+   *  Ch.13 Signing Review reads `nonExempt` from this to display the
+   *  § 1325(a)(4) best-interests-of-creditors floor without recomputing
+   *  the liquidation analysis. */
+  onTotalsChange?: (totals: { value: number; liens: number; equity: number; claimed: number; nonExempt: number }) => void;
 }
 
 const num = (v: unknown): number => {
@@ -327,7 +332,7 @@ function getEffectiveItems(
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export default function ExemptionsLiquidationPanel({ formData, clientState, clientCounty, canEdit }: Props) {
+export default function ExemptionsLiquidationPanel({ formData, clientState, clientCounty, canEdit, onTotalsChange }: Props) {
   const defaultJurisdiction = useMemo(() => {
     const s = (clientState || "").toUpperCase();
     if (s === "AZ") return "AZ";
@@ -510,6 +515,12 @@ export default function ExemptionsLiquidationPanel({ formData, clientState, clie
       { value: 0, liens: 0, equity: 0, claimed: 0, nonExempt: 0 },
     );
   }, [rows]);
+
+  // Emit totals upward so the Ch.13 Signing Review can read the
+  // § 1325(a)(4) best-interests floor without recomputing.
+  useEffect(() => {
+    onTotalsChange?.(totals);
+  }, [totals, onTotalsChange]);
 
   if (!jur) {
     return (

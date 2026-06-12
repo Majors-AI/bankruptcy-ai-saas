@@ -14,13 +14,15 @@ import { useState } from "react";
 import {
   Shield, Users, Image, Scale, DollarSign, Home, Network,
   ChevronRight, ChevronDown, BookOpen, Gauge, Calculator,
-  Car,
+  Car, CalendarDays, Target,
 } from "lucide-react";
 import {
   DepartmentManagementProvider,
 } from "./components/department-management/store";
 import { WhiteLabelProvider, useWhiteLabel, schemeCss } from "./components/law-firm-settings/whiteLabelStore";
-import { RulesAuditProvider } from "./components/law-firm-settings/rulesAuditStore";
+import { RulesAuditProvider, useRulesAudit } from "./components/law-firm-settings/rulesAuditStore";
+import FirmRuleUpdateAcceptNotice from "./components/firm-rule-updates/FirmRuleUpdateAcceptNotice";
+import { autoEnqueueForFirm } from "./lib/firmRuleUpdates";
 import { CaseTypeProvider } from "./components/law-firm-settings/CaseTypeAssignment";
 import { ReassignmentProvider } from "./components/law-firm-settings/ReassignmentRequests";
 import { LegalFilingsProvider } from "./components/law-firm-settings/LegalPrePostPanel";
@@ -36,6 +38,8 @@ import DepartmentsPage from "./components/law-firm-settings/DepartmentsPage";
 import ClientPublicRelationsPlaceholder from "./components/law-firm-settings/ClientPublicRelationsPlaceholder";
 import LocalRulesPage from "./components/law-firm-settings/LocalRulesPage";
 import FirmPolicyPage from "./components/law-firm-settings/FirmPolicyPage";
+import CalendarConfigurationPage from "./components/law-firm-settings/CalendarConfigurationPage";
+import PerformanceGoalsPage from "./components/law-firm-settings/PerformanceGoalsPage";
 
 import type { ViewerRole, DepartmentId } from "./components/department-management/types";
 
@@ -55,7 +59,7 @@ type NavKey =
   | "directory" | "white_label" | "exemptions"
   | "means_test" | MeansTestSubKey
   | "living" | LivingSubKey
-  | "local_rules" | "firm_policy"
+  | "local_rules" | "calendar_config" | "performance_goals" | "firm_policy"
   | "departments";
 
 // Leaf items rendered as flat rows in the top nav (above the expandable
@@ -67,11 +71,19 @@ const TOP_NAV_LEAVES: Array<{ key: "directory" | "white_label" | "exemptions"; l
   { key: "exemptions",  label: "Bankruptcy Exemptions", icon: Scale },
 ];
 
-const BELOW_GROUP_NAV: Array<{ key: "local_rules" | "firm_policy"; label: string; icon: React.FC<{ className?: string }> }> = [
-  { key: "local_rules", label: "Local Rules",           icon: BookOpen },
+const BELOW_GROUP_NAV: Array<{ key: "local_rules" | "calendar_config" | "performance_goals" | "firm_policy"; label: string; icon: React.FC<{ className?: string }> }> = [
+  { key: "local_rules",       label: "Local Rules",            icon: BookOpen },
+  // Calendar Configuration — per-firm department calendars + appointment
+  // types. Drives the firm calendar's department filter strip + the
+  // New Event modal's appointment-type dropdown.
+  { key: "calendar_config",   label: "Calendar Configuration", icon: CalendarDays },
+  // Performance Goals — supervisors / super-admins set per-employee
+  // monthly targets for the four Intake metrics. Powers each staffer's
+  // Intake-dashboard Performance/Goals card.
+  { key: "performance_goals", label: "Performance Goals",      icon: Target },
   // Firm Policy — firm-set knobs (NOT canonical, NOT statutory). Today
   // hosts the DMI triage threshold; more firm-local knobs land here.
-  { key: "firm_policy", label: "Firm Policy",           icon: Gauge },
+  { key: "firm_policy",       label: "Firm Policy",            icon: Gauge },
 ];
 
 // Means Test group — sits above Median Income per the firm's mental model
@@ -349,6 +361,12 @@ function Shell({
 
         {/* Page area */}
         <main className="flex-1 min-w-0 p-6 lg:p-8 space-y-6 max-w-6xl">
+          {/* Slice 5 — firm Accept-and-apply gate. Renders only when the
+              operator has published an update and the firm hasn't yet
+              accepted. Auto-enqueue ticks on every PublishEvent emitted
+              by useRulesAudit. */}
+          <FirmRuleUpdateGateMount viewerRole={viewerRole} />
+
           {view === "directory"   && <FirmDirectory viewerRole={viewerRole} />}
           {view === "white_label" && <WhiteLabelSection />}
           {/* Canonical datasets are READ-ONLY at the firm level for every
@@ -369,8 +387,10 @@ function Shell({
               activeSub={livingActiveSub}
             />
           )}
-          {view === "local_rules" && <LocalRulesPage />}
-          {view === "firm_policy" && <FirmPolicyPage legalReferenceRole={legalReferenceRole} />}
+          {view === "local_rules"       && <LocalRulesPage />}
+          {view === "calendar_config"   && <CalendarConfigurationPage legalReferenceRole={legalReferenceRole} />}
+          {view === "performance_goals" && <PerformanceGoalsPage     viewerRole={viewerRole} />}
+          {view === "firm_policy"       && <FirmPolicyPage legalReferenceRole={legalReferenceRole} />}
           {view === "departments" && (
             // Client Public Relations is scaffold-only — its placeholder
             // page replaces the standard DepartmentsPage for this key until
@@ -474,5 +494,29 @@ function NavLeaf({
       </span>
       <ChevronRight className="w-3 h-3 opacity-60" />
     </button>
+  );
+}
+
+// Slice 5 — Accept-and-apply gate mount. Auto-enqueues pending updates
+// from the rulesAuditStore publishEvents stream into the firm's pending
+// queue, then renders the notice. canAccept = law_firm_owner OR
+// attorney_super_admin (the supervising attorney). Firm id comes from
+// the per-deployment VITE_FIRM_ID env var until BAN-40 auth wires the
+// authenticated firm context.
+function FirmRuleUpdateGateMount({ viewerRole }: { viewerRole: ViewerRole }) {
+  const audit = useRulesAudit();
+  const firmId = (import.meta.env.VITE_FIRM_ID as string | undefined)
+    ?? "00000000-0000-0000-0000-000000000001";
+  // Side-effect — enqueue any new publish events for this firm.
+  autoEnqueueForFirm(firmId, audit.publishEvents);
+  // Only law_firm_owner (the firm owner) may accept here. Supervising
+  // attorneys plumb through legalReferenceRole in a follow-up.
+  const canAccept = viewerRole === "law_firm_owner";
+  return (
+    <FirmRuleUpdateAcceptNotice
+      firmId={firmId}
+      canAccept={canAccept}
+      acceptedBy={viewerRole.replace(/_/g, " ")}
+    />
   );
 }
