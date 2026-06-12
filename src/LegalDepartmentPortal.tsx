@@ -26,6 +26,7 @@ import type {
   ParalegalReviewRow,
   EcfTaskRow,
   IntakeLeadRow,
+  CalendarEventRow,
 } from "./components/legal/legalTasks";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
@@ -96,9 +97,16 @@ export default function LegalDepartmentPortal() {
   const [paralegalReviews,      setParalegalReviews]      = useState<ParalegalReviewRow[]>([]);
   const [ecfTasks,              setEcfTasks]              = useState<EcfTaskRow[]>([]);
   const [intakeLeads,           setIntakeLeads]           = useState<IntakeLeadRow[]>([]);
+  // Slice L-7 (Prompt 65) — today's hearings/filings footer source.
+  // department=eq.legal at the query layer; firm-scoping is implicit via
+  // staff_id → staff_members + table-level RLS (calendar_events has no
+  // firm_id column today). Loaded broadly (limit 300, ordered by
+  // start_time asc) and filtered client-side to today in firm TZ —
+  // matches the Intake portal's pattern at LegalAdminPortal.tsx:8811.
+  const [calendarEvents,        setCalendarEvents]        = useState<CalendarEventRow[]>([]);
 
   const load = useCallback(async () => {
-    const [air, sr, pr, et, il] = await Promise.all([
+    const [air, sr, pr, et, il, ce] = await Promise.all([
       // decision='pending' covers both the stale (RED) and fresh (YELLOW)
       // tiers; buildLegalTasks splits by age.
       api.get<AttorneyIntakeReviewRow>(
@@ -126,12 +134,19 @@ export default function LegalDepartmentPortal() {
       api.get<IntakeLeadRow>(
         "intake_leads?select=id,full_name&order=created_at.desc&limit=500",
       ),
+      // Slice L-7 (Prompt 65) — today's hearings/filings footer.
+      // Loaded broadly here; LegalDashboard filters client-side to
+      // today in firm TZ.
+      api.get<CalendarEventRow>(
+        "calendar_events?department=eq.legal&order=start_time.asc&limit=300",
+      ),
     ]);
     setAttorneyIntakeReviews(air);
     setSigningReviews(sr);
     setParalegalReviews(pr);
     setEcfTasks(et);
     setIntakeLeads(il);
+    setCalendarEvents(ce);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -217,6 +232,8 @@ export default function LegalDepartmentPortal() {
             paralegalReviews={paralegalReviews}
             ecfTasks={ecfTasks}
             intakeLeads={intakeLeads}
+            // Slice L-7 (Prompt 65) — today's hearings/filings footer.
+            calendarEvents={calendarEvents}
           />
         )}
         {section === "paralegal_review" && <ParalegalReview layout="embedded" />}

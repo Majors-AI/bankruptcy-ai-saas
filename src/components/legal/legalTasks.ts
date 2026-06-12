@@ -100,6 +100,29 @@ export interface IntakeLeadRow {
   full_name: string;
 }
 
+// ─── Slice L-7 (Prompt 65) — today's-schedule footer input ────────────────
+//
+// Narrow row shape for calendar_events. Includes the columns the L-7
+// footer renders: time + classification + client + status. Court-specific
+// columns (judge_name, courtroom, etc.) are surfaced via title/description
+// downstream so we don't need to type them here. NOT consumed by
+// buildLegalTasks — footer-only.
+
+export interface CalendarEventRow {
+  id: string;
+  calendar_type: string;        // 'intake' | 'doc_review' | 'signing' | 'court_hearing' | 'court_deadline'
+  title: string;
+  start_time: string;           // timestamptz
+  end_time: string;
+  all_day: boolean;
+  client_name: string | null;
+  case_number: string | null;
+  /** 'scheduled' | 'confirmed' | 'completed' | 'cancelled' | 'rescheduled' | 'no_show' */
+  status: string;
+  department: string | null;    // 'legal' (filtered at the query layer) / 'general' / etc.
+  event_subtype: string | null;
+}
+
 // ─── Source bundle + entry builder ────────────────────────────────────────
 
 export type LegalTaskKind =

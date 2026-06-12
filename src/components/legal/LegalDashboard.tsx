@@ -28,7 +28,9 @@
 // is NEVER imported or edited from this surface.
 
 import { useMemo, useState } from "react";
-import { Briefcase, Clock, ListChecks, Scale } from "lucide-react";
+import {
+  Briefcase, CheckCircle2, Clock, MousePointerClick, Scale, SkipForward, Sparkles,
+} from "lucide-react";
 import type { DepartmentPortalSession } from "../department-portal/DepartmentPortalLogin";
 import {
   DashboardGrid,
@@ -36,8 +38,11 @@ import {
   ConsolidatedMessagingWidget,
   BubbleCard,
   Card, CardHeader, CountBadge, EmptyHint,
+  ColorDot, COLOR_CFG,
   LEGAL_METRICS,
+  FIRM_TZ, todayInFirmTz, formatDueLabel,
 } from "../department-dashboard";
+import type { TaskEntry } from "../department-dashboard";
 import {
   buildLegalTasks,
   type AttorneyIntakeReviewRow,
@@ -45,6 +50,7 @@ import {
   type ParalegalReviewRow,
   type EcfTaskRow,
   type IntakeLeadRow,
+  type CalendarEventRow,
   type LegalTaskKind,
 } from "./legalTasks";
 
@@ -58,6 +64,8 @@ export interface LegalDashboardProps {
   paralegalReviews:      ReadonlyArray<ParalegalReviewRow>;
   ecfTasks:              ReadonlyArray<EcfTaskRow>;
   intakeLeads:           ReadonlyArray<IntakeLeadRow>;
+  // Slice L-7 (Prompt 65) — today's hearings/filings footer source.
+  calendarEvents:        ReadonlyArray<CalendarEventRow>;
   /** Optional click-router; today LegalDepartmentPortal doesn't wire
    *  one (clicks no-op until L-9). */
   onSelectTask?: (kind: LegalTaskKind, id: string) => void;
@@ -66,6 +74,7 @@ export interface LegalDashboardProps {
 export default function LegalDashboard({
   session,
   attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads,
+  calendarEvents,
   onSelectTask,
 }: LegalDashboardProps) {
   // L-9 (per-staffer "Mine" vs "Shared pool") will use the existing
@@ -91,6 +100,124 @@ export default function LegalDashboard({
     }),
     [attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads, onSelectTask],
   );
+
+  // Slice L-4 (Prompt 64) — MIDDLE Up Next.
+  //
+  // The pool is already sorted in buildLegalTasks by:
+  //   color tier → overdue-first within tier → sortKey
+  // so the cascade RED → ORANGE → YELLOW → BLUE described in the prompt
+  // falls out of the existing ordering — Up Next is simply the first
+  // non-skipped task. No re-derivation here. Direct port of
+  // AccountingDashboard's Slice-4 pattern; UpNextCard / UpNextActiveBody
+  // are duplicated below the host until a shared shell hoist lands.
+  const [skippedIds, setSkippedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const upNext: TaskEntry | null = useMemo(
+    () => tasks.find(t => !skippedIds.has(t.id)) ?? null,
+    [tasks, skippedIds],
+  );
+  const remainingCount = useMemo(
+    () => tasks.filter(t => !skippedIds.has(t.id)).length,
+    [tasks, skippedIds],
+  );
+
+  function handleSkip(id: string) {
+    setSkippedIds(prev => {
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }
+  // TODO L-8+ — Done/Pick backend wiring.
+  //   Done: mark the underlying row resolved (status update on the source
+  //         table, e.g. attorney_intake_reviews.decision='accepted' or
+  //         ecf_tasks.status='completed'). For now no-op so clicking
+  //         doesn't lie about persistence.
+  //   Pick: route the staffer to the underlying row's detail surface
+  //         (LegalDepartmentPortal section + lead/client selection).
+  //         Wires through the existing onSelectTask prop once that's
+  //         plumbed (today: undefined → click is a no-op).
+  function handleDone(_id: string) { void _id; /* TODO L-8+ */ }
+  function handlePick(_id: string) { void _id; /* TODO L-8+ */ }
+  function handleReset() {
+    setSkippedIds(new Set());
+  }
+
+  // Slice L-7 (Prompt 65) — today's hearings/filings hour grid.
+  //
+  // Filter the loaded calendar_events down to today (firm TZ) + live
+  // statuses, then bucket by hour-of-start_time in firm TZ. Past
+  // entries (start_time < now) get a "past" flag; upcoming get the
+  // default amber tone. cancelled / rescheduled are dropped.
+  //
+  // Footer renders the hours that have at least one event (no empty
+  // 8-hour grid scaffold); empty state when zero events for today.
+  const today = useMemo(() => todayInFirmTz(), []);
+
+  const todayHourGroups = useMemo(() => {
+    const now = Date.now();
+    type Bucket = {
+      hour: number;             // 0-23 in firm TZ
+      hourLabel: string;        // "9 AM" / "1 PM"
+      events: Array<{
+        evt: CalendarEventRow;
+        startIso: string;
+        endIso: string;
+        isPast: boolean;
+        timeLabel: string;      // "9:30 AM"
+      }>;
+    };
+    const buckets = new Map<number, Bucket>();
+    const fmtTime = (iso: string) =>
+      new Date(iso).toLocaleTimeString("en-US", {
+        hour: "numeric", minute: "2-digit", hour12: true, timeZone: FIRM_TZ,
+      });
+    const hourLabel = (h: number) => {
+      const am = h < 12;
+      const h12 = h % 12 === 0 ? 12 : h % 12;
+      return `${h12} ${am ? "AM" : "PM"}`;
+    };
+
+    for (const e of calendarEvents) {
+      // Skip cancelled / rescheduled — those moved out of today's view.
+      if (e.status === "cancelled" || e.status === "rescheduled") continue;
+      // Firm-TZ date of start_time → only today.
+      const dueDay = new Date(e.start_time).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+      if (dueDay !== today) continue;
+
+      // Hour-of-day in firm TZ.
+      const hourStr = new Date(e.start_time).toLocaleTimeString("en-US", {
+        hour: "numeric", hour12: false, timeZone: FIRM_TZ,
+      });
+      const hour = parseInt(hourStr, 10) || 0;
+
+      const isPast = new Date(e.start_time).getTime() < now;
+      const bucket = buckets.get(hour) ?? {
+        hour,
+        hourLabel: hourLabel(hour),
+        events: [],
+      };
+      bucket.events.push({
+        evt: e,
+        startIso: e.start_time,
+        endIso: e.end_time,
+        isPast,
+        timeLabel: fmtTime(e.start_time),
+      });
+      buckets.set(hour, bucket);
+    }
+
+    // Sort hours ascending; sort events within each hour by start_time.
+    const ordered = [...buckets.values()].sort((a, b) => a.hour - b.hour);
+    for (const b of ordered) {
+      b.events.sort((x, y) => new Date(x.startIso).getTime() - new Date(y.startIso).getTime());
+    }
+    const totalCount = ordered.reduce((s, b) => s + b.events.length, 0);
+    const upcomingCount = ordered.reduce(
+      (s, b) => s + b.events.filter(e => !e.isPast).length,
+      0,
+    );
+    return { ordered, totalCount, upcomingCount };
+  }, [calendarEvents, today]);
 
   return (
     <div className="p-4 space-y-4 bg-[#0F0F0E] min-h-full">
@@ -151,26 +278,16 @@ export default function LegalDashboard({
           />
         }
         middle={
-          <Card className="flex flex-col">
-            <CardHeader
-              icon={<ListChecks className="w-4 h-4" />}
-              title="Up Next"
-              badge={<CountBadge value={0} />}
-              chip={
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-2 py-0.5 rounded">
-                  Scaffold
-                </span>
-              }
-            />
-            <div className="p-3 space-y-2">
-              <EmptyHint>
-                Up Next surfaces the highest-priority legal task. L-4 will
-                build the priority cascade (stale attorney review → past-deadline
-                signing → 341 within 7 days → ECF task overdue → pending paralegal
-                review → upcoming filings).
-              </EmptyHint>
-            </div>
-          </Card>
+          <UpNextCard
+            task={upNext}
+            remainingCount={remainingCount}
+            totalCount={tasks.length}
+            skippedCount={skippedIds.size}
+            onSkip={handleSkip}
+            onDone={handleDone}
+            onPick={handlePick}
+            onReset={handleReset}
+          />
         }
         right={
           <ConsolidatedMessagingWidget
@@ -190,30 +307,308 @@ export default function LegalDashboard({
         }
       />
 
-      {/* Today's hearings / signings / filing deadlines footer placeholder.
-          Unlike accounting_payment_schedule, calendar_events.start_time IS
-          a timestamp — L-7 will render this as a literal hour-by-hour
-          grid mirroring Intake's TodayByHourWidget (small extraction
-          follow-up: hoist that widget into the shared shell). */}
+      {/* Today's hearings / signings / filing deadlines — Slice L-7
+          (Prompt 65). calendar_events.start_time is a real timestamp,
+          so this is a literal hour-by-hour grid (unlike Accounting's
+          date-only payment-schedule fallback). Mirrors the shape of
+          Intake's TodayByHourWidget; a future cleanup can hoist the
+          Intake widget into the shared shell and consolidate. */}
       <Card>
         <CardHeader
           icon={<Clock className="w-4 h-4" />}
           title="Today's hearings & filings"
+          badge={<CountBadge value={todayHourGroups.totalCount} />}
           chip={
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-2 py-0.5 rounded">
-              Scaffold
-            </span>
+            todayHourGroups.totalCount > 0 ? (
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-[#B8945F]">
+                {todayHourGroups.upcomingCount} upcoming · {todayHourGroups.totalCount - todayHourGroups.upcomingCount} past
+              </span>
+            ) : null
           }
         />
         <div className="p-3">
-          <EmptyHint>
-            Hour-by-hour court hearings + 341 meetings + signing
-            appointments + filing deadlines. L-7 wires from
-            calendar_events?department=eq.legal (today) +
-            trustee_341_checklist_state.
-          </EmptyHint>
+          {todayHourGroups.totalCount === 0 ? (
+            <EmptyHint>No hearings or filings scheduled today.</EmptyHint>
+          ) : (
+            <ul className="divide-y divide-[#2A2A28]">
+              {todayHourGroups.ordered.map(bucket => (
+                <li key={bucket.hour} className="py-2">
+                  <div className="flex items-baseline gap-3">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-[#B8945F] w-12 flex-shrink-0">
+                      {bucket.hourLabel}
+                    </span>
+                    <ul className="flex-1 space-y-1.5">
+                      {bucket.events.map(({ evt, isPast, timeLabel }) => (
+                        <LegalScheduleRow
+                          key={evt.id}
+                          event={evt}
+                          timeLabel={timeLabel}
+                          isPast={isPast}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+// ─── LegalScheduleRow (Slice L-7 — Prompt 65) ─────────────────────────────
+//
+// One row in today's hour grid. Status / calendar_type drives the badge
+// color; past entries dim. Title + client + case_number layered for the
+// staffer's at-a-glance read.
+
+function LegalScheduleRow({
+  event, timeLabel, isPast,
+}: {
+  event: CalendarEventRow;
+  timeLabel: string;
+  isPast: boolean;
+}) {
+  const cfg = CALENDAR_TYPE_CFG[event.calendar_type] ?? CALENDAR_TYPE_CFG.default;
+  const statusCfg = CALENDAR_STATUS_CFG[event.status] ?? null;
+  const dim = isPast ? "opacity-60" : "";
+  const titleText = event.title || cfg.label;
+  return (
+    <li className={`grid grid-cols-[auto_1fr_auto] gap-x-3 items-baseline ${dim}`}>
+      <span className="text-[10px] font-mono text-[#FAFAF7] tabular-nums w-14">
+        {timeLabel}
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs text-[#FAFAF7] truncate">
+          {titleText}
+          {event.client_name && (
+            <span className="text-[10px] text-[#6B6B66] ml-1.5">
+              · {event.client_name}
+            </span>
+          )}
+          {event.case_number && (
+            <span className="text-[10px] text-[#6B6B66] ml-1.5">
+              · case {event.case_number}
+            </span>
+          )}
+        </p>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${cfg.chip}`}>
+          {cfg.label}
+        </span>
+        {statusCfg && (
+          <span className={`text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded border ${statusCfg.chip}`}>
+            {statusCfg.label}
+          </span>
+        )}
+      </div>
+    </li>
+  );
+}
+
+// Type / status style maps — kept compact at module scope so they live
+// next to the row component. calendar_type values come from the
+// 20260502012101_create_firm_calendar_schema migration.
+const CALENDAR_TYPE_CFG: Record<string, { label: string; chip: string }> = {
+  court_hearing:   { label: "Hearing",   chip: "bg-red-900/40 text-red-300 border-red-700/60" },
+  court_deadline:  { label: "Deadline",  chip: "bg-orange-900/30 text-orange-300 border-orange-700/60" },
+  signing:         { label: "Signing",   chip: "bg-yellow-900/30 text-yellow-300 border-yellow-700/60" },
+  doc_review:      { label: "Doc Rev",   chip: "bg-sky-900/30 text-sky-300 border-sky-700/60" },
+  intake:          { label: "Intake",    chip: "bg-slate-800/50 text-slate-300 border-slate-700/60" },
+  default:         { label: "Event",     chip: "bg-slate-800/50 text-slate-300 border-slate-700/60" },
+};
+
+// Status badge — only render for completed / no_show / confirmed (the
+// outliers worth surfacing inline). 'scheduled' is the default and
+// renders no badge to keep the row clean.
+const CALENDAR_STATUS_CFG: Record<string, { label: string; chip: string } | undefined> = {
+  completed:  { label: "Done",     chip: "bg-emerald-900/30 text-emerald-300 border-emerald-700/60" },
+  no_show:    { label: "No show",  chip: "bg-red-900/40 text-red-300 border-red-700/60" },
+  confirmed:  { label: "Confirmed", chip: "bg-emerald-900/20 text-emerald-300 border-emerald-700/40" },
+  scheduled:  undefined,
+};
+
+// ─── UpNextCard (Slice L-4 — Prompt 64) ───────────────────────────────────
+//
+// MIDDLE-column card. Direct port of AccountingDashboard's Slice-4
+// UpNextCard. Surfaces the single highest-priority legal task using the
+// cascade RED → ORANGE → YELLOW → BLUE that's already baked into the
+// buildLegalTasks sort. Skip advances locally (skippedIds set owned by
+// the parent); Done / Pick are TODO no-ops until backend wiring — see
+// the parent handlers for the schema plan.
+//
+// Duplicated rather than shared with AccountingDashboard's UpNextCard
+// per the prompt's "porting/duplicating is fine to keep this slice tight;
+// extracting a shared UpNextCard into the shell can be a later cleanup".
+
+function UpNextCard({
+  task,
+  remainingCount,
+  totalCount,
+  skippedCount,
+  onSkip,
+  onDone,
+  onPick,
+  onReset,
+}: {
+  task: TaskEntry | null;
+  remainingCount: number;
+  totalCount: number;
+  skippedCount: number;
+  onSkip: (id: string) => void;
+  onDone: (id: string) => void;
+  onPick: (id: string) => void;
+  onReset: () => void;
+}) {
+  // Empty state — distinct from "all skipped" so the staffer knows
+  // whether to reset or whether they're actually done.
+  const allClear   = totalCount === 0;
+  const allSkipped = totalCount > 0 && remainingCount === 0;
+
+  return (
+    <Card className="flex flex-col">
+      <CardHeader
+        icon={<Sparkles className="w-4 h-4" />}
+        title="Up Next"
+        badge={<CountBadge value={remainingCount} tone={task?.color === "red" ? "danger" : task?.color === "orange" ? "warn" : "neutral"} />}
+        chip={
+          skippedCount > 0 ? (
+            <button
+              type="button"
+              onClick={onReset}
+              title="Bring skipped tasks back to the queue"
+              className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] hover:text-[#FAFAF7] hover:border-[#B8945F]/40 px-2 py-0.5 rounded transition-colors"
+            >
+              Reset · {skippedCount} skipped
+            </button>
+          ) : (
+            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+              Auto-prioritized
+            </span>
+          )
+        }
+      />
+      <div className="p-3 space-y-3">
+        {task ? (
+          <UpNextActiveBody
+            task={task}
+            onSkip={onSkip}
+            onDone={onDone}
+            onPick={onPick}
+          />
+        ) : allSkipped ? (
+          <div className="rounded-lg border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-4 flex items-start gap-2.5">
+            <SkipForward className="w-4 h-4 text-[#B8945F] mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-[#FAFAF7] leading-relaxed">
+              <p className="font-semibold">All open tasks skipped this session.</p>
+              <p className="text-[11px] text-[#6B6B66] mt-1">
+                Click <span className="text-[#FAFAF7] font-semibold">Reset</span> above to bring them back to the queue.
+              </p>
+            </div>
+          </div>
+        ) : allClear ? (
+          <div className="rounded-lg border border-emerald-700/30 bg-emerald-900/10 px-3 py-4 flex items-start gap-2.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 mt-0.5 flex-shrink-0" />
+            <div className="text-xs text-emerald-200 leading-relaxed">
+              <p className="font-semibold">Inbox clear — no open legal tasks.</p>
+              <p className="text-[11px] text-emerald-300/70 mt-1">
+                Up Next will surface the highest-priority item the moment one
+                lands (stale attorney review, signing past 7 days, ECF deadlines, …).
+              </p>
+            </div>
+          </div>
+        ) : (
+          <EmptyHint>No task selected.</EmptyHint>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function UpNextActiveBody({
+  task, onSkip, onDone, onPick,
+}: {
+  task: TaskEntry;
+  onSkip: (id: string) => void;
+  onDone: (id: string) => void;
+  onPick: (id: string) => void;
+}) {
+  const overdue = !!task.due && new Date(task.due).getTime() < Date.now();
+  const tierLabel = COLOR_CFG[task.color].label.toUpperCase();
+  // Tone for the outer rounded card — color-tier-aware so RED jumps out.
+  const toneCls =
+    task.color === "red"    ? "border-red-500/40 bg-red-500/8" :
+    task.color === "orange" ? "border-orange-500/40 bg-orange-500/8" :
+    task.color === "yellow" ? "border-yellow-500/40 bg-yellow-500/8" :
+                              "border-sky-500/30 bg-sky-500/5";
+
+  return (
+    <div className={`rounded-lg border ${toneCls} px-3 py-3`}>
+      <div className="flex items-start gap-2">
+        <ColorDot color={task.color} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAFAF7]">
+              {tierLabel}
+            </span>
+            <span className="text-[9px] uppercase tracking-widest text-[#6B6B66]">
+              · {task.actionLabel}
+            </span>
+            {overdue && (
+              <span className="text-[9px] font-bold uppercase tracking-widest text-red-300 border border-red-700/60 bg-red-900/40 px-1.5 py-0.5 rounded">
+                Overdue
+              </span>
+            )}
+          </div>
+          <p className="text-sm font-semibold text-[#FAFAF7] mt-1.5 leading-tight">
+            {task.title}
+          </p>
+          <p className="text-[11px] text-[#6B6B66] mt-1 leading-snug">
+            {task.subtitle}
+          </p>
+          {task.due ? (
+            <p className={`text-[10px] mt-1 font-mono ${overdue ? "text-red-300" : "text-[#B8945F]"}`}>
+              Due {formatDueLabel(task.due)}
+            </p>
+          ) : (
+            <p className="text-[10px] mt-1 text-[#3A3A36] italic">
+              No due date on this record
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Action row — Skip / Done / Pick. Skip works (local advance);
+          Done + Pick are TODO no-ops with explicit tooltip + dimming. */}
+      <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-[#2A2A28]/60">
+        <button
+          type="button"
+          onClick={() => onSkip(task.id)}
+          title="Skip this task for now — advances to the next in the queue."
+          className="flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36] rounded py-1.5 transition-colors"
+        >
+          <SkipForward className="w-3 h-3" /> Skip
+        </button>
+        <button
+          type="button"
+          onClick={() => onDone(task.id)}
+          title="Mark this task done — local-only stub today; backend persistence lands in a later slice."
+          className="flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#FAFAF7]/80 bg-emerald-900/30 hover:bg-emerald-900/40 border border-emerald-700/40 rounded py-1.5 transition-colors"
+        >
+          <CheckCircle2 className="w-3 h-3" /> Done
+        </button>
+        <button
+          type="button"
+          onClick={() => onPick(task.id)}
+          title="Open this task — local-only stub today; navigates to the underlying row in a later slice."
+          className="flex items-center justify-center gap-1.5 text-[10px] font-semibold uppercase tracking-widest text-[#FAFAF7]/80 bg-sky-900/30 hover:bg-sky-900/40 border border-sky-700/40 rounded py-1.5 transition-colors"
+        >
+          <MousePointerClick className="w-3 h-3" /> Pick
+        </button>
+      </div>
     </div>
   );
 }
