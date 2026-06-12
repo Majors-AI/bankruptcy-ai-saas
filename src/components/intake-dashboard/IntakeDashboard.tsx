@@ -1,11 +1,11 @@
-// Intake Portal (Staff) — Dashboard view.
+﻿// Intake Portal (Staff) — Dashboard view.
 //
 // Default landing for legal_admin / super_admin roles inside IntakePortalInner.
 // Attorneys do NOT receive this view — handled by the role gate in
 // LegalAdminPortal.tsx where the Dashboard tab and the defaultTab branch are
 // scoped to non-attorneys.
 //
-// Layout (top → bottom):
+// Layout (top â†’ bottom):
 //   - Client search row (above the header buttons): name/phone search of the
 //     existing `leads` prop; click opens the lead detail panel.
 //   - Header row: greeting, [phone-icon popover], [Escalate to Supervisor],
@@ -53,9 +53,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock,
-  MessageCircle, Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
-  Users, Voicemail, ListChecks, Mail, Delete, PlayCircle, Play, Pause,
-  Coffee, Target, MessageSquare, AtSign, Send,
+  Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
+  Users, Voicemail, ListChecks, Delete, PlayCircle,
   AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, X,
 } from "lucide-react";
 import ConsultSchedulerPanel, {
@@ -66,11 +65,25 @@ import ConsultSchedulerPanel, {
 import ClientSearchBar from "../client-search/ClientSearchBar";
 import PostCallScheduledModal from "../lead-comms/PostCallScheduledModal";
 import CommsPillBar from "../comms-pill/CommsPillBar";
+// Prompt 54 — shared department-dashboard shell. The shell pieces below
+// used to live inline in this file; they were extracted so Accounting +
+// Legal dashboards can mount the same widgets. Every component receives
+// data via props — no intake-specific assumptions inside the module.
 import {
-  currentMonthIso, getCurrentStaffId,
-  useCurrentMonthActuals, useEmployeeGoals,
-  type PerfMetricKey,
-} from "../../lib/perfGoalsStore";
+  DashboardGrid,
+  AllTasksWidget, LeftModeToggle,
+  AttentionBubble,
+  TopBubblesRow,
+  ConsolidatedMessagingWidget,
+  Card, CardHeader, CountBadge, EmptyHint, SampleChip,
+  INTAKE_METRICS,
+  FIRM_TZ, todayInFirmTz, nextBusinessDay, relativeTime,
+} from "../department-dashboard";
+import type {
+  TaskColor, TaskEntry,
+  TimeClockState, TimeClockActions,
+  ClientMessageThread, ClientMessage, StaffMessage,
+} from "../department-dashboard";
 
 // ─── Types (kept local to avoid coupling to LegalAdminPortal) ────────────────
 
@@ -143,29 +156,9 @@ interface ApptRow {
 type ToDoTier = "emergency" | "yellow" | "new" | "followup";
 interface ToDoRow { lead: Lead; tier: ToDoTier; }
 
-// AllTasksWidget — shared color-coded task list (LEFT column).
-type TaskColor = "red" | "orange" | "yellow" | "blue";
-interface TaskEntry {
-  id: string;
-  color: TaskColor;
-  title: string;
-  subtitle: string;
-  actionLabel: string;
-  /** Lower comes first within the same color. */
-  sortKey: number;
-  /**
-   * Due-date for the task as an ISO timestamp. Present for:
-   *   - appointment tasks   → calendar_event.start_time
-   *   - lead-derived tasks  → leads.next_follow_up_at (when set)
-   * Absent (undefined) for tasks where the underlying record has no due
-   * field today (e.g. unread client messages). Renderer shows a placeholder
-   * with a TODO note rather than fabricating a date.
-   */
-  due?: string | null;
-  /** Set on lead-derived entries so callers can route to the lead detail. */
-  leadRef?: Lead;
-  onSelect: () => void;
-}
+// TaskColor + TaskEntry moved to ../department-dashboard during Slice-1
+// (Prompt 54). Re-imported at the top of this file; type stays usable
+// here unchanged.
 
 // Layer 1 — what "Up Next" returns.
 type NextTask =
@@ -177,37 +170,15 @@ type NextTask =
   | { kind: "msg-unread";     threadId: string; clientName: string; preview: string; unreadCount: number }
   | { kind: "none" };
 
-// Exported so LegalAdminPortal's MessagingTabView (the full-page Messages
-// nav surface) can fetch + pass the same shapes to ConsolidatedMessagingWidget.
-export interface ClientMessageThread {
-  id: string;
-  client_id: string;
-  unread_count: number;
-  last_message_at: string | null;
-  updated_at: string;
-}
-
-export interface ClientMessage {
-  id: string;
-  thread_id: string;
-  body: string;
-  channel: string;
-  sender_role: string;
-  sender_name: string;
-  created_at: string;
-}
-
-export interface StaffMessage {
-  id: string;
-  sender_id: string;
-  sender_name: string;
-  sender_role: string | null;
-  channel: "email" | "sms" | "phone_note" | "dm";
-  subject: string | null;
-  body: string;
-  read: boolean;
-  created_at: string;
-}
+// ClientMessageThread / ClientMessage / StaffMessage moved to
+// ../department-dashboard during Slice-1 (Prompt 54). Re-exported below
+// so LegalAdminPortal's existing
+//   import { type ClientMessageThread, ... } from ".../IntakeDashboard"
+// path keeps working.
+export type { ClientMessageThread, ClientMessage, StaffMessage } from "../department-dashboard";
+// Also re-export ConsolidatedMessagingWidget for the same reason —
+// LegalAdminPortal imports it as a named export from this file.
+export { ConsolidatedMessagingWidget } from "../department-dashboard";
 
 // ─── Supabase REST helpers (match LegalAdminPortal's sbGet/sbPatch pattern) ──
 
@@ -242,8 +213,9 @@ async function sbPatch(table: string, id: string, body: object): Promise<void> {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-// TODO templating pass: read firm timezone from firms.timezone instead of hardcoded LA.
-const FIRM_TZ = "America/Los_Angeles";
+// FIRM_TZ moved to ../department-dashboard during Slice-1 (Prompt 54).
+// Imported at the top of this file under the same name. Same TODO still
+// applies: read firm timezone from firms.timezone instead of hardcoded LA.
 
 // TODO per-staffer work-hours config doesn't exist yet — using firm default 8a–6p.
 // When the work-hours surface lands (likely a staff_availability extension or
@@ -267,16 +239,16 @@ const TIER_NEW_CALL    = 2;  // includes case presentations once that bucket exi
 const TIER_FOLLOWUP    = 3;
 
 const URGENCY_RANK: Record<string, number> = { emergency: 0, urgent: 1, normal: 2 };
-// emergency (RED) → yellow (present the case) → new (set appointment) →
-// followup (fee-quoted). Within each tier sort by overdue-first → urgency
-// → created_at (see toDoQueue derivation).
+// emergency (RED) â†’ yellow (present the case) â†’ new (set appointment) â†’
+// followup (fee-quoted). Within each tier sort by overdue-first â†’ urgency
+// â†’ created_at (see toDoQueue derivation).
 const TIER_RANK:    Record<ToDoTier, number> = { emergency: 0, yellow: 1, new: 2, followup: 3 };
 
 // ─── Time / format helpers ──────────────────────────────────────────────────
 
-function todayInFirmTz(): string {
-  return new Date().toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
-}
+// todayInFirmTz + nextBusinessDay moved to ../department-dashboard
+// during Slice-1 (Prompt 54). Imported under the same names. The
+// intake-only helper hourOfIsoInFirmTz stays here.
 
 /** Hour (0–23) in the firm timezone for the given ISO timestamp. */
 function hourOfIsoInFirmTz(iso: string): number {
@@ -288,22 +260,6 @@ function hourOfIsoInFirmTz(iso: string): number {
   );
 }
 
-/** YYYY-MM-DD of the next business day (skips Sat/Sun) after `dateStr`. */
-function nextBusinessDay(dateStr: string): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  while (true) {
-    dt.setUTCDate(dt.getUTCDate() + 1);
-    const dow = dt.getUTCDay();
-    if (dow !== 0 && dow !== 6) {
-      const yy = dt.getUTCFullYear();
-      const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(dt.getUTCDate()).padStart(2, "0");
-      return `${yy}-${mm}-${dd}`;
-    }
-  }
-}
-
 /** Localized "Tue, Jun 10" style label from a YYYY-MM-DD string. */
 function formatDayLabel(dateStr: string): string {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -313,16 +269,7 @@ function formatDayLabel(dateStr: string): string {
   });
 }
 
-function relativeTime(iso: string): string {
-  const t = new Date(iso).getTime();
-  const diffSec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (diffSec < 60) return "just now";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
-  const days = Math.floor(diffSec / 86400);
-  if (days < 7) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: FIRM_TZ });
-}
+// relativeTime moved to ../department-dashboard during Slice-1 (Prompt 54).
 
 function formatDateLabel(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", {
@@ -360,44 +307,13 @@ function formatHourLabel(hour: number): string {
 
 /**
  * Compact due-time label for a task row.
- *   - overdue   → "5h ago"
- *   - today     → "Today 3:00 PM"
- *   - tomorrow  → "Tomorrow 9:00 AM"
- *   - this week → "Tue 9:00 AM"
- *   - else      → "Jun 12 · 9:00 AM"
+ *   - overdue   â†’ "5h ago"
+ *   - today     â†’ "Today 3:00 PM"
+ *   - tomorrow  â†’ "Tomorrow 9:00 AM"
+ *   - this week â†’ "Tue 9:00 AM"
+ *   - else      â†’ "Jun 12 Â· 9:00 AM"
  */
-function formatDueLabel(iso: string): string {
-  const due = new Date(iso);
-  const dueMs = due.getTime();
-  const nowMs = Date.now();
-  const diffMs = dueMs - nowMs;
-  const dueDay = due.toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
-  const today = todayInFirmTz();
-  const tomorrow = nextBusinessDay(today); // closest workday — informational only
-
-  if (diffMs < 0) {
-    const mins = Math.floor(-diffMs / 60_000);
-    if (mins < 60)  return `${mins}m ago`;
-    if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
-    return `${Math.floor(mins / 1440)}d ago`;
-  }
-
-  const timeStr = due.toLocaleTimeString("en-US", {
-    hour: "numeric", minute: "2-digit", hour12: true, timeZone: FIRM_TZ,
-  });
-
-  if (dueDay === today)    return `Today ${timeStr}`;
-  if (dueDay === tomorrow) return `Tomorrow ${timeStr}`;
-
-  // Within the next 6 days → weekday short label
-  const oneWeekMs = 6 * 24 * 60 * 60 * 1000;
-  if (diffMs < oneWeekMs) {
-    const dow = due.toLocaleDateString("en-US", { weekday: "short", timeZone: FIRM_TZ });
-    return `${dow} ${timeStr}`;
-  }
-  const dateStr = due.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: FIRM_TZ });
-  return `${dateStr} · ${timeStr}`;
-}
+// formatDueLabel moved to ../department-dashboard during Slice-1 (Prompt 54).
 
 // ─── Sample data — PhoneDialerWidget (Twilio Voice shape) ───────────────────
 // Kept ONLY because the dialer popover still uses these as placeholder history.
@@ -426,49 +342,9 @@ const SAMPLE_CALLS: SampleCall[] = [
   { id: "c6", direction: "inbound",  number: "(214) 555-0849", contactName: "Diane Kowalski",   leadOrClientId: null, time: new Date(Date.now() - 19  * 3_600_000).toISOString(), durationSeconds: 72,  status: "voicemail", recordingUrl: "https://api.twilio.com/recordings/RE-sample-2.mp3", isVoicemail: true,  listened: true  },
 ];
 
-// ─── Common card chrome (matches IntakePortalInner's neutral dark look) ─────
-
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`rounded-xl border border-[#2A2A28] bg-[#1A1A18] ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function CardHeader({
-  icon, title, badge, chip,
-}: { icon: React.ReactNode; title: string; badge?: React.ReactNode; chip?: React.ReactNode }) {
-  return (
-    <div className="flex items-center gap-2 px-4 py-3 border-b border-[#2A2A28]">
-      <span className="text-[#B8945F]">{icon}</span>
-      <h3 className="text-sm font-semibold text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-        {title}
-      </h3>
-      {badge}
-      {chip && <div className="ml-auto">{chip}</div>}
-    </div>
-  );
-}
-
-function CountBadge({ value, tone = "neutral" }: { value: number; tone?: "neutral" | "warn" | "danger" }) {
-  if (value <= 0) return null;
-  const cls =
-    tone === "danger" ? "bg-red-900/40 text-red-300 border-red-700/60" :
-    tone === "warn"   ? "bg-amber-900/30 text-amber-300 border-amber-700/60" :
-                         "bg-[#2A2A28] text-[#FAFAF7] border-[#3A3A36]";
-  return (
-    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${cls}`}>{value}</span>
-  );
-}
-
-function SampleChip() {
-  return (
-    <span className="text-[10px] font-semibold uppercase tracking-widest text-[#B8945F] border border-[#B8945F]/40 px-2 py-0.5 rounded">
-      Sample — not yet connected
-    </span>
-  );
-}
+// Card / CardHeader / CountBadge / SampleChip moved to
+// ../department-dashboard during Slice-1 (Prompt 54). Imported at the
+// top of this file. The intake-only ComingSoonChip stays here.
 
 function ComingSoonChip() {
   return (
@@ -480,24 +356,10 @@ function ComingSoonChip() {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
-// Mirrors LegalAdminPortal's TimeClockState / TimeClockActions. Kept local
-// here to follow the same "duplicate-types-no-coupling" pattern used for
-// Lead and CalEvent in this file.
-interface TimeClockState {
-  clockedInAt: number | null;
-  onLunchSince: number | null;
-  onBreakSince: number | null;
-  lunchMinutes: number;
-  breakMinutes: number;
-}
-interface TimeClockActions {
-  clockIn: () => void;
-  clockOut: () => void;
-  startLunch: () => void;
-  endLunch: () => void;
-  startBreak: () => void;
-  endBreak: () => void;
-}
+// TimeClockState + TimeClockActions moved to ../department-dashboard
+// during Slice-1 (Prompt 54). Imported at the top of this file under
+// their original names. LegalAdminPortal continues to pass a
+// structurally-identical state/actions pair to AttentionBubble.
 
 interface IntakeDashboardProps {
   session: PortalSession;
@@ -547,6 +409,21 @@ export default function IntakeDashboard({
 
   // ── Left column — Tasks vs. Schedule toggle ──────────────────────────────
   const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
+  // ── My-tasks vs Shared-pool scope (Prompt 52) ──────────────────────────
+  //
+  // Defaults to "mine" so the signed-in staffer's view is theirs by default;
+  // "shared" reveals the whole firm-wide pool. Affects the LEFT-column
+  // AllTasksWidget, the Up Next derivation in the middle column, and the
+  // overdue banner that drives off overdueCount.
+  //
+  // "Mine" definition mirrors LegalAdminPortal.tsx:6340 — leads where
+  // `assigned_name === session.name` OR not yet assigned (so unassigned
+  // leads don't fall through the cracks when every staffer hides them).
+  // Appointments are already pre-filtered to session.id upstream
+  // (todaysAppts at :581), so no further filter applies to those.
+  // Client message threads have no per-staff assignment today; they stay
+  // visible in both modes so unanswered firm messages aren't hidden.
+  const [taskScope, setTaskScope] = useState<"mine" | "shared">("mine");
   const [scheduleRange, setScheduleRange] = useState<"next_day" | "five_day" | "monthly">("five_day");
   // ConsultSchedulerPanel is a controlled component; we hold its selection
   // locally because this surface is view-only — picking a slot here is a
@@ -710,6 +587,17 @@ export default function IntakeDashboard({
   // Single source of truth for which queue row's log-result panel is open.
   const [expandedRowId, setExpandedRowId] = useState<string | null>(null);
 
+  // Per-scope filter on the to-do queue (Prompt 52). Declared here so the
+  // nextTask useMemo below can read it; the matching filteredTasks for
+  // the LEFT widget lives further down with the sharedTasks derivation.
+  const filteredToDoQueue = useMemo(() => {
+    if (taskScope === "shared") return toDoQueue;
+    return toDoQueue.filter(r => {
+      const owner = r.lead.assigned_name;
+      return owner === session.name || !owner;
+    });
+  }, [toDoQueue, taskScope, session.name]);
+
   const nextTask: NextTask = useMemo(() => {
     const nowMs = currentTime;
     const isLeadOverdueLocal = (l: Lead) =>
@@ -718,7 +606,7 @@ export default function IntakeDashboard({
     // 1. Manual override — caller picked a specific lead from the queue.
     //    Honors the YELLOW tier as well now.
     if (manuallyChosenId) {
-      const r = toDoQueue.find(x => x.lead.id === manuallyChosenId);
+      const r = filteredToDoQueue.find(x => x.lead.id === manuallyChosenId);
       if (r) {
         if (r.tier === "emergency") return { kind: "lead-emergency", lead: r.lead };
         if (r.tier === "yellow")    return { kind: "lead-yellow",    lead: r.lead, isOverdue: isLeadOverdueLocal(r.lead) };
@@ -752,7 +640,7 @@ export default function IntakeDashboard({
     }
 
     // 3. Emergency lead — NEVER honors the skip set (per prior behavior).
-    const emergencyRow = toDoQueue.find(r => r.tier === "emergency");
+    const emergencyRow = filteredToDoQueue.find(r => r.tier === "emergency");
     if (emergencyRow) return { kind: "lead-emergency", lead: emergencyRow.lead };
 
     // 4. RED — unread client messages. Slotted ahead of YELLOW / NEW so a
@@ -771,13 +659,13 @@ export default function IntakeDashboard({
     }
 
     // 5. YELLOW — present-the-case (attorney_accepted). Overdue first.
-    const yellowRow = toDoQueue.find(r => r.tier === "yellow" && !skippedIds.has(r.lead.id));
+    const yellowRow = filteredToDoQueue.find(r => r.tier === "yellow" && !skippedIds.has(r.lead.id));
     if (yellowRow) return { kind: "lead-yellow", lead: yellowRow.lead, isOverdue: isLeadOverdueLocal(yellowRow.lead) };
 
     // 6. BLUE — at-risk follow-ups (overdue fee-quoted) BEFORE fresh NEW
     //    intake. This is the explicit "at-risk follow-ups ahead of starting
     //    NEW intake" rule from the priority spec.
-    const overdueFollowup = toDoQueue.find(
+    const overdueFollowup = filteredToDoQueue.find(
       r => r.tier === "followup" && !skippedIds.has(r.lead.id) && isLeadOverdueLocal(r.lead)
     );
     if (overdueFollowup) {
@@ -785,19 +673,19 @@ export default function IntakeDashboard({
     }
 
     // 7. BLUE — fresh new-intake (status='new' / priority queue).
-    const newRow = toDoQueue.find(r => r.tier === "new" && !skippedIds.has(r.lead.id));
+    const newRow = filteredToDoQueue.find(r => r.tier === "new" && !skippedIds.has(r.lead.id));
     if (newRow) return { kind: "lead-new", lead: newRow.lead, isOverdue: isLeadOverdueLocal(newRow.lead) };
 
     // 8. BLUE — fresh fee-quoted follow-ups.
-    const followupRow = toDoQueue.find(r => r.tier === "followup" && !skippedIds.has(r.lead.id));
+    const followupRow = filteredToDoQueue.find(r => r.tier === "followup" && !skippedIds.has(r.lead.id));
     if (followupRow) return { kind: "lead-followup", lead: followupRow.lead, isOverdue: false };
 
     return { kind: "none" };
-  }, [todaysAppts, toDoQueue, clientThreads, skippedIds, manuallyChosenId, currentTime]);
+  }, [todaysAppts, filteredToDoQueue, clientThreads, skippedIds, manuallyChosenId, currentTime]);
 
   // ── Shared color-coded task list (LEFT column AllTasksWidget) ─────────────
   //
-  // Color rules (RED → ORANGE → YELLOW → BLUE), sort within each tier.
+  // Color rules (RED â†’ ORANGE â†’ YELLOW â†’ BLUE), sort within each tier.
   //
   //   RED (top): in-progress + imminent appointments today, then unread
   //     client message threads, then emergency-urgency leads.
@@ -836,7 +724,7 @@ export default function IntakeDashboard({
           id: `appt-${a.id}`,
           color: "red",
           title: a.client_name,
-          subtitle: `${formatTimeRange(a.start_time, a.end_time)}${a.chapter ? ` · Ch.${a.chapter}` : ""}${isInProgress ? " · in progress" : ""}`,
+          subtitle: `${formatTimeRange(a.start_time, a.end_time)}${a.chapter ? ` Â· Ch.${a.chapter}` : ""}${isInProgress ? " Â· in progress" : ""}`,
           actionLabel: "Open",
           sortKey: isInProgress ? 0 : Math.max(1, startMs / 60_000),
           due: a.start_time,
@@ -855,7 +743,7 @@ export default function IntakeDashboard({
         id: `msg-${t.id}`,
         color: "red",
         title: t.client_name ?? "Client",
-        subtitle: `${t.unread_count} unread${t.preview ? ` · ${t.preview.slice(0, 48)}` : ""}`,
+        subtitle: `${t.unread_count} unread${t.preview ? ` Â· ${t.preview.slice(0, 48)}` : ""}`,
         actionLabel: "Reply",
         sortKey: 1_000_000 + (t.last_message_at ? -new Date(t.last_message_at).getTime() / 60_000 : 0),
         // due intentionally omitted — see comment above
@@ -870,7 +758,7 @@ export default function IntakeDashboard({
         id: `lead-${l.id}`,
         color: "red",
         title: l.full_name,
-        subtitle: `Emergency · ${l.phone ?? l.email ?? "—"}`,
+        subtitle: `Emergency Â· ${l.phone ?? l.email ?? "—"}`,
         actionLabel: "Call",
         sortKey: 2_000_000 - new Date(l.created_at).getTime() / 60_000,
         due: l.next_follow_up_at ?? null,
@@ -887,7 +775,7 @@ export default function IntakeDashboard({
         id: `lead-${l.id}`,
         color: "orange",
         title: l.full_name,
-        subtitle: `Urgent · ${l.phone ?? l.email ?? "—"}${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`,
+        subtitle: `Urgent Â· ${l.phone ?? l.email ?? "—"}${l.chapter_interest ? ` Â· Ch.${l.chapter_interest}` : ""}`,
         actionLabel: "Call",
         sortKey: 3_000_000 - new Date(l.created_at).getTime() / 60_000,
         due: l.next_follow_up_at ?? null,
@@ -904,7 +792,7 @@ export default function IntakeDashboard({
         id: `lead-${l.id}`,
         color: "yellow",
         title: l.full_name,
-        subtitle: `Present the case${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`,
+        subtitle: `Present the case${l.chapter_interest ? ` Â· Ch.${l.chapter_interest}` : ""}`,
         actionLabel: "Call",
         sortKey: 4_000_000 - new Date(l.created_at).getTime() / 60_000,
         due: l.next_follow_up_at ?? null,
@@ -926,8 +814,8 @@ export default function IntakeDashboard({
         color: "blue",
         title: l.full_name,
         subtitle: feeFollowup
-          ? `Fee quoted · follow up${l.chapter_interest ? ` · Ch.${l.chapter_interest}` : ""}`
-          : `${l.status === "contacted" ? "Re-contact" : "Schedule"} · ${l.phone ?? l.email ?? "—"}`,
+          ? `Fee quoted Â· follow up${l.chapter_interest ? ` Â· Ch.${l.chapter_interest}` : ""}`
+          : `${l.status === "contacted" ? "Re-contact" : "Schedule"} Â· ${l.phone ?? l.email ?? "—"}`,
         actionLabel: feeFollowup ? "Follow up" : "Schedule",
         sortKey: 5_000_000 - new Date(l.created_at).getTime() / 60_000,
         due: l.next_follow_up_at ?? null,
@@ -938,7 +826,7 @@ export default function IntakeDashboard({
 
     // Stable sort by color tier, then by sortKey within tier.
     const colorRank: Record<TaskColor, number> = { red: 0, orange: 1, yellow: 2, blue: 3 };
-    // Sort: color tier → overdue first (within color) → sortKey.
+    // Sort: color tier â†’ overdue first (within color) â†’ sortKey.
     //
     // The "overdue first within color" tiebreaker is what satisfies the
     // prioritization rule that at-risk follow-ups (overdue YELLOW/BLUE)
@@ -966,11 +854,28 @@ export default function IntakeDashboard({
     return analyzePressingTasksAI(out);
   }, [todaysAppts, clientThreads, leads, currentTime, onChangeTab, onOpenView, onScheduleConsult]);
 
+  // Per-scope filter (Prompt 52) — sharedTasks variant. "mine" keeps
+  // appointments (already pre-filtered upstream), keeps unread client
+  // messages (no per-staff assignment), and filters lead-derived tasks
+  // to those owned by this staffer OR not yet assigned. "shared" passes
+  // everything through. (The matching filteredToDoQueue is declared
+  // earlier in the file because nextTask references it.)
+  const filteredTasks = useMemo(() => {
+    if (taskScope === "shared") return sharedTasks;
+    return sharedTasks.filter(t => {
+      if (!t.leadRef) return true; // appts + messages stay visible
+      const owner = t.leadRef.assigned_name;
+      return owner === session.name || !owner;
+    });
+  }, [sharedTasks, taskScope, session.name]);
+
   // Count of tasks whose due timestamp is in the past. Tasks without a due
   // can't be overdue (per spec — no fabricated due dates). Drives the banner.
+  // Reads from filteredTasks so "Mine" mode's banner reflects MY overdue
+  // count, not the firm-wide overdue count.
   const overdueTasks = useMemo(
-    () => sharedTasks.filter(t => !!t.due && new Date(t.due).getTime() < Date.now()),
-    [sharedTasks]
+    () => filteredTasks.filter(t => !!t.due && new Date(t.due).getTime() < Date.now()),
+    [filteredTasks]
   );
   const overdueCount = overdueTasks.length;
 
@@ -1004,14 +909,14 @@ export default function IntakeDashboard({
   // Call-result handlers — these are the "task marked Called" outcomes.
   //
   // ROUTING RULES (per the post-call workflow):
-  //   - Reached & scheduling     → handleScheduleConsult opens the scaffold
+  //   - Reached & scheduling     â†’ handleScheduleConsult opens the scaffold
   //                                modal (SMS opt-in + email confirmation
   //                                previews) then runs the existing scheduler.
-  //   - Reached & doing intake   → handleDoIntakeNow (unchanged).
-  //   - Left message / No answer → patch the lead with follow_up_queue=
+  //   - Reached & doing intake   â†’ handleDoIntakeNow (unchanged).
+  //   - Left message / No answer â†’ patch the lead with follow_up_queue=
   //                                'priority' so it lands in the unified
   //                                Leads view's Follow-Up sub-tab.
-  //   - Manual follow-up tag     → handleAddToFollowUp (unchanged).
+  //   - Manual follow-up tag     â†’ handleAddToFollowUp (unchanged).
   //
   // The follow-up routing is REAL data — intake_leads.follow_up_queue
   // already exists. Real sends + opt-out tracking are NOT here — see
@@ -1198,24 +1103,30 @@ export default function IntakeDashboard({
 
       {/* Top bubbles — Overview (now priority breakdown) + Performance / Goals.
           Clock + messaging summary moved into the AttentionBubble above;
-          this row is now two equal columns. */}
+          this row is now two equal columns.
+          departments={[INTAKE_METRICS]} preserves the pre-Slice-1 behavior;
+          Accounting + Legal will pass their own DeptMetricSet entries. */}
       <TopBubblesRow
         sharedTasks={sharedTasks}
+        departments={[INTAKE_METRICS]}
       />
 
       {/*
-        Three-column body.
+        Three-column body via the shared DashboardGrid primitive (Slice-1).
           LEFT   (compact)  — AllTasksWidget OR ScheduleColumnView (toggle)
           MIDDLE (flex)     — Up Next & Outreach Queue
           RIGHT  (flex)     — Today hour-by-hour
         On narrow viewports the columns stack vertically.
       */}
-      <div className="grid grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)_minmax(0,1.1fr)] gap-4">
-        {leftMode === "tasks" ? (
+      <DashboardGrid
+        left={leftMode === "tasks" ? (
           <AllTasksWidget
-            tasks={sharedTasks}
+            tasks={filteredTasks}
+            sharedCount={sharedTasks.length}
             mode={leftMode}
             onChangeMode={setLeftMode}
+            scope={taskScope}
+            onChangeScope={setTaskScope}
             onOpenMyTasks={() => onChangeTab("staff_tasks")}
           />
         ) : (
@@ -1237,32 +1148,36 @@ export default function IntakeDashboard({
           />
         )}
 
-        <TasksAndAppointmentsWidget
-          toDoQueue={toDoQueue}
-          nextTask={nextTask}
-          expandedRowId={expandedRowId}
-          setExpandedRowId={setExpandedRowId}
-          onStartAppointment={handleStartAppointment}
-          onStartLeadCall={handleStartLeadCall}
-          onSkip={handleSkip}
-          onChoose={handleChoose}
-          onScheduleConsult={handleScheduleConsult}
-          onDoIntakeNow={handleDoIntakeNow}
-          onLeftMessage={handleLeftMessage}
-          onNoAnswer={handleNoAnswer}
-          onAddToFollowUp={handleAddToFollowUp}
-          onCancelExpansion={handleCollapse}
-          onChangeTab={onChangeTab}
-          onOpenMessages={() => onOpenView("messages")}
-        />
+        middle={
+          <TasksAndAppointmentsWidget
+            toDoQueue={toDoQueue}
+            nextTask={nextTask}
+            expandedRowId={expandedRowId}
+            setExpandedRowId={setExpandedRowId}
+            onStartAppointment={handleStartAppointment}
+            onStartLeadCall={handleStartLeadCall}
+            onSkip={handleSkip}
+            onChoose={handleChoose}
+            onScheduleConsult={handleScheduleConsult}
+            onDoIntakeNow={handleDoIntakeNow}
+            onLeftMessage={handleLeftMessage}
+            onNoAnswer={handleNoAnswer}
+            onAddToFollowUp={handleAddToFollowUp}
+            onCancelExpansion={handleCollapse}
+            onChangeTab={onChangeTab}
+            onOpenMessages={() => onOpenView("messages")}
+          />
+        }
 
-        <ConsolidatedMessagingWidget
-          threads={clientThreads}
-          staffMsgs={staffMsgs}
-          loading={msgsLoading}
-          onOpenView={onOpenView}
-        />
-      </div>
+        right={
+          <ConsolidatedMessagingWidget
+            threads={clientThreads}
+            staffMsgs={staffMsgs}
+            loading={msgsLoading}
+            onOpenView={onOpenView}
+          />
+        }
+      />
 
       {/* Today hour-by-hour — full-width row below the 3-column grid. */}
       <TodayByHourWidget
@@ -1337,7 +1252,7 @@ function TodayByHourWidget({
             onClick={() => onChangeTab("calendar")}
             className="text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
           >
-            Open calendar →
+            Open calendar â†’
           </button>
         }
       />
@@ -1447,7 +1362,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
               onClick={() => onChangeTab("leads")}
               className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
             >
-              View all →
+              View all â†’
             </button>
           </div>
 
@@ -1489,9 +1404,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
   );
 }
 
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return <p className="px-3 py-2 text-[11px] text-[#6B6B66] italic">{children}</p>;
-}
+// EmptyHint moved to ../department-dashboard during Slice-1 (Prompt 54).
 
 function UrgencyDot({ urgency }: { urgency: string | null }) {
   const color =
@@ -1547,7 +1460,7 @@ function UpNextCard({
   function PriorityReason({ children }: { children: React.ReactNode }) {
     return (
       <span className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-widest text-[#B8945F]">
-        <ChevronRight className="w-3 h-3" /> Do this next · <span className="text-[#FAFAF7]">{children}</span>
+        <ChevronRight className="w-3 h-3" /> Do this next Â· <span className="text-[#FAFAF7]">{children}</span>
       </span>
     );
   }
@@ -1677,9 +1590,9 @@ function UpNextCard({
           <p className="text-xs font-semibold text-[#FAFAF7] truncate">{lead.full_name}</p>
           <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">
             {lead.phone ?? lead.email ?? "—"}
-            {lead.preferred_contact && <span> · prefers {lead.preferred_contact}</span>}
-            {lead.chapter_interest && <span> · Ch.{lead.chapter_interest}</span>}
-            <span> · {lead.status}</span>
+            {lead.preferred_contact && <span> Â· prefers {lead.preferred_contact}</span>}
+            {lead.chapter_interest && <span> Â· Ch.{lead.chapter_interest}</span>}
+            <span> Â· {lead.status}</span>
           </p>
         </div>
       </div>
@@ -1819,8 +1732,8 @@ function ToDoRowItem({
           <p className="text-xs text-[#FAFAF7] truncate">{lead.full_name}</p>
           <p className="text-[10px] text-[#6B6B66] truncate">
             {lead.phone ?? lead.email ?? "—"}
-            {lead.preferred_contact && <span> · prefers {lead.preferred_contact}</span>}
-            {lead.chapter_interest && <span> · Ch.{lead.chapter_interest}</span>}
+            {lead.preferred_contact && <span> Â· prefers {lead.preferred_contact}</span>}
+            {lead.chapter_interest && <span> Â· Ch.{lead.chapter_interest}</span>}
           </p>
         </div>
         <TierChip tier={tier} />
@@ -1837,7 +1750,7 @@ function ToDoRowItem({
       {expanded && (
         <div className="border-t border-[#2A2A28] mx-3 mb-3 mt-1 pt-3 px-1">
           <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
-            Log call result {lead.phone ? <span className="font-mono text-[#B8945F]">· {lead.phone}</span> : null}
+            Log call result {lead.phone ? <span className="font-mono text-[#B8945F]">Â· {lead.phone}</span> : null}
           </p>
           <div className="flex flex-wrap items-center gap-2">
             {/* Primary actions */}
@@ -1891,269 +1804,11 @@ function ToDoRowItem({
   );
 }
 
-// ─── Consolidated messaging widget (REAL + scaffold) ────────────────────────
-//
-// All messaging surfaces in one tabbed widget. Tabs:
-//   - All        — every unread, sorted by most-recent. "Customizable" is a
-//                  future feature: users will be able to pick which channels
-//                  count toward All. Until that settings model exists, All
-//                  shows everything (TODO below).
-//   - SMS        — staff_messages where channel='sms' + client threads whose
-//                  most-recent message was channel='sms'.
-//   - Email      — staff_messages where channel='email' + client threads
-//                  whose most-recent message was channel='email'.
-//   - Team       — group/firm-wide channels. NO source yet (planned: a
-//                  staff_team_channels table). Scaffold tab with empty state.
-//   - Direct     — staff_messages where channel='dm' (1-on-1 staff DMs).
-//   - Voicemails — NO source yet (planned: Twilio voice inbound + a
-//                  voicemails table). Scaffold tab with empty state.
-//
-// Indicator: the card header shows the total unread count. Each tab's button
-// shows its own per-tab unread badge.
-//
-// TODO Phase B — customizable "All":
-//   - per-user preference: which channels count toward "All"
-//   - per-firm default
-// TODO Phase B — Team channels:
-//   - new table `staff_team_channels (id, firm_id, name)` + `staff_team_channel_members`
-//   - send/receive surface; this tab would then render the unread per-channel
-// TODO Phase B — Voicemails (same TODO list as the prior VoicemailsWidget):
-//   - Twilio Voice inbound webhook + voicemails table
-// TODO Phase B — Outbound sends (post-call workflow):
-//   - When the dashboard "Called → Scheduled" flow eventually dispatches the
-//     SMS opt-in + email confirmation (currently scaffolded in
-//     PostCallScheduledModal), insert the sent rows into client_messages with
-//     sender_role='firm' + channel='sms'|'email'. The read path here already
-//     surfaces those rows in the All / SMS / Email tabs — no further widget
-//     changes needed once the dispatcher is wired.
-//   - Respect opt-out: filter outbound queue on the planned consent flag
-//     (intake_leads.sms_opt_out / opt_in_status) BEFORE enqueueing SMS.
-
-type MsgTab = "all" | "sms" | "email" | "team" | "direct" | "voicemails";
-
-interface UnifiedMsgRow {
-  id: string;
-  sender: string;
-  preview: string;
-  timestamp: string;
-  channel: "sms" | "email" | "dm" | "phone_note" | "other";
-  source: "client" | "staff";
-  unreadCount: number;
-  onOpen: () => void;
-}
-
-export function ConsolidatedMessagingWidget({
-  threads, staffMsgs, loading, onOpenView,
-}: {
-  threads: (ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[];
-  staffMsgs: StaffMessage[];
-  loading: boolean;
-  onOpenView: (view: "messages" | "staff_comms") => void;
-}) {
-  const [tab, setTab] = useState<MsgTab>("all");
-
-  // Normalize client threads + staff messages into a single row shape.
-  const rows: UnifiedMsgRow[] = useMemo(() => {
-    const out: UnifiedMsgRow[] = [];
-    for (const t of threads) {
-      const ch = (t.last_channel ?? "").toLowerCase();
-      const channel: UnifiedMsgRow["channel"] =
-        ch === "sms" ? "sms" : ch === "email" ? "email" : "other";
-      out.push({
-        id: `client-${t.id}`,
-        sender: t.client_name ?? "Client",
-        preview: t.preview || "(no preview)",
-        timestamp: t.last_message_at ?? t.updated_at,
-        channel,
-        source: "client",
-        unreadCount: t.unread_count ?? 0,
-        onOpen: () => onOpenView("messages"),
-      });
-    }
-    for (const m of staffMsgs) {
-      const channel: UnifiedMsgRow["channel"] =
-        m.channel === "sms"        ? "sms"   :
-        m.channel === "email"      ? "email" :
-        m.channel === "dm"         ? "dm"    :
-        m.channel === "phone_note" ? "phone_note" : "other";
-      out.push({
-        id: `staff-${m.id}`,
-        sender: m.sender_name,
-        preview: m.subject || m.body.slice(0, 80),
-        timestamp: m.created_at,
-        channel,
-        source: "staff",
-        unreadCount: m.read ? 0 : 1,
-        onOpen: () => onOpenView("staff_comms"),
-      });
-    }
-    // Most-recent first.
-    out.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    return out;
-  }, [threads, staffMsgs, onOpenView]);
-
-  // Per-tab unread counts and row predicates.
-  const counts = useMemo(() => {
-    const c = { all: 0, sms: 0, email: 0, team: 0, direct: 0, voicemails: 0 };
-    for (const r of rows) {
-      if (r.unreadCount <= 0) continue;
-      c.all += r.unreadCount;
-      if (r.channel === "sms")   c.sms   += r.unreadCount;
-      if (r.channel === "email") c.email += r.unreadCount;
-      if (r.source === "staff" && r.channel === "dm") c.direct += r.unreadCount;
-    }
-    return c;
-  }, [rows]);
-
-  const tabRows = useMemo<UnifiedMsgRow[]>(() => {
-    switch (tab) {
-      case "all":   return rows;
-      case "sms":   return rows.filter(r => r.channel === "sms");
-      case "email": return rows.filter(r => r.channel === "email");
-      case "direct":return rows.filter(r => r.source === "staff" && r.channel === "dm");
-      case "team":  return [];  // SCAFFOLD — no source
-      case "voicemails": return [];  // SCAFFOLD — no source
-    }
-  }, [rows, tab]);
-
-  const isScaffoldTab = tab === "team" || tab === "voicemails";
-  const totalUnread = counts.all;
-
-  const TABS: { id: MsgTab; label: string; icon: React.ReactNode; count: number; scaffold?: boolean }[] = [
-    { id: "all",        label: "All",     icon: <ListChecks className="w-3 h-3" />,     count: counts.all },
-    { id: "sms",        label: "SMS",     icon: <MessageSquare className="w-3 h-3" />,  count: counts.sms },
-    { id: "email",      label: "Email",   icon: <AtSign className="w-3 h-3" />,         count: counts.email },
-    { id: "team",       label: "Team",    icon: <Users className="w-3 h-3" />,          count: counts.team,    scaffold: true },
-    { id: "direct",     label: "Direct",  icon: <Send className="w-3 h-3" />,           count: counts.direct },
-    { id: "voicemails", label: "Voicemail", icon: <Voicemail className="w-3 h-3" />,    count: counts.voicemails, scaffold: true },
-  ];
-
-  return (
-    <Card className="flex flex-col">
-      <CardHeader
-        icon={<MessageCircle className="w-4 h-4" />}
-        title="Messages"
-        badge={<CountBadge value={totalUnread} tone={totalUnread > 0 ? "warn" : "neutral"} />}
-        chip={
-          totalUnread > 0 ? (
-            <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-amber-300">
-              <BellRing className="w-3 h-3" /> {totalUnread} to address
-            </span>
-          ) : (
-            <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
-              Inbox clear
-            </span>
-          )
-        }
-      />
-
-      {/* Tab strip */}
-      <div className="px-2 py-2 border-b border-[#2A2A28] flex items-center gap-1 overflow-x-auto">
-        {TABS.map(t => {
-          const isActive = tab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              className={`flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors flex-shrink-0 ${
-                isActive
-                  ? "bg-[#2A2A28] text-[#FAFAF7]"
-                  : "text-[#6B6B66] hover:text-[#FAFAF7]"
-              } ${t.scaffold ? "italic" : ""}`}
-              title={t.scaffold ? "Scaffold — wiring pending" : undefined}
-            >
-              {t.icon}
-              {t.label}
-              {t.count > 0 && (
-                <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60">
-                  {t.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="p-3 overflow-y-auto" style={{ maxHeight: 560 }}>
-        {loading ? (
-          <EmptyHint>Loading…</EmptyHint>
-        ) : isScaffoldTab ? (
-          <ScaffoldTabBody tab={tab} />
-        ) : tabRows.length === 0 ? (
-          <EmptyHint>{tab === "all" ? "Inbox is clear." : `No unread ${tab} messages.`}</EmptyHint>
-        ) : (
-          <ul className="space-y-1">
-            {tabRows.map(r => (
-              <li key={r.id}>
-                <button
-                  onClick={r.onOpen}
-                  className="w-full flex items-start gap-2 px-2 py-2 rounded-lg hover:bg-[#2A2A28] text-left transition-colors"
-                >
-                  <UnifiedChannelIcon channel={r.channel} source={r.source} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className={`text-xs truncate ${r.unreadCount > 0 ? "text-[#FAFAF7] font-semibold" : "text-[#FAFAF7]"}`}>
-                        {r.sender}
-                      </p>
-                      <span className="text-[9px] uppercase tracking-widest text-[#6B6B66] flex-shrink-0">
-                        {r.source === "client" ? "client" : r.channel}
-                      </span>
-                      {r.unreadCount > 0 && (
-                        <span className="text-[9px] font-bold px-1 py-0.5 rounded bg-amber-900/40 text-amber-300 border border-amber-700/60 flex-shrink-0">
-                          {r.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">{r.preview}</p>
-                  </div>
-                  <span className="text-[10px] text-[#6B6B66] flex-shrink-0 ml-2">
-                    {relativeTime(r.timestamp)}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function UnifiedChannelIcon({
-  channel, source,
-}: { channel: UnifiedMsgRow["channel"]; source: UnifiedMsgRow["source"] }) {
-  const cls = "w-3.5 h-3.5 text-[#6B6B66] mt-0.5 flex-shrink-0";
-  if (channel === "sms")        return <MessageSquare className={cls} />;
-  if (channel === "email")      return <Mail className={cls} />;
-  if (channel === "dm")         return <Send className={cls} />;
-  if (channel === "phone_note") return <Phone className={cls} />;
-  // Fallback (client thread with unknown channel)
-  if (source === "client") return <Users className={cls} />;
-  return <MessageCircle className={cls} />;
-}
-
-function ScaffoldTabBody({ tab }: { tab: MsgTab }) {
-  const cfg = tab === "team" ? {
-    icon: <Users className="w-3.5 h-3.5 text-[#6B6B66]" />,
-    label: "Team channels — coming soon",
-    detail:
-      "Group chats for firm sub-teams (Intake, Legal, Accounting, …) appear here once the team-channel feature lands.",
-  } : {
-    icon: <Voicemail className="w-3.5 h-3.5 text-[#6B6B66]" />,
-    label: "Voicemails — coming soon",
-    detail:
-      "Twilio voice inbound + the voicemails table will populate this tab. No fake entries until then.",
-  };
-  return (
-    <div className="rounded-lg border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-3">
-      <div className="flex items-center gap-2 mb-1">
-        {cfg.icon}
-        <span className="text-[11px] font-semibold uppercase tracking-widest text-[#6B6B66]">{cfg.label}</span>
-      </div>
-      <p className="text-[11px] text-[#6B6B66] leading-relaxed">{cfg.detail}</p>
-    </div>
-  );
-}
+// ConsolidatedMessagingWidget + MsgTab/UnifiedMsgRow + UnifiedChannelIcon
+// + ScaffoldTabBody moved to ../department-dashboard during Slice-1
+// (Prompt 54). Imported at the top of this file and re-exported.
+// The original docs/header below are preserved against the module copy.
+// (deleted in Slice-1 — see ../department-dashboard for canonical copy)
 
 // ─── Phone dialer — popover (relocated from bottom of grid) ──────────────────
 // Uses the same PhoneDialerWidget that previously rendered full-width at the
@@ -2297,7 +1952,7 @@ function PhoneDialerWidget() {
                       <p className={`text-xs truncate ${v.listened ? "text-[#FAFAF7]" : "text-[#FAFAF7] font-semibold"}`}>
                         {v.contactName ?? v.number}
                       </p>
-                      <p className="text-[10px] text-[#6B6B66]">{v.number} · {formatDuration(v.durationSeconds)}</p>
+                      <p className="text-[10px] text-[#6B6B66]">{v.number} Â· {formatDuration(v.durationSeconds)}</p>
                     </div>
                     <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
                       <p className="text-[10px] text-[#6B6B66]">{relativeTime(v.time)}</p>
@@ -2324,151 +1979,10 @@ function CallDirectionIcon({ direction, status }: { direction: "inbound" | "outb
     : <PhoneOutgoing className="w-3.5 h-3.5 text-sky-400 flex-shrink-0" />;
 }
 
-// ─── All-tasks widget (LEFT column, color-coded shared task list) ───────────
-
-interface AllTasksWidgetProps {
-  tasks: TaskEntry[];
-  mode: "tasks" | "schedule";
-  onChangeMode: (m: "tasks" | "schedule") => void;
-  /** Routes to the per-staffer "My Tasks" page. */
-  onOpenMyTasks?: () => void;
-}
-
-function AllTasksWidget({ tasks, mode, onChangeMode, onOpenMyTasks }: AllTasksWidgetProps) {
-  // Bucket counts per color for the header chip cluster.
-  const counts = useMemo(() => {
-    const c: Record<TaskColor, number> = { red: 0, orange: 0, yellow: 0, blue: 0 };
-    for (const t of tasks) c[t.color]++;
-    return c;
-  }, [tasks]);
-
-  return (
-    <Card className="flex flex-col">
-      <div className="px-4 py-3 border-b border-[#2A2A28]">
-        <div className="flex items-center gap-2">
-          <span className="text-[#B8945F]"><ListChecks className="w-4 h-4" /></span>
-          <h3 className="text-sm font-semibold text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-            Upcoming Tasks
-          </h3>
-          <CountBadge value={tasks.length} />
-          {onOpenMyTasks && (
-            <button
-              onClick={onOpenMyTasks}
-              title="Open your full task page — resolved + outstanding + work metrics"
-              className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
-            >
-              My Tasks →
-            </button>
-          )}
-        </div>
-        <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
-        <div className="flex items-center gap-2 mt-2">
-          <ColorTag color="red"    count={counts.red} />
-          <ColorTag color="orange" count={counts.orange} />
-          <ColorTag color="yellow" count={counts.yellow} />
-          <ColorTag color="blue"   count={counts.blue} />
-        </div>
-        <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
-          Shared queue · same list for every staffer.
-          {/* TODO planned staff-setup model: per-staff weighting + closer-strength
-              ranking will reorder this list per viewer once configured. */}
-        </p>
-      </div>
-      <div className="p-3 overflow-y-auto" style={{ maxHeight: 720 }}>
-        {tasks.length === 0 ? (
-          <EmptyHint>All clear — no open tasks in the shared queue.</EmptyHint>
-        ) : (
-          <ul className="space-y-1">
-            {tasks.map(t => (
-              <li key={t.id}>
-                <button
-                  onClick={t.onSelect}
-                  className="w-full text-left flex items-start gap-2 px-2 py-1.5 rounded hover:bg-[#2A2A28] border border-transparent hover:border-[#2A2A28] transition-colors"
-                  title={t.actionLabel}
-                >
-                  <ColorDot color={t.color} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs text-[#FAFAF7] truncate">{t.title}</p>
-                    <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">{t.subtitle}</p>
-                    <DueLine due={t.due} />
-                  </div>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-[#B8945F] flex-shrink-0 mt-0.5">
-                    {t.actionLabel}
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </Card>
-  );
-}
-
-function LeftModeToggle({ mode, onChangeMode }: { mode: "tasks" | "schedule"; onChangeMode: (m: "tasks" | "schedule") => void }) {
-  return (
-    <div className="flex items-center gap-1 mt-2 rounded border border-[#2A2A28] p-0.5 bg-[#0F0F0E]">
-      <button
-        onClick={() => onChangeMode("tasks")}
-        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
-          mode === "tasks" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
-        }`}
-      >
-        <ListChecks className="w-3 h-3" /> Upcoming Tasks
-      </button>
-      <button
-        onClick={() => onChangeMode("schedule")}
-        className={`flex-1 flex items-center justify-center gap-1 text-[10px] font-semibold uppercase tracking-widest px-2 py-1 rounded transition-colors ${
-          mode === "schedule" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
-        }`}
-      >
-        <CalendarDays className="w-3 h-3" /> See my schedule
-      </button>
-    </div>
-  );
-}
-
-function ColorTag({ color, count }: { color: TaskColor; count: number }) {
-  const cfg = COLOR_CFG[color];
-  return (
-    <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded border ${cfg.chip}`}>
-      {cfg.label} · {count}
-    </span>
-  );
-}
-
-function ColorDot({ color }: { color: TaskColor }) {
-  return <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${COLOR_CFG[color].dot}`} />;
-}
-
-function DueLine({ due }: { due: string | null | undefined }) {
-  if (due) {
-    const overdue = new Date(due).getTime() < Date.now();
-    return (
-      <p className={`text-[10px] mt-0.5 font-mono ${overdue ? "text-red-300" : "text-[#B8945F]"}`}>
-        Due {formatDueLabel(due)}
-      </p>
-    );
-  }
-  // No due value on the underlying record. Render a faint placeholder so the
-  // user sees a column-aligned "—" rather than nothing — and we DO NOT make
-  // up a date.
-  // TODO Phase B: every task surface should carry its own due (next_follow_up_at
-  // for leads is wired; client_message_threads needs a reply-SLA column before
-  // those rows can show a real due here).
-  return (
-    <p className="text-[10px] mt-0.5 text-[#3A3A36] italic" title="No due date on this record yet">
-      No due set
-    </p>
-  );
-}
-
-const COLOR_CFG: Record<TaskColor, { label: string; dot: string; chip: string }> = {
-  red:    { label: "Hot",    dot: "bg-red-500",    chip: "bg-red-900/40 text-red-300 border-red-700/60" },
-  orange: { label: "Mid",    dot: "bg-orange-400", chip: "bg-orange-900/30 text-orange-300 border-orange-700/60" },
-  yellow: { label: "Present", dot: "bg-yellow-400", chip: "bg-yellow-900/30 text-yellow-300 border-yellow-700/60" },
-  blue:   { label: "Sched",  dot: "bg-sky-400",    chip: "bg-sky-900/30 text-sky-300 border-sky-700/60" },
-};
+// AllTasksWidget + LeftModeToggle + TaskScopeToggle + ColorTag + ColorDot
+// + DueLine + COLOR_CFG moved to ../department-dashboard during Slice-1
+// (Prompt 54). Imported at the top of this file.
+// (deleted in Slice-1 — see ../department-dashboard for canonical copy)
 
 // ─── Schedule column view — toggle alternate for the LEFT column ─────────────
 
@@ -2510,7 +2024,7 @@ function ScheduleColumnView(props: ScheduleColumnViewProps) {
             onClick={() => onChangeTab("calendar")}
             className="ml-auto text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
           >
-            Open full →
+            Open full â†’
           </button>
         </div>
         <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
@@ -2549,7 +2063,7 @@ function ScheduleColumnView(props: ScheduleColumnViewProps) {
               todayLocal={todayLocal}
             />
             <p className="text-[10px] text-[#6B6B66] italic mt-3 px-1 leading-snug">
-              View-only here · tapping a slot does not book.
+              View-only here Â· tapping a slot does not book.
               {/* TODO booking from the dashboard: route a confirmed slot pick
                   through the existing NewLeadInline booking RPC. */}
             </p>
@@ -2600,11 +2114,11 @@ function NextDayList({
                 <Calendar className="w-3 h-3 text-[#6B6B66] mt-1 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[10px] font-mono text-[#B8945F] truncate">
-                    {formatDateLabel(e.start_time)} · {formatTimeRange(e.start_time, e.end_time)}
+                    {formatDateLabel(e.start_time)} Â· {formatTimeRange(e.start_time, e.end_time)}
                   </p>
                   <p className="text-xs text-[#FAFAF7] truncate mt-0.5">
                     {e.client_name}
-                    <span className="text-[#6B6B66]">{e.chapter ? ` · Ch.${e.chapter}` : ""}</span>
+                    <span className="text-[#6B6B66]">{e.chapter ? ` Â· Ch.${e.chapter}` : ""}</span>
                   </p>
                 </div>
               </button>
@@ -2642,7 +2156,7 @@ function MonthGridView({
     return m;
   }, [calEvents]);
 
-  // 6×7 month grid starting on Sunday.
+  // 6Ã—7 month grid starting on Sunday.
   const firstOfMonth = new Date(Date.UTC(cursor.year, cursor.month, 1));
   const startDow = firstOfMonth.getUTCDay();
   const daysInMonth = new Date(Date.UTC(cursor.year, cursor.month + 1, 0)).getUTCDate();
@@ -2725,832 +2239,12 @@ function MonthGridView({
   );
 }
 
-// ─── Top bubbles row ─────────────────────────────────────────────────────────
-//
-// Three bubble cards across the top of the dashboard:
-//   1. Clock      — SCAFFOLD. Local state only; ties to the planned
-//                   time-tracking backend (not built).
-//   2. Overview   — REAL where the data exists (task + staff-message counts);
-//                   SCAFFOLD on the on-schedule indicator (needs a calibrated
-//                   pace baseline that doesn't exist yet).
-//   3. Retention  — SCAFFOLD. Placeholder metrics; ties to the planned
-//                   retention/metrics backend (not built).
-//
-// Tone for bubbles 1 + 2 is intentionally supportive, not surveillance-y.
-
-interface TopBubblesRowProps {
-  /** All entries from the shared color-coded task pool. OverviewBubble
-   *  counts by color (RED/ORANGE/YELLOW/BLUE) for the priority breakdown. */
-  sharedTasks: TaskEntry[];
-}
-
-function TopBubblesRow({ sharedTasks }: TopBubblesRowProps) {
-  // Clock + per-channel unread-by-type moved into AttentionBubble (see the
-  // dashboard return). This row is Overview (priority breakdown now) +
-  // Performance / Goals Report.
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <OverviewBubble sharedTasks={sharedTasks} />
-      <RetentionBubble />
-    </div>
-  );
-}
-
-// ─── Bubble 1 — Employee Time Clock (SCAFFOLD on top of sessionStorage) ─────
-//
-// State + actions are owned by IntakePortalInner (so the force-clock-in gate
-// and idle watcher can share them). This bubble is the live view + controls.
-//
-// What's REAL here:
-//   - The current "today" counter ticks against clockedInAt persisted in
-//     sessionStorage — accurate within this browser session.
-//   - Lunch + break toggles open/close timed segments. Cumulative minutes
-//     accumulate locally.
-//
-// What's SCAFFOLD (no fabricated numbers shown as real):
-//   - This week / Pay period / Overtime / Time on phone / Time idle — all
-//     rendered as "—" placeholders. They need the time-tracking backend +
-//     phone/idle telemetry to populate.
-//
-// TODO Phase B — time-tracking backend wiring:
-//   - new table `staff_time_entries (id, staff_id, clocked_in_at,
-//     clocked_out_at, lunch_minutes, break_minutes, source)`
-//   - mutations: clock_in / clock_out / start_lunch / end_lunch /
-//     start_break / end_break
-//   - week + pay-period aggregator (firm-tz, configurable pay-period start)
-//   - per-firm OT threshold (default 40h/week) + lunch/break policy
-//   - phone-call duration roll-up from the planned `calls` table
-//   - idle time from the front-end watcher (already armed in IntakePortalInner)
-
-// On the dashboard the Clock bubble is now a COMPACT pill — status only.
-// Hour metrics + lunch/break/clock-out + PTO/STO requests live in a popup
-// that opens on click. Staff don't need running hour counters in their
-// peripheral vision; they need a quick status read + a single entry point.
-
-function ClockBubble({
-  state, actions, onRequestTimeOff,
-}: {
-  state: TimeClockState;
-  actions: TimeClockActions;
-  /** Routes to the existing TimeOffTab inside MyScheduleTab. */
-  onRequestTimeOff: (kind: "pto" | "sto") => void;
-}) {
-  // 30s tick so the live status counter refreshes.
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setTick(t => t + 1), 30_000);
-    return () => clearInterval(id);
-  }, []);
-
-  const clockedInAt = state.clockedInAt;
-  const minutesElapsed = clockedInAt ? Math.max(0, Math.floor((Date.now() - clockedInAt) / 60_000)) : 0;
-  const onLunch = state.onLunchSince != null;
-  const onBreak = state.onBreakSince != null;
-  const liveLunchMinutes = onLunch ? Math.floor((Date.now() - (state.onLunchSince ?? 0)) / 60_000) : 0;
-  const liveBreakMinutes = onBreak ? Math.floor((Date.now() - (state.onBreakSince ?? 0)) / 60_000) : 0;
-  const workedTodayMin = Math.max(0,
-    minutesElapsed - state.lunchMinutes - state.breakMinutes - liveLunchMinutes - liveBreakMinutes
-  );
-
-  const [popupOpen, setPopupOpen] = useState(false);
-
-  // Compact status pill on the dashboard. NO hour metrics shown inline —
-  // those live in the popup.
-  const statusCls =
-    onLunch ? "bg-amber-900/30 text-amber-300 border-amber-700/60" :
-    onBreak ? "bg-sky-900/30 text-sky-300 border-sky-700/60" :
-              "bg-emerald-900/20 text-emerald-300 border-emerald-700/40";
-  const StatusIcon = onLunch ? Coffee : onBreak ? Pause : Play;
-  const statusLabel = onLunch ? "On lunch" : onBreak ? "On break" : "Working";
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setPopupOpen(true)}
-        title="Open Employee Time Clock"
-        className="flex items-center gap-2 px-3 py-2 rounded-2xl border border-[#2A2A28] bg-[#1A1A18] hover:border-[#B8945F]/40 transition-colors text-left w-full"
-      >
-        <Clock className="w-3.5 h-3.5 text-[#B8945F] flex-shrink-0" />
-        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] border ${statusCls}`}>
-          <StatusIcon className="w-3 h-3" />
-          {statusLabel}
-        </span>
-        <span className="ml-auto text-[10px] text-[#6B6B66] flex-shrink-0">Open →</span>
-      </button>
-
-      {popupOpen && (
-        <ClockPopup
-          state={state}
-          actions={actions}
-          onClose={() => setPopupOpen(false)}
-          onRequestTimeOff={onRequestTimeOff}
-          workedTodayMin={workedTodayMin}
-          liveLunchMinutes={liveLunchMinutes}
-          liveBreakMinutes={liveBreakMinutes}
-        />
-      )}
-    </>
-  );
-}
-
-// ─── Clock popup — full metrics + every clock action including PTO / STO ────
-//
-// PTO and STO ("Sick Time Off") routes are intentionally THIN: they close the
-// popup and switch to the "my_schedule" tab where the existing TimeOffTab
-// form already handles the request + writes to intake_staff_time_off. This
-// is the user's "wire to the existing path where it exists" rule — we don't
-// duplicate the request form here. TODO if PTO/STO ever need a distinct
-// reason_type the form's reason selector already supports it.
-
-function ClockPopup({
-  state, actions, onClose, onRequestTimeOff,
-  workedTodayMin, liveLunchMinutes, liveBreakMinutes,
-}: {
-  state: TimeClockState;
-  actions: TimeClockActions;
-  onClose: () => void;
-  onRequestTimeOff: (kind: "pto" | "sto") => void;
-  workedTodayMin: number;
-  liveLunchMinutes: number;
-  liveBreakMinutes: number;
-}) {
-  const onLunch = state.onLunchSince != null;
-  const onBreak = state.onBreakSince != null;
-
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Employee Time Clock"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-    >
-      <div className="w-full max-w-md rounded-2xl border border-[#2A2A28] bg-[#1A1A18] shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
-        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#2A2A28] flex-shrink-0">
-          <Clock className="w-4 h-4 text-[#B8945F]" />
-          <h3 className="text-sm font-semibold text-[#FAFAF7]">Employee Time Clock</h3>
-          <span className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
-            Scaffold
-          </span>
-          <button onClick={onClose} aria-label="Close" className="ml-auto text-[#6B6B66] hover:text-[#FAFAF7]">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4 overflow-y-auto">
-          {/* Status */}
-          {onLunch ? (
-            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-amber-900/30 text-amber-300 border border-amber-700/60">
-              <Coffee className="w-4 h-4" /> On lunch · {formatHm(liveLunchMinutes)}
-            </div>
-          ) : onBreak ? (
-            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-sky-900/30 text-sky-300 border border-sky-700/60">
-              <Pause className="w-4 h-4" /> On break · {formatHm(liveBreakMinutes)}
-            </div>
-          ) : (
-            <div className="flex items-center justify-center gap-2 px-3 py-2 rounded bg-emerald-900/20 text-emerald-300 border border-emerald-700/40">
-              <Play className="w-4 h-4" /> Working · {formatHm(workedTodayMin)}
-            </div>
-          )}
-
-          {/* Lunch / Break / Clock Out */}
-          <div className="grid grid-cols-2 gap-2">
-            {onLunch ? (
-              <button
-                onClick={() => { actions.endLunch(); }}
-                className="col-span-2 flex items-center justify-center gap-1.5 bg-amber-700 hover:bg-amber-600 text-white font-bold text-xs py-2 rounded transition-colors"
-              >
-                <Play className="w-3 h-3" /> End lunch
-              </button>
-            ) : onBreak ? (
-              <button
-                onClick={() => { actions.endBreak(); }}
-                className="col-span-2 flex items-center justify-center gap-1.5 bg-sky-700 hover:bg-sky-600 text-white font-bold text-xs py-2 rounded transition-colors"
-              >
-                <Play className="w-3 h-3" /> End break
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => { actions.startLunch(); }}
-                  title="Use when you'll be away 15+ minutes for lunch"
-                  className="flex items-center justify-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold py-2 rounded border border-[#3A3A36] transition-colors"
-                >
-                  <Coffee className="w-3 h-3" /> Lunch
-                </button>
-                <button
-                  onClick={() => { actions.startBreak(); }}
-                  title="Use when you'll be away 15+ minutes for a break"
-                  className="flex items-center justify-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold py-2 rounded border border-[#3A3A36] transition-colors"
-                >
-                  <Pause className="w-3 h-3" /> Break
-                </button>
-              </>
-            )}
-            <button
-              onClick={() => { actions.clockOut(); }}
-              title="End your shift and sign out"
-              className="col-span-2 flex items-center justify-center gap-1.5 bg-[#3A1E1E] hover:bg-[#4A2424] text-[#FAFAF7] text-xs font-bold py-2 rounded transition-colors"
-            >
-              <X className="w-3 h-3" /> Clock Out (end shift)
-            </button>
-          </div>
-
-          {/* PTO / STO requests — route to MyScheduleTab's TimeOffTab form */}
-          <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#2A2A28]">
-            <button
-              onClick={() => { onClose(); onRequestTimeOff("pto"); }}
-              className="flex items-center justify-center gap-1.5 bg-sky-900/30 hover:bg-sky-900/50 text-sky-200 text-xs font-semibold py-2 rounded border border-sky-700/40 transition-colors"
-              title="Open the time-off request form (My Schedule)"
-            >
-              <Calendar className="w-3 h-3" /> Request PTO
-            </button>
-            <button
-              onClick={() => { onClose(); onRequestTimeOff("sto"); }}
-              className="flex items-center justify-center gap-1.5 bg-amber-900/30 hover:bg-amber-900/50 text-amber-200 text-xs font-semibold py-2 rounded border border-amber-700/40 transition-colors"
-              title="Open the time-off request form pre-filled to Sick (My Schedule)"
-            >
-              <AlertCircle className="w-3 h-3" /> Request STO
-            </button>
-          </div>
-
-          {/* Metrics — Today real, rest scaffold (—). No fabricated hours. */}
-          <dl className="space-y-1.5 pt-2 border-t border-[#2A2A28]">
-            <CompactStat label="Today"      value={formatHm(workedTodayMin)} />
-            <CompactStat label="This week"  value={<PlaceholderValue title="Needs time-tracking backend (week aggregator)">—</PlaceholderValue>} />
-            <CompactStat label="Pay period" value={<PlaceholderValue title="Needs pay-period config + aggregator">—</PlaceholderValue>} />
-            <CompactStat label="Overtime"   value={<PlaceholderValue title="Needs OT threshold config + week total">—</PlaceholderValue>} />
-            <CompactStat label="On phone"   value={<PlaceholderValue title="Needs the planned calls table + duration roll-up">—</PlaceholderValue>} />
-            <CompactStat label="Idle"       value={<PlaceholderValue title="Idle watcher is armed; metrics surface here once the backend persists them">—</PlaceholderValue>} />
-          </dl>
-
-          <p className="text-[10px] text-[#6B6B66] italic leading-snug">
-            Clock state persists for this browser session only. Real overtime,
-            phone, and idle metrics arrive with the time-tracking backend.
-            PTO / STO requests open the existing time-off form in My Schedule.
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function CompactStat({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline gap-2">
-      <dt className="text-[9px] text-[#6B6B66] uppercase tracking-widest flex-1 truncate">{label}</dt>
-      <dd className="text-[11px] font-mono text-[#FAFAF7]">{value}</dd>
-    </div>
-  );
-}
-
-function formatHm(totalMinutes: number): string {
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  if (h === 0) return `${m}m`;
-  return `${h}h ${String(m).padStart(2, "0")}m`;
-}
-
-// ─── Bubble 2 — Overview (REAL where possible) ───────────────────────────────
-//
-// Real counts:
-//   - Task count            — sharedTasks.length from the LEFT-column derivation
-//   - Staff inbox by channel — staffMsgs.filter(m => m.channel === ...)
-//   - Total unread client threads — sum of clientThreads.unread_count
-//
-// Scaffolded:
-//   - On-schedule / behind indicator. We don't yet have a calibrated pace
-//     baseline (expected tasks-per-hour, expected calls-per-shift). Showing
-//     a hard "behind" signal would be both wrong AND adversarial here, so
-//     this surface stays as a gentle "you're keeping up" message until a
-//     real pace metric exists.
-//
-// TODO Phase B — pace baseline:
-//   - per-role expected throughput config (legal_admin vs attorney etc.)
-//   - reads time-tracking + task-completion logs to compute actual pace
-//   - renders an actionable but kind nudge here (never punitive)
-
-// Bubble 2 — Overview now breaks tasks down by PRIORITY LEVEL.
-//
-// Previously this bubble showed open-task count + unread-by-type
-// (SMS/Email/Team/Direct). The unread-by-type block was MOVED into
-// AttentionBubble (the consolidated red bubble at the top of the
-// dashboard). Counts here come from the same sharedTasks pool the
-// LEFT-column AllTasksWidget reads — RED/ORANGE/YELLOW/BLUE per the
-// priority rules established in earlier prompts.
-
-interface OverviewBubbleProps {
-  sharedTasks: TaskEntry[];
-}
-
-function OverviewBubble({ sharedTasks }: OverviewBubbleProps) {
-  const counts = sharedTasks.reduce(
-    (acc, t) => { acc[t.color] = (acc[t.color] ?? 0) + 1; return acc; },
-    { red: 0, orange: 0, yellow: 0, blue: 0 } as Record<TaskColor, number>,
-  );
-  const total = sharedTasks.length;
-
-  return (
-    <BubbleCard
-      title="Overview — by priority"
-      icon={<ListChecks className="w-4 h-4" />}
-    >
-      <div className="space-y-3">
-        <div className="flex items-baseline gap-2">
-          <span className="text-2xl font-bold text-[#FAFAF7] leading-none">{total}</span>
-          <span className="text-[10px] uppercase tracking-widest text-[#6B6B66]">open tasks</span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-          <PriorityCount color="red"    count={counts.red} />
-          <PriorityCount color="orange" count={counts.orange} />
-          <PriorityCount color="yellow" count={counts.yellow} />
-          <PriorityCount color="blue"   count={counts.blue} />
-        </div>
-
-        <p className="text-[10px] text-[#6B6B66] italic leading-snug">
-          Same RED / ORANGE / YELLOW / BLUE rules as the left-column task list
-          and the Up Next card.
-        </p>
-
-        {/* Pace nudge — SCAFFOLD. Gentle by design. */}
-        <div className="flex items-start gap-2 rounded border border-emerald-700/30 bg-emerald-900/10 px-2.5 py-2">
-          <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 mt-0.5 flex-shrink-0" />
-          <p className="text-[11px] text-emerald-200 leading-snug">
-            You're keeping up. Be mindful of the clock — and take a breath when you need one.
-          </p>
-        </div>
-      </div>
-    </BubbleCard>
-  );
-}
-
-// Single priority-tier row inside the Overview bubble.
-function PriorityCount({ color, count }: { color: TaskColor; count: number }) {
-  const cfg = {
-    red:    { label: "Hot (RED)",     desc: "appts · unread msgs · emergency",    dot: "bg-red-500" },
-    orange: { label: "Mid (ORANGE)",  desc: "urgent leads",                         dot: "bg-orange-400" },
-    yellow: { label: "Present (YEL)", desc: "attorney accepted · present case",     dot: "bg-yellow-400" },
-    blue:   { label: "Sched (BLUE)",  desc: "new contact · fee-quoted follow-ups",  dot: "bg-sky-400" },
-  }[color];
-  return (
-    <div className="flex items-start gap-1.5">
-      <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${cfg.dot}`} />
-      <div className="flex-1 min-w-0">
-        <p className="text-[10px] text-[#6B6B66] truncate">{cfg.label}</p>
-        <p className="text-[9px] text-[#3A3A36] leading-tight truncate">{cfg.desc}</p>
-      </div>
-      <span className={`text-xs font-bold flex-shrink-0 ${count > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{count}</span>
-    </div>
-  );
-}
-
-// ─── Bubble 3 — Performance / Goals Report (SCAFFOLD) ────────────────────────
-//
-// TEMPLATE for the Legal and Accounting department dashboards.
-// The Accounting + Legal department dashboards (LegalDepartmentPortal,
-// AccountingPortal) will mount this SAME component with a different metric
-// set per department. The shape below is intentionally parameterized so
-// the only thing those callers vary is the `departments` prop. Keep the
-// chrome / row layout / placeholder semantics identical when reused.
-//
-// What this surface IS:
-//   - Department-aware: one column per department the staffer is assigned to.
-//   - Per-metric rows: Current · Monthly Goal · What's needed (gap).
-//   - The Intake metric set: Retained · Show/answer rate · Appointments set · Presented.
-//     Monthly goal for Intake = total retained for the month + the targeted
-//     percentage on the other listed metrics.
-//
-// What this surface IS NOT (today):
-//   - Real numbers. The retention / per-employee goals backend isn't wired.
-//     EVERY cell renders "—" via PlaceholderValue. NO fabricated values.
-//   - Multi-department aware. The staff-setup model that assigns staffers
-//     to one or more departments isn't built; we default to a single
-//     Intake column. The dual-column LAYOUT is in place — when the
-//     staff-setup feature ships and a staffer carries 2+ department
-//     memberships, the columns side-by-side rendering kicks in
-//     automatically (see TODO inside the bubble body).
-//
-// TODO Phase B — goals + metrics backend wiring:
-//   - Reads from `firm_perf_goals` + `firm_perf_goal_results` (the tables
-//     spec'd in the SuperAdminConsole "Performance Goals" subsection).
-//     The Performance Goals UI is where supervisors / super admins set the
-//     per-employee monthly goals this card displays against.
-//   - Per-staffer department membership (multi) on `staff_members` so the
-//     `departments` array can be built from the viewer's assignments.
-//   - "What's needed" is `Math.max(0, goal_value - current_value)` for
-//     count metrics, `Math.max(0, goal_pct - current_pct)` for percentage
-//     metrics. Today both render "—".
-//
-// Department metric sets — declared at module scope so callers (the future
-// Legal + Accounting dashboards) can extend the registry by adding entries.
-
-type DeptKey = "intake" | "legal" | "accounting";
-
-interface DeptMetricDef {
-  /** Stable key used to look up the metric in the planned firm_perf_metrics table. */
-  key: string;
-  /** Display label inside the column. */
-  label: string;
-  /** True for "show rate" / "no-show rate" style metrics; renders "%" placeholder unit. */
-  isPercentage?: boolean;
-}
-
-interface DeptMetricSet {
-  key: DeptKey;
-  label: string;
-  /** Headline goal description rendered in the column header. */
-  monthlyGoalLabel: string;
-  metrics: DeptMetricDef[];
-}
-
-const INTAKE_METRICS: DeptMetricSet = {
-  key: "intake",
-  label: "Intake",
-  monthlyGoalLabel: "Monthly retained + targeted rates",
-  metrics: [
-    { key: "retained",         label: "Retained" },
-    { key: "show_answer_rate", label: "Show / answer rate", isPercentage: true },
-    { key: "appts_set",        label: "Appointments set" },
-    { key: "presented",        label: "Presented" },
-  ],
-};
-
-// Placeholder registries for Legal + Accounting — `export`ed so the future
-// LegalDepartmentPortal / AccountingPortal department dashboards can import
-// this bubble + these metric sets and mount the same surface with their
-// own data. Today only INTAKE_METRICS is consumed inside this file.
-export const LEGAL_METRICS: DeptMetricSet = {
-  key: "legal",
-  label: "Legal",
-  monthlyGoalLabel: "Monthly case throughput + signing pace",
-  metrics: [
-    { key: "filings_completed", label: "Filings completed" },
-    { key: "doc_review_turn",   label: "Doc-review turn rate", isPercentage: true },
-    { key: "signing_pace",      label: "Signing pace" },
-  ],
-};
-export const ACCOUNTING_METRICS: DeptMetricSet = {
-  key: "accounting",
-  label: "Accounting",
-  monthlyGoalLabel: "Monthly collections + autopay pace",
-  metrics: [
-    { key: "collected",         label: "Collected this month" },
-    { key: "autopay_attach",    label: "Autopay attach rate", isPercentage: true },
-    { key: "retries_resolved",  label: "Retries resolved" },
-  ],
-};
-
-function RetentionBubble() {
-  // TODO Phase B — staff-setup model:
-  //   Read viewer.department_assignments from staff_members. When the
-  //   viewer is assigned to TWO departments, this array has TWO entries
-  //   and the grid below renders them as side-by-side columns automatically.
-  //   Today we default to a single Intake column — no fabricated second
-  //   department, no fake assignment data.
-  //
-  // Example of the future two-department case (do NOT enable today):
-  //   const departments: DeptMetricSet[] =
-  //     viewer.dept_keys.includes("legal")
-  //       ? [INTAKE_METRICS, LEGAL_METRICS]
-  //       : [INTAKE_METRICS];
-  const departments: DeptMetricSet[] = [INTAKE_METRICS];
-
-  return (
-    <BubbleCard
-      title="Performance / Goals Report"
-      icon={<Target className="w-4 h-4" />}
-      scaffold
-    >
-      <div className="space-y-3">
-        {/* Department columns. lg:grid-cols-${N} where N = departments.length;
-            for the single-department case (today) it's a 1-col grid. When
-            the staff-setup model adds a second dept, the same code renders
-            two side-by-side columns at lg+ breakpoints. */}
-        <div
-          className={`grid grid-cols-1 gap-3 ${
-            departments.length >= 2 ? "lg:grid-cols-2" : ""
-          }`}
-        >
-          {departments.map(dept => (
-            <DepartmentGoalColumn key={dept.key} dept={dept} />
-          ))}
-        </div>
-
-        <GoalsFooterNote />
-      </div>
-    </BubbleCard>
-  );
-}
-
-/** Renders one of two footer states for the Performance / Goals card:
- *    1. EMPTY  → no goals set for the staffer this month. Direct them
- *                to Law Firm Settings → Performance Goals.
- *    2. ACTIVE → at least one target is set. Show a brief "set in
- *                Performance Goals" reference so the source is clear. */
-function GoalsFooterNote() {
-  const staffId = getCurrentStaffId();
-  const month = currentMonthIso();
-  const goals = useEmployeeGoals(staffId, month);
-  const anyGoalSet = (Object.keys(goals) as PerfMetricKey[]).some(k => goals[k] != null);
-  if (!anyGoalSet) {
-    return (
-      <div className="rounded border border-dashed border-amber-500/40 bg-amber-500/5 px-2.5 py-2">
-        <p className="text-[11px] text-amber-200 italic leading-snug">
-          No monthly target set — set one in
-          <span className="text-amber-100 font-semibold"> Law Firm Settings → Performance Goals</span>
-          {" "}for {month}.
-        </p>
-      </div>
-    );
-  }
-  return (
-    <div className="rounded border border-[#2A2A28] bg-[#0F0F0E] px-2.5 py-2">
-      <p className="text-[10px] text-[#6B6B66] italic leading-snug">
-        Targets sourced from
-        <span className="text-[#FAFAF7] font-semibold"> Law Firm Settings → Performance Goals</span>
-        {" "}for {month}. Actuals refresh from the lead/case event aggregator.
-      </p>
-    </div>
-  );
-}
-
-function DepartmentGoalColumn({ dept }: { dept: DeptMetricSet }) {
-  return (
-    <div className="rounded border border-[#2A2A28] bg-[#0F0F0E] p-3">
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[#FAFAF7]">
-          {dept.label}
-        </span>
-        <span className="text-[9px] uppercase tracking-widest text-[#6B6B66]">
-          {dept.monthlyGoalLabel}
-        </span>
-      </div>
-
-      {/* Header row — Current · Goal · Needed */}
-      <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center pb-1 mb-1 border-b border-[#2A2A28]">
-        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66]" />
-        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-10">Now</span>
-        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-10">Goal</span>
-        <span className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] text-right w-12">Needed</span>
-      </div>
-
-      <dl>
-        {dept.metrics.map(m => (
-          <GoalMetricRow key={m.key} metric={m} />
-        ))}
-      </dl>
-    </div>
-  );
-}
-
-function GoalMetricRow({ metric }: { metric: DeptMetricDef }) {
-  // Performance Goals backend (in-memory + per-tab localStorage today):
-  //   - NOW    ← getCurrentMonthActuals(staffId)[metric] from perfGoalsStore
-  //   - GOAL   ← getGoal(staffId, currentMonthIso(), metric) from same
-  //   - NEEDED ← max(0, GOAL − NOW) when GOAL is set; "—" when not set
-  // Tooltip explains the wiring so anyone hovering knows the source.
-  const staffId = getCurrentStaffId();
-  const month = currentMonthIso();
-  const actuals = useCurrentMonthActuals(staffId);
-  const goals = useEmployeeGoals(staffId, month);
-
-  const nowRaw = actuals[metric.key as PerfMetricKey];
-  const goalRaw = goals[metric.key as PerfMetricKey];
-  const neededRaw = goalRaw != null ? Math.max(0, goalRaw - nowRaw) : null;
-
-  const fmt = (v: number | null) => {
-    if (v == null) return metric.isPercentage ? "—%" : "—";
-    if (metric.isPercentage) return `${v}%`;
-    return String(v);
-  };
-
-  const tooltipNow =
-    "Current-month actual — sum of qualifying events tied to this staffer "
-    + "(seed today; wired by lead/case event aggregation in Phase B).";
-  const tooltipGoal = goalRaw != null
-    ? `Monthly target for ${month} — set in Law Firm Settings → Performance Goals.`
-    : "No monthly target set. Set one in Law Firm Settings → Performance Goals.";
-  const tooltipNeeded =
-    goalRaw != null
-      ? "Math.max(0, GOAL − NOW) — what's still required to hit target."
-      : "Pending — set a monthly target first.";
-
-  return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-x-2 items-center py-0.5">
-      <dt className="text-[10px] text-[#6B6B66] truncate">{metric.label}</dt>
-      <dd className="text-[10px] text-right w-10">
-        <span title={tooltipNow} className="text-[#FAFAF7] tabular-nums">{fmt(nowRaw)}</span>
-      </dd>
-      <dd className="text-[10px] text-right w-10">
-        {goalRaw != null
-          ? <span title={tooltipGoal} className="text-[#FAFAF7] tabular-nums">{fmt(goalRaw)}</span>
-          : <PlaceholderValue title={tooltipGoal}>{metric.isPercentage ? "—%" : "—"}</PlaceholderValue>}
-      </dd>
-      <dd className="text-[10px] text-right w-12">
-        {neededRaw != null
-          ? <span title={tooltipNeeded} className={`tabular-nums ${neededRaw === 0 ? "text-emerald-400" : "text-amber-300"}`}>{fmt(neededRaw)}</span>
-          : <PlaceholderValue title={tooltipNeeded}>{metric.isPercentage ? "—%" : "—"}</PlaceholderValue>}
-      </dd>
-    </div>
-  );
-}
-
-// ─── Bubble chrome + helpers ─────────────────────────────────────────────────
-
-function BubbleCard({
-  title, icon, scaffold, children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  scaffold?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-[#2A2A28] bg-[#1A1A18] p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-[#B8945F]">{icon}</span>
-        <h3 className="text-xs font-semibold uppercase tracking-widest text-[#FAFAF7]" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
-          {title}
-        </h3>
-        {scaffold && (
-          <span className="ml-auto text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] border border-[#3A3A36] px-1.5 py-0.5 rounded">
-            Scaffold
-          </span>
-        )}
-      </div>
-      {children}
-    </div>
-  );
-}
-
-function PlaceholderValue({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <span className="text-sm font-mono text-[#6B6B66] italic" title={title}>
-      {children}
-    </span>
-  );
-}
-
-// ─── AttentionBubble (red overdue + consolidated affordances) ───────────────
-//
-// REPLACES the old OverdueReminderBanner. Always rendered now; the bubble
-// absorbs items that used to live elsewhere:
-//   - The "You have N overdue tasks — time to reorganize" heading + the
-//     overdue list (KEPT — was OverdueReminderBanner). Heading copy flips
-//     to a calmer line when count === 0.
-//   - "Ask for help" button (NEW — scaffold; opens AskForHelpModal).
-//   - Employee Time Clock compact pill (MOVED here from the dashboard
-//     header row — see the header now mounts only CommsPillBar + the
-//     action buttons).
-//   - Compact unread-by-type messaging summary (MOVED here from the
-//     OverviewBubble — Overview now shows priority breakdown by
-//     RED/ORANGE/YELLOW/BLUE counts).
-//
-// Real count from sharedTasks (filters TaskEntry.due in the past). A task
-// with no due can't be overdue.
-//
-// "Time to reorganize" copy is intentionally non-accusatory (matches the
-// dashboard's "supportive, non-surveillance" tone rule).
-
-function AttentionBubble({
-  overdueCount, overdueTasks, staffMsgs, clientThreads,
-  timeClock, timeClockActions,
-  onOpenMessagingPanel, onAskForHelp, onRequestTimeOff,
-}: {
-  overdueCount: number;
-  overdueTasks: TaskEntry[];
-  staffMsgs: StaffMessage[];
-  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string })[];
-  timeClock: TimeClockState;
-  timeClockActions: TimeClockActions;
-  onOpenMessagingPanel: (view: "messages" | "staff_comms") => void;
-  onAskForHelp: () => void;
-  onRequestTimeOff: (kind: "pto" | "sto") => void;
-}) {
-  const isHot = overdueCount > 0;
-  // Up to 3 representative overdue items so the bubble shows what's
-  // actually overdue, not just a number.
-  const sample = overdueTasks.slice(0, 3);
-
-  // Unread-by-type counts (moved from OverviewBubble).
-  const sms    = staffMsgs.filter(m => m.channel === "sms").length;
-  const email  = staffMsgs.filter(m => m.channel === "email").length;
-  const team   = staffMsgs.filter(m => m.channel === "phone_note").length;
-  const direct = staffMsgs.filter(m => m.channel === "dm").length;
-  const clientUnread = clientThreads.reduce((s, t) => s + (t.unread_count ?? 0), 0);
-
-  // Container tone — red border + tint when overdue, neutral border when not.
-  const containerCls = isHot
-    ? "rounded-2xl border border-red-500/40 bg-red-500/10 px-5 py-4"
-    : "rounded-2xl border border-[#2A2A28] bg-[#1A1A18] px-5 py-4";
-
-  return (
-    <div className={containerCls}>
-      {/* Heading */}
-      <div className="flex items-start gap-3">
-        <AlertCircle className={`w-4 h-4 mt-0.5 flex-shrink-0 ${isHot ? "text-red-400" : "text-[#B8945F]"}`} />
-        <div className="flex-1 min-w-0">
-          {isHot ? (
-            <p className="text-sm font-bold text-red-200">
-              You have {overdueCount} overdue task{overdueCount === 1 ? "" : "s"} — time to reorganize.
-            </p>
-          ) : (
-            <p className="text-sm font-bold text-[#FAFAF7]">
-              All caught up — quick actions handy below.
-            </p>
-          )}
-          {isHot && (
-            <ul className="mt-1.5 space-y-0.5">
-              {sample.map(t => (
-                <li key={t.id} className="text-[11px] text-red-200/80 leading-snug">
-                  <span className="font-semibold">{t.title}</span>
-                  <span className="text-red-300/70"> · {t.subtitle}</span>
-                </li>
-              ))}
-              {overdueTasks.length > sample.length && (
-                <li className="text-[10px] text-red-200/60 italic">
-                  + {overdueTasks.length - sample.length} more …
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
-        {/* Ask-for-help button — sits in the heading row so it's reachable
-            whether or not the overdue list is present. */}
-        <button
-          onClick={onAskForHelp}
-          title="Ask a teammate for help — flag a task or lead for reassignment"
-          className={`flex-shrink-0 inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1.5 rounded transition-colors ${
-            isHot
-              ? "text-red-100 bg-red-700/60 hover:bg-red-700"
-              : "text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36]"
-          }`}
-        >
-          <Users className="w-3 h-3" /> Ask for help
-        </button>
-      </div>
-
-      {/* Quick-actions row — Clock + Messaging summary. Two-column on lg+. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3 pt-3 border-t border-[#2A2A28]/60">
-        {/* Clock — reuses the existing ClockBubble compact pill + popup. */}
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
-            Clock
-          </p>
-          <ClockBubble
-            state={timeClock}
-            actions={timeClockActions}
-            onRequestTimeOff={onRequestTimeOff}
-          />
-        </div>
-
-        {/* Compact messaging summary — moved from OverviewBubble. */}
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1.5">
-            Unread to you
-          </p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            <UnreadStat icon={<MessageSquare className="w-3 h-3" />} label="SMS"    value={sms}    onOpen={() => onOpenMessagingPanel("messages")} />
-            <UnreadStat icon={<AtSign className="w-3 h-3" />}        label="Email"  value={email}  onOpen={() => onOpenMessagingPanel("messages")} />
-            <UnreadStat icon={<Users className="w-3 h-3" />}         label="Team"   value={team}   onOpen={() => onOpenMessagingPanel("staff_comms")} />
-            <UnreadStat icon={<Send className="w-3 h-3" />}          label="Direct" value={direct} onOpen={() => onOpenMessagingPanel("staff_comms")} />
-          </div>
-          {clientUnread > 0 && (
-            <button
-              onClick={() => onOpenMessagingPanel("messages")}
-              className="text-[10px] text-[#6B6B66] hover:text-[#FAFAF7] mt-2 leading-snug transition-colors text-left"
-            >
-              Also <span className="font-bold text-[#FAFAF7]">{clientUnread}</span> unread message{clientUnread === 1 ? "" : "s"} across client threads.
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function UnreadStat({
-  icon, label, value, onOpen,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  onOpen?: () => void;
-}) {
-  return (
-    <button
-      onClick={onOpen}
-      className="flex items-center gap-1.5 text-left hover:text-[#FAFAF7] transition-colors"
-      title={onOpen ? "Open in Messaging" : undefined}
-    >
-      <span className="text-[#6B6B66]">{icon}</span>
-      <span className="text-[10px] text-[#6B6B66] flex-1">{label}</span>
-      <span className={`text-xs font-bold ${value > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>{value}</span>
-    </button>
-  );
-}
+// TopBubblesRow + OverviewBubble + RetentionBubble + GoalMetricRow et al.
+// + ClockBubble + ClockPopup + CompactStat + formatHm + BubbleCard +
+// PlaceholderValue + AttentionBubble + UnreadStat moved to
+// ../department-dashboard during Slice-1 (Prompt 54). Imported at the
+// top of this file.
+// (deleted in Slice-1 - see ../department-dashboard for canonical copy)
 
 // ─── AskForHelpModal — SCAFFOLD reassignment-request flow ───────────────────
 //
@@ -3834,7 +2528,7 @@ function EscalateModal({
                               >
                                 <p className="text-xs text-[#FAFAF7] truncate">{l.full_name}</p>
                                 <p className="text-[10px] text-[#6B6B66] truncate">
-                                  {l.phone ?? l.email ?? "—"} · {l.status}
+                                  {l.phone ?? l.email ?? "—"} Â· {l.status}
                                 </p>
                               </button>
                             </li>

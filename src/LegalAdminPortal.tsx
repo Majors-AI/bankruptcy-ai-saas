@@ -126,6 +126,11 @@ interface Acceptance {
   decision_notes: string | null;
   decided_at: string | null;
   created_at: string;
+  /** Stage-5 presentation tracking (Prompt 52). Optional — the columns
+   *  may not yet exist in the DB; PostgREST omits the keys when so. The
+   *  CaseAdvancementStatusBar tolerates undefined values gracefully. */
+  presentation_scheduled_at?: string | null;
+  presented_at?: string | null;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -3044,6 +3049,172 @@ function ReReviewChip({ leadId }: { leadId: string }) {
   );
 }
 
+// ─── Stage-5 set-control (Prompt 52) ──────────────────────────────────────
+// Staff-only inline panel rendered beneath the CaseAdvancementStatusBar.
+// Patches presentation_scheduled_at / presented_at on
+// attorney_case_acceptances. Tolerates the columns not yet existing —
+// PostgREST returns an error which is surfaced inline; the status bar
+// continues to render "—" until the schema lands.
+
+function Stage5SetControl({
+  acceptance, onRefresh,
+}: {
+  acceptance: Acceptance;
+  onRefresh: () => void;
+}) {
+  const [saving, setSaving] = useState<null | 'scheduled' | 'presented' | 'clear'>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<null | 'scheduled' | 'presented'>(null);
+  const [draftIso, setDraftIso] = useState<string>(() => {
+    // Pre-fill with current local datetime (HTML datetime-local format).
+    const d = new Date();
+    d.setSeconds(0, 0);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  });
+
+  async function patch(body: Record<string, unknown>, kind: 'scheduled' | 'presented' | 'clear') {
+    setSaving(kind);
+    setErr(null);
+    try {
+      // Inline fetch (not sbPatch) so we can inspect the response status.
+      // sbPatch is fire-and-forget; here we want to surface "column does
+      // not exist" cleanly to the staffer so they know to run the SQL.
+      const r = await fetch(
+        `${SUPABASE_URL}/rest/v1/attorney_case_acceptances?id=eq.${acceptance.id}`,
+        {
+          method: 'PATCH',
+          headers: {
+            apikey: ANON_KEY,
+            Authorization: `Bearer ${ANON_KEY}`,
+            'Content-Type': 'application/json',
+            Prefer: 'return=minimal',
+          },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!r.ok) {
+        setErr(
+          'Patch failed — the presentation_scheduled_at / presented_at columns ' +
+          'may not yet exist on attorney_case_acceptances. Run the column SQL ' +
+          '(reported with this commit) and try again.'
+        );
+      } else {
+        setPickerOpen(null);
+        onRefresh();
+      }
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  const scheduledFmt = acceptance.presentation_scheduled_at
+    ? new Date(acceptance.presentation_scheduled_at).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : null;
+  const presentedFmt = acceptance.presented_at
+    ? new Date(acceptance.presented_at).toLocaleString('en-US', {
+        month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit',
+      })
+    : null;
+
+  return (
+    <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-3 mt-2 flex flex-col gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          Stage 5 · Presentation
+        </span>
+        <span className="text-[10px] text-slate-600">— staff-only</span>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">Scheduled:</span>
+          <span className="text-slate-300 tabular-nums">{scheduledFmt ?? '—'}</span>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(pickerOpen === 'scheduled' ? null : 'scheduled')}
+            disabled={saving !== null}
+            className="text-[10px] text-amber-300 hover:text-amber-200 disabled:opacity-50 underline"
+          >
+            {scheduledFmt ? 'Edit' : 'Set'}
+          </button>
+          {scheduledFmt && (
+            <button
+              type="button"
+              onClick={() => patch({ presentation_scheduled_at: null }, 'clear')}
+              disabled={saving !== null}
+              className="text-[10px] text-slate-500 hover:text-rose-300 disabled:opacity-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <span className="text-slate-700">·</span>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-400">Presented:</span>
+          <span className="text-slate-300 tabular-nums">{presentedFmt ?? '—'}</span>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(pickerOpen === 'presented' ? null : 'presented')}
+            disabled={saving !== null}
+            className="text-[10px] text-amber-300 hover:text-amber-200 disabled:opacity-50 underline"
+          >
+            {presentedFmt ? 'Edit' : 'Mark'}
+          </button>
+          {presentedFmt && (
+            <button
+              type="button"
+              onClick={() => patch({ presented_at: null }, 'clear')}
+              disabled={saving !== null}
+              className="text-[10px] text-slate-500 hover:text-rose-300 disabled:opacity-50"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+      {pickerOpen && (
+        <div className="flex items-center gap-2 flex-wrap pt-1 border-t border-slate-800/50">
+          <span className="text-[10px] text-slate-400">
+            {pickerOpen === 'scheduled' ? 'Scheduled for' : 'Presented at'}:
+          </span>
+          <input
+            type="datetime-local"
+            value={draftIso}
+            onChange={e => setDraftIso(e.target.value)}
+            className="bg-slate-800 border border-slate-700 text-white text-xs rounded px-2 py-1"
+          />
+          <button
+            type="button"
+            onClick={() => {
+              // datetime-local has no timezone — interpret as local + convert to ISO.
+              const iso = new Date(draftIso).toISOString();
+              const field = pickerOpen === 'scheduled' ? 'presentation_scheduled_at' : 'presented_at';
+              patch({ [field]: iso }, pickerOpen);
+            }}
+            disabled={saving !== null || !draftIso}
+            className="text-[10px] font-semibold text-slate-950 bg-amber-400 hover:bg-amber-300 rounded px-2 py-1 disabled:opacity-50"
+          >
+            {saving === pickerOpen ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            onClick={() => setPickerOpen(null)}
+            disabled={saving !== null}
+            className="text-[10px] text-slate-500 hover:text-slate-300 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {err && (
+        <p className="text-[10px] text-rose-300 leading-snug">{err}</p>
+      )}
+    </div>
+  );
+}
+
 // ─── Lead Detail Panel ────────────────────────────────────────────────────────
 
 function LeadDetailPanel({
@@ -3387,6 +3558,20 @@ function LeadDetailPanel({
       <ReReviewChip leadId={lead.id} />
 
       <CaseAdvancementStatusBar lead={lead} acceptance={acceptance} />
+
+      {/* Stage-5 set-control (Prompt 52) — staff-only inline panel for
+          presentation_scheduled_at / presented_at. Patches
+          attorney_case_acceptances directly. Hidden until acceptance
+          exists AND has been accepted (the stage doesn't apply pre-
+          acceptance). If the columns aren't yet seeded server-side, the
+          patch still ships the keys and PostgREST returns an error
+          surfaced inline — the status bar continues to render "—". */}
+      {acceptance && acceptance.decision === 'accepted' && (
+        <Stage5SetControl
+          acceptance={acceptance}
+          onRefresh={onRefresh}
+        />
+      )}
 
       {/* ── Retention-Priority Action Banner ─────────────────────────────── */}
       {lead.status !== "retained" && lead.status !== "declined" && lead.status !== "no_case" && (() => {
