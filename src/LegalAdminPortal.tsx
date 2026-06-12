@@ -33,6 +33,7 @@ import StaffSettingsPanel, { type StaffSettingsViewerRole } from "./components/s
 import DepartmentSettingsPanel, { type DepartmentSettingsViewerRole } from "./components/admin-settings/DepartmentSettingsPanel";
 import { setCurrentAttorneyName, clearCurrentAttorneyName, getCurrentAttorneyName } from "./lib/currentAttorney";
 import { scaleNationalStandards2025, getMedianAnnualIncome as storeGetMedian, getCurrentRulesetVersion, diffRulesetVersions } from "./lib/irsMeansStandards";
+import { evaluateReviewStaleness } from "./lib/ruleStaleness";
 import { getEffectiveLivingStandard } from "./components/law-firm-settings/livingStandardsOverlay";
 import { useFirmDmiTriageThreshold, useFirmMinimumDebtThreshold } from "./lib/firmPolicy";
 import {
@@ -3011,16 +3012,21 @@ function ReReviewChip({ leadId }: { leadId: string }) {
         if (cancelled) return;
         const r = rows[0] ?? null;
         if (!r) { setReason(null); setLocked(false); return; }
-        const status = String(r.case_status ?? "").toLowerCase();
-        if (status === "filed" || status === "closed") {
-          setLocked(true);
-          setReason(null);
-          return;
-        }
-        if (!r.decided_at) { setReason(null); setLocked(false); return; }
-        const current = getCurrentRulesetVersion();
-        setReason(diffRulesetVersions(r.reviewed_ruleset_version ?? null, current));
-        setLocked(false);
+        // Slice L-10 (Prompt 68) — delegate to the shared predicate.
+        // Same decision tree as the chip's previous inline logic; the
+        // dashboard's RED re-review tier consumes the same helper so
+        // the two surfaces cannot drift.
+        const verdict = evaluateReviewStaleness(
+          {
+            case_status: r.case_status ?? null,
+            decided_at: r.decided_at ?? null,
+            reviewed_ruleset_version: r.reviewed_ruleset_version ?? null,
+          },
+          getCurrentRulesetVersion(),
+        );
+        if (verdict.kind === "locked") { setLocked(true);  setReason(null); return; }
+        if (verdict.kind === "stale")  { setLocked(false); setReason(verdict.reason); return; }
+        setLocked(false); setReason(null);
       } catch {
         setReason(null);
       }
