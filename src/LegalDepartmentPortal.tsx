@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import {
   ClipboardCheck,
   PenLine,
@@ -14,9 +14,35 @@ import DepartmentPortalLogin, {
   classifyLegalStaff,
   type DepartmentPortalSession,
 } from "./components/department-portal/DepartmentPortalLogin";
-import DepartmentTaskBoard, {
-  LEGAL_TASK_STUBS,
-} from "./components/department-portal/DepartmentTaskBoard";
+// Slice L-2 (Prompt 62) — Legal Department Dashboard. Mounts the shared
+// department-dashboard shell on the "tasks" section; replaces the
+// earlier DepartmentTaskBoard stub. LEGAL_TASK_STUBS + the stub board
+// live in src/components/department-portal/DepartmentTaskBoard.tsx and
+// are no longer imported here (L-3 supplies a real task pool).
+import LegalDashboard from "./components/legal/LegalDashboard";
+import type {
+  AttorneyIntakeReviewRow,
+  SigningReviewRow,
+  ParalegalReviewRow,
+  EcfTaskRow,
+  IntakeLeadRow,
+} from "./components/legal/legalTasks";
+
+const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const V1_FIRM_ID    = (import.meta.env.VITE_FIRM_ID as string | undefined)
+  ?? "00000000-0000-0000-0000-000000000001";
+
+// Slice L-3 (Prompt 63) — minimal REST helper for the mount-level Promise.all.
+// Mirrors AccountingPortal's api.get; the dashboard is read-only here.
+const api = {
+  get: async <T,>(path: string): Promise<T[]> => {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+      headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${SUPABASE_ANON}` },
+    });
+    return r.ok ? (r.json() as Promise<T[]>) : ([] as T[]);
+  },
+};
 
 // Phase 2 step 1: shell with sub-nav. Mounts the existing ParalegalReview
 // and SigningReview components in 'embedded' layout (no double chrome).
@@ -53,6 +79,62 @@ const SECTIONS: SectionDef[] = [
 export default function LegalDepartmentPortal() {
   const [session, setSession] = useState<DepartmentPortalSession | null>(null);
   const [section, setSection] = useState<Section>("tasks");
+
+  // Slice L-3 (Prompt 63) — task-pool sources. Loaded ONCE at mount; the
+  // LegalDashboard receives them as props and derives the color-tiered
+  // TaskEntry[] via buildLegalTasks. No re-fetch on section switch.
+  //
+  // Firm scoping:
+  //   - signing_reviews has firm_id → filtered server-side.
+  //   - attorney_intake_reviews / paralegal_reviews / ecf_tasks have no
+  //     firm_id column today; relies on table-level RLS for isolation
+  //     (firm-scoped enforcement is part of Canelo's BAN-77/78 thread).
+  //   - intake_leads carries firm_id, but the existing pilot dataset
+  //     uses the default firm so we leave it unfiltered for L-3.
+  const [attorneyIntakeReviews, setAttorneyIntakeReviews] = useState<AttorneyIntakeReviewRow[]>([]);
+  const [signingReviews,        setSigningReviews]        = useState<SigningReviewRow[]>([]);
+  const [paralegalReviews,      setParalegalReviews]      = useState<ParalegalReviewRow[]>([]);
+  const [ecfTasks,              setEcfTasks]              = useState<EcfTaskRow[]>([]);
+  const [intakeLeads,           setIntakeLeads]           = useState<IntakeLeadRow[]>([]);
+
+  const load = useCallback(async () => {
+    const [air, sr, pr, et, il] = await Promise.all([
+      // decision='pending' covers both the stale (RED) and fresh (YELLOW)
+      // tiers; buildLegalTasks splits by age.
+      api.get<AttorneyIntakeReviewRow>(
+        "attorney_intake_reviews?decision=eq.pending&order=created_at.desc&limit=200",
+      ),
+      // signing_reviews status enum is in_progress/completed/paused;
+      // we want both unfinished states. Firm-scoped via firm_id.
+      api.get<SigningReviewRow>(
+        `signing_reviews?firm_id=eq.${V1_FIRM_ID}&status=in.(in_progress,paused)&order=updated_at.desc&limit=200`,
+      ),
+      // paralegal_reviews status enum is in_progress/complete/needs_info;
+      // both unfinished states surface as YELLOW in buildLegalTasks.
+      api.get<ParalegalReviewRow>(
+        "paralegal_reviews?status=in.(in_progress,needs_info)&order=updated_at.desc&limit=200",
+      ),
+      // ecf_tasks status default is 'open' (not 'pending'). Both
+      // open + in_progress surface; overdue → ORANGE, upcoming → BLUE.
+      api.get<EcfTaskRow>(
+        "ecf_tasks?status=in.(open,in_progress)&order=due_date.asc.nullslast&limit=200",
+      ),
+      // Name lookup for attorney_intake_reviews.lead_id. The other two
+      // client-side tables use a `client_id text` that isn't necessarily
+      // an intake_leads.id — fallback in buildLegalTasks is a truncated
+      // id with a future-slice TODO for a clients lookup.
+      api.get<IntakeLeadRow>(
+        "intake_leads?select=id,full_name&order=created_at.desc&limit=500",
+      ),
+    ]);
+    setAttorneyIntakeReviews(air);
+    setSigningReviews(sr);
+    setParalegalReviews(pr);
+    setEcfTasks(et);
+    setIntakeLeads(il);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   if (!session) {
     return (
@@ -124,13 +206,18 @@ export default function LegalDepartmentPortal() {
       {/* Active section content. */}
       <main className="max-w-7xl mx-auto">
         {section === "tasks" && (
-          <div className="p-6">
-            <DepartmentTaskBoard
-              session={session}
-              tasksByUserType={LEGAL_TASK_STUBS}
-              accent="#818CF8"
-            />
-          </div>
+          // Slice L-2 (Prompt 62) — Legal Department Dashboard mounted
+          // from the shared department-dashboard shell.
+          // Slice L-3 (Prompt 63) — LEFT widget wired against the
+          // mount-level Promise.all above; no re-fetch in the dashboard.
+          <LegalDashboard
+            session={session}
+            attorneyIntakeReviews={attorneyIntakeReviews}
+            signingReviews={signingReviews}
+            paralegalReviews={paralegalReviews}
+            ecfTasks={ecfTasks}
+            intakeLeads={intakeLeads}
+          />
         )}
         {section === "paralegal_review" && <ParalegalReview layout="embedded" />}
         {section === "signing_review"   && <SigningReview   layout="embedded" />}
