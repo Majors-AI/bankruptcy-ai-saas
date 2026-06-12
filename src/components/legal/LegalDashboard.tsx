@@ -42,7 +42,7 @@ import {
   LEGAL_METRICS,
   FIRM_TZ, todayInFirmTz, formatDueLabel,
 } from "../department-dashboard";
-import type { TaskEntry } from "../department-dashboard";
+import type { TaskEntry, StaffMessage } from "../department-dashboard";
 import {
   buildLegalTasks,
   type AttorneyIntakeReviewRow,
@@ -51,6 +51,8 @@ import {
   type EcfTaskRow,
   type IntakeLeadRow,
   type CalendarEventRow,
+  type AcceptanceRow,
+  type EcfInboxRow,
   type LegalTaskKind,
 } from "./legalTasks";
 
@@ -66,6 +68,10 @@ export interface LegalDashboardProps {
   intakeLeads:           ReadonlyArray<IntakeLeadRow>;
   // Slice L-7 (Prompt 65) — today's hearings/filings footer source.
   calendarEvents:        ReadonlyArray<CalendarEventRow>;
+  // Slice L-5 (Prompt 66) — Active Caseload bubble source.
+  acceptances:           ReadonlyArray<AcceptanceRow>;
+  // Slice L-6 (Prompt 67) — RIGHT-column legal comms source.
+  ecfInbox:              ReadonlyArray<EcfInboxRow>;
   /** Optional click-router; today LegalDepartmentPortal doesn't wire
    *  one (clicks no-op until L-9). */
   onSelectTask?: (kind: LegalTaskKind, id: string) => void;
@@ -74,7 +80,7 @@ export interface LegalDashboardProps {
 export default function LegalDashboard({
   session,
   attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads,
-  calendarEvents,
+  calendarEvents, acceptances, ecfInbox,
   onSelectTask,
 }: LegalDashboardProps) {
   // L-9 (per-staffer "Mine" vs "Shared pool") will use the existing
@@ -219,6 +225,148 @@ export default function LegalDashboard({
     return { ordered, totalCount, upcomingCount };
   }, [calendarEvents, today]);
 
+  // Slice L-5 (Prompt 66) — Active Caseload bubble derivation.
+  //
+  // Retained-by-chapter:
+  //   Walk intake_leads where status='retained'. For each lead, prefer
+  //   attorney_case_acceptances.chapter (source-of-truth, set at acceptance);
+  //   fall back to intake_leads.chapter_interest when no acceptance row
+  //   matches. Group into 7 / 13 / unknown.
+  //
+  // Filed-vs-Retained is PARTIAL today: filed state requires
+  // accounting_filed_case_registry (cross-portal), so the bubble shows
+  // "Filed" + "Pending Discharge" as TODO placeholders. The user said
+  // PARTIAL is expected — we don't fake those numbers.
+  const caseload = useMemo(() => {
+    // Lookup map: lead_id → chapter from accepted acceptances.
+    const acceptedChapter = new Map<string, number | null>();
+    for (const a of acceptances) {
+      if (a.decision !== "accepted") continue;
+      if (!a.lead_id) continue;
+      // Keep the most recent acceptance per lead (the load is ordered
+      // decided_at desc, so the first one wins; ignore later overrides).
+      if (!acceptedChapter.has(a.lead_id)) {
+        acceptedChapter.set(a.lead_id, a.chapter);
+      }
+    }
+    const counts = { ch7: 0, ch13: 0, unknown: 0 };
+    let totalRetained = 0;
+    for (const l of intakeLeads) {
+      if (l.status !== "retained") continue;
+      totalRetained++;
+      const chapter = acceptedChapter.get(l.id) ?? l.chapter_interest ?? null;
+      if (chapter === 7)        counts.ch7++;
+      else if (chapter === 13)  counts.ch13++;
+      else                      counts.unknown++;
+    }
+    const totalAccepted = acceptedChapter.size;
+    return { counts, totalRetained, totalAccepted };
+  }, [intakeLeads, acceptances]);
+
+  // Slice L-5 — Today's Filings & Hearings bubble derivation.
+  //
+  // Pure re-aggregation of the already-loaded calendarEvents, scoped to
+  // today (firm TZ). Count by calendar_type. Cancelled / rescheduled
+  // events skip — same filter as the footer in L-7.
+  const todaySummary = useMemo(() => {
+    const counts = {
+      hearings: 0,
+      deadlines: 0,
+      signings: 0,
+      docReviews: 0,
+      other: 0,
+    };
+    for (const e of calendarEvents) {
+      if (e.status === "cancelled" || e.status === "rescheduled") continue;
+      const dueDay = new Date(e.start_time).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+      if (dueDay !== today) continue;
+      if (e.calendar_type === "court_hearing")      counts.hearings++;
+      else if (e.calendar_type === "court_deadline") counts.deadlines++;
+      else if (e.calendar_type === "signing")        counts.signings++;
+      else if (e.calendar_type === "doc_review")     counts.docReviews++;
+      else                                            counts.other++;
+    }
+    const total = counts.hearings + counts.deadlines + counts.signings + counts.docReviews + counts.other;
+    return { counts, total };
+  }, [calendarEvents, today]);
+
+  // Slice L-6 (Prompt 67) — RIGHT-column legal comms.
+  //
+  // Maps two firm-internal legal arrays into the shell's StaffMessage
+  // shape so ConsolidatedMessagingWidget renders them unchanged.
+  //   • ecf_inbox       → incoming PACER/docket notices (channel='email';
+  //                       docket entries are court-served notices)
+  //   • attorney_intake_reviews (decision='pending', already loaded) →
+  //                       "needs review" status notices to the assigned
+  //                       attorney (channel='email'; firm-internal handoff)
+  // Both fit channel='email'. No new fetch for the reviews; ecf_inbox is
+  // the ONE new read added at the portal mount. Threads stays [] —
+  // client_message_threads has no legal-category tagging today (same gap
+  // as Accounting Slice 6; schema follow-up).
+  const legalStaffMsgs = useMemo<StaffMessage[]>(() => {
+    const out: StaffMessage[] = [];
+    const leadNameById = new Map(intakeLeads.map(l => [l.id, l.full_name]));
+
+    // ─── ecf_inbox → docket notice rows ────────────────────────────
+    for (const e of ecfInbox) {
+      // Human-friendly filing type: 'motion_for_relief' → 'Motion For Relief'
+      const filingLabel = e.filing_type
+        .split("_")
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(" ");
+      const caseTag = e.case_number ? ` · case ${e.case_number}` : "";
+      out.push({
+        id:           `ecf-inbox-${e.id}`,
+        sender_id:    "court",
+        sender_name:  e.filed_by || "ECF (PACER)",
+        sender_role:  "system_ecf_notice",
+        channel:      "email",
+        subject:      `${filingLabel}${caseTag}`,
+        body:         e.docket_entry || "(no docket text)",
+        // Unread until the firm has triaged: status='pending' means no
+        // ecf_task has been created yet. task_created / responded /
+        // dismissed all count as already handled.
+        read:         e.status !== "pending",
+        // filed_date is date-only; created_at is the timestamp the row
+        // landed in the inbox — prefer that for sort precision.
+        created_at:   e.created_at,
+      });
+    }
+
+    // ─── attorney_intake_reviews → "needs review" status notices ───
+    // The pending-review pool already loaded for the LEFT-column task
+    // pool is re-purposed here as a comms stream: each pending review
+    // is effectively a notice to the assigned attorney that an intake
+    // is waiting on them. No new fetch.
+    for (const r of attorneyIntakeReviews) {
+      if (r.decision !== "pending") continue;
+      const leadName = r.lead_id ? (leadNameById.get(r.lead_id) ?? null) : null;
+      const subject = leadName
+        ? `Attorney review needed · ${leadName}`
+        : `Attorney review needed`;
+      out.push({
+        id:           `att-review-${r.id}`,
+        sender_id:    "system",
+        sender_name:  r.attorney_name || "Intake handoff",
+        sender_role:  "system_attorney_review_notice",
+        channel:      "email",
+        subject,
+        body:
+          `Pending attorney decision on intake submission` +
+          (r.submission_id ? ` (${r.submission_id.slice(0, 8)}…)` : "") +
+          ` · review_status: ${r.review_status}`,
+        // All loaded rows are decision='pending' → unread until the
+        // attorney makes a decision (decided_at flips).
+        read:         r.decided_at !== null,
+        created_at:   r.created_at,
+      });
+    }
+
+    // Newest-first across both sources.
+    out.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+    return out;
+  }, [ecfInbox, attorneyIntakeReviews, intakeLeads]);
+
   return (
     <div className="p-4 space-y-4 bg-[#0F0F0E] min-h-full">
       {/* Top bubbles row — legal-specific (Active Caseload + Today's
@@ -228,18 +376,66 @@ export default function LegalDashboard({
         <BubbleCard
           title="Active Caseload"
           icon={<Briefcase className="w-4 h-4" />}
-          scaffold
         >
-          <div className="space-y-2">
-            <p className="text-[11px] text-[#6B6B66] leading-relaxed">
-              Per-chapter case counts (Ch.7 vs Ch.13) — filed vs retained-not-filed.
-            </p>
-            <p className="text-[10px] text-[#3A3A36] italic leading-snug">
-              Sources (L-5): attorney_case_acceptances + accounting_filed_case_registry
-              (cross-portal read). Pending-discharge slice deferred until a
-              discharge_at / case_closed_at column lands on
-              attorney_case_acceptances. Until then the bubble reports
-              filed + retained counts only.
+          <div className="space-y-3">
+            {/* Retained-by-chapter grid */}
+            <div>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B66] mb-1.5">
+                Retained
+              </p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <p className="text-2xl font-bold text-[#FAFAF7] leading-none tabular-nums">
+                    {caseload.counts.ch7}
+                  </p>
+                  <p className="text-[10px] text-[#6B6B66] mt-1">Ch. 7</p>
+                </div>
+                <div>
+                  <p className="text-2xl font-bold text-[#FAFAF7] leading-none tabular-nums">
+                    {caseload.counts.ch13}
+                  </p>
+                  <p className="text-[10px] text-[#6B6B66] mt-1">Ch. 13</p>
+                </div>
+                <div>
+                  <p className={`text-2xl font-bold leading-none tabular-nums ${caseload.counts.unknown > 0 ? "text-amber-300" : "text-[#FAFAF7]"}`}>
+                    {caseload.counts.unknown}
+                  </p>
+                  <p className="text-[10px] text-[#6B6B66] mt-1">Chapter unset</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Filed + Pending Discharge — both deferred. Render dimmed
+                "—" so the slot is visible but never lies. */}
+            <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#2A2A28]/60">
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B66] mb-0.5">
+                  Filed
+                </p>
+                <p className="text-base font-mono text-[#3A3A36] italic" title="Source is accounting_filed_case_registry (cross-portal). Adding it is a future-slice read.">
+                  —
+                </p>
+                <p className="text-[10px] text-[#6B6B66] mt-1 italic">
+                  awaits cross-portal read
+                </p>
+              </div>
+              <div>
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B66] mb-0.5">
+                  Pending discharge
+                </p>
+                <p className="text-base font-mono text-[#3A3A36] italic" title="No discharge_at / case_closed_at column on attorney_case_acceptances today; deferred until that schema lands.">
+                  —
+                </p>
+                <p className="text-[10px] text-[#6B6B66] mt-1 italic">
+                  awaits schema column
+                </p>
+              </div>
+            </div>
+
+            <p className="text-[10px] text-[#6B6B66] leading-snug">
+              {caseload.totalRetained} retained ·{" "}
+              {caseload.totalAccepted} accepted (lifetime).
+              Chapter from attorney_case_acceptances when set, else intake_leads.chapter_interest.
             </p>
           </div>
         </BubbleCard>
@@ -247,16 +443,58 @@ export default function LegalDashboard({
         <BubbleCard
           title="Today's Filings & Hearings"
           icon={<Scale className="w-4 h-4" />}
-          scaffold
         >
-          <div className="space-y-2">
-            <p className="text-[11px] text-[#6B6B66] leading-relaxed">
-              341 meetings, court hearings, and filing deadlines for today.
-            </p>
+          <div className="space-y-3">
+            {todaySummary.total === 0 ? (
+              <p className="text-[11px] text-[#6B6B66] italic leading-relaxed">
+                Nothing on the legal calendar for today.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-[#FAFAF7] leading-none tabular-nums">
+                    {todaySummary.total}
+                  </span>
+                  <span className="text-[10px] uppercase tracking-widest text-[#6B6B66]">
+                    events today
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+                  <TodaySummaryRow
+                    label="Hearings"
+                    count={todaySummary.counts.hearings}
+                    dot="bg-red-500"
+                  />
+                  <TodaySummaryRow
+                    label="Deadlines"
+                    count={todaySummary.counts.deadlines}
+                    dot="bg-orange-400"
+                  />
+                  <TodaySummaryRow
+                    label="Signings"
+                    count={todaySummary.counts.signings}
+                    dot="bg-yellow-400"
+                  />
+                  <TodaySummaryRow
+                    label="Doc reviews"
+                    count={todaySummary.counts.docReviews}
+                    dot="bg-sky-400"
+                  />
+                  {todaySummary.counts.other > 0 && (
+                    <TodaySummaryRow
+                      label="Other"
+                      count={todaySummary.counts.other}
+                      dot="bg-slate-500"
+                    />
+                  )}
+                </div>
+              </>
+            )}
+
             <p className="text-[10px] text-[#3A3A36] italic leading-snug">
-              Sources (L-5): calendar_events?department=eq.legal (start_time
-              today) + trustee_341_checklist_state (meeting_date today) +
-              ecf_tasks (due_date today). Goal pace from
+              Source: calendar_events?department=eq.legal (start_time today).
+              Goal pace from
               <span className="text-[#6B6B66] font-semibold">
                 {" "}{LEGAL_METRICS.label}
               </span>{" "}— {LEGAL_METRICS.monthlyGoalLabel.toLowerCase()}.
@@ -291,17 +529,22 @@ export default function LegalDashboard({
         }
         right={
           <ConsolidatedMessagingWidget
+            // No legal-tagged client_message_threads category exists yet —
+            // schema follow-up (same gap as Accounting Slice 6). Until then
+            // "threads" is empty and the widget's existing empty hint
+            // handles the path cleanly.
             threads={[]}
-            staffMsgs={[]}
+            staffMsgs={legalStaffMsgs}
             loading={false}
             onOpenView={() => {
-              /* L-6 will route to the legal comms surface (ECF inbox +
-                 attorney intake review status notices). No-op until
-                 that surface is wired. */
+              /* TODO Slice L-6+ — route to the dedicated legal comms
+                 surface (ECF inbox detail + attorney intake review queue).
+                 No-op until that surface is wired. */
             }}
             // Legal-relevant subset. Drops sms / direct / team / voicemails
-            // — ECF notices are firm-internal email-shaped (L-6); SMS /
-            // voicemails aren't part of the legal-department comms path.
+            // — ECF notices + attorney-review handoffs are firm-internal
+            // email-shaped; SMS / voicemails aren't part of the legal-
+            // department comms path today.
             enabledTabs={["all", "email"]}
           />
         }
@@ -609,6 +852,32 @@ function UpNextActiveBody({
           <MousePointerClick className="w-3 h-3" /> Pick
         </button>
       </div>
+    </div>
+  );
+}
+
+// ─── TodaySummaryRow (Slice L-5 — Prompt 66) ──────────────────────────────
+//
+// One row inside the Today's Filings & Hearings bubble's count grid.
+// Color dot matches the L-7 footer style map so the bubble + footer
+// look like the same surface at a glance.
+
+function TodaySummaryRow({
+  label, count, dot,
+}: {
+  label: string;
+  count: number;
+  dot: string;       // tailwind class, e.g. "bg-red-500"
+}) {
+  return (
+    <div className="flex items-start gap-1.5">
+      <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${dot}`} />
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] text-[#6B6B66] truncate">{label}</p>
+      </div>
+      <span className={`text-xs font-bold flex-shrink-0 tabular-nums ${count > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>
+        {count}
+      </span>
     </div>
   );
 }

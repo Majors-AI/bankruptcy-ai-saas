@@ -40,6 +40,8 @@
 //     a truncated client_id with a TODO comment.
 
 import type { TaskColor, TaskEntry } from "../department-dashboard";
+import { evaluateReviewStaleness } from "../../lib/ruleStaleness";
+import { getCurrentRulesetVersion } from "../../lib/irsMeansStandards";
 
 // ─── Narrow row shapes ────────────────────────────────────────────────────
 //
@@ -59,6 +61,15 @@ export interface AttorneyIntakeReviewRow {
   created_at: string;
   updated_at: string;
   decided_at: string | null;
+  // Slice L-10 (Prompt 68) — fields consumed by the shared
+  // evaluateReviewStaleness predicate. Both are TODO Phase B at the DB
+  // (see LegalAdminPortal.tsx:344-352); they arrive as undefined from
+  // PostgREST until the columns land. The helper treats null/undefined
+  // identically — null reviewed_ruleset_version yields the
+  // "tracking not enabled" reason; null case_status leaves the case
+  // unlocked.
+  reviewed_ruleset_version?: string | null;
+  case_status?: string | null;
 }
 
 export interface SigningReviewRow {
@@ -98,6 +109,59 @@ export interface EcfTaskRow {
 export interface IntakeLeadRow {
   id: string;
   full_name: string;
+  /** Lead status — 'new' / 'contacted' / ... / 'retained' / 'fee_quoted' / etc.
+   *  Optional because earlier slices selected only id+full_name; Slice L-5
+   *  (Prompt 66) widens the select to include status for the Active
+   *  Caseload bubble. buildLegalTasks doesn't read this field. */
+  status?: string | null;
+  /** Stated chapter interest (7 or 13) on the lead row. May differ from
+   *  attorney_case_acceptances.chapter (which is the post-acceptance
+   *  source of truth). */
+  chapter_interest?: number | null;
+  /** Timestamp when the lead flipped to 'retained'. */
+  retained_at?: string | null;
+}
+
+// ─── Slice L-5 (Prompt 66) — Active Caseload bubble input ─────────────────
+//
+// Narrow row shape for attorney_case_acceptances. Provides the
+// source-of-truth chapter for accepted cases (Ch.7 vs Ch.13). Joins
+// to intake_leads via lead_id for the retained-by-chapter count.
+// buildLegalTasks doesn't consume this — bubble-only.
+
+export interface AcceptanceRow {
+  id: string;
+  lead_id: string | null;
+  /** 'pending' | 'accepted' | 'declined' | 'needs_more_info' */
+  decision: string;
+  /** Source-of-truth chapter for accepted cases — integer 7 or 13. */
+  chapter: number | null;
+  case_type: string | null;
+  decided_at: string | null;
+}
+
+// ─── Slice L-6 (Prompt 67) — legal-comms widget input ────────────────────
+//
+// Narrow row shape for ecf_inbox. The L-6 RIGHT-column comms widget maps
+// these (incoming PACER/docket notices) onto the shared shell's
+// StaffMessage shape — every entry is rendered as channel='email'
+// (docket notices are email-shaped). NOT consumed by buildLegalTasks
+// (ecf_tasks is the auto-generated downstream task row; the inbox row
+// itself is the inbound notice). The dashboard sorts by filed_date desc
+// and merges with attorney_intake_reviews for the unified comms list.
+
+export interface EcfInboxRow {
+  id: string;
+  client_id: string | null;
+  case_number: string;
+  docket_entry: string;
+  filing_type: string;        // 'motion_for_relief' | 'objection_to_plan' | ... | 'general'
+  filed_by: string;
+  filed_date: string;         // date (YYYY-MM-DD)
+  deadline_days: number | null;
+  /** 'pending' | 'task_created' | 'responded' | 'dismissed' */
+  status: string;
+  created_at: string;
 }
 
 // ─── Slice L-7 (Prompt 65) — today's-schedule footer input ────────────────
@@ -155,6 +219,49 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
     () => src.onSelectTask?.(kind, id);
 
   const out: TaskEntry[] = [];
+
+  // ─── RED (top) — re-review required (ruleset changed since decision) ──
+  //
+  // Slice L-10 (Prompt 68) — reuses the same predicate the per-lead
+  // ReReviewChip in LegalAdminPortal.tsx renders, so the two surfaces
+  // cannot drift. Predicate lives in src/lib/ruleStaleness.ts; the
+  // version we compare against is in-memory (no fetch — pure read
+  // from EXEMPTIONS_BY_JURISDICTION / MEDIAN_INCOME_META / PART_B_META).
+  //
+  // Sort band 500_000 lies BELOW the stale-pending band 1_000_000, so
+  // re-review tasks sort ahead of the stale-queue RED entries (lower
+  // sortKey wins). Filed/closed cases are suppressed entirely (the
+  // helper returns kind='locked'); decisions still in flight return
+  // kind='not_decided' and are skipped here — they continue to flow
+  // through the existing stale-pending / fresh-pending tiers below.
+  const currentRuleset = getCurrentRulesetVersion();
+  for (const r of src.attorneyIntakeReviews) {
+    const verdict = evaluateReviewStaleness(
+      {
+        case_status: r.case_status ?? null,
+        decided_at: r.decided_at,
+        reviewed_ruleset_version: r.reviewed_ruleset_version ?? null,
+      },
+      currentRuleset,
+    );
+    if (verdict.kind !== "stale") continue;
+    const title = r.lead_id
+      ? (leadName.get(r.lead_id) ?? clientFallback(r.lead_id))
+      : "Lead (unknown)";
+    out.push({
+      id: `re-review-${r.id}`,
+      color: "red",
+      title,
+      subtitle: `Re-review required — ${verdict.reason ?? "rules changed"}`,
+      actionLabel: "Re-confirm",
+      // decided_at exists by the time the predicate returns 'stale'; use it
+      // for chronological ordering (older decisions surface first within
+      // the re-review band).
+      sortKey: 500_000 - new Date(r.decided_at ?? r.updated_at).getTime() / 60_000,
+      due: r.decided_at,
+      onSelect: onSelect("attorney_intake_review", r.id),
+    });
+  }
 
   // ─── RED — attorney_intake_reviews stale > 3 days (decision pending) ───
   for (const r of src.attorneyIntakeReviews) {
