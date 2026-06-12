@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Component, ReactNode } from 'react';
-import { supabase } from './lib/supabase';
+import { useAuth, useCurrentFirmId, useCurrentRole } from './lib/AuthProvider';
 import BankruptcyIntake from './BankruptcyIntake';
 import ClientDashboard from './ClientDashboard';
 import BankruptcyDocumentQuestionnaire from './bankruptcy-information-and-document-questionnaire(1).jsx';
@@ -157,34 +157,39 @@ function App() {
   const [gateToast, setGateToast] = useState<string | null>(null);
   const { dark, toggle } = useTheme();
 
-  // BAN-40 phase 2 will replace these with values from the Supabase auth context.
-  // Until auth is wired, read from env vars so each deployment is configured per firm.
-  const firmId = (import.meta.env.VITE_FIRM_ID as string | undefined) ?? '00000000-0000-0000-0000-000000000001';
-  // Per-user operator allowlist (UI tab visibility only — see OPERATOR_EMAILS
-  // comment above). Authenticated user email is fetched once on mount; the
-  // env-based VITE_PLATFORM_ROLE check still wins when set so operators on
-  // shared dev boxes can short-circuit the auth round-trip.
-  const [authedEmail, setAuthedEmail] = useState<string | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) setAuthedEmail(data.user?.email ?? null);
-    });
-    return () => { cancelled = true; };
-  }, []);
+  // RLS Phase 1 — firm_id + role now resolve through the AuthProvider.
+  // When a Supabase session is attached AND user_profiles has a row for
+  // the user, the session values win. With no session (or no seeded
+  // row), the hooks fall back to VITE_FIRM_ID / VITE_PLATFORM_ROLE /
+  // VITE_FIRM_ROLE — i.e. exactly today's behavior. Additive change.
+  const firmId = useCurrentFirmId();
+  const sessionRole = useCurrentRole();
+  // Per-user operator allowlist preserved for backwards compatibility —
+  // see OPERATOR_EMAILS comment above. Still UI-only; NOT a security
+  // boundary. The user email is now read from the AuthProvider's ambient
+  // session instead of an ad-hoc getUser() round-trip on mount.
+  const { user } = useAuth();
+  const authedEmail = user?.email ?? null;
   const isSuperAdmin =
-    (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) === 'super_admin_bankruptcy_ai'
+    sessionRole === 'super_admin_bankruptcy_ai'
+    || (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) === 'super_admin_bankruptcy_ai'
     || isOperatorEmail(authedEmail);
-  // BAN-40 phase 2 stubs — replace with auth-derived firm role lookup.
-  // Role hierarchy: law_firm_owner ⊃ super_admin ⊃ attorney
-  //   VITE_FIRM_ROLE='law_firm_owner' → firm owner (sees Law Firm Owner Portal + everything below)
-  //   VITE_FIRM_ROLE='super_admin'    → firm super admin (sees Law Firm Settings + Training)
-  //   VITE_FIRM_ROLE='attorney'       → attorney-tier staff (sees Training)
-  // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops testing.
+  // Firm-tier role resolution. Session role from user_profiles wins; env
+  // var (VITE_FIRM_ROLE) is the fallback so today's behavior is preserved
+  // when nobody is signed in. Hierarchy: law_firm_owner ⊃ firm_super_admin ⊃ attorney.
+  // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops.
   const firmRole = (import.meta.env.VITE_FIRM_ROLE as string | undefined);
-  const isLawFirmOwner   = firmRole === 'law_firm_owner' || isSuperAdmin;
-  const isFirmSuperAdmin = firmRole === 'super_admin' || isLawFirmOwner;
-  const isAttorneyRole   = firmRole === 'attorney' || isFirmSuperAdmin;
+  const isLawFirmOwner   =
+    firmRole === 'law_firm_owner'
+    || isSuperAdmin;
+  const isFirmSuperAdmin =
+    sessionRole === 'firm_super_admin'
+    || firmRole === 'super_admin'
+    || isLawFirmOwner;
+  const isAttorneyRole   =
+    sessionRole === 'attorney'
+    || firmRole === 'attorney'
+    || isFirmSuperAdmin;
   // STRICT lawyer gate — the consolidated attorney review (Eligibility /
   // Issues / All Answers / Decision) is restricted to viewers who hold a bar
   // number. Includes `attorney`, `law_firm_owner` (the firm's lead attorney),
@@ -192,7 +197,8 @@ function App() {
   // EXCLUDES the firm-tier `super_admin` — that role is administrative and
   // not automatically a lawyer per the firm-role spec.
   const isLawyerViewer =
-    firmRole === 'attorney'
+    sessionRole === 'attorney'
+    || firmRole === 'attorney'
     || firmRole === 'law_firm_owner'
     || isSuperAdmin;
 

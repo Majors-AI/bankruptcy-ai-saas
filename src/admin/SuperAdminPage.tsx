@@ -26,7 +26,6 @@ import {
   Tag,
   Layers,
   CheckCircle2,
-  XCircle,
   Pencil,
   Save,
   X,
@@ -43,12 +42,16 @@ import {
   Briefcase,
   Scale,
   Receipt,
+  BarChart3,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import type { PlatformRole } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import {
   OPERATOR_SEED_FIRMS, computeOperatorMetrics, mergeSeedWithLive,
-  type OperatorSeedFirm,
+  computeFirmComparison, computeFirmBilling, SERVICE_PLANS,
+  type OperatorSeedFirm, type FirmComparisonRow, type FirmBillingRow,
 } from './operatorSeed';
 
 const MLG_FIRM_ID = '00000000-0000-0000-0000-000000000001';
@@ -65,7 +68,7 @@ interface Props {
   currentUserRole?: PlatformRole | null;
 }
 
-type AdminTab = 'dashboard' | 'firms' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications' | 'reference_rules';
+type AdminTab = 'dashboard' | 'firms' | 'firm_comparison' | 'operator_billing' | 'pricing' | 'features' | 'discounts' | 'tier_templates' | 'usage' | 'branding' | 'communications' | 'reference_rules';
 
 interface Firm {
   id: string;
@@ -253,18 +256,22 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
   }, [allFirms]);
 
   const TABS: { id: AdminTab; label: string; icon: React.ReactNode }[] = [
-    { id: 'dashboard',       label: 'Dashboard',       icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
-    { id: 'firms',           label: 'Firms',           icon: <Building2 className="w-3.5 h-3.5" /> },
-    { id: 'pricing',         label: 'Pricing',         icon: <DollarSign className="w-3.5 h-3.5" /> },
-    { id: 'features',        label: 'Features',        icon: <ToggleRight className="w-3.5 h-3.5" /> },
-    { id: 'discounts',       label: 'Discounts',       icon: <Tag className="w-3.5 h-3.5" /> },
-    { id: 'tier_templates',  label: 'Tier Templates',  icon: <Layers className="w-3.5 h-3.5" /> },
-    { id: 'usage',           label: 'Usage & Billing', icon: <Activity className="w-3.5 h-3.5" /> },
-    { id: 'branding',        label: 'Branding',        icon: <Palette className="w-3.5 h-3.5" /> },
-    { id: 'communications',  label: 'Communications',  icon: <Mail className="w-3.5 h-3.5" /> },
+    { id: 'dashboard',        label: 'Dashboard',         icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
+    { id: 'firms',            label: 'Firms',             icon: <Building2 className="w-3.5 h-3.5" /> },
+    // Slice 3 — cross-firm comparison reporting (operator-only).
+    { id: 'firm_comparison',  label: 'Firm Comparison',   icon: <BarChart3 className="w-3.5 h-3.5" /> },
+    { id: 'pricing',          label: 'Pricing',           icon: <DollarSign className="w-3.5 h-3.5" /> },
+    { id: 'features',         label: 'Features',          icon: <ToggleRight className="w-3.5 h-3.5" /> },
+    { id: 'discounts',        label: 'Discounts',         icon: <Tag className="w-3.5 h-3.5" /> },
+    // Slice 4 — service-plan billing roll-up (operator-only, placeholders).
+    { id: 'operator_billing', label: 'Operator Billing',  icon: <Receipt className="w-3.5 h-3.5" /> },
+    { id: 'tier_templates',   label: 'Tier Templates',    icon: <Layers className="w-3.5 h-3.5" /> },
+    { id: 'usage',            label: 'Usage & Billing',   icon: <Activity className="w-3.5 h-3.5" /> },
+    { id: 'branding',         label: 'Branding',          icon: <Palette className="w-3.5 h-3.5" /> },
+    { id: 'communications',   label: 'Communications',    icon: <Mail className="w-3.5 h-3.5" /> },
     // Reference Rules — canonical edit home for every legal-reference
     // dataset. Distinct from the firm-side rule pages (which are read-only).
-    { id: 'reference_rules', label: 'Reference Rules', icon: <BookOpen className="w-3.5 h-3.5" /> },
+    { id: 'reference_rules',  label: 'Reference Rules',   icon: <BookOpen className="w-3.5 h-3.5" /> },
   ];
 
   const selectedFirmName = allFirms.find((f) => f.id === selectedFirmId)?.name ?? selectedFirmId.slice(0, 8);
@@ -368,13 +375,15 @@ export default function SuperAdminPage({ currentUserRole }: Props) {
           ))}
         </div>
 
-        {activeTab === 'dashboard'      && <OperatorDashboard onOpenFirm={setSelectedFirmProfileId} />}
-        {activeTab === 'firms'          && <FirmsTab onOpenFirm={setSelectedFirmProfileId} />}
-        {activeTab === 'pricing'        && <PricingTab firmId={selectedFirmId} firmName={selectedFirmName} />}
-        {activeTab === 'features'       && <FeaturesTab firmId={selectedFirmId} firmName={selectedFirmName} />}
-        {activeTab === 'discounts'      && <DiscountsTab firmId={selectedFirmId} firmName={selectedFirmName} />}
-        {activeTab === 'tier_templates' && <TierTemplatesTab />}
-        {activeTab === 'usage'          && <UsageTab />}
+        {activeTab === 'dashboard'        && <OperatorDashboard onOpenFirm={setSelectedFirmProfileId} />}
+        {activeTab === 'firms'            && <FirmsTab onOpenFirm={setSelectedFirmProfileId} />}
+        {activeTab === 'firm_comparison'  && <FirmComparisonTab />}
+        {activeTab === 'pricing'          && <PricingTab firmId={selectedFirmId} firmName={selectedFirmName} />}
+        {activeTab === 'features'         && <FeaturesTab firmId={selectedFirmId} firmName={selectedFirmName} />}
+        {activeTab === 'discounts'        && <DiscountsTab firmId={selectedFirmId} firmName={selectedFirmName} />}
+        {activeTab === 'operator_billing' && <OperatorBillingTab />}
+        {activeTab === 'tier_templates'   && <TierTemplatesTab />}
+        {activeTab === 'usage'            && <UsageTab />}
         {activeTab === 'branding'       && (
           <FirmBrandingPanel firmId={selectedFirmId} firmName={selectedFirmName} />
         )}
@@ -1724,5 +1733,362 @@ function TierTemplatesTab() {
         </div>
       )}
     </section>
+  );
+}
+
+// ─── Slice 3 — Firm comparison reporting ─────────────────────────────────
+
+type ComparisonSortKey = "firmName" | "totalCases" | "filedCases" | "filingRatePct" | "avgDaysToFile";
+type SortDir = "asc" | "desc";
+
+function FirmComparisonTab() {
+  // Seed-only today — live aggregate flows in when client_intakes counts
+  // are queryable per firm (see operatorSeed.ts header).
+  const rows = useMemo(() => computeFirmComparison(OPERATOR_SEED_FIRMS), []);
+  const [sortKey, setSortKey] = useState<ComparisonSortKey>("filingRatePct");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const sorted = useMemo(() => {
+    const cmp = (a: FirmComparisonRow, b: FirmComparisonRow) => {
+      const av = a[sortKey];
+      const bv = b[sortKey];
+      // null avgDaysToFile sorts last regardless of direction.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (typeof av === "number" && typeof bv === "number") return av - bv;
+      return String(av).localeCompare(String(bv));
+    };
+    const out = [...rows].sort(cmp);
+    return sortDir === "asc" ? out : out.reverse();
+  }, [rows, sortKey, sortDir]);
+
+  function clickHeader(k: ComparisonSortKey) {
+    if (k === sortKey) {
+      setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(k);
+      setSortDir(k === "firmName" ? "asc" : "desc");
+    }
+  }
+
+  // Bar chart denominator — biggest filingRatePct across firms. Empty
+  // dataset → 1 so the bars don't divide-by-zero.
+  const maxFilingRate = Math.max(1, ...rows.map(r => r.filingRatePct));
+
+  const totals = useMemo(() => ({
+    firms:      rows.length,
+    cases:      rows.reduce((acc, r) => acc + r.totalCases, 0),
+    filed:      rows.reduce((acc, r) => acc + r.filedCases, 0),
+  }), [rows]);
+  const portfolioRate = totals.cases > 0
+    ? Math.round((totals.filed / totals.cases) * 1000) / 10
+    : 0;
+
+  return (
+    <section className="space-y-5">
+      <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
+        <BarChart3 className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-bold text-sky-300">Firm Comparison — operator only</p>
+          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+            Cross-firm aggregates from the operator seed. Avg days-to-file
+            is <strong className="text-sky-300">approximate</strong> — derived from per-firm
+            cohort dates (intake-start avg → filed avg) when available, otherwise
+            falling back to a static placeholder. Real per-case duration ships when
+            client_intakes timestamps are queryable.
+          </p>
+        </div>
+      </div>
+
+      {/* Roll-up summary */}
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <RollupCard label="Firms" value={totals.firms.toString()} />
+        <RollupCard label="Total cases" value={totals.cases.toLocaleString()} />
+        <RollupCard label="Filed" value={totals.filed.toLocaleString()} />
+        <RollupCard
+          label="Portfolio filing rate"
+          value={`${portfolioRate.toFixed(1)}%`}
+          tone="amber"
+        />
+      </div>
+
+      {/* Sortable comparison table */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/40 flex items-center gap-2">
+          <BarChart3 className="w-3.5 h-3.5 text-amber-400" />
+          <p className="text-xs font-bold text-white">Per-firm comparison</p>
+          <p className="text-[11px] text-slate-500 ml-1">Click a column to sort</p>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              <SortableTh label="Firm"            k="firmName"      activeKey={sortKey} dir={sortDir} onClick={clickHeader} align="left" />
+              <SortableTh label="Total cases"     k="totalCases"    activeKey={sortKey} dir={sortDir} onClick={clickHeader} />
+              <SortableTh label="Filed"           k="filedCases"    activeKey={sortKey} dir={sortDir} onClick={clickHeader} />
+              <SortableTh label="Filing rate"     k="filingRatePct" activeKey={sortKey} dir={sortDir} onClick={clickHeader} />
+              <SortableTh label="Avg days to file" k="avgDaysToFile" activeKey={sortKey} dir={sortDir} onClick={clickHeader} />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/40">
+            {sorted.map(row => (
+              <tr key={row.firmId} className="hover:bg-slate-800/20 transition-colors">
+                <td className="px-5 py-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-white">{row.firmName}</span>
+                    <span className="text-[9px] uppercase tracking-widest text-slate-500 border border-slate-700 rounded-full px-2 py-0.5">
+                      {row.status}
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-sm text-right tabular-nums text-slate-300">
+                  {row.totalCases.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-sm text-right tabular-nums text-slate-300">
+                  {row.filedCases.toLocaleString()}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="w-24 h-2 rounded-full bg-slate-800 overflow-hidden">
+                      <div
+                        className="h-full bg-amber-400"
+                        style={{ width: `${(row.filingRatePct / maxFilingRate) * 100}%` }}
+                      />
+                    </div>
+                    <span className="text-sm tabular-nums text-amber-300 w-12 text-right">
+                      {row.filingRatePct.toFixed(1)}%
+                    </span>
+                  </div>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {row.avgDaysToFile == null ? (
+                    <span className="text-sm text-slate-700">—</span>
+                  ) : (
+                    <div className="flex items-center justify-end gap-2">
+                      <span className="text-sm tabular-nums text-slate-300">{row.avgDaysToFile}d</span>
+                      {row.avgDaysSource !== "derived" && (
+                        <span
+                          className="text-[9px] uppercase tracking-widest text-amber-300/80 border border-amber-500/30 rounded-full px-2 py-0.5"
+                          title={
+                            row.avgDaysSource === "seed_static"
+                              ? "Static placeholder — real per-case duration not yet wired"
+                              : "Source unknown"
+                          }
+                        >
+                          approx
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Numbers above flow from <code className="text-slate-400">OPERATOR_SEED_FIRMS</code>{" "}
+        in <code className="text-slate-400">src/admin/operatorSeed.ts</code>. Wiring layer:
+        firm totals → <code className="text-slate-400">client_intakes</code> counts; filing
+        rate → <code className="text-slate-400">status='filed'</code> share; avg days-to-file →{" "}
+        <code className="text-slate-400">AVG(filed_at − intake_started_at)</code> aggregate.
+      </p>
+    </section>
+  );
+}
+
+function RollupCard({
+  label, value, tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "amber";
+}) {
+  const valueClass = tone === "amber" ? "text-amber-300" : "text-white";
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">
+      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{label}</p>
+      <p className={`text-2xl font-bold tabular-nums mt-1 ${valueClass}`}>{value}</p>
+    </div>
+  );
+}
+
+function SortableTh({
+  label, k, activeKey, dir, onClick, align,
+}: {
+  label: string;
+  k: ComparisonSortKey;
+  activeKey: ComparisonSortKey;
+  dir: SortDir;
+  onClick: (k: ComparisonSortKey) => void;
+  align?: "left" | "right";
+}) {
+  const isActive = activeKey === k;
+  const alignClass = align === "left" ? "text-left px-5" : "text-right px-4";
+  return (
+    <th className={`${alignClass} py-3`}>
+      <button
+        type="button"
+        onClick={() => onClick(k)}
+        className={`inline-flex items-center gap-1 hover:text-white transition-colors ${isActive ? "text-amber-300" : "text-slate-500"}`}
+      >
+        <span>{label}</span>
+        {isActive && (dir === "asc"
+          ? <ArrowUp className="w-3 h-3" />
+          : <ArrowDown className="w-3 h-3" />)}
+      </button>
+    </th>
+  );
+}
+
+// ─── Slice 4 — Per-firm billing by service plan ──────────────────────────
+
+function OperatorBillingTab() {
+  const roll = useMemo(() => computeFirmBilling(OPERATOR_SEED_FIRMS), []);
+  return (
+    <section className="space-y-5">
+      <div className="bg-amber-500/8 border border-amber-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
+        <Receipt className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-xs font-bold text-amber-300">
+            Operator Billing — placeholder plans / placeholder pricing
+          </p>
+          <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">
+            Service-plan catalog + per-firm plan assignment in{" "}
+            <code className="text-amber-300/80">src/admin/operatorSeed.ts</code>. Tier names
+            and prices are PLACEHOLDERS — set the real catalog before turning on charges.
+            Real billing wiring (invoices, dunning, Stripe customers / subscriptions /
+            usage records) is V2+ and out of scope here.
+          </p>
+        </div>
+      </div>
+
+      {/* MRR-style roll-up */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <RollupCard label="Billable firms" value={roll.activeFirmCount.toString()} />
+        <RollupCard label="Monthly recurring (MRR)" value={fmtCents(roll.mrrCents)} tone="amber" />
+        <RollupCard
+          label="Annualized (12× MRR)"
+          value={fmtCents(roll.mrrCents * 12)}
+        />
+      </div>
+
+      {/* Per-firm billing table */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/40 flex items-center gap-2">
+          <Receipt className="w-3.5 h-3.5 text-amber-400" />
+          <p className="text-xs font-bold text-white">Per-firm billing</p>
+          <p className="text-[11px] text-slate-500 ml-1">(usage-based overage not modeled — V2+)</p>
+        </div>
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-slate-800 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+              <th className="text-left px-5 py-3">Firm</th>
+              <th className="text-left px-4 py-3">Plan</th>
+              <th className="text-left px-4 py-3">Since</th>
+              <th className="text-right px-4 py-3">Cases used / included</th>
+              <th className="text-right px-4 py-3">Utilization</th>
+              <th className="text-right px-4 py-3">Monthly charge</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-800/40">
+            {roll.rows.map(row => (
+              <BillingRow key={row.firmId} row={row} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Plan catalog readout */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-800 bg-slate-800/40 flex items-center gap-2">
+          <Layers className="w-3.5 h-3.5 text-sky-400" />
+          <p className="text-xs font-bold text-white">Plan catalog</p>
+          <p className="text-[11px] text-slate-500 ml-1">(placeholders — edit in operatorSeed.ts)</p>
+        </div>
+        <div className="divide-y divide-slate-800/40">
+          {SERVICE_PLANS.map(plan => (
+            <div key={plan.key} className="px-5 py-3 grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-3 items-center">
+              <div>
+                <p className="text-sm font-bold text-white">{plan.name}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">{plan.scope}</p>
+              </div>
+              <div className="text-xs text-slate-400">
+                Included: {plan.includedCases === 0 ? "unlimited" : `${plan.includedCases} cases/mo`}
+              </div>
+              <div className="text-sm font-bold text-amber-300 tabular-nums">
+                {fmtCents(plan.monthlyPriceCents)}/mo
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Real billing surfaces (invoices, payment status, Stripe IDs, dunning, proration on
+        plan changes) live with the V2+ Stripe wiring. Pilot firms remain comped per the
+        Usage &amp; Billing tab.
+      </p>
+    </section>
+  );
+}
+
+function BillingRow({ row }: { row: FirmBillingRow }) {
+  const isBillable = row.status === "active" || row.status === "trial";
+  const utilization = row.utilizationPct;
+  // Over-utilization (>= 100%) signals the firm has used everything
+  // included in their plan — a pricing flag, NOT an overage bill (the
+  // scaffold doesn't compute overages).
+  const overUtilized = utilization != null && utilization >= 100;
+  return (
+    <tr className="hover:bg-slate-800/20 transition-colors">
+      <td className="px-5 py-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-sm text-white">{row.firmName}</span>
+          <span className="text-[9px] uppercase tracking-widest text-slate-500 border border-slate-700 rounded-full px-2 py-0.5">
+            {row.status}
+          </span>
+          {!isBillable && (
+            <span
+              className="text-[9px] uppercase tracking-widest text-slate-500 border border-slate-700 rounded-full px-2 py-0.5"
+              title="Suspended / churned firms are excluded from the MRR roll-up"
+            >
+              not billing
+            </span>
+          )}
+        </div>
+      </td>
+      <td className="px-4 py-3 text-sm text-slate-300">{row.plan.name}</td>
+      <td className="px-4 py-3 text-xs text-slate-500">{fmtDate(row.planAssignedAt)}</td>
+      <td className="px-4 py-3 text-sm text-right tabular-nums text-slate-300">
+        {row.casesUsed.toLocaleString()}
+        {" / "}
+        {row.plan.includedCases === 0 ? "∞" : row.plan.includedCases.toLocaleString()}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {utilization == null ? (
+          <span className="text-sm text-slate-500">—</span>
+        ) : (
+          <div className="flex items-center justify-end gap-2">
+            <div className="w-20 h-2 rounded-full bg-slate-800 overflow-hidden">
+              <div
+                className={`h-full ${overUtilized ? "bg-rose-400" : "bg-emerald-400"}`}
+                style={{ width: `${Math.min(100, utilization)}%` }}
+              />
+            </div>
+            <span
+              className={`text-sm tabular-nums w-14 text-right ${overUtilized ? "text-rose-300" : "text-slate-300"}`}
+            >
+              {utilization.toFixed(1)}%
+            </span>
+          </div>
+        )}
+      </td>
+      <td className="px-4 py-3 text-sm text-right tabular-nums">
+        <span className={isBillable ? "text-amber-300 font-semibold" : "text-slate-600"}>
+          {fmtCents(row.monthlyChargeCents)}
+        </span>
+      </td>
+    </tr>
   );
 }

@@ -43,6 +43,59 @@ export interface Ch13SecuredClaimInput {
   cureArrears?: number;
   ongoingMonthlyPayment?: number;
   collateralAddress?: string;
+  /** Junior liens on the SAME collateral, in lien-priority order.
+   *  Used by the In re Zimmer / In re Tanner / In re Lane strip-
+   *  eligibility detection on the principal residence: a junior is
+   *  wholly unsecured (and only then strip-eligible, jurisdiction-
+   *  dependent) when collateral value is fully consumed by senior
+   *  balances before this position. Primary authority in the 9th Cir.
+   *  (AZ + WA) is In re Zimmer, 313 F.3d 1220 (9th Cir. 2002); accord
+   *  In re Tanner (11th Cir.) and In re Lane (6th Cir.). Intake
+   *  doesn't capture junior liens — attorney-entered on the anti-mod
+   *  claim card. */
+  juniorLiens?: ReadonlyArray<JuniorLien>;
+}
+
+export interface JuniorLien {
+  id: string;
+  label: string;
+  balance: number;
+  /** Lien position ≥ 2 (1 = the senior itself). */
+  position: number;
+}
+
+/** Pure helper. Given a senior balance, collateral value, and the
+ *  juniors stacked above it, returns each junior tagged with whether
+ *  it's wholly unsecured (strip-eligible on the principal residence
+ *  under In re Zimmer, 313 F.3d 1220 (9th Cir. 2002) — primary for
+ *  AZ/WA; accord In re Tanner (11th Cir.) and In re Lane (6th Cir.))
+ *  and the equity cushion remaining at that lien's position. */
+export function classifyJuniorLiens(input: {
+  collateralValue: number;
+  seniorBalance: number;
+  juniors: ReadonlyArray<JuniorLien>;
+}): Array<{
+  lien: JuniorLien;
+  whollyUnsecured: boolean;
+  cushionAtThisPosition: number;
+}> {
+  const sorted = [...input.juniors].sort((a, b) => a.position - b.position);
+  let cumulativeSeniors = Math.max(0, input.seniorBalance);
+  const out: Array<{
+    lien: JuniorLien;
+    whollyUnsecured: boolean;
+    cushionAtThisPosition: number;
+  }> = [];
+  for (const lien of sorted) {
+    const cushion = input.collateralValue - cumulativeSeniors;
+    out.push({
+      lien,
+      whollyUnsecured: cushion <= 0,
+      cushionAtThisPosition: cushion,
+    });
+    cumulativeSeniors += Math.max(0, lien.balance);
+  }
+  return out;
 }
 
 /** Result of deriveBatch3FromIntake. */
@@ -155,13 +208,15 @@ export function deriveSecuredClaims(
 /** Batch 3 — derive plan-cost inputs from intake form_data.
  *
  *  mortgageArrearsInPlan: arrears > 0 OR mortgageCurrent === "no".
- *    Either signal indicates the mortgage is being cured in the plan,
- *    which triggers the conduit (trustee disburses ongoing mortgage).
  *  arrearsCure: parseFloat(formData.mortgageArrears).
  *  ongoingMortgageOverTerm: monthly payment × planMonths.
- *  priorityClaims: today reads formData.taxDebt (the priority-class field
- *    intake captures today). TODO leaf — extend to domestic-support
- *    arrears, employee wages, etc. when intake captures those. */
+ *  priorityClaims: sum of the § 507 categories intake captures. Today:
+ *    - taxDebt        — formData.taxDebt
+ *    - DSO arrears    — formData.dsoArrears (domestic-support arrears)
+ *    - wage priority  — formData.wagePriority (last 180 days wages owed
+ *                       by debtor-employer; § 507(a)(4))
+ *  Attorney can override the total with formData._attorneyPriorityOverride
+ *  when present (set on the Ch13Eligibility surface). */
 export function deriveBatch3FromIntake(
   formData: Record<string, unknown> | null,
   planMonths: number,
@@ -172,25 +227,80 @@ export function deriveBatch3FromIntake(
   const arrears = num(formData.mortgageArrears);
   const monthly = num(formData.mortgageMonthlyPayment);
   const mortgageCurrent = String(formData.mortgageCurrent ?? "").toLowerCase();
-  // Conduit-trigger: arrears > 0 OR mortgageCurrent === "no". Either way
-  // the plan needs to cure the arrears, and the conduit-on path applies.
   const mortgageArrearsInPlan = arrears > 0 || (mortgageCurrent === "no");
+
+  // Attorney override wins when set; otherwise sum the captured categories.
+  const overrideRaw = parseFloat(String(formData._attorneyPriorityOverride ?? ""));
+  const priorityClaims = Number.isFinite(overrideRaw) && overrideRaw >= 0
+    ? overrideRaw
+    : (num(formData.taxDebt) + num(formData.dsoArrears) + num(formData.wagePriority));
+
   return {
     mortgageArrearsInPlan,
     arrearsCure: arrears,
     ongoingMortgageOverTerm: monthly * planMonths,
-    priorityClaims: num(formData.taxDebt),
+    priorityClaims,
   };
 }
 
-/** Derive a CH13Venue from the firm's primary filing state. Today AZ
- *  maps cleanly; WA defaults to W.D. (the higher-volume district).
- *  Returns "AZ" for uncovered states — flagged inline in code so the
- *  enum extension is obvious when a new filing state lands. */
-export function deriveVenue(firmPrimaryState: string): CH13Venue {
-  const s = firmPrimaryState.trim().toLowerCase();
-  if (s === "arizona") return "AZ";
-  if (s === "washington") return "WA-W";
+/** Canonical WA county → bankruptcy-district map.
+ *  W.D. Wash. covers the western/coastal counties; E.D. Wash. covers
+ *  the counties east of the Cascade crest. Source: 28 U.S.C. § 128.
+ *  Lowercase keys for case-insensitive lookup.
+ *
+ *  TODO: if Dom wants ID/MT/AK/OR districts in the engine later,
+ *  extend the CH13Venue enum + CH13_ADMIN_MULTIPLIERS in
+ *  ch13PlanCost.ts alongside expanding this map. */
+const WA_COUNTY_TO_DISTRICT: Readonly<Record<string, "WA-W" | "WA-E">> = {
+  // W.D. Wash. — 19 counties.
+  clallam: "WA-W", clark: "WA-W", cowlitz: "WA-W", grays_harbor: "WA-W",
+  island: "WA-W", jefferson: "WA-W", king: "WA-W", kitsap: "WA-W",
+  lewis: "WA-W", mason: "WA-W", pacific: "WA-W", pierce: "WA-W",
+  san_juan: "WA-W", skagit: "WA-W", skamania: "WA-W", snohomish: "WA-W",
+  thurston: "WA-W", wahkiakum: "WA-W", whatcom: "WA-W",
+  // E.D. Wash. — 20 counties.
+  adams: "WA-E", asotin: "WA-E", benton: "WA-E", chelan: "WA-E",
+  columbia: "WA-E", douglas: "WA-E", ferry: "WA-E", franklin: "WA-E",
+  garfield: "WA-E", grant: "WA-E", kittitas: "WA-E", klickitat: "WA-E",
+  lincoln: "WA-E", okanogan: "WA-E", pend_oreille: "WA-E", spokane: "WA-E",
+  stevens: "WA-E", walla_walla: "WA-E", whitman: "WA-E", yakima: "WA-E",
+};
+
+function normalizeCountyKey(county: string): string {
+  return county.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
+/** Look up the WA district for a county. Returns null when the county
+ *  isn't in the map. Exported so tests can pin per-county resolution. */
+export function resolveWaDistrict(county: string | null | undefined): "WA-W" | "WA-E" | null {
+  if (!county) return null;
+  return WA_COUNTY_TO_DISTRICT[normalizeCountyKey(county)] ?? null;
+}
+
+/** Derive a CH13Venue.
+ *
+ *  The case state wins over the firm's primary state when supplied —
+ *  a WA case under an AZ-primary firm files in WA, not AZ. When no
+ *  case state is passed, falls back to firmPrimaryState (preserves the
+ *  prior call sites). Returns "AZ" for uncovered states — flagged
+ *  inline so the enum extension is obvious when a new filing state
+ *  lands.
+ *
+ *  WA W.D. vs E.D. resolves via the canonical county→district table
+ *  when a county is supplied. Without a county the WA fallback is
+ *  "WA-W" (higher filing volume); attorneys can confirm/override at
+ *  the case level. */
+export function deriveVenue(
+  firmPrimaryState: string,
+  caseState?: string | null,
+  caseCounty?: string | null,
+): CH13Venue {
+  const effective = (caseState && caseState.trim() ? caseState : firmPrimaryState).trim().toLowerCase();
+  if (effective === "arizona" || effective === "az") return "AZ";
+  if (effective === "washington" || effective === "wa") {
+    const byCounty = resolveWaDistrict(caseCounty);
+    return byCounty ?? "WA-W";
+  }
   return "AZ";
 }
 

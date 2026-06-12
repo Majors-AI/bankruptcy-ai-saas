@@ -313,6 +313,19 @@ export function useFirmPrimaryState(): string {
 // settings in this file.
 const STORAGE_KEY_FIRM_ADMITTED = "firmPolicy.firmAdmittedStates";
 
+// Per-firm admitted-states seed by VITE_FIRM_ID. Used as the default when
+// localStorage is empty AND the firm is one we ship pre-seeded. Mirrors
+// the canonical seed in src/admin/operatorSeed.ts (kept inline here to
+// avoid lib → components import direction). Keep in sync when the
+// operator seed changes.
+//   - MLG  (…0001): AZ + WA
+//   - Neeley (…0002): AZ
+// TODO: wire from real firms.admitted_states JSONB column once persisted.
+const ADMITTED_STATES_SEED: Readonly<Record<string, ReadonlyArray<string>>> = {
+  "00000000-0000-0000-0000-000000000001": ["Arizona", "Washington"],
+  "00000000-0000-0000-0000-000000000002": ["Arizona"],
+};
+
 let _firmAdmittedStates: ReadonlyArray<string> = (() => {
   try {
     const raw = typeof localStorage !== "undefined" ? localStorage.getItem(STORAGE_KEY_FIRM_ADMITTED) : null;
@@ -324,8 +337,17 @@ let _firmAdmittedStates: ReadonlyArray<string> = (() => {
       }
     }
   } catch { /* ignore */ }
-  // Default — just the firm's primary state. The firm expands this in
-  // Firm Policy when they're admitted in additional jurisdictions.
+  // Default — seed by firm id when known, otherwise just the primary state.
+  // Reads the env-resolved VITE_FIRM_ID at module init (matches the firmId
+  // every other surface reads from VITE_FIRM_ID).
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.env) {
+      const firmId = (import.meta.env.VITE_FIRM_ID as string | undefined);
+      if (firmId && ADMITTED_STATES_SEED[firmId]) {
+        return ADMITTED_STATES_SEED[firmId].slice();
+      }
+    }
+  } catch { /* import.meta might not be available in some test runners */ }
   return [_firmPrimaryState];
 })();
 

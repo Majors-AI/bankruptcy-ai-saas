@@ -9,6 +9,8 @@ import {
   deriveHouseholdSize,
   deriveCmiMonthly,
   deriveVenue,
+  resolveWaDistrict,
+  classifyJuniorLiens,
   isMedianAvailable,
   type Ch13SecuredClaimInput,
 } from "./ch13Derive";
@@ -156,6 +158,24 @@ describe("deriveBatch3FromIntake — mortgage / priority / conduit", () => {
     expect(deriveBatch3FromIntake({}, 60).priorityClaims).toBe(0);
   });
 
+  it("priorityClaims sums taxDebt + dsoArrears + wagePriority", () => {
+    const out = deriveBatch3FromIntake({
+      taxDebt: "12500",
+      dsoArrears: "5000",
+      wagePriority: "2000",
+    }, 60);
+    expect(out.priorityClaims).toBe(19500);
+  });
+
+  it("priorityClaims attorney override supersedes the sum", () => {
+    const out = deriveBatch3FromIntake({
+      taxDebt: "12500",
+      dsoArrears: "5000",
+      _attorneyPriorityOverride: "8000",
+    }, 60);
+    expect(out.priorityClaims).toBe(8000);
+  });
+
   it("null form_data → all-zero", () => {
     expect(deriveBatch3FromIntake(null, 60)).toEqual({
       mortgageArrearsInPlan: false,
@@ -215,6 +235,133 @@ describe("deriveVenue", () => {
   it("uncovered state defaults to AZ", () => {
     expect(deriveVenue("California")).toBe("AZ");
     expect(deriveVenue("")).toBe("AZ");
+  });
+  it("case state wins over firm primary state when supplied", () => {
+    // WA case under an AZ-primary firm → WA-W (this is the MLG case
+    // with admitted = AZ + WA, primary = AZ, but a WA-filed case).
+    expect(deriveVenue("Arizona", "Washington")).toBe("WA-W");
+    expect(deriveVenue("Arizona", "WA")).toBe("WA-W");
+    // AZ case under a WA-primary firm → AZ.
+    expect(deriveVenue("Washington", "Arizona")).toBe("AZ");
+  });
+  it("missing / blank caseState falls back to firmPrimaryState", () => {
+    expect(deriveVenue("Washington", "")).toBe("WA-W");
+    expect(deriveVenue("Washington", null)).toBe("WA-W");
+    expect(deriveVenue("Washington", undefined)).toBe("WA-W");
+  });
+});
+
+describe("WA county → district", () => {
+  it("resolveWaDistrict — W.D. counties", () => {
+    expect(resolveWaDistrict("King")).toBe("WA-W");
+    expect(resolveWaDistrict("Pierce")).toBe("WA-W");
+    expect(resolveWaDistrict("Snohomish")).toBe("WA-W");
+    expect(resolveWaDistrict("Clark")).toBe("WA-W");
+    expect(resolveWaDistrict("Thurston")).toBe("WA-W");
+  });
+  it("resolveWaDistrict — E.D. counties", () => {
+    expect(resolveWaDistrict("Spokane")).toBe("WA-E");
+    expect(resolveWaDistrict("Benton")).toBe("WA-E");
+    expect(resolveWaDistrict("Yakima")).toBe("WA-E");
+    expect(resolveWaDistrict("Walla Walla")).toBe("WA-E");
+    expect(resolveWaDistrict("Pend Oreille")).toBe("WA-E");
+  });
+  it("resolveWaDistrict — case + whitespace tolerant", () => {
+    expect(resolveWaDistrict("  king  ")).toBe("WA-W");
+    expect(resolveWaDistrict("SPOKANE")).toBe("WA-E");
+    expect(resolveWaDistrict("walla walla")).toBe("WA-E");
+  });
+  it("resolveWaDistrict — unknown county → null", () => {
+    expect(resolveWaDistrict("Multnomah")).toBe(null); // OR county, not WA
+    expect(resolveWaDistrict("")).toBe(null);
+    expect(resolveWaDistrict(null)).toBe(null);
+  });
+  it("deriveVenue resolves WA-W vs WA-E by county", () => {
+    expect(deriveVenue("Arizona", "Washington", "King")).toBe("WA-W");
+    expect(deriveVenue("Arizona", "Washington", "Spokane")).toBe("WA-E");
+    // WA case under MLG (AZ-primary, AZ+WA admitted) — county routes the
+    // district correctly.
+    expect(deriveVenue("Arizona", "WA", "Pierce")).toBe("WA-W");
+    expect(deriveVenue("Arizona", "WA", "Yakima")).toBe("WA-E");
+  });
+  it("deriveVenue WA without county → WA-W (higher-volume default)", () => {
+    expect(deriveVenue("Arizona", "Washington")).toBe("WA-W");
+    expect(deriveVenue("Arizona", "WA", null)).toBe("WA-W");
+    expect(deriveVenue("Arizona", "WA", "")).toBe("WA-W");
+  });
+  it("deriveVenue ignores county when state isn't Washington", () => {
+    expect(deriveVenue("Arizona", "Arizona", "King")).toBe("AZ");
+    expect(deriveVenue("Arizona", "California", "Spokane")).toBe("AZ");
+  });
+});
+
+describe("classifyJuniorLiens — In re Tanner / In re Lane strip eligibility", () => {
+  it("junior fully cushioned (equity above it) → NOT wholly unsecured", () => {
+    // $300k home, $200k senior, $40k HELOC at position 2.
+    // Cushion at position 2 = 300 − 200 = $100k > 0 → secured slice exists.
+    const result = classifyJuniorLiens({
+      collateralValue: 300_000,
+      seniorBalance: 200_000,
+      juniors: [{ id: "j1", label: "HELOC", balance: 40_000, position: 2 }],
+    });
+    expect(result).toHaveLength(1);
+    expect(result[0].whollyUnsecured).toBe(false);
+    expect(result[0].cushionAtThisPosition).toBe(100_000);
+  });
+
+  it("junior wholly unsecured (senior already pierces collateral) → strip-eligible", () => {
+    // $250k home, $260k senior, $30k HELOC at position 2.
+    // Cushion at position 2 = 250 − 260 = −10k ≤ 0 → wholly unsecured.
+    const result = classifyJuniorLiens({
+      collateralValue: 250_000,
+      seniorBalance: 260_000,
+      juniors: [{ id: "j1", label: "HELOC", balance: 30_000, position: 2 }],
+    });
+    expect(result[0].whollyUnsecured).toBe(true);
+    expect(result[0].cushionAtThisPosition).toBe(-10_000);
+  });
+
+  it("multi-junior cascade — position 2 partially secured, position 3 wholly unsecured", () => {
+    // $300k home, $250k senior, $40k at pos 2, $20k at pos 3.
+    // Pos 2 cushion = 300 − 250 = 50k > 0 → secured slice (partial).
+    // Pos 3 cushion = 300 − (250 + 40) = 10k > 0 → still partially secured.
+    const result = classifyJuniorLiens({
+      collateralValue: 300_000,
+      seniorBalance: 250_000,
+      juniors: [
+        { id: "j1", label: "HELOC", balance: 40_000, position: 2 },
+        { id: "j2", label: "Third", balance: 20_000, position: 3 },
+      ],
+    });
+    expect(result[0].whollyUnsecured).toBe(false);
+    expect(result[0].cushionAtThisPosition).toBe(50_000);
+    expect(result[1].whollyUnsecured).toBe(false);
+    expect(result[1].cushionAtThisPosition).toBe(10_000);
+  });
+
+  it("unsorted juniors are sorted by position before cascade", () => {
+    // Same as above but passed in reverse order — result must be by position.
+    const result = classifyJuniorLiens({
+      collateralValue: 200_000,
+      seniorBalance: 220_000,
+      juniors: [
+        { id: "third", label: "Third", balance: 10_000, position: 3 },
+        { id: "second", label: "HELOC", balance: 30_000, position: 2 },
+      ],
+    });
+    expect(result[0].lien.id).toBe("second");
+    expect(result[1].lien.id).toBe("third");
+    expect(result[0].whollyUnsecured).toBe(true);
+    expect(result[1].whollyUnsecured).toBe(true);
+  });
+
+  it("empty juniors → empty array", () => {
+    const result = classifyJuniorLiens({
+      collateralValue: 300_000,
+      seniorBalance: 200_000,
+      juniors: [],
+    });
+    expect(result).toEqual([]);
   });
 });
 

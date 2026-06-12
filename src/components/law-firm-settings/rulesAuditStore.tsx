@@ -36,7 +36,12 @@ import {
   type RuleUpdatePublishEvent, type NotifyResult,
 } from "../../lib/notifyRuleUpdate";
 
-export type RulesSection = "exemptions" | "median_income" | "living_standards";
+export type RulesSection =
+  | "exemptions"
+  | "median_income"
+  | "living_standards"
+  | "ch13_admin_multipliers"
+  | "means_test_figures";
 
 export interface RulesAuditEntry {
   id: string;

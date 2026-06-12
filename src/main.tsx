@@ -1,6 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.tsx';
+import { AuthProvider } from './lib/AuthProvider';
+import StaffSignIn from './components/StaffSignIn';
 import './index.css';
 
 // Initialize theme from localStorage or system preference
@@ -16,6 +18,23 @@ if (window.location.pathname === '/v1-preview') {
   import('./v1-prototypes/PreviewAll.jsx').then(({ default: PreviewAll }) => {
     root.render(<StrictMode><PreviewAll /></StrictMode>);
   });
+} else if (window.location.pathname === '/signin') {
+  // RLS Phase 1 — standalone sign-in surface, always reachable independent
+  // of App.tsx state. Establishes the ambient persisted session that the
+  // rest of the app reads via useAuth().
+  root.render(
+    <StrictMode>
+      <AuthProvider>
+        <StaffSignIn />
+      </AuthProvider>
+    </StrictMode>,
+  );
 } else {
-  root.render(<StrictMode><App /></StrictMode>);
+  root.render(
+    <StrictMode>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </StrictMode>,
+  );
 }

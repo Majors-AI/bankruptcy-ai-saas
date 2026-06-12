@@ -94,11 +94,7 @@ const SECTION_ROWS: SectionRow[] = [
     label:         "Means-Test Figures (statutory caps)",
     icon:          Calculator,
     changeSection: "means_test_figures",
-    // Means-Test Figures lives under living_standards in the current
-    // audit-section taxonomy (the engine reads NATIONAL_STANDARDS_2025
-    // for the long-form figures). Re-bucketing to its own audit section
-    // is a later refactor.
-    auditSection:  "living_standards",
+    auditSection:  "means_test_figures",
     pathSlug:      "means_test_figures",
     datasetDate:   NATIONAL_STANDARDS_2025_META.effectiveDate,
     expectedCsvColumns: ["form_line", "label", "amount", "citation"],
@@ -173,11 +169,8 @@ const SECTION_ROWS: SectionRow[] = [
     groupLabel:    "Ch.13",
     label:         "Ch.13 admin multipliers (trustee fee %)",
     icon:          Briefcase,
-    // No dedicated audit section for Ch.13 multipliers; bucket under the
-    // most adjacent existing key. The PerSection upload writes its own
-    // path so the entry is identifiable in the audit log.
     changeSection: "means_test_figures",
-    auditSection:  "median_income",
+    auditSection:  "ch13_admin_multipliers",
     pathSlug:      "ch13_admin_multipliers",
     datasetDate:   "—",
     expectedCsvColumns: ["venue", "multiplier_pct"],
