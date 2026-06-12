@@ -144,8 +144,8 @@ export default function Ch13SigningReview(props: Ch13SigningReviewProps) {
     return classifyCommitmentPeriod({ cmiMonthly, medianAnnual }).period.months;
   }, [cmiMonthly, medianAnnual]);
   const venue: CH13Venue = useMemo(
-    () => deriveVenue(firmPrimaryState),
-    [firmPrimaryState],
+    () => deriveVenue(firmPrimaryState, props.intakeState, props.intakeCounty),
+    [firmPrimaryState, props.intakeState, props.intakeCounty],
   );
 
   // securedClaims — derived from intake form_data. When intake is empty
@@ -167,6 +167,7 @@ export default function Ch13SigningReview(props: Ch13SigningReviewProps) {
   // ─── Eligibility / Summary tab ───────────────────────────────────────
   const eligibilityBody = (
     <Ch13Eligibility
+      caseId="client-demo"
       isLawyer={isLawyer}
       securedClaims={securedClaims}
       cmiMonthly={cmiMonthly}

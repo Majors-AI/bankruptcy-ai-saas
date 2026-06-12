@@ -34,7 +34,7 @@ import {
   RulesAuditProvider, useRulesAudit, type RulesSection, type PublishEvent,
 } from "../components/law-firm-settings/rulesAuditStore";
 
-const SECTIONS: Array<{ key: RulesSection | "local_rules"; label: string }> = [
+const SECTIONS: Array<{ key: RulesSection; label: string }> = [
   { key: "exemptions",        label: "Exemptions" },
   { key: "median_income",     label: "Median Income" },
   { key: "living_standards",  label: "Living Standards (National + Local + Transportation)" },
@@ -165,7 +165,7 @@ function ReferenceRulesTabInner() {
               <button
                 key={s.key}
                 disabled={publishing !== null}
-                onClick={() => handlePublish([s.key as RulesSection])}
+                onClick={() => handlePublish([s.key])}
                 className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-1 rounded border border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20 disabled:opacity-50"
               >
                 <Send className="w-3 h-3" /> Publish {s.label}

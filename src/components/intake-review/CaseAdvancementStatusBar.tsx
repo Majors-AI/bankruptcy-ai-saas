@@ -63,6 +63,18 @@ export interface CaseAdvancementLead {
 export interface CaseAdvancementAcceptance {
   decision: string;
   decided_at: string | null;
+  /** Optional Stage-5 timestamps (Prompt 52). When `presented_at` is set,
+   *  Stage 5 renders "done" + the timestamp; when only
+   *  `presentation_scheduled_at` is set, Stage 5 renders "current" + the
+   *  scheduled timestamp. Both undefined → "—" + the columns-absent note.
+   *
+   *  Lives on attorney_case_acceptances (NOT intake_leads) to keep the
+   *  Phase-2 RLS work on intake_leads independent. Optional in the
+   *  interface so runtime tolerates the columns not yet existing in the
+   *  schema — the row payload simply omits them and rendering falls
+   *  back gracefully. */
+  presentation_scheduled_at?: string | null;
+  presented_at?: string | null;
 }
 
 // ─── Stage definitions ───────────────────────────────────────────────────────
@@ -96,11 +108,22 @@ function fmtDate(iso: string | null | undefined): string {
 // 'sent_for_attorney_review' is the post-stage-3 state: stage 3 is DONE,
 // stage 4 (Case accepted) is the next active state. Once acceptance arrives
 // with a definitive decision, stage 4 flips done and stage 5 becomes current.
+//
+// Stage 5 sub-states (Prompt 52):
+//   - acceptance.presented_at set         → stage 5 DONE, stage 6 current
+//   - acceptance.presentation_scheduled_at set (no presented_at) → stage 5 current
+//   - neither set (acceptance accepted)   → stage 5 current (waiting to schedule)
+// retained / fee_quoted status overrides all of the above (status-driven
+// stages take precedence — once they're set the case has already moved past
+// the presentation step).
 function deriveCurrentStage(lead: CaseAdvancementLead, acceptance: CaseAdvancementAcceptance | null): number {
   const s = lead.status;
   if (s === 'retained') return 6;
   if (s === 'fee_quoted') return 7;
-  if (acceptance?.decision === 'accepted') return 5;
+  if (acceptance?.decision === 'accepted') {
+    if (acceptance.presented_at) return 6; // presentation complete → next is retention
+    return 5;
+  }
   if (s === 'sent_for_attorney_review') return 4;
   if (s === 'intake_complete' || (lead.intake_completed && !lead.sent_for_review)) return 3;
   if (s === 'consultation_complete' || s === 'intake_in_progress') return 2;
@@ -162,11 +185,15 @@ export default function CaseAdvancementStatusBar({
     {
       id: 5,
       label: 'Case presented or scheduled for presentation',
-      // TODO: no presentation_scheduled_at / presented_at fields exist on
-      // intake_leads or attorney_case_acceptances today. Render "—" until
-      // the schema captures these. When the column lands, replace the
-      // following line with fmtTimestamp(lead.presented_at ?? lead.presentation_scheduled_at).
-      caption: '— (presentation timestamp not wired)',
+      // Wired via attorney_case_acceptances.presented_at /
+      // .presentation_scheduled_at (Prompt 52). Tolerates the columns
+      // not yet existing — when both are undefined the caption falls
+      // back to "—" with a "columns not yet seeded" hint.
+      caption: acceptance?.presented_at
+        ? `Presented: ${fmtTimestamp(acceptance.presented_at)}`
+        : acceptance?.presentation_scheduled_at
+          ? `Scheduled: ${fmtTimestamp(acceptance.presentation_scheduled_at)}`
+          : '—',
       status: statusFor(5, current),
     },
     {
@@ -239,8 +266,7 @@ export default function CaseAdvancementStatusBar({
 
       <p className="mt-3 text-[10px] text-slate-500 italic leading-relaxed">
         Status stages are client-visible; internal staff log entries below are not.
-        {' '}TODO Phase B: persistence for stage 5 (presentation timestamps) and the
-        supervisor-configured follow-up cadence rules for stage 7.
+        {' '}TODO Phase B: supervisor-configured follow-up cadence rules for stage 7.
       </p>
     </div>
   );

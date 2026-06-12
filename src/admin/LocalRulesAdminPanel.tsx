@@ -184,13 +184,11 @@ function UploadForm({
 
   function submit() {
     if (!title.trim() || !effectiveDate) return;
-    // Feed the existing rulesAuditStore — Local Rules uploads land under
-    // the living_standards section key today (the section taxonomy
-    // doesn't yet include a dedicated "local_rules" enum value; the
-    // shared diff + re-review infra works regardless of label). TODO
-    // Phase B — expand RulesSection with "local_rules" and switch this.
+    // Feed the existing rulesAuditStore under the dedicated local_rules
+    // bucket (added to RulesSection in Prompt 49). Matches the
+    // PerSectionUploadsPanel Local Rules row.
     audit.recordChange({
-      section: "living_standards",
+      section: "local_rules",
       actor: "bankruptcy_ai_operator",
       path: `local_rules.${districtValue}`,
       oldValue: null,
