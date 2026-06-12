@@ -142,9 +142,10 @@ export default function Ch13Eligibility(props: Ch13EligibilityProps) {
   const setReason = useCallback((path: string, next: string) => {
     setReasons(prev => ({ ...prev, [path]: next }));
   }, []);
-  // Section key — ch13_admin_multipliers is the closest semantic fit in
-  // the existing RulesSection union. Taxonomy expand TODO matches
-  // LongFormDeductionPanel's note ("shared section key").
+  // Section key — ch13_case_override is the dedicated bucket for per-case
+  // attorney overrides on the Ch.13 review surface. Distinct from
+  // ch13_admin_multipliers (which is firm-level trustee-fee schedule
+  // data) so the per-case audit trail doesn't pollute firm-rule history.
   const recordOverride = useCallback((args: {
     field: string;
     oldValue: string | number | null;
@@ -154,7 +155,7 @@ export default function Ch13Eligibility(props: Ch13EligibilityProps) {
     const path = `ch13_review.${props.caseId}.${args.field}`;
     const reason = (reasons[path] ?? "").trim();
     audit.recordChange({
-      section: "ch13_admin_multipliers",
+      section: "ch13_case_override",
       actor,
       path,
       oldValue: args.oldValue,

@@ -323,7 +323,7 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
                 body: 'Send a secure intake link. Plaid pulls bank statements, credit-report import drops creditors into Schedule E/F, and the AI assistant keeps the client moving.',
               },
               {
-                n: '04', title: 'File &amp; submit',
+                n: '04', title: 'File & submit',
                 body: 'Export to Best Case (or your existing filing software), submit trustee documents from the same record, and ride the case through 341 and discharge.',
               },
             ].map(s => (

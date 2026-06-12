@@ -40,7 +40,17 @@ export type RulesSection =
   | "exemptions"
   | "median_income"
   | "living_standards"
+  // Firm-level Ch.13 trustee-fee multiplier schedule (per-district admin
+  // multiplier rules — sourced from the UST trustee-fee report).
   | "ch13_admin_multipliers"
+  // Per-case Ch.13 review overrides — the attorney-entered controls in
+  // Ch13Eligibility (FMV, Till rate, conduit, D→unsecured, purchase /
+  // filing dates, Statement of Intention, priority pool, junior liens).
+  // Distinct bucket from ch13_admin_multipliers so per-case overrides
+  // don't pollute the firm-level trustee-fee audit trail.
+  | "ch13_case_override"
+  // Per-district Local Rules uploads (PDF + version stamp).
+  | "local_rules"
   | "means_test_figures";
 
 export interface RulesAuditEntry {

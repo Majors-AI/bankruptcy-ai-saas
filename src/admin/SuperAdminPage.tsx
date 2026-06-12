@@ -1470,7 +1470,10 @@ function startOfCurrentMonth(): string {
 }
 
 function UsageTab() {
-  const [firms, setFirms] = useState<Firm[] | null>(null);
+  // Narrow to the columns the SELECT actually returns — UsageTab only
+  // reads id / name / slug / status; pulling Firm.created_at would
+  // require widening the SELECT and isn't used by any consumer below.
+  const [firms, setFirms] = useState<Pick<Firm, 'id' | 'name' | 'slug' | 'status'>[] | null>(null);
   const [events, setEvents] = useState<UsageEvent[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);

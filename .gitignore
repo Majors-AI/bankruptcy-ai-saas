@@ -28,3 +28,6 @@ dist-ssr
 
 # One-shot REST helper for seeding Dixon Cider (not part of the app build)
 scripts/seed_dixon_cider_via_rest.mjs
+
+# Session-only working notes (SQL scratchpads, verification scripts, local sandbox)
+scratch/

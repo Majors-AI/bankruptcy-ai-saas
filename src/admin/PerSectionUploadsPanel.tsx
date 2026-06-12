@@ -183,11 +183,7 @@ const SECTION_ROWS: SectionRow[] = [
     label:         "Local Rules (per-state, per-district)",
     icon:          FileText,
     changeSection: "local_rules",
-    // local_rules isn't part of the RulesSection union (it's its own
-    // store path inside the rulesAuditStore log) — bucket under
-    // exemptions for the recordChange entry; the local_rules upload
-    // panel still handles the real flow.
-    auditSection:  "exemptions",
+    auditSection:  "local_rules",
     pathSlug:      "local_rules",
     datasetDate:   "0.1-scaffold",
     helper:        "Local Rules has its own dedicated upload panel (Local Rules tab) — per-district PDF + version stamp. Pointer-only here.",
