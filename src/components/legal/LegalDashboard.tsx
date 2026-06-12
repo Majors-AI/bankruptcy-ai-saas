@@ -83,15 +83,10 @@ export default function LegalDashboard({
   calendarEvents, acceptances, ecfInbox,
   onSelectTask,
 }: LegalDashboardProps) {
-  // L-9 (per-staffer "Mine" vs "Shared pool") will use the existing
-  // DepartmentPortalSession identity. Today the values are stubbed so
-  // the toggles in AllTasksWidget render visually without doing
-  // anything substantive.
-  void session;
-
   const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
-  // L-3 default scope is "shared" until L-9 wires the per-staffer filter
-  // on top of session identity.
+  // Slice L-9 (Prompt 69) — per-staff filter scope. Default "shared"
+  // preserves the existing dashboard behavior; flipping to "mine" applies
+  // the assigned_name filter below. Mirrors the Prompt-52 Intake pattern.
   const [taskScope, setTaskScope] = useState<"mine" | "shared">("shared");
 
   // Slice L-3 (Prompt 63) — real legal task pool. Built from the four
@@ -107,6 +102,28 @@ export default function LegalDashboard({
     [attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads, onSelectTask],
   );
 
+  // Slice L-9 (Prompt 69) — per-staff filter.
+  //
+  // "shared" → pass-through (full pool, identical to pre-L-9 behavior).
+  // "mine"   → keep only tasks whose leadRef.assigned_name matches the
+  //            session staffer (case-insensitive trim compare). Tasks
+  //            with null assigned_name (signing_reviews, plus any
+  //            attorney_intake_reviews / paralegal_reviews / ecf_tasks
+  //            whose source column was empty) are DROPPED from Mine —
+  //            an unassigned task isn't "mine" by definition. Matches the
+  //            same key shape (staff_members.name) used by the Mine/
+  //            Shared toggle in IntakeDashboard's Prompt-52 implementation.
+  const filteredTasks = useMemo(() => {
+    if (taskScope === "shared") return tasks;
+    const mineKey = session.name.trim().toLowerCase();
+    if (!mineKey) return tasks;
+    return tasks.filter(t => {
+      const owner = t.leadRef?.assigned_name;
+      if (!owner) return false;
+      return owner.trim().toLowerCase() === mineKey;
+    });
+  }, [tasks, taskScope, session.name]);
+
   // Slice L-4 (Prompt 64) — MIDDLE Up Next.
   //
   // The pool is already sorted in buildLegalTasks by:
@@ -116,14 +133,17 @@ export default function LegalDashboard({
   // non-skipped task. No re-derivation here. Direct port of
   // AccountingDashboard's Slice-4 pattern; UpNextCard / UpNextActiveBody
   // are duplicated below the host until a shared shell hoist lands.
+  //
+  // Slice L-9 (Prompt 69) — Up Next picks from filteredTasks so the
+  // scope toggle affects "what's next for me" vs "what's next for the firm".
   const [skippedIds, setSkippedIds] = useState<ReadonlySet<string>>(() => new Set());
   const upNext: TaskEntry | null = useMemo(
-    () => tasks.find(t => !skippedIds.has(t.id)) ?? null,
-    [tasks, skippedIds],
+    () => filteredTasks.find(t => !skippedIds.has(t.id)) ?? null,
+    [filteredTasks, skippedIds],
   );
   const remainingCount = useMemo(
-    () => tasks.filter(t => !skippedIds.has(t.id)).length,
-    [tasks, skippedIds],
+    () => filteredTasks.filter(t => !skippedIds.has(t.id)).length,
+    [filteredTasks, skippedIds],
   );
 
   function handleSkip(id: string) {
@@ -507,7 +527,12 @@ export default function LegalDashboard({
       <DashboardGrid
         left={
           <AllTasksWidget
-            tasks={tasks}
+            // Slice L-9 (Prompt 69) — feed the post-scope list as the
+            // visible pool. AllTasksWidget reads tasks.length as the
+            // "mine" count and sharedCount as the "shared pool · N"
+            // label, so passing filteredTasks here + tasks.length to
+            // sharedCount makes both badges accurate in either scope.
+            tasks={filteredTasks}
             sharedCount={tasks.length}
             mode={leftMode}
             onChangeMode={setLeftMode}
@@ -519,7 +544,10 @@ export default function LegalDashboard({
           <UpNextCard
             task={upNext}
             remainingCount={remainingCount}
-            totalCount={tasks.length}
+            // Slice L-9 (Prompt 69) — UpNextCard's "X of N" footer reads
+            // totalCount; reflect the active scope so the math matches
+            // what the staffer sees in the LEFT pool.
+            totalCount={filteredTasks.length}
             skippedCount={skippedIds.size}
             onSkip={handleSkip}
             onDone={handleDone}

@@ -218,6 +218,25 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
   const onSelect = (kind: LegalTaskKind, id: string) =>
     () => src.onSelectTask?.(kind, id);
 
+  // Slice L-9 (Prompt 69) — per-staff "Mine / Shared" filter key.
+  // The shell's TaskEntry exposes an optional `leadRef.assigned_name`
+  // which the dashboard's filteredTasks memo compares against
+  // session.name (case-insensitive trim). Each tier below populates
+  // the field from its source row's assignee column:
+  //   • attorney_intake_reviews → attorney_name
+  //   • paralegal_reviews       → paralegal_name
+  //   • ecf_tasks               → assigned_to
+  //   • signing_reviews         → null (no name column today; reviewer_id
+  //                                points at auth.users(id) which doesn't
+  //                                match staff_members.id → no comparable
+  //                                key. These rows stay in Shared only.)
+  // Empty strings (the schema default) coalesce to null so downstream
+  // "unassigned" handling is consistent.
+  const norm = (s: string | null | undefined) => {
+    const v = (s ?? "").trim();
+    return v ? v : null;
+  };
+
   const out: TaskEntry[] = [];
 
   // ─── RED (top) — re-review required (ruleset changed since decision) ──
@@ -259,6 +278,7 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
       // the re-review band).
       sortKey: 500_000 - new Date(r.decided_at ?? r.updated_at).getTime() / 60_000,
       due: r.decided_at,
+      leadRef: { assigned_name: norm(r.attorney_name) },
       onSelect: onSelect("attorney_intake_review", r.id),
     });
   }
@@ -283,6 +303,7 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
       // YELLOW paralegal review).
       sortKey: (isStale ? 1_000_000 : 3_500_000) - new Date(r.created_at).getTime() / 60_000,
       due: r.created_at,
+      leadRef: { assigned_name: norm(r.attorney_name) },
       onSelect: onSelect("attorney_intake_review", r.id),
     });
   }
@@ -305,6 +326,11 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
       actionLabel: isStale ? "Resume" : "Continue",
       sortKey: (isStale ? 1_200_000 : 3_700_000) - new Date(s.updated_at).getTime() / 60_000,
       due: s.updated_at,
+      // signing_reviews has no reviewer_name column; reviewer_id points
+      // at auth.users(id) which doesn't share an ID space with
+      // staff_members.id. No comparable per-staff key — leave null so
+      // these tasks fall through to Shared only.
+      leadRef: { assigned_name: null },
       onSelect: onSelect("signing_review", s.id),
     });
   }
@@ -334,6 +360,7 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
         ? 2_000_000 - (now - dueMs) / 60_000
         : 4_500_000 + dueMs / 60_000,
       due: t.due_date,
+      leadRef: { assigned_name: norm(t.assigned_to) },
       onSelect: onSelect("ecf_task", t.id),
     });
   }
@@ -351,6 +378,7 @@ export function buildLegalTasks(src: LegalTaskSources): TaskEntry[] {
       actionLabel: "Open",
       sortKey: 3_900_000 - new Date(p.updated_at).getTime() / 60_000,
       due: p.updated_at,
+      leadRef: { assigned_name: norm(p.paralegal_name) },
       onSelect: onSelect("paralegal_review", p.id),
     });
   }
