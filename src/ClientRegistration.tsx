@@ -77,13 +77,13 @@ function DisclosureSection({ num, title, children, needsReview }: {
   num: number; title: string; children: React.ReactNode; needsReview?: boolean;
 }) {
   return (
-    <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: 20, background: COLORS.surface }}>
-      <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500, color: COLORS.heading, marginBottom: 8 }}>
-        <span style={{ width: 20, height: 20, background: COLORS.surfaceBlue, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: COLORS.primary, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{num}</span>
+    <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 22, background: COLORS.surface }}>
+      <h3 style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 14, fontWeight: 600, color: COLORS.heading, marginBottom: 10 }}>
+        <span style={{ width: 24, height: 24, background: COLORS.surfaceBlue, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: COLORS.primary, flexShrink: 0, fontFamily: "'JetBrains Mono', monospace" }}>{num}</span>
         {title}
       </h3>
       {needsReview && (
-        <div style={{ fontSize: 10, color: COLORS.warning, border: `1px dashed ${COLORS.warning}`, borderRadius: 2, padding: '2px 8px', display: 'inline-block', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
+        <div style={{ fontSize: 10, color: COLORS.warning, border: `1px dashed ${COLORS.warning}`, borderRadius: 999, padding: '2px 10px', display: 'inline-block', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 500 }}>
           [NEEDS ATTORNEY REVIEW] — Placeholder language — not final
         </div>
       )}
@@ -707,11 +707,27 @@ export default function ClientRegistration({ onComplete }: Props) {
           <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 28, letterSpacing: '-0.02em', color: COLORS.heading, marginBottom: 6 }}>
             Disclosures & Authorizations
           </h2>
-          <p style={{ fontSize: 13, color: COLORS.body, marginBottom: 32, maxWidth: 540 }}>
+          <p style={{ fontSize: 14, color: COLORS.body, marginBottom: 20, maxWidth: 540, lineHeight: 1.55 }}>
             Read each section carefully and check each box to confirm your understanding.
             All disclosures and consents below are required to access the portal.
             Your typed signature at the bottom constitutes your electronic signature under the E-SIGN Act.
           </p>
+
+          {/* Warm intro band — same soft-blue language as the landing's
+              reassurance band, set above the dense section list so the page
+              opens with a calmer first read. */}
+          <div style={{
+            background: COLORS.surfaceBlue,
+            border: `1px solid ${COLORS.primary}33`,
+            borderRadius: 12,
+            padding: '14px 18px',
+            marginBottom: 24,
+            fontSize: 13,
+            color: COLORS.body,
+            lineHeight: 1.6,
+          }}>
+            We've kept these as plain-language as possible. Take your time — your account stays where it is if you need to step away and come back.
+          </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
@@ -831,8 +847,8 @@ export default function ClientRegistration({ onComplete }: Props) {
             </DisclosureSection>
 
             {/* ── Signature Block ─────────────────────────────────────────── */}
-            <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: 20, background: COLORS.surface }}>
-              <h3 style={{ fontSize: 13, fontWeight: 500, color: COLORS.heading, marginBottom: 4 }}>Electronic Signature</h3>
+            <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 22, background: COLORS.surface }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: COLORS.heading, marginBottom: 4 }}>Electronic Signature</h3>
               <p style={{ fontSize: 12, color: COLORS.body, marginBottom: 20, lineHeight: 1.6 }}>
                 By typing your name below you are signing this document electronically. Your typed signature has the same legal effect as a handwritten signature under the E-SIGN Act.
               </p>
@@ -979,26 +995,38 @@ export default function ClientRegistration({ onComplete }: Props) {
     return (
       <div style={{ minHeight: '100vh', background: bg, padding: 24, paddingTop: 40 }}>
         <div style={{ width: '100%', maxWidth: 640, margin: '0 auto' }}>
-          <div style={{ border: `1px solid ${COLORS.success}`, borderRadius: 4, padding: '10px 16px', marginBottom: 28, display: 'inline-block' }}>
-            <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.06em', color: COLORS.success }}>Registration complete</span>
+          {/* "Registration complete" status pill — soft-blue plate with the
+              success-colored check, warmer than the prior 4-radius rectangle. */}
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
+            background: COLORS.surfaceBlue,
+            border: `1px solid ${COLORS.success}55`,
+            borderRadius: 999,
+            padding: '6px 14px',
+            marginBottom: 28,
+          }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={COLORS.success} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12"/>
+            </svg>
+            <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em', color: COLORS.success }}>Registration complete</span>
           </div>
 
           <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 28, letterSpacing: '-0.02em', color: COLORS.heading, marginBottom: 6 }}>
             Your signed documents
           </h2>
-          <p style={{ fontSize: 13, color: COLORS.body, marginBottom: 28 }}>
+          <p style={{ fontSize: 14, color: COLORS.body, marginBottom: 24, lineHeight: 1.55 }}>
             The documents below have been recorded and are permanently on file. They will also appear in your client portal under <strong style={{ color: COLORS.heading }}>My Documents</strong> at any time.
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {docs.map(doc => (
-              <div key={doc.id} style={{ border: `1px solid ${doc.accent}40`, borderLeft: `3px solid ${doc.accent}`, borderRadius: 4, padding: 20, background: COLORS.surface }}>
+              <div key={doc.id} style={{ border: `1px solid ${COLORS.border}`, borderLeft: `4px solid ${doc.accent}`, borderRadius: 12, padding: 22, background: COLORS.surface }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
                   <div>
-                    <p style={{ fontSize: 14, fontWeight: 500, color: COLORS.heading, marginBottom: 4 }}>{doc.label}</p>
-                    <p style={{ fontSize: 12, color: COLORS.body, lineHeight: 1.5 }}>{doc.desc}</p>
+                    <p style={{ fontSize: 14, fontWeight: 600, color: COLORS.heading, marginBottom: 4 }}>{doc.label}</p>
+                    <p style={{ fontSize: 13, color: COLORS.body, lineHeight: 1.55 }}>{doc.desc}</p>
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.04em', border: `1px solid ${doc.accent}`, color: doc.accent, background: 'transparent', borderRadius: 2, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', border: `1px solid ${doc.accent}55`, color: doc.accent, background: 'transparent', borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap', flexShrink: 0 }}>
                     {doc.status}
                   </span>
                 </div>
@@ -1013,8 +1041,10 @@ export default function ClientRegistration({ onComplete }: Props) {
               </div>
             ))}
 
-            <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: 4, padding: '12px 16px', background: COLORS.surface }}>
-              <p style={{ fontSize: 12, color: COLORS.body, lineHeight: 1.6 }}>
+            {/* Retention reassurance band — softer feel than the prior tight
+                callout; same content. */}
+            <div style={{ border: `1px solid ${COLORS.primary}22`, borderRadius: 12, padding: '14px 18px', background: COLORS.surfaceBlue }}>
+              <p style={{ fontSize: 13, color: COLORS.body, lineHeight: 1.6, margin: 0 }}>
                 All signed documents are available in your client portal under <strong style={{ color: COLORS.heading }}>My Documents</strong>. Under bankruptcy.ai's data retention policy, records are retained for the duration of your case and purged from the platform within 30 days of case closure; {firmName} retains your complete file per applicable rules of professional conduct.
               </p>
             </div>
@@ -1038,17 +1068,25 @@ export default function ClientRegistration({ onComplete }: Props) {
   if (step === 'success') {
     return (
       <div style={{ minHeight: '100vh', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
-        <div style={{ width: '100%', maxWidth: 400, textAlign: 'center' }}>
-          <div style={{ width: 48, height: 48, border: `1px solid ${COLORS.success}`, borderRadius: 4, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px' }}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={COLORS.success} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <div style={{ width: '100%', maxWidth: 440, textAlign: 'center' }}>
+          {/* Warm rounded check tile — sized to match the landing's brand
+              tile, soft-blue surface with the success-color check. */}
+          <div style={{
+            width: 72, height: 72, borderRadius: 18,
+            background: COLORS.surfaceBlue,
+            border: `1.5px solid ${COLORS.success}40`,
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 22px',
+          }}>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={COLORS.success} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="20 6 9 17 4 12"/>
             </svg>
           </div>
-          <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 28, letterSpacing: '-0.02em', color: COLORS.heading, marginBottom: 12 }}>
-            Registration complete
+          <h2 style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 30, letterSpacing: '-0.02em', color: COLORS.heading, marginBottom: 10 }}>
+            You're all set
           </h2>
-          <p style={{ fontSize: 14, color: COLORS.body, marginBottom: 32, lineHeight: 1.6 }}>
-            Your account is set up and all consents have been recorded. Welcome to bankruptcy.ai — {firmName}.
+          <p style={{ fontSize: 15, color: COLORS.body, marginBottom: 28, lineHeight: 1.6 }}>
+            Your account is ready and your consents are on file. Welcome — we're glad to have you working with <strong style={{ color: COLORS.heading }}>{firmName}</strong>.
           </p>
           <button
             onClick={onComplete}
