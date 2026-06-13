@@ -217,36 +217,35 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
 
   if (step === 'landing') {
     return (
-      <div className="min-h-screen bg-[#060c18] text-slate-200">
-        {/* Ambient glow — matches the rest of the registration flow's
-            amber palette. Pointer-events disabled so the hero CTAs stay
-            clickable through the gradient. */}
+      <div className="min-h-screen bg-white text-[#475569]">
+        {/* Ambient glow — soft blue tints. Pointer-events disabled so the
+            hero CTAs stay clickable through the gradient. */}
         <div className="absolute inset-x-0 top-0 h-[640px] overflow-hidden pointer-events-none">
-          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[520px] bg-amber-900/15 rounded-full blur-3xl" />
-          <div className="absolute top-40 right-0 w-[600px] h-[400px] bg-sky-900/10 rounded-full blur-3xl" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[1100px] h-[520px] bg-[#3B82F6]/10 rounded-full blur-3xl" />
+          <div className="absolute top-40 right-0 w-[600px] h-[400px] bg-[#0EA5E9]/10 rounded-full blur-3xl" />
         </div>
 
         {/* Top nav — Back + Sign-in entry */}
         <header className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 pt-6 flex items-center justify-between">
           {onBack ? (
-            <button onClick={onBack} className="flex items-center gap-2 text-slate-400 hover:text-white text-xs font-medium transition-colors">
+            <button onClick={onBack} className="flex items-center gap-2 text-[#475569] hover:text-[#0F172A] text-xs font-medium transition-colors">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18"/></svg>
               Back
             </button>
           ) : <span />}
           <div className="flex items-center gap-2">
-            <div className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-amber-600/20 border border-amber-500/30">
-              <svg className="w-3.5 h-3.5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-[#DBEAFE] border border-[#3B82F6]/30">
+              <svg className="w-3.5 h-3.5 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
               </svg>
             </div>
-            <span className="text-sm font-bold text-white tracking-tight">
-              bankruptcy<span className="text-amber-400">.ai</span>
+            <span className="text-sm font-bold text-[#0F172A] tracking-tight">
+              bankruptcy<span className="text-[#2563EB]">.ai</span>
             </span>
           </div>
           <button
             onClick={() => setStep('login')}
-            className="text-xs font-semibold text-slate-300 hover:text-white transition-colors"
+            className="text-xs font-semibold text-[#2563EB] hover:text-[#3B82F6] transition-colors"
           >
             Sign in &rarr;
           </button>
@@ -254,32 +253,47 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
 
         {/* ─── Hero ──────────────────────────────────────────────────── */}
         <section className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 pt-16 pb-12 text-center">
-          <p className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-3 py-1 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+          {/* Hero lockup — large icon + wordmark + slogan above the eyebrow chip */}
+          <div className="mb-10 flex flex-col items-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-[#DBEAFE] border border-[#3B82F6]/30 shadow-md shadow-[#2563EB]/10 mb-4">
+              <svg className="w-9 h-9 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/>
+              </svg>
+            </div>
+            <p className="text-3xl sm:text-4xl font-bold text-[#0F172A] tracking-tight leading-none">
+              bankruptcy<span className="text-[#2563EB]">.ai</span>
+            </p>
+            <p className="text-sm sm:text-base text-[#475569] mt-3 italic max-w-xl mx-auto leading-relaxed">
+              Built by attorneys, for attorneys — with AI that does the chasing.
+            </p>
+          </div>
+
+          <p className="inline-flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.18em] text-[#2563EB] bg-[#DBEAFE] border border-[#3B82F6]/30 rounded-full px-3 py-1 mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#2563EB]" />
             For consumer-bankruptcy law firms
           </p>
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white tracking-tight leading-[1.05]">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-[#0F172A] tracking-tight leading-[1.05]">
             The end-to-end platform for<br className="hidden sm:block" />{" "}
-            <span className="text-amber-400">consumer-bankruptcy practice.</span>
+            <span className="text-[#2563EB]">consumer-bankruptcy practice.</span>
           </h1>
-          <p className="text-base sm:text-lg text-slate-400 max-w-2xl mx-auto mt-6 leading-relaxed">
+          <p className="text-base sm:text-lg text-[#475569] max-w-2xl mx-auto mt-6 leading-relaxed">
             Intake to discharge, in one place. Document gathering, trustee submissions,
             credit-report pulls that drop straight into your schedules, and AI that keeps
             every client moving — without you chasing them.
           </p>
 
           {/* Eligibility statement — surfaced UP FRONT so non-firms self-select out */}
-          <div className="mt-6 inline-flex items-center gap-2 text-xs text-amber-200/90 bg-amber-500/5 border border-amber-500/20 rounded-xl px-4 py-2">
-            <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mt-6 inline-flex items-center gap-2 text-xs text-[#475569] bg-[#F8FAFC] border border-[#E2E8F0] rounded-xl px-4 py-2">
+            <svg className="w-4 h-4 text-[#2563EB] flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
             </svg>
-            <span><strong className="text-amber-300">Eligibility:</strong> you must be a law firm in good standing with at least one attorney licensed to practice. Bar status is verified during registration.</span>
+            <span><strong className="text-[#0F172A]">Eligibility:</strong> you must be a law firm in good standing with at least one attorney licensed to practice. Bar status is verified during registration.</span>
           </div>
 
           <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-3">
             <button
               onClick={() => setStep('register')}
-              className="group bg-amber-600 hover:bg-amber-500 text-white rounded-xl py-4 px-7 font-semibold text-base transition-all shadow-lg shadow-amber-900/40 hover:-translate-y-0.5 flex items-center gap-2"
+              className="group bg-[#2563EB] hover:bg-[#3B82F6] text-white rounded-xl py-4 px-7 font-semibold text-base transition-all shadow-lg shadow-[#2563EB]/20 hover:-translate-y-0.5 flex items-center gap-2"
             >
               <span>Register your firm</span>
               <svg className="w-5 h-5 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -288,22 +302,22 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
             </button>
             <button
               onClick={() => setStep('demo')}
-              className="text-sm font-semibold text-slate-300 hover:text-white px-4 py-3 transition-colors"
+              className="text-sm font-semibold text-[#2563EB] hover:text-[#3B82F6] px-4 py-3 transition-colors"
             >
               Request a free demo &rarr;
             </button>
-            <a href="#how-it-works" className="text-sm font-semibold text-slate-500 hover:text-slate-300 px-4 py-3">
+            <a href="#how-it-works" className="text-sm font-semibold text-[#475569] hover:text-[#0F172A] px-4 py-3">
               See how it works &darr;
             </a>
           </div>
         </section>
 
         {/* ─── How it works ──────────────────────────────────────────── */}
-        <section id="how-it-works" className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-slate-800/60">
+        <section id="how-it-works" className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-[#E2E8F0]">
           <div className="text-center mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 mb-3">How it works</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Onboard your firm in four steps.</h2>
-            <p className="text-sm text-slate-400 mt-3 max-w-xl mx-auto">
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#2563EB] mb-3">How it works</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#0F172A] tracking-tight">Onboard your firm in four steps.</h2>
+            <p className="text-sm text-[#475569] mt-3 max-w-xl mx-auto">
               From bar verification to your first filed petition — a clear path with no surprise integrations.
             </p>
           </div>
@@ -327,122 +341,106 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
                 body: 'Export to Best Case (or your existing filing software), submit trustee documents from the same record, and ride the case through 341 and discharge.',
               },
             ].map(s => (
-              <li key={s.n} className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 relative overflow-hidden hover:border-amber-500/30 transition-colors">
-                <span className="absolute top-4 right-5 text-5xl font-bold text-slate-800/80 leading-none select-none">{s.n}</span>
-                <h3 className="text-base font-semibold text-white mb-2 relative">{s.title}</h3>
-                <p className="text-xs text-slate-400 leading-relaxed relative" dangerouslySetInnerHTML={{ __html: s.body }} />
+              <li key={s.n} className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-6 relative overflow-hidden hover:border-[#3B82F6]/40 transition-colors">
+                <span className="absolute top-4 right-5 text-5xl font-bold text-[#DBEAFE] leading-none select-none">{s.n}</span>
+                <h3 className="text-base font-semibold text-[#0F172A] mb-2 relative">{s.title}</h3>
+                <p className="text-xs text-[#475569] leading-relaxed relative" dangerouslySetInnerHTML={{ __html: s.body }} />
               </li>
             ))}
           </ol>
         </section>
 
         {/* ─── Features ──────────────────────────────────────────────── */}
-        <section className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-slate-800/60">
+        <section className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-[#E2E8F0]">
           <div className="text-center mb-12">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 mb-3">Platform features</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Built for the way bankruptcy practice actually works.</h2>
+            <p className="text-[12px] font-bold uppercase tracking-[0.18em] text-[#2563EB] mb-3">Platform features</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-[#0F172A] tracking-tight">Built for the way bankruptcy practice actually works.</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Document gathering */}
             <FeatureCard
               icon={
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
                 </svg>
               }
               title="Client document gathering"
-              body="A guided client portal collects every document the trustee will ask for — pay stubs, tax returns, bank statements, IDs, vehicle titles, retirement statements. Automated reminders + due-date tracking. Upload by phone or web."
-              bullets={[
-                'Plaid-backed bank-statement retrieval — no PDF chasing',
-                'Per-case checklist auto-built from the filing chapter + district',
-                'Refresh on filing-date cadence (docs current as of signing)',
-              ]}
+              body="A guided client portal collects every document the trustee will ask for — pay stubs, tax returns, bank statements, IDs, vehicle titles, retirement statements. Automated reminders + due-date tracking. Upload by phone or web. Documents are encrypted in transit and at rest."
+              bullets={[]}
             />
 
-            {/* Trustee submissions */}
+            {/* Security / compliance */}
             <FeatureCard
               icon={
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>
+                <svg className="w-6 h-6 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
                 </svg>
               }
-              title="Trustee document submissions"
-              body="Package and submit Chapter 7 / 13 trustee documents straight from the case file. Per-trustee checklists, encrypted delivery, and read receipts so you know exactly when the trustee opens each packet."
-              bullets={[
-                'District + trustee-specific checklists (AZ, WA, NTX seeded)',
-                'Encrypted bundle delivery + audit log on every send',
-                '341 meeting checklist tied to the same record',
-              ]}
+              title="Built for security and compliance"
+              body="Your clients' data lives on SOC 2-aligned AWS infrastructure with encryption in transit and at rest, role-based access, and full audit logging. SOC 2 certification is in progress."
+              bullets={[]}
             />
 
-            {/* Credit pull */}
+            {/* Credit-report import */}
             <FeatureCard
               icon={
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/>
                 </svg>
               }
-              title="Credit pull → Schedule E/F"
-              body="Pull a tri-bureau credit report inside the case file and import the creditors directly into Schedules D / E / F. Account numbers, balances, addresses — no re-keying."
-              bullets={[
-                'Soft + hard pull options; consent captured + audit-logged',
-                'Auto-classify secured vs unsecured priority vs general unsecured',
-                'Match against the client’s self-reported list, flag discrepancies for attorney review',
-              ]}
+              title="Credit-report import"
+              body="Soft credit pulls powered by iSoftpull drop creditor accounts straight into Schedule E/F — no manual re-keying. A soft pull, so it won't affect your client's score."
+              bullets={[]}
             />
 
-            {/* AI + automation */}
+            {/* Guided client questionnaire */}
             <FeatureCard
               icon={
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                <svg className="w-6 h-6 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
                 </svg>
               }
-              title="AI + automation that runs the case"
-              body="A drafted-message assistant keeps clients informed at every step — appointment reminders, missing-document nudges, post-filing 341 prep, discharge follow-ups. Drafts go to your team for approval; nothing sends without a human."
-              bullets={[
-                'Per-firm voice + authorized knowledge base — the AI never invents legal advice',
-                'Automatic stage-by-stage status notifications to the client',
-                'Attorney-supervisor approval queue on every outbound draft',
-              ]}
+              title="Guided client questionnaire"
+              body="Clients are walked through every question in plain language and can complete their questionnaire anytime, 24/7, at their own pace — saving as they go and picking up right where they left off."
+              bullets={[]}
             />
           </div>
         </section>
 
         {/* ─── Integrations ──────────────────────────────────────────── */}
-        <section className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-slate-800/60">
+        <section className="relative z-10 max-w-6xl mx-auto px-6 lg:px-8 py-16 border-t border-[#E2E8F0]">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-300 mb-3">Integrations</p>
-              <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#2563EB] mb-3">Integrations</p>
+              <h2 className="text-3xl sm:text-4xl font-bold text-[#0F172A] tracking-tight">
                 Works with your existing software — including Best Case.
               </h2>
-              <p className="text-sm text-slate-400 mt-4 leading-relaxed">
+              <p className="text-sm text-[#475569] mt-4 leading-relaxed">
                 You shouldn&apos;t have to rip out the filing software your team already knows.
-                Export a complete case package to <strong className="text-white">Best Case Bankruptcy</strong> when
+                Export a complete case package to <strong className="text-[#0F172A]">Best Case Bankruptcy</strong> when
                 you&apos;re ready to file — schedules, statement of financial affairs, means-test
                 figures, and supporting documents — all formatted for direct import. Other
                 filing systems on the integration roadmap.
               </p>
-              <ul className="mt-6 space-y-2 text-sm text-slate-300">
+              <ul className="mt-6 space-y-2 text-sm text-[#475569]">
                 {[
                   'Best Case Bankruptcy export (schedules + SOFA + 122 forms)',
                   'Plaid for bank-statement retrieval (consent-tracked)',
-                  'Tri-bureau credit-report pull → schedules import',
+                  'iSoftpull soft credit-report import → Schedule E/F',
                   'SendGrid + Twilio for transactional client comms',
                   'PACER reconciliation — filing-date confirmation flows back into the case file',
                 ].map(item => (
                   <li key={item} className="flex items-start gap-2.5">
-                    <svg className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7"/></svg>
+                    <svg className="w-4 h-4 text-[#2563EB] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7"/></svg>
                     <span>{item}</span>
                   </li>
                 ))}
               </ul>
             </div>
 
-            <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-500 mb-3">Sample case export</p>
+            <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-6">
+              <p className="text-xs font-bold uppercase tracking-widest text-[#475569] mb-3">Sample case export</p>
               <div className="space-y-2 text-xs font-mono">
                 {[
                   ['client', 'Doe, Jane M.'],
@@ -457,24 +455,24 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
                   ['exemption_set', 'AZ (opt-out)'],
                   ['export_target', 'Best Case Bankruptcy → ready'],
                 ].map(([k, v]) => (
-                  <div key={k} className="flex items-baseline justify-between gap-3 border-b border-slate-800/60 pb-1.5">
-                    <span className="text-slate-500">{k}</span>
-                    <span className="text-amber-300 text-right">{v}</span>
+                  <div key={k} className="flex items-baseline justify-between gap-3 border-b border-[#E2E8F0] pb-1.5">
+                    <span className="text-[#64748B]">{k}</span>
+                    <span className="text-[#2563EB] text-right">{v}</span>
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-500 italic mt-3">Illustrative — not a real client.</p>
+              <p className="text-[10px] text-[#64748B] italic mt-3">Illustrative — not a real client.</p>
             </div>
           </div>
         </section>
 
         {/* ─── CTA ─────────────────────────────────────────────────── */}
-        <section className="relative z-10 max-w-4xl mx-auto px-6 lg:px-8 py-16 border-t border-slate-800/60">
-          <div className="bg-gradient-to-br from-amber-600/20 via-amber-500/5 to-transparent border border-amber-500/30 rounded-3xl p-8 sm:p-10 text-center">
-            <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+        <section className="relative z-10 max-w-4xl mx-auto px-6 lg:px-8 py-16 border-t border-[#E2E8F0]">
+          <div className="bg-gradient-to-br from-[#DBEAFE] via-[#F8FAFC] to-transparent border border-[#3B82F6]/30 rounded-3xl p-8 sm:p-10 text-center">
+            <h2 className="text-2xl sm:text-3xl font-bold text-[#0F172A] tracking-tight">
               Register — or see it first.
             </h2>
-            <p className="text-sm text-slate-300 mt-3 max-w-xl mx-auto">
+            <p className="text-sm text-[#475569] mt-3 max-w-xl mx-auto">
               Registration takes about 5 minutes (firm address, bar number, state of admission,
               and a working email for the firm owner). Prefer a walk-through before you sign up?
               Request a free demo and we&apos;ll show you the platform end-to-end.
@@ -482,34 +480,34 @@ export default function AttorneyRegistration({ onComplete, onBack }: Props) {
             <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
                 onClick={() => setStep('register')}
-                className="group bg-amber-600 hover:bg-amber-500 text-white rounded-xl py-3.5 px-6 font-semibold text-sm transition-all shadow-lg shadow-amber-900/40 hover:-translate-y-0.5 flex items-center gap-2"
+                className="group bg-[#2563EB] hover:bg-[#3B82F6] text-white rounded-xl py-3.5 px-6 font-semibold text-sm transition-all shadow-lg shadow-[#2563EB]/20 hover:-translate-y-0.5 flex items-center gap-2"
               >
                 <span>Start registration</span>
                 <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
               </button>
               <button
                 onClick={() => setStep('demo')}
-                className="group bg-slate-800 hover:bg-slate-700 text-white rounded-xl py-3.5 px-6 font-semibold text-sm transition-all border border-slate-700 hover:border-slate-600 flex items-center gap-2"
+                className="group bg-white hover:bg-[#F8FAFC] text-[#0F172A] rounded-xl py-3.5 px-6 font-semibold text-sm transition-all border border-[#E2E8F0] hover:border-[#3B82F6]/40 flex items-center gap-2"
               >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                <svg className="w-4 h-4 text-[#2563EB]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
                 <span>Request a free demo</span>
               </button>
               <button
                 onClick={() => setStep('login')}
-                className="text-sm font-semibold text-slate-300 hover:text-white px-4 py-3 transition-colors"
+                className="text-sm font-semibold text-[#2563EB] hover:text-[#3B82F6] px-4 py-3 transition-colors"
               >
                 Already registered? Sign in &rarr;
               </button>
             </div>
 
-            <p className="text-[11px] text-amber-200/80 mt-6">
-              <strong className="text-amber-300">Reminder:</strong> registration requires a firm in good standing
+            <p className="text-[11px] text-[#475569] mt-6">
+              <strong className="text-[#0F172A]">Reminder:</strong> registration requires a firm in good standing
               with at least one attorney licensed in the state of admission. Bar status is verified
               against the state bar directory.
             </p>
           </div>
 
-          <p className="text-center text-slate-600 text-[11px] mt-6">Protected by 256-bit TLS encryption.</p>
+          <p className="text-center text-[#64748B] text-[11px] mt-6">Protected by 256-bit TLS encryption.</p>
         </section>
       </div>
     );
@@ -1052,22 +1050,24 @@ function FeatureCard({
   bullets: string[];
 }) {
   return (
-    <div className="bg-slate-900/40 border border-slate-800 rounded-2xl p-6 hover:border-amber-500/30 transition-colors">
-      <div className="w-11 h-11 rounded-xl bg-amber-600/15 border border-amber-500/30 flex items-center justify-center mb-4">
+    <div className="bg-[#F8FAFC] border border-[#E2E8F0] rounded-2xl p-6 hover:border-[#3B82F6]/40 transition-colors">
+      <div className="w-11 h-11 rounded-xl bg-[#DBEAFE] border border-[#3B82F6]/30 flex items-center justify-center mb-4">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-white mb-2">{title}</h3>
-      <p className="text-sm text-slate-400 leading-relaxed">{body}</p>
-      <ul className="mt-4 space-y-1.5">
-        {bullets.map(b => (
-          <li key={b} className="flex items-start gap-2 text-xs text-slate-300">
-            <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7"/>
-            </svg>
-            <span>{b}</span>
-          </li>
-        ))}
-      </ul>
+      <h3 className="text-lg font-semibold text-[#0F172A] mb-2">{title}</h3>
+      <p className="text-sm text-[#475569] leading-relaxed">{body}</p>
+      {bullets.length > 0 && (
+        <ul className="mt-4 space-y-1.5">
+          {bullets.map(b => (
+            <li key={b} className="flex items-start gap-2 text-xs text-[#475569]">
+              <svg className="w-3.5 h-3.5 text-[#2563EB] flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.4} d="M5 13l4 4L19 7"/>
+              </svg>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
