@@ -53,6 +53,7 @@ import {
   type CalendarEventRow,
   type AcceptanceRow,
   type EcfInboxRow,
+  type FiledCaseRegistryRow,
   type LegalTaskKind,
 } from "./legalTasks";
 
@@ -72,6 +73,10 @@ export interface LegalDashboardProps {
   acceptances:           ReadonlyArray<AcceptanceRow>;
   // Slice L-6 (Prompt 67) — RIGHT-column legal comms source.
   ecfInbox:              ReadonlyArray<EcfInboxRow>;
+  // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell source. From
+  // accounting_filed_case_registry (cross-portal — same table the
+  // Accounting filed-cases tab reads).
+  filedRegistry:         ReadonlyArray<FiledCaseRegistryRow>;
   /** Optional click-router; today LegalDepartmentPortal doesn't wire
    *  one (clicks no-op until L-9). */
   onSelectTask?: (kind: LegalTaskKind, id: string) => void;
@@ -80,7 +85,7 @@ export interface LegalDashboardProps {
 export default function LegalDashboard({
   session,
   attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads,
-  calendarEvents, acceptances, ecfInbox,
+  calendarEvents, acceptances, ecfInbox, filedRegistry,
   onSelectTask,
 }: LegalDashboardProps) {
   const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
@@ -253,10 +258,10 @@ export default function LegalDashboard({
   //   fall back to intake_leads.chapter_interest when no acceptance row
   //   matches. Group into 7 / 13 / unknown.
   //
-  // Filed-vs-Retained is PARTIAL today: filed state requires
-  // accounting_filed_case_registry (cross-portal), so the bubble shows
-  // "Filed" + "Pending Discharge" as TODO placeholders. The user said
-  // PARTIAL is expected — we don't fake those numbers.
+  // Slice L-8 (Prompt 73) — Filed-by-chapter is now wired from
+  // accounting_filed_case_registry (cross-portal); see the filedCounts
+  // memo below. Pending Discharge remains "—" — that one waits on a
+  // discharge_at / case_closed_at column that doesn't exist (Gap #7).
   const caseload = useMemo(() => {
     // Lookup map: lead_id → chapter from accepted acceptances.
     const acceptedChapter = new Map<string, number | null>();
@@ -282,6 +287,22 @@ export default function LegalDashboard({
     const totalAccepted = acceptedChapter.size;
     return { counts, totalRetained, totalAccepted };
   }, [intakeLeads, acceptances]);
+
+  // Slice L-8 (Prompt 73) — Filed count from accounting_filed_case_registry.
+  //
+  // The registry's chapter column is NOT NULL with CHECK (chapter IN (7, 13)),
+  // so every row resolves to one of the two buckets — no "unknown" tier
+  // here. Anything outside 7|13 (defensive) is silently dropped from the
+  // per-chapter split but stays in the total.
+  const filedCounts = useMemo(() => {
+    let ch7 = 0;
+    let ch13 = 0;
+    for (const r of filedRegistry) {
+      if (r.chapter === 7)       ch7++;
+      else if (r.chapter === 13) ch13++;
+    }
+    return { ch7, ch13, total: ch7 + ch13 };
+  }, [filedRegistry]);
 
   // Slice L-5 — Today's Filings & Hearings bubble derivation.
   //
@@ -425,18 +446,21 @@ export default function LegalDashboard({
               </div>
             </div>
 
-            {/* Filed + Pending Discharge — both deferred. Render dimmed
-                "—" so the slot is visible but never lies. */}
+            {/* Filed (real count, Slice L-8 / Prompt 73) + Pending
+                Discharge (still deferred — Gap #7 needs a discharge_at /
+                case_closed_at column that doesn't exist). */}
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#2A2A28]/60">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B66] mb-0.5">
                   Filed
                 </p>
-                <p className="text-base font-mono text-[#3A3A36] italic" title="Source is accounting_filed_case_registry (cross-portal). Adding it is a future-slice read.">
-                  —
+                <p className="text-2xl font-bold text-[#FAFAF7] leading-none tabular-nums">
+                  {filedCounts.total}
                 </p>
-                <p className="text-[10px] text-[#6B6B66] mt-1 italic">
-                  awaits cross-portal read
+                <p className="text-[10px] text-[#6B6B66] mt-1 tabular-nums">
+                  Ch. 7 <span className="text-[#FAFAF7]">{filedCounts.ch7}</span>
+                  {" · "}
+                  Ch. 13 <span className="text-[#FAFAF7]">{filedCounts.ch13}</span>
                 </p>
               </div>
               <div>

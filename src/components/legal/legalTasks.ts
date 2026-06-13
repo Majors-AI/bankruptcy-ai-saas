@@ -140,6 +140,21 @@ export interface AcceptanceRow {
   decided_at: string | null;
 }
 
+// ─── Slice L-8 (Prompt 73) — Active Caseload "Filed" cell ───────────────
+//
+// Narrow row shape for accounting_filed_case_registry. Cross-portal read
+// added to the L-3 mount-level Promise.all. The registry has no firm_id
+// column (firm scoping is via the FK to accounting_clients); the schema
+// constrains chapter to 7 or 13 via CHECK, so there is no "unknown" bucket
+// here. Read shape mirrors the accounting filed-cases tab.
+
+export interface FiledCaseRegistryRow {
+  id: string;
+  /** smallint NOT NULL CHECK (chapter IN (7, 13)) — always 7 or 13. */
+  chapter: number;
+  filed_date: string;
+}
+
 // ─── Slice L-6 (Prompt 67) — legal-comms widget input ────────────────────
 //
 // Narrow row shape for ecf_inbox. The L-6 RIGHT-column comms widget maps
