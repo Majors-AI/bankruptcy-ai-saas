@@ -14,6 +14,7 @@ import IntakeDashboard, {
   type ClientMessage as DashClientMessage,
   type StaffMessage as DashStaffMessage,
 } from "./components/intake-dashboard/IntakeDashboard";
+import LeadsByMonthChart from "./components/intake-dashboard/LeadsByMonthChart";
 import StaffGuidedIntake from "./components/intake-script/StaffGuidedIntake";
 import NewLeadInline from "./components/intake-new-lead/NewLeadInline";
 import ConsultSchedulerPanel, {
@@ -8872,6 +8873,21 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   const feeQuotedLeads = leads.filter(l => l.status === "fee_quoted");
   const retainedCount = leads.filter(l => l.status === "retained").length;
 
+  // Prompt 88 — today-in-firm-tz buckets for the relabeled stat cards.
+  // Both derivations use real columns (intake_leads.created_at +
+  // intake_leads.retained_at) and never fabricate a count when the
+  // backing data is absent (lead with no retained_at simply doesn't
+  // contribute). BAN-84 is the contacted-signal follow-up.
+  const todayStrTz_StatRow = todayInFirmTz();
+  const leadsToday = leads.filter(l => {
+    if (!l.created_at) return false;
+    return new Date(l.created_at).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }) === todayStrTz_StatRow;
+  }).length;
+  const retainedToday = leads.filter(l => {
+    if (l.status !== "retained" || !l.retained_at) return false;
+    return new Date(l.retained_at).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }) === todayStrTz_StatRow;
+  }).length;
+
   function getAcceptance(leadId: string) {
     return acceptances.find(a => a.lead_id === leadId) ?? null;
   }
@@ -9237,16 +9253,29 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
         <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
-        {/* Stats row — hidden on the dashboard tab (replaced there by the
-            three TopBubbles inside IntakeDashboard). Other tabs keep it. */}
+        {/* Prompt 88 — stat cards row. Hidden on the dashboard tab
+            (replaced there by the TopBubbles inside IntakeDashboard).
+            "Fee Quoted / Follow-Up" was removed; "Total Leads Received
+            Today" + "Retained Today" replace the lifetime totals with
+            today-scoped real counts. */}
         {activeTab !== "dashboard" && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
             {[
-              { label: "Total Leads",    val: leads.length,       color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
-              { label: "Need Scheduling",       val: newLeads.length,       color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
-              { label: "Today Appointments",    val: todayConsult.length,   color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
-              { label: "Pending Atty Review",   val: reviewQueue.length,    color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
-              { label: "Fee Quoted / Follow-Up",val: feeQuotedLeads.length, color: "text-orange-400",  icon: <DollarSign className="w-4 h-4" />,  tab: "followup" as const },
+              // Real — created_at filtered to today (firm tz).
+              { label: "Total Leads Received Today", val: leadsToday,          color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
+              // Real status filter today; BAN-84 will narrow this to
+              // "after SMS + email sent" when a contacted_at column
+              // (or equivalent contacted signal) lands on intake_leads.
+              // TODO BAN-84: precision upgrade once the contacted
+              // signal exists.
+              { label: "Need Scheduling",            val: newLeads.length,     color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
+              { label: "Today Appointments",         val: todayConsult.length, color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
+              { label: "Pending Atty Review",        val: reviewQueue.length,  color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
+              // Real — retained_at + status filter to today. If no lead
+              // has retained_at populated yet, this renders 0 (NOT a
+              // fabricated number). TODO BAN-84: revisit when the
+              // retention-event aggregator lands.
+              { label: "Retained Today",             val: retainedToday,       color: "text-emerald-400", icon: <CheckCircle2 className="w-4 h-4" />, tab: "leads" as const },
             ].map(s => (
               <button key={s.label} onClick={() => setActiveTab(s.tab)}
                 className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4 flex items-center gap-3 hover:border-slate-700 transition-colors text-left">
@@ -9258,6 +9287,14 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
               </button>
             ))}
           </div>
+        )}
+
+        {/* Prompt 88 — leads-by-month bar graph. Uses the same `leads`
+            array the stat cards do. Annual = 12 months of selected year;
+            Monthly = days of selected month. Honest empty state if no
+            leads in the period; never fabricated. */}
+        {activeTab !== "dashboard" && (
+          <LeadsByMonthChart leads={leads} />
         )}
 
         {/* ── DASHBOARD TAB (legal_admin / super_admin only — attorneys never see this) ── */}
