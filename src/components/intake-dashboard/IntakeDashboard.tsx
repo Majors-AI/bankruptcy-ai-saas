@@ -1734,8 +1734,63 @@ interface TasksAndAppointmentsWidgetProps {
   onOpenMessages: () => void;
 }
 
+// ─── Prompt 87 — Disposition kinds (local-only; BAN-83 wires real sends) ────
+
+type DispositionKind =
+  | "start_intake"     // staffer began the intake flow during the call
+  | "lvm"              // staffer left a voicemail (manual)
+  | "no_answer"        // no answer — row gets a Follow-up tag
+  | "leave_message"    // automated message — TODO BAN-83 (no real send)
+  | "send_email"       // automated email   — TODO BAN-83 (no real send)
+  | "send_sms";        // automated SMS     — TODO BAN-83 (no real send)
+
+const DISPOSITION_LABEL: Record<DispositionKind, string> = {
+  start_intake:  "Started intake",
+  lvm:           "Left voicemail",
+  no_answer:     "No answer",
+  leave_message: "Leave message",
+  send_email:    "Send email",
+  send_sms:      "Send SMS",
+};
+
+/**
+ * Lead → scheduled-ISO derivation for the per-row scheduled-time chip and
+ * the Up Next countdown. Prefers next_follow_up_at (precise timestamp);
+ * falls back to consultation_date (date-only — countdown skipped because
+ * we don't fabricate a time, but the chip still renders the date).
+ */
+function getLeadScheduledIso(lead: Lead): string | null {
+  if (lead.next_follow_up_at) return lead.next_follow_up_at;
+  return null;
+}
+
+/** Render a compact "in 12m" / "5h ago" / "in 2d" relative chunk. */
+function formatRelativeMin(diffMin: number): string {
+  const abs = Math.abs(diffMin);
+  let text: string;
+  if (abs < 60)        text = `${abs}m`;
+  else if (abs < 60*24) text = `${Math.floor(abs / 60)}h ${abs % 60}m`;
+  else                 text = `${Math.floor(abs / (60*24))}d`;
+  return diffMin >= 0 ? `in ${text}` : `${text} ago`;
+}
+
 function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
   const { toDoQueue, nextTask, onChangeTab } = props;
+
+  // Prompt 87 — local tick so per-row countdowns + the Up Next countdown
+  // refresh without leaning on the parent. 30s cadence matches ClockHub.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Prompt 87 — local disposition state, keyed by lead.id. UI only.
+  // Persistence + real outreach (send/retry/requeue) lands with BAN-83.
+  const [dispositions, setDispositions] = useState<Record<string, DispositionKind>>({});
+  function recordDisposition(leadId: string, kind: DispositionKind) {
+    setDispositions(prev => ({ ...prev, [leadId]: kind }));
+  }
 
   return (
     <Card className="flex flex-col">
@@ -1766,6 +1821,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
           <UpNextCard
             nextTask={nextTask}
             queue={toDoQueue}
+            nowMs={nowMs}
             onStartAppointment={props.onStartAppointment}
             onStartLeadCall={props.onStartLeadCall}
             onSkip={props.onSkip}
@@ -1783,12 +1839,11 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
                   key={row.lead.id}
                   row={row}
                   expanded={props.expandedRowId === row.lead.id}
+                  nowMs={nowMs}
+                  disposition={dispositions[row.lead.id] ?? null}
+                  onRecordDisposition={(kind) => recordDisposition(row.lead.id, kind)}
                   onCall={() => props.onStartLeadCall(row.lead.id)}
-                  onScheduleConsult={() => props.onScheduleConsult(row.lead)}
                   onDoIntakeNow={() => props.onDoIntakeNow(row.lead)}
-                  onLeftMessage={() => props.onLeftMessage(row.lead)}
-                  onNoAnswer={() => props.onNoAnswer(row.lead)}
-                  onAddToFollowUp={() => props.onAddToFollowUp(row.lead)}
                   onCancel={props.onCancelExpansion}
                 />
               ))}
@@ -1827,10 +1882,13 @@ function TierChip({ tier }: { tier: ToDoTier }) {
 // ─── Up Next card (Layer 1) ──────────────────────────────────────────────────
 
 function UpNextCard({
-  nextTask, queue, onStartAppointment, onStartLeadCall, onSkip, onChoose, onOpenMessages,
+  nextTask, queue, nowMs, onStartAppointment, onStartLeadCall, onSkip, onChoose, onOpenMessages,
 }: {
   nextTask: NextTask;
   queue: ToDoRow[];
+  /** Live tick from the parent widget; drives the lead-variant countdown
+   *  (appointment variants carry their own `minutesUntilStart` already). */
+  nowMs: number;
   onStartAppointment: () => void;
   onStartLeadCall: (leadId: string) => void;
   onSkip: (taskId: string) => void;
@@ -1965,6 +2023,15 @@ function UpNextCard({
     nextTask.kind === "lead-new" ? "first contact / set appointment" :
     "fee-quoted follow-up";
 
+  // Prompt 87 — live countdown for lead variants. We derive from
+  // intake_leads.next_follow_up_at (a real timestamp). consultation_date
+  // is date-only so we DON'T fabricate a clock time for it — the row chip
+  // (see ToDoRowItem) still shows the date even when no countdown applies.
+  const scheduledIso = getLeadScheduledIso(lead);
+  const minutesUntil = scheduledIso
+    ? Math.floor((new Date(scheduledIso).getTime() - nowMs) / 60_000)
+    : null;
+
   return (
     <UpNextShell tone={isEmergency ? "emergency" : "lead"}>
       <UpNextHeader label={isEmergency ? "Up Next — emergency" : "Up Next"}>
@@ -1972,6 +2039,16 @@ function UpNextCard({
         {overdue && !isEmergency && (
           <span className="text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 rounded border border-red-700/60 bg-red-900/30 text-red-300">
             Overdue
+          </span>
+        )}
+        {minutesUntil !== null && (
+          <span
+            className={`text-[10px] font-mono tabular-nums ${
+              minutesUntil <= 0 ? "text-red-300" : minutesUntil <= 60 ? "text-amber-300" : "text-[#B8945F]"
+            }`}
+            title={`Scheduled ${new Date(scheduledIso ?? "").toLocaleString("en-US", { timeZone: FIRM_TZ })}`}
+          >
+            {formatRelativeMin(minutesUntil)}
           </span>
         )}
       </UpNextHeader>
@@ -2103,23 +2180,47 @@ function ChoosePicker({
   );
 }
 
-// ─── To-do row + log-result panel ────────────────────────────────────────────
+// ─── To-do row + disposition window (Prompt 87) ─────────────────────────────
 
 function ToDoRowItem({
-  row, expanded, onCall,
-  onScheduleConsult, onDoIntakeNow, onLeftMessage, onNoAnswer, onAddToFollowUp, onCancel,
+  row, expanded, nowMs, disposition, onRecordDisposition,
+  onCall, onDoIntakeNow, onCancel,
 }: {
   row: ToDoRow;
   expanded: boolean;
+  /** Live tick from the parent widget; drives the scheduled-time chip
+   *  countdown so each row's "in 12m" / "5h ago" stays accurate. */
+  nowMs: number;
+  /** Recorded disposition for this lead (null = not recorded yet). */
+  disposition: DispositionKind | null;
+  /** Records the chosen disposition to local state. Backend write/send
+   *  is BAN-83 — see DispositionWindow for TODO markers. */
+  onRecordDisposition: (kind: DispositionKind) => void;
   onCall: () => void;
-  onScheduleConsult: () => void;
   onDoIntakeNow: () => void;
-  onLeftMessage: () => void;
-  onNoAnswer: () => void;
-  onAddToFollowUp: () => void;
   onCancel: () => void;
 }) {
   const { lead, tier } = row;
+
+  // Prompt 87 — per-row scheduled time chip. Prefers next_follow_up_at
+  // (real timestamp → countdown); falls back to consultation_date
+  // (date-only → date label, no countdown).
+  const scheduledIso = getLeadScheduledIso(lead);
+  const consultDate = !scheduledIso && lead.consultation_date ? lead.consultation_date : null;
+  const minutesUntil = scheduledIso
+    ? Math.floor((new Date(scheduledIso).getTime() - nowMs) / 60_000)
+    : null;
+  const scheduledLabel: string | null =
+    scheduledIso
+      ? new Date(scheduledIso).toLocaleString("en-US", {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: FIRM_TZ,
+        })
+      : consultDate
+        ? `Consult ${formatDayLabel(consultDate)}`
+        : null;
+
+  const isFollowUp = disposition === "no_answer";
+
   return (
     <li className="rounded-lg border border-transparent hover:border-[#2A2A28] transition-colors">
       <div className="flex items-center gap-3 px-3 py-2">
@@ -2132,10 +2233,42 @@ function ToDoRowItem({
             {lead.chapter_interest && <span> Â· Ch.{lead.chapter_interest}</span>}
           </p>
         </div>
-        {/* Assignee chip — DISPLAY ONLY. Shows who the lead is currently
-            assigned to (intake_leads.assigned_name). The dashboard does
-            not write or auto-assign — score-based auto-assignment lands
-            with BAN-82. Hidden when the lead is unassigned. */}
+
+        {/* Scheduled time chip — display only. Shows a date (consultation)
+            or live countdown (next_follow_up_at). Both come from real
+            intake_leads columns; we never fabricate a time. */}
+        {scheduledLabel && (
+          <span
+            title={scheduledIso ? `Scheduled ${new Date(scheduledIso).toLocaleString("en-US", { timeZone: FIRM_TZ })}` : `Consult on ${consultDate}`}
+            className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-[#B8945F] bg-[#0F0F0E] border border-[#2A2A28] px-2 py-0.5 rounded flex-shrink-0"
+          >
+            <Calendar className="w-3 h-3" /> {scheduledLabel}
+            {minutesUntil !== null && (
+              <span
+                className={`tabular-nums ${
+                  minutesUntil <= 0 ? "text-red-300" : minutesUntil <= 60 ? "text-amber-300" : "text-[#6B6B66]"
+                }`}
+              >
+                · {formatRelativeMin(minutesUntil)}
+              </span>
+            )}
+          </span>
+        )}
+
+        {/* Follow-up tag — surfaces locally when the staffer recorded a
+            No-Answer disposition. BAN-83 will replace this with the
+            backed requeue + outreach auto-retry state. */}
+        {isFollowUp && (
+          <span
+            title="Recorded as No Answer — back in follow-up queue (BAN-83 wires the real requeue)"
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-900/30 border border-red-700/60 px-2 py-0.5 rounded-full flex-shrink-0"
+          >
+            <BellRing className="w-3 h-3" /> Follow-up
+          </span>
+        )}
+
+        {/* Assignee chip — DISPLAY ONLY (Prompt 86; BAN-82 wires the real
+            auto-assignment). Hidden when unassigned. */}
         {lead.assigned_name && (
           <span
             title={`Assigned to ${lead.assigned_name} — auto-assignment lands with BAN-82`}
@@ -2144,71 +2277,143 @@ function ToDoRowItem({
             <UserCheck className="w-3 h-3" /> {lead.assigned_name}
           </span>
         )}
+
         <TierChip tier={tier} />
+
         {!expanded && (
           <button
             onClick={onCall}
             className="flex items-center gap-1 text-[11px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] border border-[#B8945F]/40 hover:border-[#B8945F] px-2 py-1 rounded transition-colors"
           >
-            <Phone className="w-3 h-3" /> Call
+            <Phone className="w-3 h-3" /> Start call
           </button>
         )}
       </div>
 
       {expanded && (
-        <div className="border-t border-[#2A2A28] mx-3 mb-3 mt-1 pt-3 px-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
-            Log call result {lead.phone ? <span className="font-mono text-[#B8945F]">Â· {lead.phone}</span> : null}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Primary actions */}
-            <button
-              onClick={onScheduleConsult}
-              className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
-            >
-              <Calendar className="w-3 h-3" /> Schedule consult
-            </button>
-            <button
-              onClick={onDoIntakeNow}
-              className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
-            >
-              <ClipboardList className="w-3 h-3" /> Do intake now
-            </button>
-            {/* Call-outcome shortcuts — both "Left message" and "No answer"
-                route the lead to the Follow-Up sub-tab of the unified Leads
-                view (sets intake_leads.follow_up_queue='priority'). */}
-            <div className="flex items-center gap-3 ml-auto">
-              <button
-                onClick={onLeftMessage}
-                title="Log: left a voicemail. Lead moves to Follow-Up."
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                Left message
-              </button>
-              <button
-                onClick={onNoAnswer}
-                title="Log: no answer. Lead moves to Follow-Up."
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                No answer
-              </button>
-              <button
-                onClick={onAddToFollowUp}
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors flex items-center gap-1"
-              >
-                <BellRing className="w-3 h-3" /> Add to follow-up
-              </button>
-              <button
-                onClick={onCancel}
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <DispositionWindow
+          lead={lead}
+          disposition={disposition}
+          onRecord={onRecordDisposition}
+          onStartIntake={onDoIntakeNow}
+          onClose={onCancel}
+        />
       )}
     </li>
+  );
+}
+
+/**
+ * Prompt 87 — Start-call disposition window. Inline panel that opens when
+ * the staffer clicks the row's "Start call" button.
+ *
+ * Two groups:
+ *   1. Primary dispositions — call-outcome buckets (Start Intake / Left
+ *      voicemail / No answer). Only "Start Intake" navigates (calls the
+ *      host's onDoIntakeNow). LVM + No Answer are recorded locally.
+ *   2. Actions — automated outreach (Leave Message / Send Email /
+ *      Send SMS). All three are RECORD-ONLY today; real send/retry/
+ *      requeue lands with BAN-83.
+ *
+ * No sends fire from this UI. The descriptive note on "No Answer" spells
+ * out the intended auto-retry/missed-you/requeue behavior as TEXT so the
+ * staffer knows what the future automation will do, without us implying a
+ * timer started or a message went out.
+ */
+function DispositionWindow({
+  lead, disposition, onRecord, onStartIntake, onClose,
+}: {
+  lead: Lead;
+  disposition: DispositionKind | null;
+  onRecord: (kind: DispositionKind) => void;
+  onStartIntake: () => void;
+  onClose: () => void;
+}) {
+  function handleClick(kind: DispositionKind) {
+    onRecord(kind);
+    // TODO BAN-83 — when outreach automation lands, dispatch the
+    // corresponding effect (auto-retry timer, missed-you SMS, requeue
+    // to follow-up). Today this is record-only — no timer, no send.
+    if (kind === "start_intake") {
+      // Start Intake is a real navigation, not just a recorded outcome;
+      // hand off to the host so the intake flow opens immediately.
+      onStartIntake();
+    }
+  }
+
+  const recordedLabel = disposition ? DISPOSITION_LABEL[disposition] : null;
+
+  return (
+    <div className="border-t border-[#2A2A28] mx-3 mb-3 mt-1 pt-3 px-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
+        Disposition {lead.phone ? <span className="font-mono text-[#B8945F]">Â· {lead.phone}</span> : null}
+      </p>
+
+      {/* Primary dispositions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => handleClick("start_intake")}
+          className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
+        >
+          <ClipboardList className="w-3 h-3" /> Start Intake
+        </button>
+        <button
+          onClick={() => handleClick("lvm")}
+          className="flex items-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold px-3 py-1.5 rounded border border-[#3A3A36] transition-colors"
+        >
+          <Voicemail className="w-3 h-3" /> Leave Voicemail
+        </button>
+        <button
+          onClick={() => handleClick("no_answer")}
+          className="flex items-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold px-3 py-1.5 rounded border border-[#3A3A36] transition-colors"
+        >
+          <PhoneMissed className="w-3 h-3" /> No Answer
+        </button>
+      </div>
+
+      {/* Secondary actions */}
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <p className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] mr-1">Actions</p>
+        <button
+          onClick={() => handleClick("leave_message")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <MessageSquare className="w-3 h-3" /> Leave Message
+        </button>
+        <button
+          onClick={() => handleClick("send_email")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <Mail className="w-3 h-3" /> Send Email
+        </button>
+        <button
+          onClick={() => handleClick("send_sms")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <Send className="w-3 h-3" /> Send SMS
+        </button>
+        <button
+          onClick={onClose}
+          className="ml-auto text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Descriptive note — text only, NOT a behavior. */}
+      <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
+        <strong className="text-[#B8945F] not-italic">On No Answer:</strong> system will auto-retry,
+        send a missed-you message, and requeue the lead for follow-up. Real send/retry/requeue
+        lands with outreach automation (BAN-83) — today this just records the disposition locally.
+      </p>
+
+      {recordedLabel && (
+        <p className="text-[11px] text-[#FAFAF7] mt-2 px-2.5 py-1.5 rounded border border-emerald-700/40 bg-emerald-900/20">
+          <CheckCircle2 className="w-3 h-3 inline mr-1 text-emerald-400" />
+          Recorded as <strong>{recordedLabel}</strong> — will send when outreach automation is live (BAN-83).
+        </p>
+      )}
+    </div>
   );
 }
 
