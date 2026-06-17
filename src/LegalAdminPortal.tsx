@@ -26,6 +26,7 @@ import ConsultSchedulerPanel, {
 import { isClaimedByOther, LeadClaimBadge, LeadClaimBanner } from "./components/lead-claim/LeadClaim";
 import FloatingChat from "./components/floating-chat/FloatingChat";
 import AllAnswersView, { ALL_ANSWERS_SCHEMA, renderAnswerValue } from "./components/intake-review/AllAnswersView";
+import FormDataInventory from "./components/intake-dashboard/FormDataInventory";
 import { calcDebtComposition } from "./AttorneyIntakeDashboard";
 import CaseAdvancementStatusBar from "./components/intake-review/CaseAdvancementStatusBar";
 import ClientTimeLog, { useClientTimeLog } from "./components/intake-review/ClientTimeLog";
@@ -2134,18 +2135,24 @@ function IntakeAttorneyReviewModal({
           )}
 
           {/* ══════════ ALL ANSWERS TAB ══════════
-              Read-only mirror of the locked client questionnaire. Reuses the
-              shared <AllAnswersView> component (same one mounted in
-              AttorneyIntakeDashboard's All Answers tab and in the non-lawyer
-              Review Intake modal). Renders nothing editable; the locked
-              questionnaire is never modified from this surface. */}
+              Prompt 84 (expanded) — replaced the curated read-only
+              AllAnswersView with FormDataInventory. FormDataInventory
+              still reuses ALL_ANSWERS_SCHEMA for the filing-document
+              groupings but additionally surfaces any top-level
+              form_data key the schema doesn't yet cover under an
+              "Other captured fields" panel, and recursively renders
+              nested objects/arrays as indented sub-lists instead of
+              raw JSON. Honest blanks throughout; strictly read-only.
+              The attorney-review-mode AllAnswersView (with per-section
+              flag toggles + submit-back-to-client) still lives on the
+              AttorneyIntakeDashboard tab and is unaffected. */}
           {activeTab === "allAnswers" && (
             <div className="space-y-3">
               {submission && submission.form_data ? (
-                <AllAnswersView
+                <FormDataInventory
                   fd={submission.form_data as Record<string, unknown>}
                   title="All Answers"
-                  subtitle="Read-only mirror of the locked client questionnaire. Blanks are flagged here and surfaced in the Summary tab so missing required fields are visible at a glance."
+                  subtitle="Read-only mirror of every field the locked client questionnaire wrote to intake_submissions.form_data. Grouped by filing document; any top-level keys the curated schema doesn't yet cover are listed under 'Other captured fields' so nothing the client submitted is hidden from review."
                 />
               ) : (
                 <div className="text-center py-10 bg-slate-900 border border-slate-800 rounded-2xl">
