@@ -55,8 +55,9 @@ import {
   Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock,
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
   Users, Voicemail, ListChecks, Delete, PlayCircle,
-  AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, X,
+  AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, BellOff, X,
   Mail, MessageSquare, MessageCircle, Send, Target, UserCheck,
+  Coffee, ArrowRightLeft,
 } from "lucide-react";
 import ConsultSchedulerPanel, {
   type StaffDetail as SchedulerStaffDetail,
@@ -72,7 +73,6 @@ import CommsPillBar from "../comms-pill/CommsPillBar";
 // data via props — no intake-specific assumptions inside the module.
 import {
   TaskScopeToggle,
-  ClockBubble,
   RetentionBubble,
   Card, CardHeader, CountBadge, EmptyHint, SampleChip,
   BubbleCard, COLOR_CFG,
@@ -369,6 +369,158 @@ interface IntakeDashboardProps {
   // watcher live there). The ClockBubble below just reflects + controls it.
   timeClock: TimeClockState;
   timeClockActions: TimeClockActions;
+}
+
+// ─── Prompt 89 — Staff Directory (LEFT rail) ─────────────────────────────────
+//
+// Department-grouped list of active staff. Reads from the existing
+// `staffPool` (intake_leads → staff_members) the dashboard already loads
+// at mount, so this adds no fetches.
+//
+// Honest-data: per-person live availability (available / in-office /
+// on-break / out) has no source today — there's no cross-staff presence
+// column or telephony channel. We render a neutral "status unavailable"
+// dot per row and a `title=` note pointing at BAN-85 instead of
+// fabricating who is on break / out.
+//
+// Per-person "Transfer" affordance is a hover-only label, clearly marked
+// as coming with the telephony integration (BAN-85). It does NOT
+// initiate a real call transfer.
+//
+// Prompt 89-fix — hoisted above IntakeDashboard so the JSX usage of
+// <StaffDirectory /> in the dashboard body appears AFTER the function
+// declaration in source order. Previously declared lower in the file;
+// JavaScript hoisting made that legal but a stale Vite HMR cache could
+// resolve <StaffDirectory /> to undefined when the file was edited in
+// place. Source-order match eliminates that class of HMR confusion.
+function StaffDirectory({
+  staffPool,
+  embedded = false,
+}: {
+  staffPool: SchedulerStaffDetail[];
+  // Prompt 92 — `embedded` toggles render mode. When false (default,
+  // backward-compatible), the directory renders as a standalone Card
+  // with a CardHeader, sticky positioning, and a tall scroll region —
+  // the legacy "rail" surface. When true, the directory renders as a
+  // bare column inside another card (today: ClockHub's left column),
+  // dropping the Card wrapper, the sticky positioning, and using the
+  // same compact uppercase-label header pattern the sibling columns
+  // (Priority queue, Comms, Clock+Appts) use, so the four read as one
+  // continuous surface.
+  embedded?: boolean;
+}) {
+  // Bucket by role. `role` (lowercased) is matched against well-known
+  // substrings; everything else falls into "Other" rather than being
+  // dropped. Empty groups don't render.
+  const groups = useMemo(() => {
+    const out: Record<string, SchedulerStaffDetail[]> = {
+      Attorneys: [], Paralegals: [], Intake: [], Accounting: [], Other: [],
+    };
+    for (const s of staffPool) {
+      const role = (s.role ?? "").toLowerCase();
+      if      (role.includes("attorney"))                              out.Attorneys.push(s);
+      else if (role.includes("paralegal"))                             out.Paralegals.push(s);
+      else if (role.includes("intake"))                                out.Intake.push(s);
+      else if (role.includes("accounting") || role.includes("billing"))out.Accounting.push(s);
+      else                                                              out.Other.push(s);
+    }
+    return out;
+  }, [staffPool]);
+
+  const total = staffPool.length;
+
+  // Shared body: department grouping, neutral status dots (BAN-85),
+  // Transfer placeholders (BAN-85), BAN-85 footer note. Identical in
+  // both render modes — only the surrounding chrome differs.
+  const body = (
+    <>
+      {total === 0 ? (
+        <EmptyHint>No active staff loaded.</EmptyHint>
+      ) : (
+        (Object.entries(groups) as [string, SchedulerStaffDetail[]][])
+          .filter(([, members]) => members.length > 0)
+          .map(([label, members]) => (
+            <div key={label}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1 px-1">
+                {label} · <span className="text-[#FAFAF7] tabular-nums">{members.length}</span>
+              </p>
+              <ul className="space-y-0.5">
+                {members.map(m => <StaffDirectoryRow key={m.id} staff={m} />)}
+              </ul>
+            </div>
+          ))
+      )}
+      <p className="text-[9px] text-[#6B6B66] italic px-1 leading-snug">
+        Status + call transfer arrive with the telephony + presence
+        backend.
+        {/* TODO BAN-85 — wire live availability (available / in-office /
+            on-break / out) from telephony presence + the time-clock
+            backend; surface real Transfer over the call channel. */}
+      </p>
+    </>
+  );
+
+  if (embedded) {
+    // Prompt 92 — embedded render. Lives inside ClockHub's BubbleCard
+    // as the leftmost column. Header is the same compact
+    // uppercase-label pattern the Priority-queue column uses; the
+    // body scrolls inside a capped region (~30 staff makes the full
+    // list taller than the sibling columns, so we cap at 260px to
+    // sit comfortably within the NOW card).
+    return (
+      <div className="min-w-0 space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+          Staff Directory · <span className="text-[#FAFAF7] tabular-nums">{total}</span>
+        </p>
+        <div className="space-y-3 overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
+          {body}
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy standalone render — kept for any caller still mounting the
+  // directory as its own rail (none on the intake dashboard after
+  // Prompt 92, but the prop default preserves the old shape).
+  return (
+    <Card className="flex flex-col sticky top-4">
+      <CardHeader
+        icon={<Users className="w-4 h-4" />}
+        title="Staff Directory"
+        badge={<CountBadge value={total} />}
+      />
+      <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 720 }}>
+        {body}
+      </div>
+    </Card>
+  );
+}
+
+function StaffDirectoryRow({ staff }: { staff: SchedulerStaffDetail }) {
+  return (
+    <li className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-[#0F0F0E] transition-colors">
+      {/* Neutral status dot — see BAN-85 note above. We do NOT fabricate
+          per-staff availability. */}
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-[#3A3A36] flex-shrink-0"
+        title="Status unavailable — live availability lands with BAN-85"
+      />
+      <span className="text-xs text-[#FAFAF7] truncate flex-1">{staff.name}</span>
+      <span className="text-[9px] text-[#6B6B66] italic flex-shrink-0">
+        status —
+      </span>
+      <button
+        onClick={() => {
+          // TODO BAN-85 — initiate real call transfer over the telephony
+          // backend. Today this is a labelled placeholder.
+        }}
+        title="Transfer call — telephony pending (BAN-85)"
+        className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-[#6B6B66] hover:text-[#B8945F] transition-opacity flex-shrink-0"
+      >
+        <ArrowRightLeft className="w-3 h-3" /> Transfer
+      </button>
+    </li>
+  );
 }
 
 export default function IntakeDashboard({
@@ -988,7 +1140,15 @@ export default function IntakeDashboard({
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="space-y-4">
+    /*
+     * Prompt 92 — the StaffDirectory rail has been merged INTO ClockHub
+     * as its leftmost column, so the dashboard body returns to a single
+     * full-width column. Order: greeting → action row → ClockHub (which
+     * now contains the directory + priority + comms + clock/appts) →
+     * Schedule & Task card → Week calendar. The earlier two-column page
+     * grid + <aside> wrapper (Prompts 89 + 90) is gone.
+     */
+    <div className="space-y-4 min-w-0">
       {/*
         TOPMOST — greeting line. Was previously inside the header-row beside
         the comms pill + clock + action buttons; pulled out so the dashboard
@@ -1096,6 +1256,7 @@ export default function IntakeDashboard({
         timeClock={timeClock}
         timeClockActions={timeClockActions}
         sharedTasksCount={sharedTasks.length}
+        staffPool={staffPool}
         onOpenMessagingPanel={onOpenView}
         onOpenPhoneDialer={() => setPhonePopoverOpen(true)}
         onOpenTasks={() => { /* the task queue is the next section below */ }}
@@ -1230,6 +1391,7 @@ function ClockHub({
   staffMsgs, clientThreads,
   timeClock, timeClockActions,
   sharedTasksCount,
+  staffPool,
   onOpenMessagingPanel, onOpenPhoneDialer, onOpenTasks,
   onRequestTimeOff,
 }: {
@@ -1241,6 +1403,10 @@ function ClockHub({
   timeClock: TimeClockState;
   timeClockActions: TimeClockActions;
   sharedTasksCount: number;
+  // Prompt 92 — staffPool drives the embedded StaffDirectory column
+  // (the leftmost column inside this card). Same array the dashboard
+  // already loads from intake_leads → staff_members.
+  staffPool: SchedulerStaffDetail[];
   onOpenMessagingPanel: (view: "messages" | "staff_comms") => void;
   onOpenPhoneDialer: () => void;
   onOpenTasks: () => void;
@@ -1276,14 +1442,111 @@ function ClockHub({
     weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ,
   });
 
+  // Prompt 89 — DND visual toggle (local state only). Real notification
+  // silencing + reflecting DND to other staff is BAN-85 (telephony +
+  // presence backend). Today this is purely an indicator.
+  const [dnd, setDnd] = useState(false);
+
+  // Prompt 89 — work-clock states. Drive the EXISTING TimeClockActions —
+  // real, not stubs. The labeled buttons below replace the previous
+  // ClockBubble pill (which hid clock-out/lunch/break behind a popup).
+  const isClockedIn = timeClock.clockedInAt != null;
+  const onLunch     = timeClock.onLunchSince != null;
+  const onBreak     = timeClock.onBreakSince != null;
+
   return (
     <BubbleCard
       title="Now"
       icon={<Clock className="w-4 h-4" />}
     >
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* LEFT — time + date + work-clock pill + upcoming appointments */}
-        <div className="lg:col-span-4 min-w-0 space-y-3">
+        {/* LEFTMOST — Prompt 92: StaffDirectory merged in as a true
+            column of the NOW card. Renders without its own Card
+            wrapper (embedded mode) so the four columns read as one
+            continuous surface. No left border (it IS the left edge).
+            On narrow viewports it stacks above the other columns. */}
+        <div className="lg:col-span-3 min-w-0">
+          <StaffDirectory staffPool={staffPool} embedded />
+        </div>
+
+        {/* Priority queue — Prompt 89 placed this column here; Prompt
+            92 narrowed its span (col-span-3 → col-span-2) to make
+            room for the directory column and added the standard
+            lg:border-l lg:pl-5 divider so all four internal columns
+            are separated by consistent dividers. */}
+        <div className="lg:col-span-2 min-w-0 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
+            Priority queue · <span className="text-[#FAFAF7]">{totalTasks}</span> open
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {(["red", "orange", "yellow", "blue"] as const).map(color => {
+              const cfg = COLOR_CFG[color];
+              const n = counts[color];
+              return (
+                <div key={color} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                  <span className="text-[10px] text-[#6B6B66] flex-1 truncate">{cfg.label}</span>
+                  <span className={`text-xs font-bold flex-shrink-0 tabular-nums ${n > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>
+                    {n}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[9px] text-[#6B6B66] italic mt-2 leading-snug">
+            Same RED / ORANGE / YELLOW / BLUE tiers as the centre task list.
+          </p>
+        </div>
+
+        {/* MIDDLE — full icon row (bigger glyphs) + DND toggle + compact
+            messages preview. Replaces the removed standalone messaging
+            panel. */}
+        <div className="lg:col-span-4 min-w-0 space-y-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CommsPillBar
+              staffMsgs={staffMsgs}
+              clientThreads={clientThreads}
+              sharedTasksCount={sharedTasksCount}
+              onOpenMessagingPanel={onOpenMessagingPanel}
+              onOpenPhoneDialer={onOpenPhoneDialer}
+              onOpenTasks={onOpenTasks}
+              size="lg"
+            />
+            {/* Prompt 89 — DND visual toggle. Lives next to phone controls.
+                Backend (real notification silencing + reflecting DND to
+                other staff over telephony presence) lands with BAN-85. */}
+            <button
+              type="button"
+              onClick={() => {
+                // TODO BAN-85 — wire to real notification-silencing +
+                // broadcast DND state to other staff over telephony
+                // presence. Today: visual toggle only.
+                setDnd(d => !d);
+              }}
+              title={dnd ? "Do Not Disturb is ON — visual only (real silencing lands with BAN-85)" : "Toggle Do Not Disturb (visual only — BAN-85)"}
+              aria-pressed={dnd}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-widest border transition-colors ${
+                dnd
+                  ? "bg-red-900/30 border-red-700/60 text-red-300"
+                  : "bg-[#1A1A18] border-[#2A2A28] text-[#6B6B66] hover:text-[#FAFAF7] hover:border-[#3A3A36]"
+              }`}
+            >
+              {dnd ? <BellOff className="w-3.5 h-3.5" /> : <BellRing className="w-3.5 h-3.5" />}
+              {dnd ? "DND on" : "DND"}
+            </button>
+          </div>
+          <CompactMessagesPreview
+            threads={clientThreads}
+            staffMsgs={staffMsgs}
+            onOpenView={onOpenMessagingPanel}
+          />
+        </div>
+
+        {/* RIGHT (was LEFT) — Prompt 89: time + work-clock buttons +
+            upcoming appointments. Prompt 92 narrowed the span
+            (col-span-4 → col-span-3) to keep the total at 12 after
+            the directory column was added on the left. */}
+        <div className="lg:col-span-3 min-w-0 space-y-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
           <div className="flex items-baseline gap-3 flex-wrap">
             <p className="text-3xl font-bold text-[#FAFAF7] tabular-nums leading-none">
               {timeLabel}
@@ -1293,14 +1556,79 @@ function ClockHub({
             </p>
           </div>
 
-          {/* Work-clock pill (shared shell ClockBubble) — kept inline so
-              clock-in/out + lunch/break/PTO/STO are still reachable now
-              that the old red AttentionBubble is gone. */}
-          <ClockBubble
-            state={timeClock}
-            actions={timeClockActions}
-            onRequestTimeOff={onRequestTimeOff}
-          />
+          {/* Prompt 89 — labeled work-clock buttons. Replaces the
+              previous ClockBubble pill (which hid actions inside a
+              popup). Drives the EXISTING TimeClockActions — real,
+              backed by the same in-session state. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isClockedIn && (
+              <button
+                onClick={timeClockActions.clockIn}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> Clock in
+              </button>
+            )}
+            {isClockedIn && !onLunch && !onBreak && (
+              <>
+                <button
+                  onClick={timeClockActions.startBreak}
+                  title="Start a break — drives the existing time-clock state"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded bg-sky-900/30 hover:bg-sky-900/50 text-sky-200 border border-sky-700/40 transition-colors"
+                >
+                  <Coffee className="w-3.5 h-3.5" /> I'm going on break
+                </button>
+                <button
+                  onClick={timeClockActions.startLunch}
+                  title="Start lunch — drives the existing time-clock state"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded bg-amber-900/30 hover:bg-amber-900/50 text-amber-200 border border-amber-700/40 transition-colors"
+                >
+                  <Coffee className="w-3.5 h-3.5" /> I'm going on lunch
+                </button>
+                <button
+                  onClick={timeClockActions.clockOut}
+                  title="End your shift"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-[#3A1E1E] hover:bg-[#4A2424] text-[#FAFAF7] border border-red-900/40 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Clock out
+                </button>
+              </>
+            )}
+            {onLunch && (
+              <button
+                onClick={timeClockActions.endLunch}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> End lunch
+              </button>
+            )}
+            {onBreak && (
+              <button
+                onClick={timeClockActions.endBreak}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> End break
+              </button>
+            )}
+          </div>
+          {/* Compact request-time-off line — routes to MyScheduleTab's
+              TimeOffTab so the PTO/STO form is still reachable now that
+              the ClockBubble popup is gone. */}
+          <div className="flex items-center gap-3 text-[10px] text-[#6B6B66]">
+            <button
+              onClick={() => onRequestTimeOff("pto")}
+              className="hover:text-[#FAFAF7] transition-colors"
+            >
+              Request PTO
+            </button>
+            <span>·</span>
+            <button
+              onClick={() => onRequestTimeOff("sto")}
+              className="hover:text-[#FAFAF7] transition-colors"
+            >
+              Request STO
+            </button>
+          </div>
 
           {upcoming.length === 0 ? (
             <p className="text-[11px] text-[#6B6B66] italic">
@@ -1347,49 +1675,6 @@ function ClockHub({
               })}
             </ul>
           )}
-        </div>
-
-        {/* MIDDLE — full icon row + compact messages preview. Replaces the
-            removed standalone ConsolidatedMessagingWidget. */}
-        <div className="lg:col-span-5 min-w-0 space-y-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
-          <CommsPillBar
-            staffMsgs={staffMsgs}
-            clientThreads={clientThreads}
-            sharedTasksCount={sharedTasksCount}
-            onOpenMessagingPanel={onOpenMessagingPanel}
-            onOpenPhoneDialer={onOpenPhoneDialer}
-            onOpenTasks={onOpenTasks}
-          />
-          <CompactMessagesPreview
-            threads={clientThreads}
-            staffMsgs={staffMsgs}
-            onOpenView={onOpenMessagingPanel}
-          />
-        </div>
-
-        {/* RIGHT — folded priority-tier counts (compact glance) */}
-        <div className="lg:col-span-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
-            Priority queue · <span className="text-[#FAFAF7]">{totalTasks}</span> open
-          </p>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
-            {(["red", "orange", "yellow", "blue"] as const).map(color => {
-              const cfg = COLOR_CFG[color];
-              const n = counts[color];
-              return (
-                <div key={color} className="flex items-center gap-1.5">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
-                  <span className="text-[10px] text-[#6B6B66] flex-1 truncate">{cfg.label}</span>
-                  <span className={`text-xs font-bold flex-shrink-0 tabular-nums ${n > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>
-                    {n}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-          <p className="text-[9px] text-[#6B6B66] italic mt-2 leading-snug">
-            Same RED / ORANGE / YELLOW / BLUE tiers as the centre task list.
-          </p>
         </div>
       </div>
     </BubbleCard>
