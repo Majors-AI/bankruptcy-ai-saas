@@ -72,6 +72,15 @@ const SECTIONS = [
   { id:"personalInfo", label:"Voluntary Petition",        icon:"📋", group:"Petition" },
   { id:"schedAB",      label:"Schedule A/B – All Assets", icon:"🏠", group:"Schedules" },
   { id:"schedC",       label:"Schedule C – Exemptions",   icon:"⚖️", group:"Schedules" },
+  // Prompt 94 (BAN-86) — Creditor source choice. Lives after Schedule C and
+  // before Schedule D. Always visible (no gate). The three options it
+  // offers — manual / PDF upload / iSoftpull — decide HOW creditors are
+  // captured in the next three sections (D / E / F): manual entry stays
+  // the default flow, PDF upload reuses the credit-report fan-out into
+  // schedD.creditors / schedEF_pri.creditors / schedEF_np.creditors with
+  // the _fromCreditReport flag, and iSoftpull is feature-flagged off
+  // until the API key lands (BAN-86 backend work).
+  { id:"creditorSource", label:"Creditor Source",         icon:"💳", group:"Schedules" },
   { id:"schedD",       label:"Schedule D – Secured Creditors", icon:"🔒", group:"Schedules" },
   { id:"schedEF_pri",  label:"Schedule E – Priority Creditors", icon:"⚡", group:"Schedules" },
   { id:"schedEF_np",   label:"Schedule F – Non-Priority Creditors", icon:"💳", group:"Schedules" },
@@ -4377,12 +4386,17 @@ function SectionVoluntaryPetition({d, u, imp, ImportBanner, clientId}) {
 }
 
 function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
+  void clientId; // Prompt 99 — reserved for future portal requests
   const sd = d.schedAB_re||{properties:[]};
   const props = sd.properties||[];
   const [selectedPropIdx, setSelectedPropIdx] = useState(0);
-  const [zillowPending, setZillowPending] = useState({}); // { [propIndex]: value string typed by client }
-  const [otherValPending, setOtherValPending] = useState({}); // { [propIndex]: {value:"",source:""} }
 
+  // Prompt 99 — BLANK_PROP keeps the existing field names for downstream
+  // back-compat (the auto-seed in SchedDHomeTab still reads mortgageBalance /
+  // hasHOA / hasSecondLien / secondLiens). New `liens` array added for the
+  // click-all-that-apply per-property lien identification step; hasHOA and
+  // hasSecondLien are now derived from `liens` so existing consumers
+  // continue to work without changes.
   const BLANK_PROP = {
     addr:"", city:"", state:"", zip:"", county:"", description:"", interest:"Fee Simple",
     value:"", debtorPct:"100", purchaseDate:"", purchaseDateConfirmed:false,
@@ -4393,6 +4407,8 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
     otherInfo:"", zillowVerifiedDate:"", otherValSource:"",
     hasHOA:"", hoaName:"", hoaMonthlyDues:"", hoaArrears:"", hoaBalanceConfirmed:false, hoaStatementUploaded:"",
     hasSecondLien:"", secondLiens:[],
+    liens:[], // NEW — Prompt 99 click-all-that-apply selections
+    _intakeConfirmed:false,
     inForeclosure:"", foreclosureSaleDateSet:"", foreclosureSaleDate:"",
     foreclosureTrustee:"", foreclosureTrusteePhone:"", foreclosureTrusteeEmail:"",
     foreclosureDocUploaded:false,
@@ -4420,36 +4436,121 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
     u("schedAB_re", { ...sd, properties: updated, _zipCountySynced: true });
   }
 
-  // Second lien helpers
-  const addLien = (i) => {
-    const lien = { lenderName:"", addr:"", balance:"", monthlyPayment:"", arrears:"", loanType:"HELOC / Second Mortgage", acct:"" };
-    updProp(i, "secondLiens", [...(props[i].secondLiens||[]), lien]);
-  };
-  const updLien = (pi, li, f, v) => {
-    const liens = [...(props[pi].secondLiens||[])];
-    liens[li] = {...liens[li],[f]:v};
-    updProp(pi, "secondLiens", liens);
-  };
-  const remLien = (pi, li) => {
-    const liens = [...(props[pi].secondLiens||[])];
-    liens.splice(li,1);
-    updProp(pi, "secondLiens", liens);
+  // Prompt 99 — per-property lien checklist. Click-all-that-apply. Identifies
+  // which loans/liens exist on the property; balances and creditor details
+  // are captured later on Schedule D. Back-compat: hasHOA + hasSecondLien
+  // are derived from `liens` so the existing Schedule D auto-seed keeps
+  // working until that flow is reworked in the next phase to read `liens`
+  // directly.
+  const LIEN_TYPES = [
+    "1st mortgage",
+    "2nd mortgage",
+    "HELOC",
+    "IRS tax lien",
+    "state tax lien",
+    "HOA lien",
+    "judgment lien",
+  ];
+  const toggleLien = (pi, lt) => {
+    const current = props[pi].liens || [];
+    const next = current.includes(lt) ? current.filter(x => x !== lt) : [...current, lt];
+    const nextHasHOA       = next.includes("HOA lien") ? "yes" : "no";
+    const nextHasSecondLien = (next.includes("2nd mortgage") || next.includes("HELOC")) ? "yes" : "no";
+    const a = [...props];
+    a[pi] = { ...a[pi], liens: next, hasHOA: nextHasHOA, hasSecondLien: nextHasSecondLien };
+    u("schedAB_re", { ...sd, properties: a });
   };
 
   return (
     <div>
       {ImportBanner && <ImportBanner sectionKeys={["schedAB_re.hasRE","schedAB_re.properties"]}/>}
 
-      {/* Real Property Valuation Notice */}
-      <div className="border border-amber-400/30 bg-amber-400/5 rounded-xl px-4 py-4 mb-4 text-xs text-amber-100 leading-relaxed space-y-2">
-        <div className="flex items-center gap-2 mb-1">
-          <svg className="w-4 h-4 text-amber-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-          <span className="font-bold text-amber-300 text-xs uppercase tracking-wider">How to Value Your Real Estate</span>
-        </div>
-        <p><strong className="text-amber-200">What value do I use?</strong> Use the Zillow Zestimate — that is the amount the court trustee will most likely look at. If you think your home is worth a different amount, you can enter your own number, but you will need to explain why.</p>
-        <p className="text-amber-300/80 border-t border-amber-400/20 pt-2 mt-1"><strong>Important:</strong> You are responsible for giving accurate values. Putting wrong values on your bankruptcy paperwork can have serious legal consequences.</p>
-      </div>
+      {/* ─── PART 1 — Summary at top ─────────────────────────────────────── */}
+      {props.length > 0 && (() => {
+        const confirmed = sd.allREConfirmed;
+        const fmtMoney = (v) => v ? `$${parseFloat(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "—";
+        if (confirmed) {
+          return (
+            <div className="mb-5 rounded-2xl border border-green-500/40 bg-green-500/8 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-green-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  <div>
+                    <p className="text-sm font-bold text-green-300 mb-0.5">Real Estate Confirmed — {props.length} {props.length === 1 ? "property" : "properties"} listed</p>
+                    <p className="text-xs text-slate-400">All listed properties have been reviewed and confirmed.</p>
+                  </div>
+                </div>
+                <button type="button" onClick={() => u("schedAB_re", {...sd, allREConfirmed: false})}
+                  className="text-xs text-slate-500 hover:text-slate-300 underline transition-colors whitespace-nowrap flex-shrink-0">
+                  Make a change
+                </button>
+              </div>
+            </div>
+          );
+        }
+        return (
+          <div className="mb-5 rounded-2xl border border-slate-600 bg-slate-800/40 overflow-hidden">
+            <div className="px-5 py-3 border-b border-slate-700 flex items-center gap-2 bg-slate-800/60">
+              <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              <span className="text-xs font-bold text-white uppercase tracking-wider">Real Estate — Summary</span>
+              <span className="ml-auto text-xs text-slate-500">{props.length} {props.length === 1 ? "property" : "properties"}</span>
+            </div>
+            <div className="divide-y divide-slate-800">
+              {props.map((p, idx) => {
+                const missing = [!p.addr && "address", !p.value && "value"].filter(Boolean);
+                return (
+                  <div key={idx} className={`px-5 py-4 ${missing.length ? "bg-rose-500/4" : ""}`}>
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Property {idx + 1}</span>
+                        {missing.length > 0 && <span className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-full px-2 py-0.5">Missing: {missing.join(", ")}</span>}
+                      </div>
+                      <button type="button" onClick={() => setSelectedPropIdx(idx)}
+                        className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline transition-colors flex-shrink-0">
+                        Edit
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs">
+                      <div className="col-span-2 sm:col-span-1 flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Address</span><span className="text-white text-right sm:text-left">{[p.addr, p.city, p.state].filter(Boolean).join(", ") || <span className="text-rose-400 italic">Not entered</span>}</span></div>
+                      <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Market Value</span><span className="text-white">{p.value ? fmtMoney(p.value) : <span className="text-rose-400 italic">Not entered</span>}</span></div>
+                      <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Liens marked</span><span className="text-white text-right sm:text-left">{(p.liens && p.liens.length) ? p.liens.join(", ") : <span className="text-slate-500 italic">None</span>}</span></div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="px-5 py-4 border-t border-slate-700 bg-slate-900/40">
+              <button type="button" disabled={props.length === 0}
+                onClick={() => u("schedAB_re", {...sd, allREConfirmed: true})}
+                className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-sm font-bold rounded-xl transition-colors">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                This is all my real estate — everything looks good
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
+      {/* ─── PART 5 — Other real estate question, separate from primary hasRE ── */}
+      <div className="mb-5 rounded-2xl border border-slate-600 bg-slate-900/40 p-5">
+        <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Other real estate</p>
+        <p className="text-sm font-semibold text-white mb-2">Do you own any raw land, timeshares, or other real estate?</p>
+        <p className="text-xs text-slate-400 leading-relaxed mb-3">
+          This includes vacant land, vacation properties, time-shares, mobile homes, or any other real property besides what's already listed above.
+        </p>
+        <div className="flex gap-2 flex-wrap">
+          <button type="button"
+            onClick={() => { u("schedAB_re", {...sd, hasRE: "Yes", hasOtherRE: "yes", properties: [...props, {...BLANK_PROP}]}); setSelectedPropIdx(props.length); }}
+            className="px-4 py-2 rounded-xl bg-amber-400/15 border border-amber-400/40 text-amber-300 text-xs font-semibold hover:bg-amber-400/25 transition-colors">
+            Yes — add it now
+          </button>
+          <button type="button"
+            onClick={() => u("schedAB_re", {...sd, hasOtherRE: "no"})}
+            className={`px-4 py-2 rounded-xl border text-xs font-semibold transition-colors ${sd.hasOtherRE === "no" ? "bg-green-500/15 border-green-500/40 text-green-300" : "border-slate-600 text-slate-400 hover:border-slate-500"}`}>
+            No — nothing else
+          </button>
+        </div>
+      </div>
 
       <Card>
         <CardTitle icon="🏠" title="Real Property" sub="Do you own a home, land, rental property, mobile home, or time-share? Even if someone else's name is also on it, or if you owe more than it's worth — list it here."/>
@@ -4474,25 +4575,19 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
               </div>
             )}
 
-            {/* Property selector tabs */}
+            {/* Property selector + Add */}
             {props.length > 0 && (
               <div className="mb-4">
                 <div className="flex flex-wrap gap-2 mb-3">
                   {props.map((p, idx) => {
                     const propLabel = p.addr ? p.addr.split(",")[0] : `Property ${idx+1}`;
-                    const isComplete = !!(p.addr && p.value && p.hasSecondLien);
                     return (
                       <button key={idx} type="button" onClick={() => setSelectedPropIdx(idx)}
                         className={`flex items-center gap-1.5 px-3 py-2 rounded-xl border text-xs font-semibold transition-all ${
                           selectedPropIdx === idx
                             ? "bg-amber-400/20 border-amber-400/50 text-amber-300"
-                            : isComplete
-                              ? "bg-green-500/10 border-green-500/30 text-green-300 hover:border-green-400"
-                              : "border-slate-600 text-slate-400 hover:border-slate-500"
+                            : "border-slate-600 text-slate-400 hover:border-slate-500"
                         }`}>
-                        {isComplete && selectedPropIdx !== idx && (
-                          <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-                        )}
                         {propLabel}
                       </button>
                     );
@@ -4506,1207 +4601,144 @@ function SectionSchedAB_RE({d, u, imp, ImportBanner, clientId}) {
               </div>
             )}
 
-            {props.map((p,i) => (
-              i !== selectedPropIdx ? null :
-              <div key={i} className="border border-slate-600 rounded-2xl overflow-hidden mb-4">
-                {/* Header */}
-                <div className="flex justify-between items-center px-5 py-3 bg-slate-800/60 border-b border-slate-700">
-                  <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
-                    Property {i+1}{p.description ? ` — ${p.description}` : ""}
-                    {imp&&imp("schedAB_re.properties")&&i===0 ? <span className="ml-2 text-green-400 text-xs normal-case tracking-normal font-normal">from intake</span> : null}
-                  </span>
-                  <RemBtn onClick={()=>{ remProp(i); setSelectedPropIdx(Math.max(0, i-1)); }}/>
-                </div>
-
-                {/* ── Per-property tab bar ── */}
-                {(() => {
-                  const PROP_TABS = [
-                    { id:"location", label:"Location & Value", icon:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg> },
-                    { id:"creditors", label:"Creditors", icon:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg> },
-                    { id:"ownership", label:"Ownership", icon:<svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg> },
-                  ];
-                  const activeTab = p._propTab || "location";
-
-                  // ── Completeness ──
-                  const valFilled = !!(p.value && (p.zillowVerifiedDate || p.otherValSource || p._valHelpSent));
-                  const credFilled = !!(p.mortgageBalance && p.mortgageBalanceUpdated && p.monthlyPayment && p.mortgageCurrent);
-                  const ownFilled = !!(p.description && p.interest && p.purchaseDate);
-
-                  // ── Staleness (30 days) ──
-                  // Value: use zillowVerifiedDate if present, else otherValSource has no date so check _valConfirmedAt
-                  const valStale = valFilled && !p._valHelpSent && isStaleDate(p.zillowVerifiedDate || p._valConfirmedAt);
-                  // Mortgage: statement date is on the statement itself — if it's >30 days, data is stale
-                  const credStale = credFilled && isStaleDate(p.mortgageStatementDate || p._stmtConfirmedAt);
-                  // Ownership: confirmed once and static — stale only if purchaseDateConfirmed was never done
-                  const ownStale = false; // ownership rarely changes — no auto-expiry
-
-                  const tabDone  = { location: valFilled && !valStale,  creditors: credFilled && !credStale,  ownership: ownFilled && !ownStale  };
-                  const tabStale = { location: valStale,                 creditors: credStale,                 ownership: false };
-                  const tabEmpty = { location: !valFilled,               creditors: !credFilled,               ownership: !ownFilled };
-
-                  // Tab button state: active | stale | done | empty
-                  const tabBtnClass = (id) => {
-                    if (activeTab === id)   return "border-amber-400 text-amber-300 bg-amber-400/5";
-                    if (tabStale[id])       return "border-orange-400/60 text-orange-300 hover:text-orange-200";
-                    if (tabDone[id])        return "border-green-500/50 text-green-300 hover:text-green-200";
-                    return "border-red-500/40 text-red-400 hover:text-red-300";
-                  };
-
-                  return (
-                    <>
-                      <div className="flex border-b border-slate-700 bg-slate-900/30">
-                        {PROP_TABS.map(t => (
-                          <button key={t.id} type="button"
-                            onClick={() => updProp(i, "_propTab", t.id)}
-                            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 text-xs font-semibold transition-all border-b-2 ${tabBtnClass(t.id)}`}>
-                            {t.icon}
-                            <span className="hidden sm:inline">{t.label}</span>
-                            {tabDone[t.id] && activeTab !== t.id && <svg className="w-3 h-3 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>}
-                            {tabStale[t.id] && activeTab !== t.id && <svg className="w-3 h-3 text-orange-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>}
-                            {tabEmpty[t.id] && activeTab !== t.id && <svg className="w-3 h-3 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>}
-                          </button>
-                        ))}
-                      </div>
-                      <div className="p-5 space-y-4">
-                      {/* ─── TAB: Location & Value ─── */}
-                      {activeTab === "location" && (
-                      <div>
-                      {/* Mandatory / stale banner */}
-                      {(tabEmpty.location || tabStale.location) && (
-                        <div className={`mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3 text-xs leading-relaxed ${tabStale.location ? "bg-orange-500/10 border border-orange-500/30 text-orange-200" : "bg-red-500/10 border border-red-500/30 text-red-200"}`}>
-                          <svg className={`w-4 h-4 shrink-0 mt-0.5 ${tabStale.location ? "text-orange-400" : "text-red-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                          <div>
-                            {tabStale.location
-                              ? <><strong className={`${tabStale.location ? "text-orange-300" : "text-red-300"}`}>Property value is outdated</strong> — the confirmed value is more than 30 days old. Please re-verify the current value from Zillow, your county assessor, or another approved source before proceeding.</>
-                              : <><strong className="text-red-300">Required — property value not confirmed.</strong> You must confirm the current market value of this property before this section can be marked complete.</>
-                            }
-                          </div>
-                        </div>
-                      )}
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Property Location</p>
-                  <F label="Street Address" required imported={imp&&i===0&&imp("schedAB_re.properties")}><TI value={p.addr} onChange={v=>updProp(i,"addr",v)} placeholder="123 Oak Lane"/></F>
-                  <Grid3>
-                    <F label="City" required imported={imp&&i===0&&imp("schedAB_re.properties")}><TI value={p.city} onChange={v=>updProp(i,"city",v)} placeholder="City"/></F>
-                    <F label="State" required imported={imp&&i===0&&imp("schedAB_re.properties")}><SEL value={p.state} onChange={v=>updProp(i,"state",v)} options={US_STATES}/></F>
-                    <F label="ZIP" required imported={i===0&&!!d.petition?.zip}><TI value={p.zip||""} onChange={v=>updProp(i,"zip",v)} placeholder="ZIP"/></F>
-                  </Grid3>
-                  <F label="County" imported={i===0&&!!d.petition?.county}><TI value={p.county||""} onChange={v=>updProp(i,"county",v)} placeholder="County name"/></F>
-
-                  {/* Current Home Value — confirmed by client from Zillow or other source */}
-                  <div className="border border-slate-700 rounded-xl p-4 mt-2 bg-slate-800/40">
-                    <p className="text-xs font-semibold text-white mb-0.5">Current Home Value</p>
-                    <p className="text-xs text-slate-400 mb-3 leading-relaxed">
-                      Visit <strong className="text-white">Zillow.com</strong>, search for this property, and enter the <strong className="text-white">Zestimate</strong> shown. If you have a different documented source, you may use that instead.
-                    </p>
-
-                    {/* ── Already confirmed ── */}
-                    {(p.zillowVerifiedDate || p.otherValSource) ? (
-                      <div>
-                        <div className="flex items-start gap-2 text-xs text-green-300 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2.5">
-                          <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                          <span className="flex-1 leading-relaxed">{p.otherInfo || (p.zillowVerifiedDate ? `Zillow Zestimate of $${Number(p.value||0).toLocaleString()} confirmed by debtor on ${p.zillowVerifiedDate}` : `Value of $${Number(p.value||0).toLocaleString()} provided by debtor — Source: ${p.otherValSource}`)}</span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              updProp(i,"zillowVerifiedDate","");
-                              updProp(i,"otherInfo","");
-                              updProp(i,"otherValSource","");
-                              updProp(i,"value","");
-                              updProp(i,"valueDisputeReason",undefined);
-                              setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                              setZillowPending(prev => { const n={...prev}; delete n[i]; return n; });
-                            }}
-                            className="text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0 ml-2 text-xs"
-                          >change</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-
-                        {/* Option A — Zillow (primary, recommended) */}
-                        <div className="border border-blue-500/30 rounded-xl p-4 bg-blue-500/5">
-                          <div className="flex items-start gap-2 mb-3">
-                            <div className="w-5 h-5 rounded-full bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-xs font-bold text-blue-300 flex-shrink-0 mt-0.5">A</div>
-                            <div>
-                              <p className="text-xs font-semibold text-white mb-0.5">Zillow Zestimate <span className="ml-1 text-blue-300 font-normal">(recommended)</span></p>
-                              <p className="text-xs text-slate-400 leading-relaxed">Visit Zillow, search for this property, and enter the Zestimate value below.</p>
-                            </div>
-                          </div>
-                          <a
-                            href={`https://www.zillow.com/homes/${encodeURIComponent([p.addr,p.city,p.state,p.zip].filter(Boolean).join(", "))}_rb/`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 underline mb-3 transition-colors"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
-                            Open Zillow for this address
-                          </a>
-                          <p className="text-xs text-slate-500 mb-2">After visiting Zillow, enter the Zestimate shown on the page:</p>
-                          <div className="flex gap-2 items-center">
-                            <span className="text-slate-400 text-sm font-semibold">$</span>
-                            <input
-                              type="number"
-                              className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-blue-400"
-                              placeholder="Enter Zestimate from Zillow"
-                              value={zillowPending[i] !== undefined ? zillowPending[i] : ""}
-                              onChange={e => setZillowPending(prev => ({...prev, [i]: e.target.value}))}
-                            />
-                            <button
-                              type="button"
-                              disabled={!zillowPending[i]}
-                              onClick={() => {
-                                const val = zillowPending[i];
-                                const today = new Date();
-                                const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
-                                const formatted = `$${Number(val).toLocaleString()}`;
-                                updProp(i, "value", val);
-                                updProp(i, "otherInfo", `Zillow Zestimate of ${formatted} confirmed by Debtor on ${dateStr}.`);
-                                updProp(i, "zillowVerifiedDate", dateStr);
-                                setZillowPending(prev => { const n={...prev}; delete n[i]; return n; });
-                              }}
-                              className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 hover:bg-blue-500/30 text-blue-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed flex-shrink-0"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                              Confirm
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Option B — Licensed / Written Appraisal */}
-                        {(() => {
-                          const pend = otherValPending[i];
-                          const isThisOption = pend?.optionKey === "appraisal";
-                          return (
-                            <div className="border border-slate-600 hover:border-amber-500/40 rounded-xl p-4 transition-colors bg-slate-900/30">
-                              <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-xs font-bold text-amber-300 flex-shrink-0 mt-0.5">B</div>
-                                <div>
-                                  <p className="text-xs font-semibold text-white mb-0.5">Licensed or Written Appraisal</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">You have a written appraisal from a licensed appraiser, broker price opinion, or comparable market analysis.</p>
-                                </div>
-                              </div>
-                              {isThisOption ? (
-                                <div className="mt-2 space-y-2.5">
-                                  <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2.5 text-xs text-red-200 leading-relaxed">
-                                    <p className="font-bold text-red-300 mb-1">Important — Please Read Before Proceeding</p>
-                                    <p className="mb-1">Trustees frequently reference <strong className="text-white">Zillow</strong>. Our office <strong className="text-white">does not appraise assets</strong>. If your stated value is <em>higher</em> than Zillow's estimate, it may create <strong className="text-white">unexempt equity</strong> — the trustee could attempt to liquidate the asset to pay creditors. If <em>lower</em>, your attorney will need the documentation to defend it.</p>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Appraisal type <span className="text-red-400">*</span></label>
-                                    <select className="w-full bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-xs focus:outline-none focus:border-amber-400"
-                                      value={pend.source||""} onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],source:e.target.value}}))}>
-                                      <option value="">Select type…</option>
-                                      <option value="Licensed Appraisal">Licensed Appraisal</option>
-                                      <option value="Broker Price Opinion (BPO)">Broker Price Opinion (BPO)</option>
-                                      <option value="Comparative Market Analysis (CMA)">Comparative Market Analysis (CMA)</option>
-                                      <option value="Recent Purchase Price">Recent Purchase Price</option>
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Value from appraisal <span className="text-red-400">*</span></label>
-                                    <div className="flex gap-2 items-center">
-                                      <span className="text-slate-400 text-sm font-semibold">$</span>
-                                      <input type="number" className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-400"
-                                        placeholder="e.g. 290000" value={pend.value||""}
-                                        onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],value:e.target.value}}))}/>
-                                    </div>
-                                  </div>
-                                  <div className="flex gap-2">
-                                    <button type="button"
-                                      disabled={!pend.value || !pend.source}
-                                      onClick={() => {
-                                        const source = pend.source; const val = pend.value;
-                                        const today = new Date();
-                                        const dateStr = `${String(today.getMonth()+1).padStart(2,"0")}/${String(today.getDate()).padStart(2,"0")}/${today.getFullYear()}`;
-                                        const formatted = `$${Number(val).toLocaleString()}`;
-                                        updProp(i,"value",val); updProp(i,"otherValSource",source);
-                                        updProp(i,"_valConfirmedAt", new Date().toISOString());
-                                        updProp(i,"otherInfo",`Value of ${formatted} provided by Debtor on ${dateStr}. Source: ${source}. Note: Trustee may reference Zillow independently.`);
-                                        setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                                      }}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-amber-500/20 border border-amber-500/40 hover:bg-amber-500/30 text-amber-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                                      I understand — confirm this value
-                                    </button>
-                                    <button type="button" onClick={() => setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; })} className="text-slate-500 hover:text-slate-300 text-xs transition-colors px-2">cancel</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => setOtherValPending(prev => ({...prev,[i]:{value:"",source:"",optionKey:"appraisal"}}))}
-                                  className="mt-1 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 text-amber-300 text-xs font-semibold transition-all">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                                  I have a written appraisal
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {/* Option C — Request help */}
-                        {(() => {
-                          const pend = otherValPending[i];
-                          const isThisOption = pend?.optionKey === "help";
-                          const helpSent = p._valHelpSent;
-                          return (
-                            <div className={`border rounded-xl p-4 transition-colors ${helpSent ? "border-green-500/30 bg-green-500/5" : "border-slate-600 hover:border-slate-500 bg-slate-900/30"}`}>
-                              <div className="flex items-start gap-2 mb-2">
-                                <div className="w-5 h-5 rounded-full bg-slate-600/60 border border-slate-500 flex items-center justify-center text-xs font-bold text-slate-300 flex-shrink-0 mt-0.5">C</div>
-                                <div>
-                                  <p className="text-xs font-semibold text-white mb-0.5">I can't provide any of the above</p>
-                                  <p className="text-xs text-slate-400 leading-relaxed">If you're unable to access Zillow, obtain an appraisal, or look up your tax assessed value, send us a message explaining why and we will assist you.</p>
-                                </div>
-                              </div>
-                              {helpSent ? (
-                                <div className="flex items-center gap-2 text-xs text-green-400 mt-1">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                                  Message sent — your attorney will follow up with you.
-                                  <button type="button" onClick={() => { updProp(i,"_valHelpSent",false); setOtherValPending(prev => ({...prev,[i]:{optionKey:"help",reason:pend?.reason||""}})); }} className="ml-auto text-slate-500 hover:text-slate-300 underline">edit</button>
-                                </div>
-                              ) : isThisOption ? (
-                                <div className="mt-2 space-y-2">
-                                  <label className="block text-xs text-slate-400">Please explain in detail why you cannot provide a property value <span className="text-red-400">*</span></label>
-                                  <textarea rows={3}
-                                    className="w-full bg-slate-800 border border-slate-600 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 resize-none"
-                                    placeholder="e.g. This property is in a rural area not listed on Zillow, we have not had it appraised, and the county records are not available online. I need guidance on how to establish the value."
-                                    value={pend.reason||""}
-                                    onChange={e => setOtherValPending(prev => ({...prev,[i]:{...prev[i],reason:e.target.value}}))}
-                                  />
-                                  <div className="flex gap-2">
-                                    <button type="button"
-                                      disabled={!(pend.reason||"").trim()}
-                                      onClick={async () => {
-                                        const clientName = `${d.petition?.firstName||""} ${d.petition?.lastName||""}`.trim() || clientId;
-                                        const question = `PROPERTY VALUATION HELP REQUEST — Property ${i+1}: ${[p.addr,p.city,p.state].filter(Boolean).join(", ")}\n\nClient is unable to provide a property value. Reason provided:\n\n${pend.reason}`;
-                                        try {
-                                          await supabase.from("attorney_questions").insert({ client_id: clientId, client_name: clientName, question, status: "pending" });
-                                        } catch(_) {}
-                                        updProp(i,"_valHelpSent",true);
-                                        setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; });
-                                      }}
-                                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-blue-500/20 border border-blue-500/40 hover:bg-blue-500/30 text-blue-300 text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed">
-                                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
-                                      Send message to attorney
-                                    </button>
-                                    <button type="button" onClick={() => setOtherValPending(prev => { const n={...prev}; delete n[i]; return n; })} className="text-slate-500 hover:text-slate-300 text-xs transition-colors px-2">cancel</button>
-                                  </div>
-                                </div>
-                              ) : (
-                                <button type="button" onClick={() => setOtherValPending(prev => ({...prev,[i]:{optionKey:"help",reason:""}}))}
-                                  className="mt-1 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl bg-slate-800 border border-slate-600 hover:border-slate-500 text-slate-400 hover:text-slate-300 text-xs font-semibold transition-all">
-                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                                  Request help from our office
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })()}
-
-                        {!zillowPending[i] && !otherValPending[i] && !p._valHelpSent && (
-                          <p className="text-xs text-slate-500 italic">No value confirmed yet — choose an option above.</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <F label="Other Information" hint="Auto-filled when value is confirmed — you may also add additional notes">
-                    <TI value={p.otherInfo||""} onChange={v=>updProp(i,"otherInfo",v)} placeholder="e.g. Zillow Zestimate $348,000 confirmed by Debtor on 04/26/2026"/>
-                  </F>
-                </div>
-                )}
-
-                {/* ─── TAB: Ownership ─── */}
-                {activeTab === "ownership" && (
-                <div>
-                {/* Mandatory banner */}
-                {tabEmpty.ownership && (
-                  <div className="mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3 text-xs leading-relaxed bg-red-500/10 border border-red-500/30 text-red-200">
-                    <svg className="w-4 h-4 shrink-0 mt-0.5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                    <div><strong className="text-red-300">Required — ownership details incomplete.</strong> Property type, nature of interest, and date of ownership are all required before this section can be marked complete.</div>
-                  </div>
-                )}
-                {/* ── Ownership ── */}
-
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Ownership Details — Schedule A/B</p>
-                  {(() => {
-                    const PROP_TYPES = ["Single-Family Home","Duplex or Multi-Unit Building","Condominium or Cooperative","Manufactured or Mobile Home","Investment Property","Timeshare","Other"];
-                    const effective = p.description || "Single-Family Home";
-                    const isStandard = PROP_TYPES.includes(effective);
-                    const selVal = isStandard ? effective : "Other";
-                    const isConfirmed = !!p.descriptionConfirmed;
-                    const needsConfirm = !isConfirmed;
-                    return (
-                      <F label="What type of property is this?" imported={imp&&i===0&&imp("schedAB_re.properties")}>
-                        {needsConfirm && (
-                          <div className="mb-2 flex items-start gap-2 bg-blue-500/10 border border-blue-500/30 rounded-lg px-3 py-2">
-                            <svg className="w-3.5 h-3.5 text-blue-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                            <p className="text-xs text-blue-200">We set this to <strong className="text-white">{effective}</strong> based on your intake form. Is that correct? If not, choose a different type below.</p>
-                          </div>
-                        )}
-                        <SEL
-                          value={selVal}
-                          onChange={v => { updProp(i, "description", v); updProp(i, "descriptionConfirmed", true); }}
-                          options={PROP_TYPES}
-                          placeholder="Select property type..."
-                        />
-                        {selVal === "Other" && (
-                          <TI value={isStandard ? "" : p.description} onChange={v=>{ updProp(i,"description",v); updProp(i,"descriptionConfirmed",true); }} placeholder="Describe the property type..." className="mt-2"/>
-                        )}
-                        {!isConfirmed && (
-                          <button type="button" onClick={()=>updProp(i,"descriptionConfirmed",true)}
-                            className="mt-2 text-xs px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/30 text-green-300 hover:bg-green-500/25 transition-colors font-semibold">
-                            Yes, this is correct — confirm type
-                          </button>
-                        )}
-                        {isConfirmed && (
-                          <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                            Confirmed: {effective}
-                            <button type="button" onClick={()=>updProp(i,"descriptionConfirmed",false)} className="ml-2 text-slate-500 hover:text-slate-300 underline font-normal">change</button>
-                          </p>
-                        )}
-                      </F>
-                    );
-                  })()}
-                  {(() => {
-                    const INTEREST_TYPES = [
-                      { value:"Fee Simple",         example:"Most common — you own it outright, by yourself or with a spouse" },
-                      { value:"Joint Tenancy",       example:"You and one or more people own equal shares; if one dies, the survivor inherits automatically (e.g., you and your spouse on the deed)" },
-                      { value:"Tenancy in Common",   example:"You own a specific percentage share; each person's share can be sold or passed on separately (e.g., you own 50%, your sibling owns 50%)" },
-                      { value:"Tenancy by the Entirety", example:"Married couples only — both spouses own the whole property together; neither can sell without the other's consent" },
-                      { value:"Community Property",  example:"In community property states — property acquired during marriage is owned 50/50 by both spouses by law" },
-                      { value:"Life Estate",          example:"You have the right to live there for the rest of your life, but ownership transfers to someone else when you pass (common in estate planning)" },
-                      { value:"Contract for Deed",    example:"You are buying the property on a payment plan and you occupy it, but the seller still holds the legal title until it's paid off" },
-                      { value:"Land Trust",           example:"Legal title is held by a trust, but you are the beneficial owner — sometimes used for privacy or estate planning" },
-                      { value:"Equitable Interest",   example:"You have a beneficial or financial interest in the property but do not hold legal title (e.g., you paid for it but it's in someone else's name)" },
-                      { value:"Time Share",            example:"You own the right to use the property for a set period each year (e.g., one week per year at a vacation resort)" },
-                      { value:"Other",                 example:"Any ownership arrangement not described above — your attorney will help classify it" },
-                    ];
-                    const selected = INTEREST_TYPES.find(t => t.value === (p.interest || "Fee Simple")) || INTEREST_TYPES[0];
-                    const pct = parseFloat(p.debtorPct);
-                    const isPartial = !isNaN(pct) && pct < 100 && pct > 0;
-                    const coOwners = p.coOwners || [];
-                    const addCoOwner = () => updProp(i, "coOwners", [...coOwners, {name:"", relationship:"", pct:""}]);
-                    const updCoOwner = (ci, f, v) => { const a=[...coOwners]; a[ci]={...a[ci],[f]:v}; updProp(i,"coOwners",a); };
-                    const remCoOwner = (ci) => { const a=[...coOwners]; a.splice(ci,1); updProp(i,"coOwners",a); };
-                    const totalPct = (pct || 0) + coOwners.reduce((s,co) => s + (parseFloat(co.pct)||0), 0);
-                    const pctOk = Math.abs(totalPct - 100) < 0.01;
-                    return (
-                      <>
-                        <Grid2>
-                          <F label="Nature of Interest" hint="How is ownership of this property held? Check your deed if unsure.">
-                            <SEL
-                              value={p.interest || "Fee Simple"}
-                              onChange={v=>updProp(i,"interest",v)}
-                              options={INTEREST_TYPES.map(t=>({value:t.value, label:`${t.value} — ${t.example}`}))}
-                            />
-                            <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
-                              Not sure?{" "}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const county = p.county?.trim();
-                                  const state = p.state?.trim();
-                                  const query = [county ? `${county} County` : "", state, "county recorder property records"].filter(Boolean).join(" ");
-                                  window.open(`https://www.google.com/search?q=${encodeURIComponent(query)}`, "_blank");
-                                }}
-                                className="underline text-amber-400 hover:text-amber-300 transition-colors"
-                              >
-                                Look up your deed
-                              </button>
-                              {" "}to confirm.
-                            </p>
-                          </F>
-                          <F label="Your Ownership Percentage" hint="What percent of this property do you own? Enter 100 if you are the sole owner.">
-                            <div className="flex items-center gap-2">
-                              <TI value={p.debtorPct} onChange={v=>{ updProp(i,"debtorPct",v); if(parseFloat(v)>=100) updProp(i,"coOwners",[]); }} placeholder="100" className="w-24"/>
-                              <span className="text-xs text-slate-400">%</span>
-                            </div>
-                          </F>
-                        </Grid2>
-
-                        {/* Co-owner fields when debtor owns less than 100% */}
-                        {isPartial && (
-                          <div className="mt-3 border border-amber-400/25 rounded-xl p-4 bg-amber-400/5">
-                            <div className="flex items-start gap-2 mb-3">
-                              <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                              <div>
-                                <p className="text-xs font-bold text-amber-300">You listed {pct}% ownership — who owns the other {(100 - pct).toFixed(0)}%?</p>
-                                <p className="text-xs text-slate-400 mt-0.5 leading-relaxed">All ownership shares must add up to 100%. Please list every other co-owner below.</p>
-                              </div>
-                            </div>
-
-                            <div className="space-y-3">
-                              {coOwners.map((co, ci) => (
-                                <div key={ci} className="border border-slate-600 rounded-xl p-3 bg-slate-900/60">
-                                  <div className="flex items-center justify-between mb-2">
-                                    <p className="text-xs font-semibold text-slate-300">Co-Owner {ci + 1}</p>
-                                    <RemBtn onClick={()=>remCoOwner(ci)}/>
-                                  </div>
-                                  <Grid3>
-                                    <F label="Full Name"><TI value={co.name} onChange={v=>updCoOwner(ci,"name",v)} placeholder="e.g. Jane Smith"/></F>
-                                    <F label="Relationship to You"><TI value={co.relationship} onChange={v=>updCoOwner(ci,"relationship",v)} placeholder="e.g. Spouse, Parent, Sibling"/></F>
-                                    <F label="Their Ownership %">
-                                      <div className="flex items-center gap-2">
-                                        <TI value={co.pct} onChange={v=>updCoOwner(ci,"pct",v)} placeholder="e.g. 50" className="w-24"/>
-                                        <span className="text-xs text-slate-400">%</span>
-                                      </div>
-                                    </F>
-                                  </Grid3>
-                                </div>
-                              ))}
-                            </div>
-
-                            <button type="button" onClick={addCoOwner}
-                              className="mt-3 flex items-center gap-2 text-xs text-amber-400 hover:text-amber-300 border border-amber-400/30 hover:border-amber-400/60 rounded-xl px-3 py-2 transition-all bg-amber-400/5 hover:bg-amber-400/10">
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-                              Add Co-Owner
-                            </button>
-
-                            {/* Ownership total validation */}
-                            <div className={`mt-3 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold ${pctOk ? "bg-green-500/10 border border-green-500/30 text-green-300" : "bg-red-500/10 border border-red-500/30 text-red-300"}`}>
-                              {pctOk
-                                ? <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg> Ownership adds up to 100% — looks good.</>
-                                : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg> Total ownership is {totalPct.toFixed(0)}% — must equal 100%. Please adjust the percentages above.</>
-                              }
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                  <F label="Date of Ownership" hint="Exact date you acquired ownership — verify against deed or closing documents" imported={imp&&i===0&&!!p.purchaseDate}>
-                    <TI value={p.purchaseDate} onChange={v=>{ updProp(i,"purchaseDate",v); updProp(i,"purchaseDateConfirmed",false); }} placeholder="MM/DD/YYYY"/>
-                    {p.purchaseDate && !p.purchaseDateConfirmed && (
-                      <div className="mt-2 flex items-start gap-2 bg-amber-400/10 border border-amber-400/30 rounded-lg px-3 py-2">
-                        <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                        <div className="flex-1">
-                          <p className="text-xs text-amber-200 font-semibold mb-1">Date imported from intake — please confirm this is the exact date you acquired ownership.</p>
-                          <button type="button" onClick={()=>updProp(i,"purchaseDateConfirmed",true)} className="text-xs px-3 py-1 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 hover:bg-amber-400/30 font-semibold transition-all">Confirm this date is correct</button>
-                        </div>
-                      </div>
-                    )}
-                    {p.purchaseDateConfirmed && (
-                      <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                        Date confirmed by client.
-                      </p>
-                    )}
-                    {!p.purchaseDate && (
-                      <p className="text-xs text-amber-400/80 mt-1">Not provided at intake — please enter the exact date of ownership (month/day/year). Not sure? Search your address on <button type="button" onClick={()=>{ const addr = [p.address,p.city,p.state].filter(Boolean).join(", "); window.open(`https://www.zillow.com/homes/${encodeURIComponent(addr||"")}_rb/`, "_blank"); }} className="underline text-amber-300 hover:text-amber-200 transition-colors">Zillow</button> and check the Price History tab — it typically shows the sale date.</p>
-                    )}
-                  </F>
-                </div>
-                )}
-
-                {/* ─── TAB: Creditors ─── */}
-                {activeTab === "creditors" && (
-                <div>
-                {/* Mandatory / stale banner */}
-                {(tabEmpty.creditors || tabStale.creditors) && (
-                  <div className={`mb-4 flex items-start gap-2.5 rounded-xl px-4 py-3 text-xs leading-relaxed ${tabStale.creditors ? "bg-orange-500/10 border border-orange-500/30 text-orange-200" : "bg-red-500/10 border border-red-500/30 text-red-200"}`}>
-                    <svg className={`w-4 h-4 shrink-0 mt-0.5 ${tabStale.creditors ? "text-orange-400" : "text-red-400"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                    <div>
-                      {tabStale.creditors
-                        ? <><strong className="text-orange-300">Mortgage data is outdated</strong> — your statement is more than 30 days old. Please upload your most recent mortgage statement so we have the current balance, payment, and status.</>
-                        : <><strong className="text-red-300">Required — mortgage details incomplete.</strong> Current balance, monthly payment, and payment status are all required from your most recent mortgage statement.</>
-                      }
-                    </div>
-                  </div>
-                )}
-
-                {/* ── First Mortgage / Primary Lien ── */}
-                <div className="border-t border-slate-700 pt-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">First Mortgage / Primary Lien — Schedule D &amp; J</p>
-
-                  {/* Required fields notice */}
-                  <div className="bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3 mb-4 text-xs text-amber-200 leading-relaxed">
-                    <p className="font-semibold text-amber-300 mb-1">Three fields are required from your most recent mortgage statement:</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-amber-100">
-                      <span className={`flex items-center gap-1 ${p.mortgageBalance && p.mortgageBalanceUpdated ? "text-green-300" : ""}`}>
-                        {p.mortgageBalance && p.mortgageBalanceUpdated ? <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> : <span className="w-3 h-3 inline-block border border-amber-400/50 rounded-full"/>}
-                        Current balance
-                      </span>
-                      <span className={`flex items-center gap-1 ${p.monthlyPayment ? "text-green-300" : ""}`}>
-                        {p.monthlyPayment ? <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> : <span className="w-3 h-3 inline-block border border-amber-400/50 rounded-full"/>}
-                        Monthly payment
-                      </span>
-                      <span className={`flex items-center gap-1 ${p.mortgageCurrentConfirmed ? "text-green-300" : ""}`}>
-                        {p.mortgageCurrentConfirmed ? <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg> : <span className="w-3 h-3 inline-block border border-amber-400/50 rounded-full"/>}
-                        Payments current?
-                      </span>
-                    </div>
-                    <p className="mt-2 text-amber-200/70">Upload your statement below — we'll read it automatically. If upload isn't possible, enter the values manually then upload an accepted copy.</p>
-                  </div>
-
-                  {/* Statement upload — primary method */}
-                  <InlineStatementCapture
-                    title="Mortgage Statement"
-                    docType="mortgage_stmt"
-                    category="secured-creditors"
-                    contextRef={`property_${i}`}
-                    clientId={clientId}
-                    allowDefer={false}
-                    extractPrompt={`Extract from this mortgage statement and return JSON with these exact keys:
-{
-  "lender_name": "servicer or lender name as printed",
-  "account_number_last4": "last 4 digits of loan/account number only",
-  "current_balance": number or null,
-  "monthly_payment": number or null,
-  "statement_date": "MM/DD/YYYY or null",
-  "past_due_amount": number or null,
-  "payments_current": "Yes" or "No" or null
-}`}
-                    onExtracted={parsed => {
-                      if (!parsed) return;
-                      updProp(i,"_stmtExtracted", {
-                        lenderName: parsed.lender_name || null,
-                        lenderAcct: parsed.account_number_last4 || null,
-                        mortgageBalance: parsed.current_balance ? String(parsed.current_balance) : null,
-                        monthlyPayment: parsed.monthly_payment ? String(parsed.monthly_payment) : null,
-                        mortgageStatementDate: parsed.statement_date || null,
-                        mortgageArrears: (parsed.past_due_amount && parsed.past_due_amount > 0) ? String(parsed.past_due_amount) : null,
-                        mortgageCurrent: parsed.payments_current || null,
-                      });
-                      updProp(i,"_stmtConfirmed", false);
-                      updProp(i,"_stmtFieldDisputes", {});
-                      updProp(i,"_stmtOverrideMode", false);
-                    }}
-                  />
-
-                  {/* ── AI extraction preview ── */}
-                  {p._stmtExtracted && !p._stmtConfirmed && (() => {
-                    const ex = p._stmtExtracted;
-                    const disputes = p._stmtFieldDisputes || {};
-
-                    const FIELDS = [
-                      { key:"lenderName",           label:"Lender / Servicer Name",    fmt: v => v },
-                      { key:"lenderAcct",            label:"Account # (last 4)",        fmt: v => v },
-                      { key:"mortgageBalance",       label:"Current Balance",           fmt: v => `$${parseFloat(v).toLocaleString()}` },
-                      { key:"monthlyPayment",        label:"Monthly Payment",           fmt: v => `$${parseFloat(v).toLocaleString()}` },
-                      { key:"mortgageStatementDate", label:"Statement Date",            fmt: v => v },
-                      { key:"mortgageCurrent",       label:"Payments Current?",         fmt: v => v },
-                      { key:"mortgageArrears",       label:"Past Due / Arrears",        fmt: v => `$${parseFloat(v).toLocaleString()}` },
-                    ];
-
-                    const allConfirmed = FIELDS.filter(f => ex[f.key]).every(f => disputes[f.key]?.status === "confirmed" || (!disputes[f.key] && ex[f.key]));
-                    const anyPending = FIELDS.some(f => ex[f.key] && disputes[f.key]?.status === "pending");
-
-                    return (
-                      <div className="mt-3 border border-blue-500/30 bg-blue-500/5 rounded-2xl p-4">
-                        <div className="flex items-center gap-2 mb-3">
-                          <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                          <div>
-                            <p className="text-xs font-bold text-blue-300">AI read your statement — review each field below</p>
-                            <p className="text-xs text-slate-400 mt-0.5">Confirm each value is correct. If anything looks wrong, click "This is wrong" next to that field.</p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 mb-4">
-                          {FIELDS.filter(f => ex[f.key]).map(f => {
-                            const dispute = disputes[f.key] || {};
-                            const isConfirmed = dispute.status === "confirmed";
-                            const isPending = dispute.status === "pending";
-                            const isRetrying = dispute.status === "retrying";
-                            const isOverride = dispute.status === "override";
-
-                            return (
-                              <div key={f.key} className={`rounded-xl border px-3 py-2.5 transition-all ${
-                                isConfirmed ? "border-green-500/30 bg-green-500/5"
-                                : isPending || isRetrying ? "border-amber-400/40 bg-amber-400/5"
-                                : isOverride ? "border-slate-500 bg-slate-800/60"
-                                : "border-slate-700 bg-slate-800/40"
-                              }`}>
-                                <div className="flex items-start justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <p className="text-xs text-slate-400 mb-0.5">{f.label}</p>
-                                    {isOverride ? (
-                                      <div className="space-y-1.5 mt-1">
-                                        <input
-                                          type="text"
-                                          className="w-full bg-slate-900 border border-slate-600 rounded-lg px-2 py-1.5 text-white text-xs focus:outline-none focus:border-blue-400"
-                                          placeholder="Enter correct value"
-                                          value={dispute.correctedValue || ""}
-                                          onChange={e => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{...dispute,correctedValue:e.target.value}})}
-                                        />
-                                        <div className="flex gap-2">
-                                          <button type="button"
-                                            disabled={!dispute.correctedValue}
-                                            onClick={() => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{status:"confirmed",correctedValue:dispute.correctedValue,wasOverridden:true}})}
-                                            className="text-xs px-2.5 py-1 rounded-lg bg-green-500/20 border border-green-500/30 text-green-300 font-semibold transition-all disabled:opacity-40"
-                                          >Use this value</button>
-                                          <button type="button"
-                                            onClick={() => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{}})}
-                                            className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
-                                          >cancel</button>
-                                        </div>
-                                      </div>
-                                    ) : (
-                                      <p className={`text-sm font-semibold ${isConfirmed ? "text-green-300" : "text-white"}`}>
-                                        {dispute.correctedValue && dispute.wasOverridden ? dispute.correctedValue : f.fmt(ex[f.key])}
-                                        {dispute.wasOverridden && <span className="ml-1.5 text-xs font-normal text-amber-400">(client corrected)</span>}
-                                      </p>
-                                    )}
-                                  </div>
-                                  <div className="flex items-center gap-1.5 shrink-0">
-                                    {isConfirmed ? (
-                                      <span className="flex items-center gap-1 text-xs text-green-400 font-semibold">
-                                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-                                        Confirmed
-                                      </span>
-                                    ) : isPending ? (
-                                      <div className="text-right space-y-1">
-                                        <p className="text-xs text-amber-300 font-semibold">What's wrong?</p>
-                                        <textarea
-                                          rows={2}
-                                          className="w-44 bg-slate-900 border border-amber-400/40 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-400 resize-none"
-                                          placeholder="Describe the issue..."
-                                          value={dispute.note || ""}
-                                          onChange={e => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{...dispute,note:e.target.value}})}
-                                        />
-                                        <div className="flex gap-1 justify-end flex-wrap">
-                                          <button type="button"
-                                            disabled={!dispute.note}
-                                            onClick={() => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{...dispute,status:"override"}})}
-                                            className="text-xs px-2 py-1 rounded-lg bg-amber-400/20 border border-amber-400/30 text-amber-300 font-semibold disabled:opacity-40 transition-all"
-                                          >I'll enter it myself</button>
-                                          <button type="button"
-                                            onClick={() => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{}})}
-                                            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-1"
-                                          >cancel</button>
-                                        </div>
-                                      </div>
-                                    ) : isOverride ? null : (
-                                      <button type="button"
-                                        onClick={() => updProp(i,"_stmtFieldDisputes",{...disputes,[f.key]:{status:"pending",note:""}})}
-                                        className="text-xs text-slate-500 hover:text-red-400 transition-colors underline whitespace-nowrap"
-                                      >This is wrong</button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {/* Confirm all button */}
-                        {!anyPending && (
-                          <button type="button"
-                            onClick={() => {
-                              const ex2 = p._stmtExtracted;
-                              const disp = p._stmtFieldDisputes || {};
-                              const get = (key) => disp[key]?.wasOverridden ? disp[key].correctedValue : (ex2[key] || null);
-                              if (get("lenderName"))           updProp(i,"lenderName",              get("lenderName"));
-                              if (get("lenderAcct"))           updProp(i,"lenderAcct",              get("lenderAcct"));
-                              if (get("mortgageBalance"))      updProp(i,"mortgageBalance",         get("mortgageBalance"));
-                              if (get("monthlyPayment"))       updProp(i,"monthlyPayment",          get("monthlyPayment"));
-                              if (get("mortgageStatementDate")) updProp(i,"mortgageStatementDate", get("mortgageStatementDate"));
-                              if (get("mortgageArrears"))      updProp(i,"mortgageArrears",         get("mortgageArrears"));
-                              if (get("mortgageCurrent"))      { updProp(i,"mortgageCurrent", get("mortgageCurrent")); updProp(i,"mortgageCurrentConfirmed", true); }
-                              updProp(i,"mortgageBalanceUpdated", true);
-                              updProp(i,"_stmtConfirmed", true);
-                              updProp(i,"_stmtConfirmedAt", new Date().toISOString());
-                              const hadOverrides = Object.values(disp).some(d => d.wasOverridden);
-                              if (hadOverrides) updProp(i,"_stmtNeedsAttorneyReview", true);
-                            }}
-                            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30 font-semibold text-xs transition-all"
-                          >
-                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                            All values are correct — apply to my file
-                          </button>
-                        )}
-                        {anyPending && (
-                          <p className="text-xs text-amber-300 text-center">Resolve all flagged fields before confirming.</p>
-                        )}
-                      </div>
-                    );
-                  })()}
-
-                  {/* Statement confirmed summary */}
-                  {p._stmtConfirmed && (
-                    <div className="mt-2 flex items-center justify-between bg-green-500/8 border border-green-500/20 rounded-xl px-3 py-2">
-                      <p className="text-xs text-green-400 flex items-center gap-1.5">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                        Statement data confirmed and applied.
-                      </p>
-                      <div className="flex items-center gap-2">
-                        {p._stmtNeedsAttorneyReview && (
-                          <span className="text-xs text-amber-300 bg-amber-400/10 border border-amber-400/30 rounded-full px-2.5 py-0.5 font-semibold">Attorney review flagged</span>
-                        )}
-                        <button type="button" onClick={()=>{ updProp(i,"_stmtConfirmed",false); updProp(i,"_stmtFieldDisputes",{}); }} className="text-xs text-slate-500 hover:text-slate-300 underline">re-review</button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Manual entry fields — always visible; required if no statement confirmed */}
-                  <div className={`mt-4 space-y-3 ${!p._stmtConfirmed ? "border border-amber-400/20 rounded-xl p-4 bg-amber-400/3" : ""}`}>
-                    {!p._stmtConfirmed && (
-                      <p className="text-xs text-amber-300 font-semibold mb-1">
-                        Enter the following from your most recent mortgage statement, then upload a copy above.
-                      </p>
-                    )}
-                    <Grid3>
-                      <F label="Lender / Servicer Name" imported={imp&&i===0&&!!p.lenderName}>
-                        <TI value={p.lenderName} onChange={v=>updProp(i,"lenderName",v)} placeholder="e.g. Wells Fargo Home Mortgage"/>
-                        {p.lenderName && <LenderPortalLink lenderName={p.lenderName} className="text-blue-400 mt-1"/>}
-                      </F>
-                      <F label="Lender / Creditor Address">
-                        <TI value={p.lenderAddr||""} onChange={v=>updProp(i,"lenderAddr",v)} placeholder="e.g. P.O. Box 10335, Des Moines, IA 50306"/>
-                      </F>
-                      <F label="Loan / Account Number (last 4)">
-                        <TI value={p.lenderAcct} onChange={v=>updProp(i,"lenderAcct",v)} placeholder="XXXX"/>
-                      </F>
-                    </Grid3>
-                    <Grid2>
-                      <F label="Statement Date" hint="Date printed on your most recent mortgage statement">
-                        <TI value={p.mortgageStatementDate||""} onChange={v=>updProp(i,"mortgageStatementDate",v)} placeholder="MM/DD/YYYY"/>
-                      </F>
-                    </Grid2>
-                    {p.mortgageBalance && !p.mortgageBalanceUpdated && (
-                      <div className="flex items-start gap-2 bg-amber-400/10 border border-amber-400/30 rounded-xl px-3 py-2.5">
-                        <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                        <p className="text-xs text-slate-300 leading-relaxed"><strong className="text-amber-300">Balance from intake — must be updated.</strong> Enter the current balance from your most recent mortgage statement.</p>
-                      </div>
-                    )}
-                    <Grid3>
-                      <F label="Current Mortgage Balance" required imported={imp&&i===0&&!!p.mortgageBalance}>
-                        <DI value={p.mortgageBalance} onChange={v=>{ updProp(i,"mortgageBalance",v); updProp(i,"mortgageBalanceUpdated",true); }}/>
-                        {p.mortgageBalance && p.mortgageBalanceUpdated && <p className="text-xs text-green-400 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>Updated</p>}
-                        {!p.mortgageBalance && <p className="text-xs text-amber-400 mt-1">Required — enter from statement</p>}
-                      </F>
-                      <F label="Monthly Payment" required imported={imp&&i===0&&!!p.monthlyPayment}>
-                        <DI value={p.monthlyPayment} onChange={v=>updProp(i,"monthlyPayment",v)}/>
-                        {!p.monthlyPayment && <p className="text-xs text-amber-400 mt-1">Required — enter from statement</p>}
-                      </F>
-                      <F label="Payments Current?" required imported={imp&&i===0&&!!p.mortgageCurrent}>
-                        <SEL value={p.mortgageCurrent} onChange={v=>{ updProp(i,"mortgageCurrent",v); updProp(i,"mortgageCurrentConfirmed",false); }} options={["Yes","No"]} placeholder="Select..."/>
-                        {p.mortgageCurrent && !p.mortgageCurrentConfirmed && (
-                          <div className="mt-2 bg-amber-400/10 border border-amber-400/30 rounded-lg px-2.5 py-2">
-                            <p className="text-xs text-amber-200 mb-1.5">Please confirm payments are <strong>{p.mortgageCurrent === "Yes" ? "current" : "past due"}</strong> as of today.</p>
-                            <button type="button" onClick={()=>updProp(i,"mortgageCurrentConfirmed",true)} className="text-xs px-2.5 py-1 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 hover:bg-amber-400/30 font-semibold transition-all">Confirm</button>
-                          </div>
-                        )}
-                        {p.mortgageCurrentConfirmed && (
-                          <p className="text-xs text-green-400 mt-1 flex items-center gap-1"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>Confirmed.</p>
-                        )}
-                        {!p.mortgageCurrent && <p className="text-xs text-amber-400 mt-1">Required — confirm payment status</p>}
-                      </F>
-                    </Grid3>
-                    {(p.mortgageCurrent === "No" || p.mortgageCurrent === "no") && (
-                      <F label="Mortgage Arrears" required hint="Total past-due amount from your statement — appears on Schedule D.">
-                        <DI value={p.mortgageArrears} onChange={v=>updProp(i,"mortgageArrears",v)}/>
-                      </F>
-                    )}
-                  </div>
-                  <F label="Does your monthly mortgage payment include property taxes and/or homeowner's insurance?" imported={imp&&i===0&&!!p.mortgageIncludesTaxInsurance}>
-                    <div className="space-y-2">
-                      {[
-                        {v:"both",    l:"Yes — both property taxes and homeowner's insurance are included in my payment (full escrow)"},
-                        {v:"taxOnly", l:"Taxes are included in my payment, but I pay homeowner's insurance separately"},
-                        {v:"insOnly", l:"Homeowner's insurance is paid through escrow, but I pay property taxes separately"},
-                        {v:"neither", l:"No — I pay property taxes and homeowner's insurance separately from my mortgage payment"},
-                      ].map(opt=>(
-                        <RAD key={opt.v} name={`taxins_${i}`} value={opt.v} current={p.mortgageIncludesTaxInsurance} onChange={v=>updProp(i,"mortgageIncludesTaxInsurance",v)} label={opt.l}/>
-                      ))}
-                    </div>
-                    {p.mortgageIncludesTaxInsurance === "both" && (
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed bg-slate-800/60 rounded-lg px-3 py-2">Your full mortgage payment (including tax and insurance escrow) will be listed on <strong className="text-white">Schedule J</strong>. Do <em>not</em> enter property taxes or homeowner's insurance again in the expenses section.</p>
-                    )}
-                    {p.mortgageIncludesTaxInsurance === "taxOnly" && (
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed bg-slate-800/60 rounded-lg px-3 py-2">Your mortgage payment (including tax escrow) is listed on <strong className="text-white">Schedule J</strong>. Do <em>not</em> list property taxes again separately — but do enter your separate homeowner's insurance premium in the expenses section.</p>
-                    )}
-                    {p.mortgageIncludesTaxInsurance === "insOnly" && (
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed bg-slate-800/60 rounded-lg px-3 py-2">Your mortgage payment (including insurance escrow) is listed on <strong className="text-white">Schedule J</strong>. Do <em>not</em> list homeowner's insurance again separately — but do enter your separate property tax payments in the expenses section.</p>
-                    )}
-                    {p.mortgageIncludesTaxInsurance === "neither" && (
-                      <p className="text-xs text-slate-400 mt-2 leading-relaxed bg-slate-800/60 rounded-lg px-3 py-2">Your mortgage payment will be listed on <strong className="text-white">Schedule J</strong>. Enter property taxes and homeowner's insurance separately in the expenses section.</p>
-                    )}
-                  </F>
-                </div>
-
-                {/* ── Foreclosure Status ── */}
-                <div className="border-t border-slate-700 pt-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Foreclosure Status</p>
-                  <F label="Is this property currently in foreclosure or has a Notice of Default been filed?">
-                    <div className="flex gap-3">
-                      <RAD name={`fc_${i}`} value="yes" current={p.inForeclosure} onChange={v=>updProp(i,"inForeclosure",v)} label="Yes"/>
-                      <RAD name={`fc_${i}`} value="no"  current={p.inForeclosure} onChange={v=>updProp(i,"inForeclosure",v)} label="No"/>
-                    </div>
-                  </F>
-                  {p.inForeclosure === "yes" && (
-                    <div className="space-y-4">
-                      {/* Urgent notice */}
-                      <div className="bg-red-500/15 border border-red-500/40 rounded-xl px-4 py-3 text-xs text-red-200 leading-relaxed">
-                        <div className="flex items-center gap-2 mb-1.5">
-                          <svg className="w-4 h-4 text-red-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                          <strong className="text-red-300 uppercase tracking-wide text-xs">Important — Time-Sensitive</strong>
-                        </div>
-                        <p className="mb-1.5">Foreclosure proceedings <strong className="text-white">do not stop until a bankruptcy case number is issued by the court</strong> — and that only happens after your petition is filed. If a foreclosure sale takes place before filing, you could lose your home permanently.</p>
-                        <p className="mb-1.5 text-red-200">The automatic stay takes effect the moment the court assigns a case number. <strong className="text-white">The fastest way to stop a foreclosure is to complete this questionnaire and pay all required fees</strong> so your attorney can file your petition immediately.</p>
-                        <p className="text-red-300/80">Keep your attorney informed of any scheduled sale dates right away. <strong className="text-white">Your attorney will advise you on next steps during the review stage.</strong></p>
-                      </div>
-                      <F label="Has a foreclosure sale date been scheduled?">
-                        <div className="flex gap-3">
-                          <RAD name={`fcsale_${i}`} value="yes" current={p.foreclosureSaleDateSet} onChange={v=>updProp(i,"foreclosureSaleDateSet",v)} label="Yes — a sale date has been set"/>
-                          <RAD name={`fcsale_${i}`} value="no"  current={p.foreclosureSaleDateSet} onChange={v=>updProp(i,"foreclosureSaleDateSet",v)} label="Not yet / I don't know"/>
-                        </div>
-                      </F>
-                      {p.foreclosureSaleDateSet === "yes" && (
-                        <>
-                          <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-3 py-2 text-xs text-red-300 leading-relaxed">
-                            A sale date has been set. Provide the trustee information below — or upload your foreclosure notice. <strong className="text-white">Contact your attorney immediately.</strong>
-                          </div>
-                          <F label="Scheduled Foreclosure Sale Date" required>
-                            <TI value={p.foreclosureSaleDate||""} onChange={v=>updProp(i,"foreclosureSaleDate",v)} placeholder="MM/DD/YYYY"/>
-                          </F>
-                          <Grid2>
-                            <F label="Foreclosure Trustee / Law Firm Name">
-                              <TI value={p.foreclosureTrustee||""} onChange={v=>updProp(i,"foreclosureTrustee",v)} placeholder="e.g. Quality Loan Service Corp"/>
-                            </F>
-                            <F label="Trustee Phone Number">
-                              <TI value={p.foreclosureTrusteePhone||""} onChange={v=>updProp(i,"foreclosureTrusteePhone",v)} placeholder="(800) 555-0100"/>
-                            </F>
-                          </Grid2>
-                          <F label="Trustee Email (if known)">
-                            <TI value={p.foreclosureTrusteeEmail||""} onChange={v=>updProp(i,"foreclosureTrusteeEmail",v)} placeholder="trustee@example.com"/>
-                          </F>
-                          <div className="flex items-start gap-3 border border-amber-400/25 rounded-xl p-3 bg-amber-400/5">
-                            <svg className="w-3.5 h-3.5 text-amber-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                            <div>
-                              <p className="text-xs font-semibold text-amber-300 mb-0.5">Foreclosure Notice — Upload in Document Step</p>
-                              <p className="text-xs text-slate-400 leading-relaxed">Have your Notice of Trustee's Sale or Notice of Default ready. You will be asked to upload it in the <strong className="text-white">Document Upload</strong> step at the end of this questionnaire.</p>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {/* ── HOA ── */}
-                <div className="border-t border-slate-700 pt-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Homeowners Association (HOA)</p>
-                  <F label="Is there an HOA for this property?">
-                    <div className="flex gap-3">
-                      <RAD name={`hoa_${i}`} value="yes" current={p.hasHOA} onChange={v=>updProp(i,"hasHOA",v)} label="Yes"/>
-                      <RAD name={`hoa_${i}`} value="no"  current={p.hasHOA} onChange={v=>updProp(i,"hasHOA",v)} label="No"/>
-                    </div>
-                  </F>
-                  {p.hasHOA === "yes" && (
-                    <>
-                      <div className="bg-amber-400/10 border border-amber-400/20 rounded-lg px-3 py-2.5 mb-3 text-xs text-amber-200 leading-relaxed">
-                        Monthly HOA dues populate <strong className="text-white">Schedule J</strong> (expenses). Any unpaid HOA arrears are listed on <strong className="text-white">Schedule D</strong> as a <strong className="text-white">statutory lien</strong> secured by{" "}
-                        <strong className="text-white">{p.addr ? p.addr : `Property ${i+1}`}</strong>.
-                      </div>
-                      <Grid2>
-                        <F label="HOA Name"><TI value={p.hoaName} onChange={v=>updProp(i,"hoaName",v)} placeholder="e.g. Maple Heights HOA"/></F>
-                        <F label="Monthly Dues" imported={imp&&i===0&&!!p.hoaMonthlyDues}>
-                          <DI value={p.hoaMonthlyDues} onChange={v=>{ updProp(i,"hoaMonthlyDues",v); updProp(i,"hoaBalanceConfirmed",false); }}/>
-                        </F>
-                      </Grid2>
-                      <F label="Is there a current outstanding HOA balance (arrears)?" imported={imp&&i===0&&p.hoaArrears!==undefined}>
-                        <div className="flex gap-3">
-                          <RAD name={`hoabal_${i}`} value="yes" current={p.hoaArrears && parseFloat(p.hoaArrears) > 0 ? "yes" : (p.hoaArrears === "0" ? "no" : "")} onChange={v=>{ updProp(i,"hoaArrears", v==="no" ? "0" : ""); updProp(i,"hoaBalanceConfirmed",false); }} label="Yes — I owe a balance"/>
-                          <RAD name={`hoabal_${i}`} value="no"  current={p.hoaArrears && parseFloat(p.hoaArrears) > 0 ? "yes" : (p.hoaArrears === "0" ? "no" : "")} onChange={v=>{ updProp(i,"hoaArrears", v==="no" ? "0" : ""); updProp(i,"hoaBalanceConfirmed",false); }} label="No — I am current"/>
-                        </div>
-                        {(parseFloat(p.hoaArrears) > 0 || (p.hoaArrears !== "0" && p.hoaArrears !== "")) && (
-                          <div className="mt-2">
-                            <F label="HOA Arrears Amount" hint="Total past-due — listed on Schedule D as a statutory lien">
-                              <DI value={p.hoaArrears} onChange={v=>{ updProp(i,"hoaArrears",v); updProp(i,"hoaBalanceConfirmed",false); }}/>
-                            </F>
-                          </div>
-                        )}
-                      </F>
-                      {/* Confirm if amounts have changed */}
-                      {(p.hoaMonthlyDues || p.hoaArrears) && !p.hoaBalanceConfirmed && (
-                        <div className="bg-amber-400/10 border border-amber-400/30 rounded-lg px-3 py-2.5 text-xs text-amber-200 leading-relaxed">
-                          <p className="font-semibold mb-1.5">HOA amounts imported from intake — please confirm they are still current.</p>
-                          <p className="mb-2 text-amber-200/80">Monthly dues: <strong className="text-white">${p.hoaMonthlyDues || "0"}</strong>{parseFloat(p.hoaArrears) > 0 ? ` · Balance owed: $${p.hoaArrears}` : " · No balance owed"}. Have these amounts changed?</p>
-                          <div className="flex gap-2">
-                            <button type="button" onClick={()=>updProp(i,"hoaBalanceConfirmed",true)} className="text-xs px-3 py-1 rounded-lg bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30 font-semibold transition-all">These amounts are still correct</button>
-                            <button type="button" onClick={()=>{ updProp(i,"hoaMonthlyDues",""); updProp(i,"hoaArrears",""); }} className="text-xs px-3 py-1 rounded-lg bg-slate-700 border border-slate-600 text-slate-300 hover:bg-slate-600 font-semibold transition-all">Amounts have changed — clear &amp; re-enter</button>
-                          </div>
-                        </div>
-                      )}
-                      {p.hoaBalanceConfirmed && (
-                        <p className="text-xs text-green-400 flex items-center gap-1 mt-1">
-                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                          HOA amounts confirmed by client.
-                        </p>
-                      )}
-                      {/* HOA statement photo capture */}
-                      {clientId && (
-                        <InlineStatementCapture
-                          title="HOA Statement"
-                          docType="hoa_stmt"
-                          category="hoa"
-                          contextRef={`property_${i}`}
-                          clientId={clientId}
-                          allowDefer={true}
-                          extractPrompt={`Extract from this HOA statement and return JSON with these exact keys:
-{
-  "hoa_name": "name of the HOA",
-  "monthly_dues": number or null,
-  "outstanding_balance": number or null,
-  "statement_date": "MM/DD/YYYY or null"
-}`}
-                          onExtracted={parsed => {
-                            if (!parsed) return;
-                            if (parsed.hoa_name)             updProp(i,"hoaName",          parsed.hoa_name);
-                            if (parsed.monthly_dues)         updProp(i,"hoaMonthlyDues",   String(parsed.monthly_dues));
-                            if (parsed.outstanding_balance != null && parsed.outstanding_balance > 0)
-                                                             updProp(i,"hoaArrears",        String(parsed.outstanding_balance));
-                            updProp(i,"hoaBalanceConfirmed", false);
-                          }}
-                        />
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* ── Second / Junior Liens ── */}
-                <div className="border-t border-slate-700 pt-4">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Second / Junior Liens — Schedule D</p>
-                  <F label="Other than your primary mortgage and any HOA, are there any additional liens on this property?">
-                    <p className="text-xs text-slate-500 mb-3 leading-relaxed">This includes HELOCs, second mortgages, home equity loans, IRS tax liens, state tax liens, judgment liens from lawsuits, or mechanic's liens from contractors.</p>
-                    <div className="flex gap-3">
-                      <RAD name={`lien_${i}`} value="yes" current={p.hasSecondLien} onChange={v=>updProp(i,"hasSecondLien",v)} label="Yes"/>
-                      <RAD name={`lien_${i}`} value="no"  current={p.hasSecondLien} onChange={v=>updProp(i,"hasSecondLien",v)} label="No"/>
-                    </div>
-                  </F>
-
-                  {p.hasSecondLien === "yes" && !(p.secondLienCount > 0) && !(p.secondLiens?.length > 0) && (
-                    <div className="mt-3 space-y-3">
-                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-4 py-3 text-xs text-blue-200 leading-relaxed">
-                        Each lien is listed separately on <strong className="text-white">Schedule D</strong>. We will ask for creditor details one lien at a time.
-                      </div>
-                      <F label="How many additional liens are on this property?" required hint="Count each separately — e.g. one HELOC and one IRS lien = 2">
-                        <div className="flex flex-wrap gap-2 mt-1">
-                          {[1,2,3,4,5].map(n => (
-                            <button key={n} type="button"
-                              onClick={() => {
-                                const blank = { lenderName:"", balance:"", monthlyPayment:"", arrears:"", loanType:"", acct:"", _step:"type" };
-                                updProp(i,"secondLiens", Array.from({length:n},()=>({...blank})));
-                                updProp(i,"secondLienCount", n);
-                              }}
-                              className="w-10 h-10 rounded-xl border border-slate-600 hover:border-amber-400/60 text-slate-300 hover:text-amber-300 text-sm font-bold transition-all">
-                              {n}
-                            </button>
-                          ))}
-                          <button type="button"
-                            onClick={() => {
-                              const blank = { lenderName:"", balance:"", monthlyPayment:"", arrears:"", loanType:"", acct:"", _step:"type" };
-                              updProp(i,"secondLiens", Array.from({length:6},()=>({...blank})));
-                              updProp(i,"secondLienCount", 6);
-                            }}
-                            className="px-3 h-10 rounded-xl border border-slate-600 hover:border-amber-400/60 text-slate-400 hover:text-amber-300 text-xs font-bold transition-all">
-                            6+
-                          </button>
-                        </div>
-                      </F>
-                    </div>
-                  )}
-
-                  {p.hasSecondLien === "yes" && (p.secondLiens?.length > 0) && (
-                    <>
-                      <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl px-3 py-2.5 mt-3 mb-3 text-xs text-blue-200 leading-relaxed">
-                        {p.secondLiens.length} additional lien{p.secondLiens.length > 1 ? "s" : ""} on <strong className="text-white">{p.addr || `Property ${i+1}`}</strong>. Complete each one below.
-                      </div>
-
-                      {(p.secondLiens||[]).map((lien, li) => {
-                        const stepDone = lien.loanType && lien.lenderName && lien.balance;
-                        return (
-                          <div key={li} className="border border-slate-700 rounded-2xl mb-3 overflow-hidden bg-slate-800/40">
-                            {/* Lien header */}
-                            <div className="flex justify-between items-center px-4 py-3 bg-slate-800/60 border-b border-slate-700">
-                              <div>
-                                <span className="text-xs font-bold text-blue-300 uppercase tracking-widest">Lien {li+1} of {p.secondLiens.length}</span>
-                                {lien.loanType && <span className="text-xs text-slate-400 ml-2">— {lien.loanType}</span>}
-                              </div>
-                              <div className="flex items-center gap-2">
-                                {stepDone && <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>}
-                                <RemBtn onClick={()=>remLien(i,li)}/>
-                              </div>
-                            </div>
-
-                            <div className="p-4 space-y-3">
-                              {/* Step 1: Lien type */}
-                              <F label="What type of lien is this?" required>
-                                <div className="flex flex-wrap gap-2 mt-1">
-                                  {["HELOC / Second Mortgage","Home Equity Loan","Tax Lien (IRS)","Tax Lien (State)","Judgment Lien","HOA Lien","Mechanic's / Contractor Lien","Other"].map(t => (
-                                    <button key={t} type="button"
-                                      onClick={()=>updLien(i,li,"loanType",t)}
-                                      className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${lien.loanType===t ? "bg-blue-500/20 border-blue-500/50 text-blue-300" : "border-slate-600 text-slate-400 hover:border-slate-500"}`}>
-                                      {t}
-                                    </button>
-                                  ))}
-                                </div>
-                                {lien.loanType === "Tax Lien (IRS)" && (
-                                  <div className="mt-2 bg-red-500/10 border border-red-500/25 rounded-lg px-3 py-2.5 text-xs text-red-200 leading-relaxed">
-                                    <strong className="text-red-300">IRS Federal Tax Lien:</strong> A Notice of Federal Tax Lien attaches to all property you own. Even if the underlying tax debt is dischargeable, the <strong className="text-white">lien survives bankruptcy</strong> and must be addressed separately. Your attorney will advise on lien discharge or avoidance options.
-                                  </div>
-                                )}
-                                {lien.loanType === "Judgment Lien" && (
-                                  <div className="mt-2 bg-amber-400/10 border border-amber-400/30 rounded-lg px-3 py-2.5 text-xs text-amber-200 leading-relaxed">
-                                    <strong className="text-amber-300">Attorney Note:</strong> A judicial lien may be avoidable under 11 U.S.C. § 522(f) if it impairs a homestead exemption. Your attorney will review lien avoidance options.
-                                  </div>
-                                )}
-                              </F>
-
-                              {/* Step 2: Creditor info — shown once type is selected */}
-                              {lien.loanType && (
-                                <>
-                                  <Grid3>
-                                    <F label="Creditor / Lender Name" required><TI value={lien.lenderName} onChange={v=>updLien(i,li,"lenderName",v)} placeholder="e.g. Bank of America, IRS"/></F>
-                                    <F label="Creditor / Lender Address"><TI value={lien.addr||""} onChange={v=>updLien(i,li,"addr",v)} placeholder="e.g. P.O. Box 1234, Atlanta, GA 30301"/></F>
-                                    <F label="Account # (last 4)"><TI value={lien.acct} onChange={v=>updLien(i,li,"acct",v)} placeholder="XXXX"/></F>
-                                  </Grid3>
-                                  <Grid3>
-                                    <F label="Balance Owed" required><DI value={lien.balance} onChange={v=>updLien(i,li,"balance",v)}/></F>
-                                    <F label="Monthly Payment"><DI value={lien.monthlyPayment} onChange={v=>updLien(i,li,"monthlyPayment",v)}/></F>
-                                    <F label="Arrears / Past Due"><DI value={lien.arrears} onChange={v=>updLien(i,li,"arrears",v)}/></F>
-                                  </Grid3>
-                                  {stepDone && (
-                                    <div className="flex items-center gap-2 bg-green-500/10 border border-green-500/25 rounded-lg px-3 py-2">
-                                      <svg className="w-3.5 h-3.5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-                                      <p className="text-xs text-green-300 font-semibold">Lien {li+1} complete.</p>
-                                    </div>
-                                  )}
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      })}
-                      <AddBtn onClick={()=>addLien(i)} label="Add Another Lien"/>
-                    </>
-                  )}
-                </div>
-                </div>
-                )}
-
-                      </div>{/* end tab content area */}
-                    </>
-                  );
-                })()}
-              </div>
-            ))}
-            {/* ── Listed Real Estate Properties — review + confirm panel ── */}
-            {(() => {
-              const confirmed = sd.allREConfirmed;
-              const fmtMoney = (v) => v ? `$${parseFloat(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2})}` : "$0.00";
-              const hasImportedData = props.some(p => p.addr || p.value || p.lenderName);
-              const intakeReviewed = !!sd.intakeDataReviewed;
-
-              if (confirmed) {
-                return (
-                  <div className="mt-4 rounded-2xl border border-green-500/40 bg-green-500/8 p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-start gap-3">
-                        <svg className="w-5 h-5 text-green-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                        <div>
-                          <p className="text-sm font-bold text-green-300 mb-0.5">Real Estate Confirmed — {props.length} {props.length === 1 ? "property" : "properties"} listed</p>
-                          <p className="text-xs text-slate-400">All listed properties have been reviewed and confirmed as complete and accurate.</p>
-                        </div>
-                      </div>
-                      <button type="button" onClick={() => u("schedAB_re", {...sd, allREConfirmed: false})}
-                        className="text-xs text-slate-500 hover:text-slate-300 underline transition-colors whitespace-nowrap flex-shrink-0">
-                        Make a change
-                      </button>
-                    </div>
-                  </div>
-                );
-              }
+            {/* ─── Per-property simplified flow ───────────────────────────── */}
+            {props.map((p, i) => {
+              if (i !== selectedPropIdx) return null;
+              const wasImported = imp && imp("schedAB_re.properties") && i === 0;
+              const importConfirmed = !!p._intakeConfirmed;
+              const currentLiens = p.liens || [];
 
               return (
-                <div className="mt-4 rounded-2xl border border-slate-600 bg-slate-800/40 overflow-hidden">
-                  {/* Header */}
-                  <div className="px-5 py-3 border-b border-slate-700 flex items-center gap-2 bg-slate-800/60">
-                    <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">Listed Real Estate Properties</span>
-                    <span className="ml-auto text-xs text-slate-500">{props.length} {props.length === 1 ? "property" : "properties"}</span>
+                <div key={i} className="border border-slate-600 rounded-2xl overflow-hidden mb-4">
+                  <div className="flex justify-between items-center px-5 py-3 bg-slate-800/60 border-b border-slate-700">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+                      Property {i+1}{p.description ? ` — ${p.description}` : ""}
+                      {wasImported ? <span className="ml-2 text-green-400 text-xs normal-case tracking-normal font-normal">✓ from intake</span> : null}
+                    </span>
+                    <RemBtn onClick={()=>{ remProp(i); setSelectedPropIdx(Math.max(0, i-1)); }}/>
                   </div>
 
-                  {/* Property rows */}
-                  {props.length > 0 ? (
-                    <div className="divide-y divide-slate-800">
-                      {props.map((p, idx) => {
-                        const missing = [!p.addr && "address", !p.value && "value"].filter(Boolean);
-                        return (
-                          <div key={idx} className={`px-5 py-4 ${missing.length ? "bg-rose-500/4" : ""}`}>
-                            <div className="flex items-start justify-between gap-3 mb-2">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">Property {idx + 1}</span>
-                                {missing.length > 0 && <span className="text-xs text-rose-400 bg-rose-500/10 border border-rose-500/25 rounded-full px-2 py-0.5">Missing: {missing.join(", ")}</span>}
-                              </div>
-                              <button type="button" onClick={() => setSelectedPropIdx(idx)}
-                                className="text-xs text-amber-400 hover:text-amber-300 font-semibold underline transition-colors flex-shrink-0">
-                                Edit
-                              </button>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs">
-                              <div className="col-span-2 sm:col-span-1 flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Address</span><span className="text-white text-right sm:text-left">{[p.addr, p.city, p.state].filter(Boolean).join(", ") || <span className="text-rose-400 italic">Not entered</span>}</span></div>
-                              <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Market Value</span><span className="text-white">{p.value ? fmtMoney(p.value) : <span className="text-rose-400 italic">Not entered</span>}</span></div>
-                              <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Ownership</span><span className="text-white">{p.interest || "Fee Simple"}{p.debtorPct && p.debtorPct !== "100" ? ` — ${p.debtorPct}%` : ""}</span></div>
-                              <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Mortgage Balance</span><span className="text-white">{p.mortgageBalance ? fmtMoney(p.mortgageBalance) : <span className="text-slate-500 italic">None</span>}</span></div>
-                              <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Payments Current</span><span className={p.mortgageCurrent === "No" ? "text-red-400 font-semibold" : "text-white"}>{p.mortgageCurrent || <span className="text-amber-400 italic">Not answered</span>}</span></div>
-                              <div className="flex justify-between sm:flex-col sm:justify-start gap-1"><span className="text-slate-500">Date of Ownership</span><span className="text-white">{p.purchaseDate || <span className="text-slate-500 italic">Not entered</span>}</span></div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="px-5 py-6 text-center text-xs text-slate-500">No properties added yet. Use the tabs above to add a property.</div>
-                  )}
-
-                  {/* Pre-filled intake review acknowledgment */}
-                  {hasImportedData && (
-                    <div className={`px-5 py-3 border-t border-slate-700 ${intakeReviewed ? "bg-green-500/5" : "bg-amber-400/5"}`}>
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <div className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-all ${intakeReviewed ? "bg-green-500 border-green-500" : "border-slate-500 hover:border-amber-400"}`}
-                          onClick={() => u("schedAB_re", {...sd, intakeDataReviewed: !intakeReviewed})}>
-                          {intakeReviewed && <svg className="w-2.5 h-2.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-                        </div>
-                        <div>
-                          <p className={`text-xs font-semibold mb-0.5 ${intakeReviewed ? "text-green-300" : "text-slate-300"}`}>I have reviewed all pre-filled information from my intake</p>
-                          <p className="text-xs text-slate-500 leading-relaxed">Some fields were automatically filled in from your initial intake form. Please confirm you have reviewed each property above and that all pre-populated information is correct.</p>
-                        </div>
-                      </label>
-                    </div>
-                  )}
-
-                  {/* Action footer */}
-                  <div className="px-5 py-4 border-t border-slate-700 bg-slate-900/40 space-y-3">
-                    <p className="text-xs text-slate-400 leading-relaxed">All real estate interests must be disclosed — including vacation homes, rental properties, vacant land, time-shares, and any property sold or transferred in the last 2 years.</p>
-                    <div className="flex flex-col sm:flex-row gap-3">
-                      <button
-                        type="button"
-                        onClick={() => { addProp(); setSelectedPropIdx(props.length); }}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-500 hover:border-amber-400/60 text-slate-400 hover:text-amber-300 text-sm font-semibold rounded-xl transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-                        I Need to Add More Real Estate
-                      </button>
-                      <button
-                        type="button"
-                        disabled={props.length === 0 || (hasImportedData && !intakeReviewed)}
-                        onClick={() => u("schedAB_re", {...sd, allREConfirmed: true})}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-amber-400 hover:bg-amber-300 disabled:bg-slate-700 disabled:text-slate-500 disabled:cursor-not-allowed text-slate-950 text-sm font-bold rounded-xl transition-colors"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-                        This is All My Real Estate — Everything Looks Good
-                      </button>
-                    </div>
-                    {hasImportedData && !intakeReviewed && (
-                      <p className="text-xs text-amber-400 flex items-center gap-1.5">
-                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                        Please check the box above confirming you have reviewed your pre-filled intake information before continuing.
-                      </p>
+                  <div className="p-5 space-y-5">
+                    {/* PART 3 — confirm-from-intake strip */}
+                    {wasImported && !importConfirmed && (p.addr || p.city) && (
+                      <div className="rounded-xl border border-blue-500/30 bg-blue-500/8 p-4">
+                        <p className="text-xs font-bold text-blue-300 mb-1">Does this look correct and accurate?</p>
+                        <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                          We pre-filled the address and ownership fields below from your intake form. Please review them and confirm — or correct anything that's wrong.
+                        </p>
+                        <button type="button" onClick={() => updProp(i, "_intakeConfirmed", true)}
+                          className="px-3 py-1.5 rounded-lg bg-green-500/15 border border-green-500/40 text-green-300 text-xs font-semibold hover:bg-green-500/25 transition-colors">
+                          ✓ Yes, this is correct
+                        </button>
+                      </div>
                     )}
+
+                    {/* Location */}
+                    <div>
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Property Location</p>
+                      <F label="Street Address" required imported={imp&&i===0&&imp("schedAB_re.properties")}><TI value={p.addr} onChange={v=>updProp(i,"addr",v)} placeholder="123 Oak Lane"/></F>
+                      <Grid3>
+                        <F label="City" required imported={imp&&i===0&&imp("schedAB_re.properties")}><TI value={p.city} onChange={v=>updProp(i,"city",v)} placeholder="City"/></F>
+                        <F label="State" required imported={imp&&i===0&&imp("schedAB_re.properties")}><SEL value={p.state} onChange={v=>updProp(i,"state",v)} options={US_STATES}/></F>
+                        <F label="ZIP" required imported={i===0&&!!d.petition?.zip}><TI value={p.zip||""} onChange={v=>updProp(i,"zip",v)} placeholder="ZIP"/></F>
+                      </Grid3>
+                      <F label="County" imported={i===0&&!!d.petition?.county}><TI value={p.county||""} onChange={v=>updProp(i,"county",v)} placeholder="County name"/></F>
+                    </div>
+
+                    {/* Value */}
+                    <div className="border-t border-slate-700 pt-4">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Current Market Value</p>
+                      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-3 py-2 mb-3 text-xs text-blue-200 leading-relaxed">
+                        Trustees typically reference <strong className="text-white">Zillow.com</strong> to value real estate. Enter a current market value here — the Zillow Zestimate is a good starting point.
+                      </div>
+                      <F label="Current market value" required>
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-400 text-sm font-semibold">$</span>
+                          <TI value={p.value || ""} onChange={v => updProp(i, "value", v)} placeholder="e.g. 290000"/>
+                        </div>
+                      </F>
+                      {(p.addr || p.city) && (
+                        <a href={`https://www.zillow.com/homes/${encodeURIComponent([p.addr,p.city,p.state,p.zip].filter(Boolean).join(", "))}_rb/`}
+                          target="_blank" rel="noreferrer"
+                          className="inline-flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 underline mt-1 transition-colors">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+                          Open Zillow for this address
+                        </a>
+                      )}
+                    </div>
+
+                    {/* PART 4 — Liens checklist */}
+                    <div className="border-t border-slate-700 pt-4">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Loans &amp; Liens on This Property</p>
+                      <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                        Are there any loans or liens on this property? <strong className="text-white">Click all that apply.</strong> We'll capture balances, creditor names, and statements later on Schedule D — this step is just identification.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {LIEN_TYPES.map(lt => {
+                          const isSelected = currentLiens.includes(lt);
+                          return (
+                            <button key={lt} type="button" onClick={() => toggleLien(i, lt)}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                                isSelected
+                                  ? "bg-amber-400/20 border-amber-400/60 text-amber-300"
+                                  : "bg-slate-800/40 border-slate-700 text-slate-300 hover:border-slate-500"
+                              }`}>
+                              {isSelected && <span className="mr-1">✓</span>}
+                              {lt}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {currentLiens.length === 0 ? (
+                        <p className="text-xs text-slate-500 italic mt-2">No liens marked. If the property is paid off, leave this blank.</p>
+                      ) : (
+                        <p className="text-xs text-green-400 mt-2">
+                          ✓ {currentLiens.length} {currentLiens.length === 1 ? "lien" : "liens"} marked. Details will be collected on Schedule D.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Ownership */}
+                    <div className="border-t border-slate-700 pt-4">
+                      <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-2">Ownership Details</p>
+                      {(() => {
+                        const PROP_TYPES = ["Single-Family Home","Duplex or Multi-Unit Building","Condominium or Cooperative","Manufactured or Mobile Home","Investment Property","Raw Land","Timeshare","Other"];
+                        const effective = p.description || "";
+                        const isStandard = PROP_TYPES.includes(effective);
+                        const selVal = isStandard ? effective : (effective ? "Other" : "");
+                        return (
+                          <F label="What type of property is this?" required>
+                            <SEL value={selVal}
+                              onChange={v => updProp(i, "description", v)}
+                              options={PROP_TYPES}
+                              placeholder="Select property type..."/>
+                            {selVal === "Other" && (
+                              <TI value={!isStandard ? p.description : ""} onChange={v => updProp(i, "description", v)} placeholder="Describe the property type..." className="mt-2"/>
+                            )}
+                          </F>
+                        );
+                      })()}
+                      <Grid2>
+                        <F label="Nature of Interest" hint="How is ownership of this property held? Check your deed if unsure.">
+                          <SEL value={p.interest || "Fee Simple"}
+                            onChange={v => updProp(i, "interest", v)}
+                            options={["Fee Simple","Joint Tenancy","Tenancy in Common","Tenancy by the Entirety","Community Property","Life Estate","Contract for Deed","Land Trust","Equitable Interest","Time Share","Other"]}/>
+                        </F>
+                        <F label="Your Ownership %">
+                          <div className="flex items-center gap-2">
+                            <TI value={p.debtorPct || "100"} onChange={v => updProp(i, "debtorPct", v)} placeholder="100" className="w-24"/>
+                            <span className="text-xs text-slate-400">%</span>
+                          </div>
+                        </F>
+                      </Grid2>
+                      <F label="Date of Ownership" hint="The date you acquired this property — month/day/year">
+                        <TI value={p.purchaseDate || ""} onChange={v => updProp(i, "purchaseDate", v)} placeholder="MM/DD/YYYY"/>
+                      </F>
+                    </div>
                   </div>
                 </div>
               );
-            })()}
+            })}
           </>
         )}
       </Card>
@@ -10425,6 +9457,252 @@ const CR_EXTRACT_PROMPT = `This is a Stretto bankruptcy credit report. Extract A
 
 Return ONLY valid JSON — no markdown fences, no extra text. Include every single tradeline from every page.`;
 
+// ─── Prompt 94 (BAN-86) — Creditor source choice ───────────────────────────────
+//
+// Sits between Schedule C and Schedule D as the "creditorSource" section
+// (see SECTIONS array at the top of this file and the dispatcher arm).
+// Lets the client pick how their creditors will be captured for D / E / F.
+//
+//   1. Enter manually → no-op for now; the next three sections (D / E / F)
+//      continue to accept manual entry exactly as today.
+//   2. Upload credit report (PDF) → re-mounts the existing SectionCreditReport
+//      body below the choice cards. SectionCreditReport already owns the
+//      upload → extract → review → import flow and writes the parsed rows
+//      into schedD.creditors / schedEF_pri.creditors / schedEF_np.creditors
+//      with the `_fromCreditReport: true` marker, so D / E / F render the
+//      imported rows when the client gets there.
+//   3. iSoftpull → FEATURE-FLAGGED OFF. The button is rendered visibly
+//      disabled. Flip `ENABLE_ISOFTPULL` to `true` once the API key + the
+//      pull RPC land (tracked under BAN-86). Today it must NOT initiate a
+//      pull and MUST NOT charge anything.
+//
+// The chosen option is persisted to `form_data.creditorSource.choice` so
+// other surfaces (paralegal review, the orphan-now-live SectionCreditReport,
+// the schedule sections themselves) can read the election back.
+//
+// This section is NOT in SUMMARY_SECTIONS / COMMUNITY_SECTIONS / SECTION_INTROS,
+// so the dispatcher's `withAll(…)` wrapper applies the standard Back / Next
+// chrome with `canAdvance` defaulting true — the client may pick an option
+// (or none) and click Next at any time.
+
+// Feature flag — flip to `true` when the iSoftpull integration lands
+// (BAN-86 backend work: API key + pull RPC + result-mapping logic).
+const ENABLE_ISOFTPULL = false;
+
+function SectionCreditorSource({ d, u, clientId }) {
+  const cs = d.creditorSource || {};
+  const choice = cs.choice || null; // null | "manual" | "pdf" | "isoftpull"
+
+  const pick = (next) => u("creditorSource", { ...cs, choice: next, chosenAt: new Date().toISOString() });
+
+  const OPTIONS = [
+    {
+      id: "manual",
+      title: "Enter creditors manually",
+      blurb:
+        "You will type each creditor's name, address, account number, and balance directly into Schedules D, E, and F. No additional charge. Best if you have your statements handy and only have a small number of creditors.",
+      tags: ["No additional charge", "Full control"],
+      disabled: false,
+    },
+    {
+      id: "pdf",
+      title: "Upload a credit report (PDF)",
+      blurb:
+        "Upload a PDF of your credit report (from AnnualCreditReport.com or any bureau). We'll read every tradeline, auto-sort each one into Schedule D (secured), E (priority), or F (non-priority), and show you a review screen before importing. You can still edit anything afterwards.",
+      tags: ["Fastest", "Captures everything", "Reviewable before import"],
+      disabled: false,
+    },
+    {
+      id: "isoftpull",
+      title: "iSoftpull (soft credit pull)",
+      blurb:
+        "We pull your credit report directly using a soft inquiry that does NOT affect your credit score. Results land here automatically.",
+      tags: ENABLE_ISOFTPULL ? ["Soft inquiry — no score impact"] : ["Available soon"],
+      disabled: !ENABLE_ISOFTPULL,
+    },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white mb-2">
+          How will you give us your creditors?
+        </h2>
+        <p className="text-sm text-slate-400 leading-relaxed max-w-2xl">
+          Pick one of the options below. The next three sections (Schedule D — Secured,
+          Schedule E — Priority, Schedule F — Non-Priority) all read from the same creditor
+          list, so this choice decides whether you type them in by hand, upload a credit
+          report we'll auto-sort for you, or pull a fresh soft inquiry.
+        </p>
+      </div>
+
+      {/* ── Prompt 96 — Schedule D disclosures (moved from SectionSchedD) ── */}
+      {/* The disclosure copy that used to live inside the Schedule D intro
+          gate and inside SchedDHomeTab / SchedDVehicleTab step 1 has been
+          consolidated here so the client reads it once, before the
+          source-choice cards, instead of seeing it again at every D / E / F
+          step. SectionSchedD's intro gate is trimmed in this prompt to
+          avoid duplication. */}
+      <div className="rounded-2xl border border-slate-600 bg-slate-800/50 overflow-hidden">
+        <div className="px-6 py-5 border-b border-slate-700 bg-slate-800/80">
+          <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Important — Schedule D Disclosures</p>
+          <h3 className="text-xl font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>What Is Schedule D?</h3>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-slate-300 leading-relaxed">
+            Schedule D is an <strong className="text-white">official document</strong> included in your bankruptcy filing. It lists every creditor that holds a <strong className="text-white">secured claim</strong> — meaning they have a legal right to take back a specific piece of property if you stop making payments.
+          </p>
+
+          {/* What is a secured creditor */}
+          <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What Is a Secured Creditor?</p>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">A secured creditor is any lender whose loan is backed by collateral — something they can take if you don't pay. Common examples include:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {[
+                { icon: "🏠", label: "Mortgage on your home" },
+                { icon: "🚗", label: "Vehicle loan on your car, truck, or motorcycle" },
+                { icon: "🔑", label: "Title loan or registration loan" },
+                { icon: "🏘️", label: "HOA dues (statutory lien on your property)" },
+                { icon: "🏦", label: "Home Equity Loan or HELOC" },
+                { icon: "⚖️", label: "IRS or judgment liens attached to property" },
+              ].map((ex, i) => (
+                <div key={i} className="flex items-center gap-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2">
+                  <span className="text-base shrink-0">{ex.icon}</span>
+                  <span className="text-xs text-slate-300">{ex.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* What we need */}
+          <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
+            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What You Will Need to Provide</p>
+            <p className="text-xs text-slate-400 mb-3 leading-relaxed">For each secured creditor, you must provide verification showing:</p>
+            <div className="space-y-2">
+              {[
+                "Current loan balance (from your most recent statement)",
+                "Current monthly payment amount",
+                "Account number",
+                "Interest rate",
+                "Whether the loan is current or past due",
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-2.5">
+                  <span className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0">{i+1}</span>
+                  <span className="text-xs text-slate-300">{item}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Every secured creditor must be listed */}
+          <div className="bg-amber-400/8 border border-amber-400/30 rounded-xl px-4 py-3 flex items-start gap-3">
+            <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            <div>
+              <p className="text-xs font-bold text-amber-300 mb-1">Every Secured Creditor Must Be Listed</p>
+              <p className="text-xs text-slate-400 leading-relaxed">Federal law requires that all secured creditors receive proper notice of your bankruptcy filing. Omitting a secured creditor can create serious problems for your case. If you are unsure whether a creditor belongs here, include them — your attorney will review.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {OPTIONS.map(opt => {
+          const isSelected = choice === opt.id;
+          const isDisabled = opt.disabled;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => { if (!isDisabled) pick(opt.id); }}
+              disabled={isDisabled}
+              aria-pressed={isSelected}
+              className={`text-left rounded-2xl border p-5 transition-all ${
+                isDisabled
+                  ? "border-slate-800 bg-slate-900/40 opacity-60 cursor-not-allowed"
+                  : isSelected
+                    ? "border-amber-400 bg-amber-400/10 ring-2 ring-amber-400/40"
+                    : "border-slate-700 bg-slate-900/60 hover:border-slate-500 hover:bg-slate-900"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <h3 className="text-base font-bold text-white">{opt.title}</h3>
+                {isSelected && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300 px-2 py-1 rounded-full bg-amber-400/15 border border-amber-400/40 flex-shrink-0">
+                    Selected
+                  </span>
+                )}
+                {isDisabled && (
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 px-2 py-1 rounded-full bg-slate-800 border border-slate-700 flex-shrink-0">
+                    Coming soon
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-slate-400 leading-relaxed mb-3">{opt.blurb}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {opt.tags.map(t => (
+                  <span key={t} className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
+                    isDisabled
+                      ? "bg-slate-800 text-slate-500"
+                      : "bg-slate-800 text-slate-300"
+                  }`}>
+                    {t}
+                  </span>
+                ))}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Branch body — what shows below the cards depends on the choice. */}
+      {choice === "manual" && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
+          <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+            Manual entry selected
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            Great — click <strong className="text-white">Next</strong> to start entering
+            your secured creditors on Schedule D. You'll have a chance to add priority and
+            non-priority creditors on the following two sections.
+          </p>
+        </div>
+      )}
+
+      {choice === "pdf" && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
+          <h3 className="text-sm font-bold text-white mb-3 flex items-center gap-2">
+            <svg className="w-4 h-4 text-amber-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            Upload a credit report (PDF)
+          </h3>
+          {/* Reuse the existing SectionCreditReport body verbatim — it owns the
+              entire upload → extract → review → import lifecycle and already
+              fans out into schedD / schedEF_pri / schedEF_np. */}
+          <SectionCreditReport d={d} u={u} clientId={clientId} onNext={() => { /* navigation is owned by withAll() above */ }} />
+        </div>
+      )}
+
+      {choice === "isoftpull" && !ENABLE_ISOFTPULL && (
+        // Defensive — pick() blocks selecting the disabled option, but if a
+        // saved row already carries choice === "isoftpull" we still render a
+        // clear message instead of nothing.
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
+          <p className="text-xs text-slate-400 leading-relaxed">
+            iSoftpull is not available yet. Pick one of the other two options
+            for now; we will reach out to re-run a soft pull once it's enabled
+            (tracked as <span className="font-mono text-slate-300">BAN-86</span>).
+          </p>
+        </div>
+      )}
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Your choice is saved to your file. You can come back to this step at any time
+        and switch options — imported tradelines stay in place unless you remove them.
+      </p>
+    </div>
+  );
+}
+
 function SectionCreditReport({ d, u, clientId, onNext }) {
   const cr = d.creditReport || {};
   const [phase, setPhase] = useState(() => cr._phase || "upload"); // upload | extracting | review | done
@@ -10439,16 +9717,27 @@ function SectionCreditReport({ d, u, clientId, onNext }) {
 
   const updateItem = (id, patch) => setItems(prev => prev.map(it => it._id === id ? { ...it, ...patch } : it));
 
-  const buildItems = (accounts) => accounts.map((a, i) => ({
-    ...a,
-    _id: i,
-    _schedule: crGuessSchedule(a),
-    _fCategory: crGuessFCategory(a),
-    _isThirdPartyCollector: !!(a.originalCreditor && a.originalCreditor !== a.creditorName),
-    _collectorName: (a.originalCreditor && a.originalCreditor !== a.creditorName) ? a.creditorName : (a.collectorName || ""),
-    _displayName: (a.originalCreditor && a.originalCreditor !== a.creditorName) ? a.originalCreditor : a.creditorName,
-    _assetLink: null,
-  }));
+  const buildItems = (accounts) => accounts.map((a, i) => {
+    // Prompt 98 — client-facing classification is binary: Secured /
+    // Unsecured / Skip. crGuessSchedule may return "schedEF_pri" for
+    // tradelines that look priority-ish (IRS, child support, etc.) but
+    // priority routing is determined at attorney review, not by the
+    // client, so any "schedEF_pri" default is remapped to "schedEF_np"
+    // (unsecured). The client's binary selection on the row governs the
+    // final routing on import.
+    const guess = crGuessSchedule(a);
+    const defaultSchedule = guess === "schedEF_pri" ? "schedEF_np" : guess;
+    return {
+      ...a,
+      _id: i,
+      _schedule: defaultSchedule,
+      _fCategory: crGuessFCategory(a),
+      _isThirdPartyCollector: !!(a.originalCreditor && a.originalCreditor !== a.creditorName),
+      _collectorName: (a.originalCreditor && a.originalCreditor !== a.creditorName) ? a.creditorName : (a.collectorName || ""),
+      _displayName: (a.originalCreditor && a.originalCreditor !== a.creditorName) ? a.originalCreditor : a.creditorName,
+      _assetLink: null,
+    };
+  });
 
   // PDF/image extraction — uses pdfjs for text extraction, falls back to image rendering for scanned PDFs
   const handleFileChange = async (e) => {
@@ -10612,11 +9901,18 @@ function SectionCreditReport({ d, u, clientId, onNext }) {
     return assets;
   })();
 
+  // Prompt 98 — client-facing classification is binary:
+  //   Secured   → schedD.creditors
+  //   Unsecured → schedEF_np.creditors
+  //   Skip      → no import
+  // Priority (Schedule E) is determined at attorney review, not by the
+  // client, so it is intentionally NOT a client-selectable option here.
+  // Any tradeline that crGuessSchedule auto-classified as priority was
+  // remapped to "schedEF_np" in buildItems.
   const GROUPS = [
-    { id:"schedEF_np",  label:"Sched. F",    longLabel:"Schedule F — Non-Priority Unsecured", color:"text-blue-300",   activeBorder:"border-blue-500/50",   activeBg:"bg-blue-500/10",   dot:"bg-blue-400" },
-    { id:"schedD",      label:"Sched. D",    longLabel:"Schedule D — Secured",                color:"text-amber-300",  activeBorder:"border-amber-400/50",  activeBg:"bg-amber-400/10",  dot:"bg-amber-400" },
-    { id:"schedEF_pri", label:"Sched. E",    longLabel:"Schedule E — Priority",               color:"text-orange-300", activeBorder:"border-orange-400/50", activeBg:"bg-orange-400/10", dot:"bg-orange-400" },
-    { id:"skip",        label:"Skip",        longLabel:"Skip / Closed / Zero Balance",        color:"text-slate-400",  activeBorder:"border-slate-500",     activeBg:"bg-slate-700/30",  dot:"bg-slate-500" },
+    { id:"schedD",      label:"Secured",     longLabel:"Secured (Schedule D)",                color:"text-amber-300", activeBorder:"border-amber-400/50",  activeBg:"bg-amber-400/10",  dot:"bg-amber-400" },
+    { id:"schedEF_np",  label:"Unsecured",   longLabel:"Unsecured (Schedule F)",              color:"text-blue-300",  activeBorder:"border-blue-500/50",   activeBg:"bg-blue-500/10",   dot:"bg-blue-400" },
+    { id:"skip",        label:"Skip",        longLabel:"Skip / Closed / Zero Balance",        color:"text-slate-400", activeBorder:"border-slate-500",     activeBg:"bg-slate-700/30",  dot:"bg-slate-500" },
   ];
 
   const countForGroup = (gid) => items.filter(it => it._schedule === gid).length;
@@ -10792,7 +10088,7 @@ function SectionCreditReport({ d, u, clientId, onNext }) {
           <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
             <div>
               <p className="text-base font-bold text-white">{items.length} Creditors Found</p>
-              <p className="text-xs text-slate-400 mt-0.5">Review each assignment. Change any that are wrong, then confirm to import all creditors to their respective schedules.</p>
+              <p className="text-xs text-slate-400 mt-0.5">Mark each tradeline <strong className="text-amber-300">Secured</strong> or <strong className="text-blue-300">Unsecured</strong>. (Priority routing is determined later at attorney review — not your call here.) Then confirm to import.</p>
             </div>
             <button type="button" onClick={() => { setPhase("upload"); u("creditReport", { ...cr, _phase: "upload" }); }}
               className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 border border-slate-700 rounded-xl px-3 py-1.5 transition-colors shrink-0">
@@ -10831,7 +10127,7 @@ function SectionCreditReport({ d, u, clientId, onNext }) {
             <div className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-2 bg-slate-800/60 border-b border-slate-700/60">
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Creditor</span>
               <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-right">Balance</span>
-              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-right w-40">Assign to Schedule</span>
+              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-right w-40">Secured / Unsecured</span>
             </div>
 
             {visibleItems.length === 0 && (
@@ -11176,14 +10472,10 @@ function SchedDVehicleTab({d, u, imp, clientId, sd, vehicleCreditors, confirmed,
                   </p>
                 </div>
 
-                {/* Every vehicle must be listed */}
-                <div className="bg-amber-400/6 border border-amber-400/25 rounded-xl px-4 py-3 flex items-start gap-3">
-                  <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                  <div>
-                    <p className="text-xs font-bold text-amber-300 mb-1">Every Vehicle Loan Must Be Listed</p>
-                    <p className="text-xs text-slate-400 leading-relaxed">This includes cars, trucks, motorcycles, boats, RVs, title loans, and registration loans — even if you plan to keep paying, even if the vehicle is being repossessed. Listing it here does not mean you are giving it up. You will tell us your intent separately.</p>
-                  </div>
-                </div>
+                {/* Prompt 96 — the generic "Every Vehicle Loan Must Be Listed"
+                    disclosure was moved into SectionCreditorSource so the
+                    client reads it once at the start of the creditor flow,
+                    not again at every Schedule D step. */}
 
               </div>
               <div className="px-5 py-4 border-t border-slate-700 bg-slate-900/40 flex items-center justify-between gap-3">
@@ -11336,6 +10628,664 @@ function SchedDVehicleTab({d, u, imp, clientId, sd, vehicleCreditors, confirmed,
   );
 }
 
+// ─── Prompt 96 (BAN-87) — Schedule D manual flow ───────────────────────────────
+//
+// A guided, one-question-at-a-time wizard that replaces the dense 4-tab
+// Schedule D experience for clients who chose "Enter creditors manually" on
+// the Creditor Source step (gate: d.creditorSource?.choice === "manual").
+// Drives the questions off the same-session Schedule A/B answers:
+//   - If A/B reports a home (schedAB_re.hasRE === "Yes" + properties[]),
+//     ask about a mortgage on it. If the property has an HOA, ask about
+//     that. Then ask about any other liens on the home.
+//   - For each vehicle in schedAB_phy.vehicles[], ask about a loan on it,
+//     then any other liens on it.
+//   - Finally, a catch-all "any other secured creditors?" question.
+//
+// Behavior intentionally narrowed for this slice:
+//   - Captures ONLY 4 fields per creditor — creditor name, last-4 of
+//     account, exact balance owed, exact monthly payment — stored on the
+//     existing BLANK_SECURED shape so downstream (SectionSummary, BCI
+//     export, the paralegal-review reads, the credit-report fan-out
+//     marker convention) keeps working unchanged. All other BLANK_SECURED
+//     fields are left blank as intentional.
+//   - Does NOT auto-seed/prefill creditor rows from Schedule A/B — the
+//     client is asked fresh. A/B answers only decide which questions to
+//     show, never write rows behind the client's back. (When manual mode
+//     is active SectionSchedD short-circuits before SchedDHomeTab's
+//     auto-seed useEffect can run, so no rows arrive prefilled.)
+//   - Statement upload reuses InlineStatementCapture with a 30-day
+//     staleness guard on parsed `statement_date` (the document is not
+//     rejected — the row is flagged `_statementStale: true` and the
+//     client sees an inline notice that a newer statement is required
+//     before drafting).
+//   - Skipping the statement (allowDefer → onDefer) writes a
+//     `pending_doc_requests` row tagged with the creditor name + last 4
+//     so the document portal can chase it.
+//   - Judgment liens (when the client picks "Judgment lien" in the
+//     other-liens type chip row) land on Schedule F (schedEF_np) with
+//     attorney-review markers — NOT on Schedule D — because § 522(f) lien
+//     avoidance is judgment-lien-specific. §522(f) language matches the
+//     existing inline note in the locked file.
+
+// Sub-helper: the four-field creditor form + statement upload + 30-day
+// staleness check + optional type chip picker (for "other lien" steps).
+// Calls onSave (or onSaveJudgment when the picked type is "judgment") with
+// the assembled creditor patch — the parent decides whether the row lands
+// on schedD or schedEF_np.
+function SDManualCreditorForm({
+  clientId,
+  titleLabel,          // e.g. "Mortgage on 123 Main St"  — shown above the form
+  docType,             // e.g. "mortgage_stmt" — InlineStatementCapture key
+  category,            // e.g. "secured-creditors" — storage folder
+  collateralHint,      // e.g. "Real Property — 123 Main St"
+  liabilityKind,       // "mortgage" | "hoa" | "vehicle_loan" | "other_lien"
+  typePicker,          // true → show the 5-chip lien-type row (other-lien steps)
+  onSave,              // (creditorPatch) => void
+  onSaveJudgment,      // (creditorPatch) => void — called when picked type is "judgment"
+  onCancel,            // optional — closes the form without saving
+}) {
+  const [name, setName] = useState("");
+  const [acct4, setAcct4] = useState("");
+  const [balance, setBalance] = useState("");
+  const [monthly, setMonthly] = useState("");
+  const [stmtExtracted, setStmtExtracted] = useState(null);
+  const [stmtDate, setStmtDate] = useState("");
+  const [stmtStale, setStmtStale] = useState(false);
+  const [pickedType, setPickedType] = useState(typePicker ? "" : null);
+
+  const TYPES = [
+    { id: "heloc",    label: "HELOC / 2nd mortgage" },
+    { id: "tax",      label: "Tax lien (IRS / state)" },
+    { id: "mechanic", label: "Mechanic's / contractor lien" },
+    { id: "judgment", label: "Judgment lien" },
+    { id: "other",    label: "Other lien" },
+  ];
+  const typeMeta = TYPES.find(t => t.id === pickedType) || null;
+  const isJudgment = pickedType === "judgment";
+
+  // Allow save once name + balance are present (monthly may legitimately be
+  // zero for some liens, e.g. tax / judgment / HOA arrears). Type required
+  // when the picker is shown.
+  const canSave = !!name.trim() && !!balance.trim() && (!typePicker || !!pickedType);
+
+  // Dynamic title used by the statement-capture widget. Embeds the typed
+  // name + last-4 so a deferred pending_doc_requests row carries identifying
+  // info even before the creditor row is saved.
+  const liveTitle = name && acct4
+    ? `${name} (acct ****${acct4}) — ${titleLabel}`
+    : name
+      ? `${name} — ${titleLabel}`
+      : titleLabel;
+
+  const handleExtracted = (parsed) => {
+    if (!parsed) return;
+    setStmtExtracted(parsed);
+    if (parsed.lender_name           && !name)    setName(String(parsed.lender_name));
+    if (parsed.account_number_last4  && !acct4)   setAcct4(String(parsed.account_number_last4).replace(/\D/g, "").slice(-4));
+    if (parsed.current_balance       && !balance) setBalance(String(parsed.current_balance));
+    if (parsed.monthly_payment       && !monthly) setMonthly(String(parsed.monthly_payment));
+    if (parsed.statement_date) {
+      setStmtDate(parsed.statement_date);
+      const dt = new Date(parsed.statement_date);
+      if (!isNaN(dt.getTime())) {
+        const daysOld = Math.floor((Date.now() - dt.getTime()) / 86_400_000);
+        setStmtStale(daysOld > 30);
+      }
+    }
+  };
+
+  const save = () => {
+    if (!canSave) return;
+    const collateral = typeMeta
+      ? `${typeMeta.label} — ${collateralHint}`
+      : collateralHint;
+    const patch = {
+      name: name.trim(),
+      acct: acct4,
+      amount: balance.trim(),
+      monthlyPayment: monthly.trim(),
+      collateral,
+      _manualLiability: liabilityKind + (typeMeta ? `:${typeMeta.id}` : ""),
+      ...(stmtExtracted ? { _stmtExtracted: stmtExtracted } : {}),
+      ...(stmtDate ? { _statementDate: stmtDate } : {}),
+      ...(stmtStale ? { _statementStale: true } : {}),
+    };
+    if (isJudgment && onSaveJudgment) onSaveJudgment(patch);
+    else onSave(patch);
+    // Reset for the next creditor in the same step.
+    setName(""); setAcct4(""); setBalance(""); setMonthly("");
+    setStmtExtracted(null); setStmtDate(""); setStmtStale(false);
+    if (typePicker) setPickedType("");
+  };
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/40 p-5">
+      <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">{titleLabel}</p>
+
+      {typePicker && (
+        <div>
+          <p className="text-xs font-semibold text-white mb-2">What type of lien is it?</p>
+          <div className="flex flex-wrap gap-2">
+            {TYPES.map(t => (
+              <button key={t.id} type="button"
+                onClick={() => setPickedType(t.id)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                  pickedType === t.id
+                    ? "bg-amber-400/15 border-amber-400/60 text-amber-300"
+                    : "bg-slate-800/40 border-slate-700 text-slate-300 hover:border-slate-500"
+                }`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          {isJudgment && (
+            <div className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/8 px-4 py-3 text-xs text-amber-200 leading-relaxed">
+              <strong className="text-amber-300">Your attorney will review this.</strong>{" "}
+              A judicial lien may be avoidable under{" "}
+              <strong className="text-white">11 U.S.C. § 522(f)</strong>{" "}
+              if it impairs an exemption — so we record judgment liens for
+              attorney review on Schedule F (not on Schedule D). You will
+              not need to do anything else here beyond entering the details.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Four manual fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Creditor name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Wells Fargo Bank"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Last 4 of account number</label>
+          <input type="text" value={acct4} maxLength={4}
+            onChange={e => setAcct4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="1234"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Exact balance owed</label>
+          <input type="text" inputMode="decimal" value={balance}
+            onChange={e => setBalance(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="0.00"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Exact monthly payment</label>
+          <input type="text" inputMode="decimal" value={monthly}
+            onChange={e => setMonthly(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="0.00"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+      </div>
+
+      {/* Statement upload + 30-day staleness check */}
+      <div>
+        <p className="text-xs font-semibold text-white mb-1">Upload the most recent statement (within 30 days)</p>
+        <p className="text-[11px] text-slate-400 leading-relaxed mb-2">
+          A current statement (dated within the last 30 days) is required before your case can be drafted.
+          Upload now, or click <strong className="text-slate-300">I'll add later</strong> — we'll create a
+          request in your document portal so you can come back to it.
+        </p>
+        <InlineStatementCapture
+          title={liveTitle}
+          docType={docType}
+          category={category}
+          contextRef={`schedD_${docType}_${acct4 || "unknown"}`}
+          clientId={clientId}
+          allowDefer
+          extractPrompt={`Extract from this statement and return JSON with these exact keys:
+{
+  "lender_name": "servicer or lender name as printed",
+  "account_number_last4": "last 4 digits of loan/account number only",
+  "current_balance": number or null,
+  "monthly_payment": number or null,
+  "statement_date": "MM/DD/YYYY or null",
+  "past_due_amount": number or null
+}`}
+          onExtracted={handleExtracted}
+        />
+        {stmtStale && (
+          <div className="mt-2 rounded-xl border border-rose-500/40 bg-rose-500/5 px-3 py-2 text-xs text-rose-200 leading-relaxed">
+            <strong className="text-rose-300">Statement is older than 30 days</strong> ({stmtDate}).
+            A current statement is required before your case can be drafted. Please come back and upload
+            a newer one when you have it.
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800">
+        <button type="button" onClick={save} disabled={!canSave}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            canSave
+              ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+              : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+          }`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+          {isJudgment ? "Save (routes to Schedule F for attorney review)" : "Save this creditor"}
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}
+            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 transition-colors">
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Sub-helper: one yes/no question with a renderForm slot that the parent
+// uses to show the four-field form when the answer is "yes". Manages the
+// "add another / continue" affordance after a row is saved.
+function SDManualStepShell({
+  badge, question, helper, yesLabel, noLabel,
+  renderForm,           // (closeForm) => <SDManualCreditorForm .../>
+  addAnotherLabel = "Add another",
+  doneLabel = "Continue to next question",
+  advance,              // () => void
+}) {
+  const [answer, setAnswer] = useState("");   // "" | "yes" | "no"
+  const [showForm, setShowForm] = useState(false);
+  const [savedCount, setSavedCount] = useState(0);
+
+  if (answer === "") {
+    return (
+      <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-5 space-y-3">
+        <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">{badge}</p>
+        <h3 className="text-lg font-bold text-white leading-snug">{question}</h3>
+        {helper && <p className="text-xs text-slate-400 leading-relaxed">{helper}</p>}
+        <div className="flex gap-2 flex-wrap pt-1">
+          <button type="button"
+            onClick={() => { setAnswer("yes"); setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm transition-colors">
+            {yesLabel}
+          </button>
+          <button type="button"
+            onClick={() => { setAnswer("no"); advance(); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white font-semibold text-sm transition-colors">
+            {noLabel}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // answer === "yes" — either show the form, or the post-save affordance.
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-amber-400/30 bg-amber-400/5 px-5 py-4">
+        <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">{badge}</p>
+        <p className="text-sm text-amber-200">{question}</p>
+        {savedCount > 0 && (
+          <p className="text-xs text-green-400 mt-2">✓ {savedCount} saved so far on this question.</p>
+        )}
+      </div>
+
+      {showForm && renderForm(() => {
+        // After save, the form parent calls onSave which writes to form_data;
+        // we then hide the form and bump the saved-count.
+        setShowForm(false);
+        setSavedCount(c => c + 1);
+      })}
+
+      {!showForm && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <button type="button" onClick={() => setShowForm(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 font-semibold text-sm transition-colors hover:bg-amber-400/20">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+            {addAnotherLabel}
+          </button>
+          <button type="button" onClick={advance}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/40 text-green-300 font-semibold text-sm transition-colors hover:bg-green-500/25">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+            {doneLabel}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SectionSchedDManual({ d, u, clientId }) {
+  const sd = d.schedD || { creditors: [] };
+  const properties = d.schedAB_re?.properties || [];
+  const hasRE      = d.schedAB_re?.hasRE === "Yes" && properties.length > 0;
+  const vehicles   = d.schedAB_phy?.vehicles || [];
+
+  // Build the queue once per render. Order: per-property mortgage / HOA /
+  // other liens, then per-vehicle loan / other liens, then a single
+  // "any other secured creditors?" catch-all, then the done step.
+  const queue = [];
+  if (hasRE) {
+    properties.forEach((p, pi) => {
+      queue.push({ kind: "home_mort", propIdx: pi });
+      if (p.hasHOA === "yes") queue.push({ kind: "home_hoa", propIdx: pi });
+      queue.push({ kind: "home_other", propIdx: pi });
+    });
+  }
+  vehicles.forEach((_, vi) => {
+    queue.push({ kind: "veh_loan", vehIdx: vi });
+    queue.push({ kind: "veh_other", vehIdx: vi });
+  });
+  queue.push({ kind: "other_q" });
+  queue.push({ kind: "done" });
+
+  const stepRaw = sd._manualStep || 0;
+  const step = Math.min(Math.max(stepRaw, 0), queue.length - 1);
+  const setStep = (n) => u("schedD", { ...sd, _manualStep: Math.min(Math.max(n, 0), queue.length - 1) });
+  const advance = () => setStep(step + 1);
+  const goBack  = () => setStep(step - 1);
+
+  const current = queue[step];
+
+  // Creditor write helpers ----------------------------------------------------
+  // Always read the latest sd / sf state when we push (rather than the
+  // closure-captured copy at the top of the render) so that an "Add
+  // another" within the same step doesn't drop earlier writes.
+  const pushDCreditor = (patch) => {
+    const sdNow = d.schedD || { creditors: [] };
+    const row = {
+      ...BLANK_SECURED,
+      _confirmed: true,
+      _confirmedAt: new Date().toISOString(),
+      _confirmedBy: "client",
+      _manualEntry: true,
+      ...patch,
+    };
+    u("schedD", { ...sdNow, creditors: [...(sdNow.creditors || []), row] });
+  };
+
+  const pushJudgmentLien = (patch) => {
+    // Judgment liens land on Schedule F with §522(f) review markers so the
+    // attorney can evaluate a motion to avoid the lien on a case-by-case
+    // basis. The note string mirrors the existing inline language used
+    // elsewhere in the locked file.
+    const sfNow = d.schedEF_np || { creditors: [] };
+    const row = {
+      ...BLANK_SECURED,
+      _flagAttorneyReview: true,
+      _attorneyReviewReason: "522f_avoid_judicial_lien",
+      _attorneyReviewNote: "Judicial lien — review for 11 U.S.C. § 522(f) motion to avoid lien impairing exemption.",
+      _confirmed: true,
+      _confirmedAt: new Date().toISOString(),
+      _confirmedBy: "client",
+      _manualEntry: true,
+      _fromSchedDManualJudgment: true,
+      ...patch,
+    };
+    u("schedEF_np", { ...sfNow, creditors: [...(sfNow.creditors || []), row] });
+  };
+
+  // Step body renderer --------------------------------------------------------
+  const renderStep = () => {
+    if (!current) return null;
+
+    if (current.kind === "home_mort") {
+      const p = properties[current.propIdx];
+      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
+      const collateralHint = `Real Property — ${addr || "Primary Residence"}`;
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Your home`}
+          question={`You listed a home${addr ? ` at ${addr}` : ""}. Do you owe a mortgage on it?`}
+          helper="Include any first mortgage, deed of trust, or primary lien on the property. You will be asked about HOA and other liens next."
+          yesLabel="Yes — I have a mortgage"
+          noLabel="No, no mortgage on the home"
+          addAnotherLabel="Add another mortgage on this home"
+          doneLabel="Done with mortgages — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel={`Mortgage on ${addr || "the home"}`}
+              docType="mortgage_stmt"
+              category="secured-creditors"
+              collateralHint={collateralHint}
+              liabilityKind="mortgage"
+              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "home_hoa") {
+      const p = properties[current.propIdx];
+      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
+      const collateralHint = `HOA Statutory Lien — ${addr || "Property"}`;
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — HOA on your home`}
+          question="You said the property has an HOA. Do you have an HOA balance or past-due dues to list?"
+          helper="HOAs have an automatic statutory lien — it must be listed even if you're current."
+          yesLabel="Yes — list the HOA"
+          noLabel="No HOA balance / no HOA"
+          addAnotherLabel="Add another HOA"
+          doneLabel="Done with HOA — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel={`HOA — ${addr || "the home"}`}
+              docType="hoa_stmt"
+              category="secured-creditors"
+              collateralHint={collateralHint}
+              liabilityKind="hoa"
+              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr, _isHOA: true }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "home_other") {
+      const p = properties[current.propIdx];
+      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
+      const collateralHint = `${addr || "the home"}`;
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Other liens on your home`}
+          question={`Any other liens on the home${addr ? ` at ${addr}` : ""}?`}
+          helper="HELOC / 2nd mortgage, IRS or state tax lien, mechanic's / contractor lien, judgment lien, or any other recorded lien."
+          yesLabel="Yes — add a lien"
+          noLabel="No other liens on the home"
+          addAnotherLabel="Add another lien"
+          doneLabel="Done with home liens — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel={`Other lien — ${addr || "the home"}`}
+              docType="secured_stmt"
+              category="secured-creditors"
+              collateralHint={collateralHint}
+              liabilityKind="other_lien"
+              typePicker
+              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr }); closeForm(); }}
+              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, propertyAddr: addr, consideration: "Judgment lien (home)" }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "veh_loan") {
+      const v = vehicles[current.vehIdx];
+      const label = [v?.year, v?.make, v?.model].filter(Boolean).join(" ") || `Vehicle ${current.vehIdx + 1}`;
+      const collateralHint = label;
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — ${label}`}
+          question={`You listed a ${label}. Do you owe a loan on it?`}
+          helper={v?.hasLoan === "yes"
+            ? "You told us in Schedule A/B that there is a loan — confirm the details below."
+            : "If there's a title loan, registration loan, or any lender that can take the vehicle back, list it here."}
+          yesLabel="Yes — I have a loan on this vehicle"
+          noLabel="No, no loan on this vehicle"
+          addAnotherLabel="Add another loan on this vehicle"
+          doneLabel="Done with this vehicle's loan — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel={`Vehicle loan — ${label}`}
+              docType="auto_loan"
+              category="secured-creditors"
+              collateralHint={collateralHint}
+              liabilityKind="vehicle_loan"
+              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "veh_other") {
+      const v = vehicles[current.vehIdx];
+      const label = [v?.year, v?.make, v?.model].filter(Boolean).join(" ") || `Vehicle ${current.vehIdx + 1}`;
+      const collateralHint = label;
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Other liens on ${label}`}
+          question={`Any other liens on the ${label}?`}
+          helper="Mechanic's lien, judgment lien tied to the vehicle, or any other recorded lien."
+          yesLabel="Yes — add a lien"
+          noLabel="No other liens on this vehicle"
+          addAnotherLabel="Add another lien"
+          doneLabel="Done with this vehicle — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel={`Other lien — ${label}`}
+              docType="secured_stmt"
+              category="secured-creditors"
+              collateralHint={collateralHint}
+              liabilityKind="other_lien"
+              typePicker
+              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
+              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, consideration: `Judgment lien (${label})` }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "other_q") {
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Anything else`}
+          question="Do you have any other secured creditors not yet listed?"
+          helper="Personal property liens, business equipment loans, title loans on items other than vehicles, anything you've signed collateral over to a lender."
+          yesLabel="Yes — add another creditor"
+          noLabel="No, that's all my secured creditors"
+          addAnotherLabel="Add another secured creditor"
+          doneLabel="Done — review my entries"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel="Other secured creditor"
+              docType="secured_stmt"
+              category="secured-creditors"
+              collateralHint="Other secured collateral"
+              liabilityKind="other"
+              typePicker
+              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
+              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, consideration: "Judgment lien" }); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "done") {
+      const dRows = (d.schedD?.creditors || []);
+      const fJudgmentRows = (d.schedEF_np?.creditors || []).filter(c => c._fromSchedDManualJudgment);
+      const totalD = dRows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+      return (
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-5 space-y-4">
+          <p className="text-xs font-bold text-green-400 uppercase tracking-widest">All set — review your entries</p>
+          <h3 className="text-lg font-bold text-white">You've finished the guided Schedule D walkthrough.</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Below is everything you entered. Use the previous-question link to fix anything that's wrong; otherwise
+            click Next to continue to Schedule E.
+          </p>
+
+          <div className="space-y-2">
+            <p className="text-xs font-bold text-white">Schedule D — Secured creditors ({dRows.length})</p>
+            {dRows.length === 0
+              ? <p className="text-xs text-slate-500 italic">No secured creditors entered.</p>
+              : <ul className="space-y-1.5">
+                  {dRows.map((c, ci) => (
+                    <li key={ci} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-white truncate">{c.name || "(no name)"} {c.acct && <span className="text-slate-500 font-mono">· ****{c.acct}</span>}</p>
+                        <p className="text-[11px] text-slate-400 truncate">{c.collateral}</p>
+                        {c._statementStale && <p className="text-[10px] text-rose-300">⚠ statement &gt; 30 days — needs replacement before drafting</p>}
+                      </div>
+                      <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                    </li>
+                  ))}
+                </ul>
+            }
+            <p className="text-xs text-slate-500 italic">Total: <span className="text-amber-300 font-semibold">${totalD.toLocaleString()}</span></p>
+          </div>
+
+          {fJudgmentRows.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-white">Routed to Schedule F for attorney review ({fJudgmentRows.length})</p>
+              <ul className="space-y-1.5">
+                {fJudgmentRows.map((c, ci) => (
+                  <li key={ci} className="flex items-center justify-between gap-3 bg-amber-400/8 border border-amber-400/30 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-amber-200 truncate">{c.name || "(no name)"} {c.acct && <span className="text-slate-500 font-mono">· ****{c.acct}</span>}</p>
+                      <p className="text-[11px] text-amber-300/80 truncate">Judgment lien — flagged for § 522(f) review</p>
+                    </div>
+                    <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-amber-400" style={{fontFamily:"'Georgia',serif"}}>
+            Schedule D — Secured Creditors
+          </h2>
+          <p className="text-xs text-slate-500">Step {step + 1} of {queue.length} · guided manual entry.</p>
+        </div>
+        {step > 0 && (
+          <button type="button" onClick={goBack}
+            className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5 transition-colors">
+            ← Previous question
+          </button>
+        )}
+      </div>
+
+      {renderStep()}
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Need to fix an earlier answer? Use the <strong className="text-slate-300">Previous question</strong> link above.
+        Each creditor is saved as soon as you click <strong className="text-slate-300">Save</strong>.
+      </p>
+    </div>
+  );
+}
+
 // ─── SCHEDULE D — Tabbed by collateral type ─────────────────────────────────
 function SectionSchedD({d, u, imp, ImportBanner, clientId, summaryConfirmed, onSummaryConfirm, updateMode, hasUnreviewedChanges}) {
   const [schedDIntroAgreed, setSchedDIntroAgreed] = useState(() => !!(d.schedD?._introAgreed));
@@ -11345,6 +11295,17 @@ function SectionSchedD({d, u, imp, ImportBanner, clientId, summaryConfirmed, onS
   const sd = d.schedD || { creditors: [] };
   const creds = sd.creditors || [];
   const ch13DebtCheck = useDebtLimitCheck(d);
+
+  // Prompt 96 (BAN-87) — manual-path short-circuit. When the client chose
+  // "Enter creditors manually" on the Creditor Source step, render the
+  // guided one-question-at-a-time wizard instead of the legacy 4-tab body
+  // below. This bypasses the SchedDHomeTab auto-seed useEffect (which
+  // would otherwise prefill rows from Schedule A/B) so the client is
+  // asked fresh, per Prompt 96 spec. All useState hooks above run on every
+  // render regardless, so React hooks ordering is preserved.
+  if (d.creditorSource?.choice === "manual") {
+    return <SectionSchedDManual d={d} u={u} clientId={clientId}/>;
+  }
 
   const D_TAB_ORDER = ["home", "vehicle", "other", "summary"];
 
@@ -11404,98 +11365,34 @@ function SectionSchedD({d, u, imp, ImportBanner, clientId, summaryConfirmed, onS
       )}
 
       {/* ── SCHEDULE D INTRO / AGREE GATE ── */}
+      {/* Prompt 96 — the full "What is Schedule D / What is a secured creditor /
+          What you will need / Two ways to enter / Every secured creditor must
+          be listed" disclosure has been moved into SectionCreditorSource so
+          the client reads it once at the start, not again at every D / E / F
+          section. The gate logic + `_introAgreed` persistence is preserved so
+          existing saved sessions keep the same shape; only the disclosure
+          copy is trimmed down to a one-paragraph acknowledgment. */}
       {!schedDIntroAgreed && (
         <div className="space-y-5">
           <div className="rounded-2xl border border-slate-600 bg-slate-800/50 overflow-hidden">
             {/* Header */}
             <div className="px-6 py-5 border-b border-slate-700 bg-slate-800/80">
               <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Schedule D — Secured Creditors</p>
-              <h2 className="text-xl font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>What Is Schedule D?</h2>
+              <h2 className="text-xl font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>Let's enter your secured creditors.</h2>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-6 py-5">
               <p className="text-sm text-slate-300 leading-relaxed">
-                Schedule D is an <strong className="text-white">official document</strong> included in your bankruptcy filing. It lists every creditor that holds a <strong className="text-white">secured claim</strong> — meaning they have a legal right to take back a specific piece of property if you stop making payments.
+                You reviewed the Schedule D overview on the previous step (Creditor Source). On the next screen you'll enter each secured creditor — mortgage, vehicle loans, HOA liens, and any other loans backed by collateral.
               </p>
-
-              {/* What is a secured creditor */}
-              <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
-                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What Is a Secured Creditor?</p>
-                <p className="text-xs text-slate-400 mb-3 leading-relaxed">A secured creditor is any lender whose loan is backed by collateral — something they can take if you don't pay. Common examples include:</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {[
-                    { icon: "🏠", label: "Mortgage on your home" },
-                    { icon: "🚗", label: "Vehicle loan on your car, truck, or motorcycle" },
-                    { icon: "🔑", label: "Title loan or registration loan" },
-                    { icon: "🏘️", label: "HOA dues (statutory lien on your property)" },
-                    { icon: "🏦", label: "Home Equity Loan or HELOC" },
-                    { icon: "⚖️", label: "IRS or judgment liens attached to property" },
-                  ].map((ex, i) => (
-                    <div key={i} className="flex items-center gap-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2">
-                      <span className="text-base shrink-0">{ex.icon}</span>
-                      <span className="text-xs text-slate-300">{ex.label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* What we need */}
-              <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
-                <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What You Will Need to Provide</p>
-                <p className="text-xs text-slate-400 mb-3 leading-relaxed">For each secured creditor, you must provide verification showing:</p>
-                <div className="space-y-2">
-                  {[
-                    "Current loan balance (from your most recent statement)",
-                    "Current monthly payment amount",
-                    "Account number",
-                    "Interest rate",
-                    "Whether the loan is current or past due",
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-2.5">
-                      <span className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0">{i+1}</span>
-                      <span className="text-xs text-slate-300">{item}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* How to provide info — manual vs AI */}
-              <div className="bg-blue-500/8 border border-blue-500/25 rounded-xl px-4 py-4">
-                <p className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-3">Two Ways to Enter Your Information</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg className="w-4 h-4 text-slate-300 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-                      <p className="text-xs font-bold text-white">Enter Manually</p>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">Type in the balance, payment, account number, and interest rate directly from your statement.</p>
-                  </div>
-                  <div className="bg-slate-800/60 border border-blue-500/25 rounded-xl px-4 py-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <svg className="w-4 h-4 text-blue-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                      <p className="text-xs font-bold text-blue-300">Use Our AI Tool</p>
-                    </div>
-                    <p className="text-xs text-slate-400 leading-relaxed">Upload a PDF statement or take a photo — our AI reads the document and fills in all the numbers for you automatically.</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Important notice */}
-              <div className="bg-amber-400/8 border border-amber-400/30 rounded-xl px-4 py-3 flex items-start gap-3">
-                <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-                <div>
-                  <p className="text-xs font-bold text-amber-300 mb-1">Every Secured Creditor Must Be Listed</p>
-                  <p className="text-xs text-slate-400 leading-relaxed">Federal law requires that all secured creditors receive proper notice of your bankruptcy filing. Omitting a secured creditor can create serious problems for your case. If you are unsure whether a creditor belongs here, include them — your attorney can review.</p>
-                </div>
-              </div>
             </div>
 
             {/* I Agree button */}
             <div className="px-6 py-4 border-t border-slate-700 bg-slate-900/40 flex items-center justify-between gap-4">
-              <p className="text-xs text-slate-500 leading-relaxed max-w-md">By clicking "I Agree", you confirm that you have read the above and understand what is required on Schedule D.</p>
+              <p className="text-xs text-slate-500 leading-relaxed max-w-md">By continuing, you confirm you read the Schedule D overview on the previous step and understand what is required here.</p>
               <button type="button"
                 onClick={() => { setSchedDIntroAgreed(true); u("schedD", { ...(d.schedD || {}), _introAgreed: true }); }}
                 className="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-amber-400/25 border border-amber-400/60 text-amber-300 font-bold text-sm transition-all hover:bg-amber-400/35 whitespace-nowrap shrink-0">
-                I Agree — Continue
+                Got it — continue
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/></svg>
               </button>
             </div>
@@ -11773,10 +11670,502 @@ const SE_DEBT_TYPES = [
   },
 ];
 
+// ─── Prompt 97 (BAN-88) — Schedule E manual flow ───────────────────────────────
+//
+// Three guided yes/no questions for clients on the manual path:
+//   1. Back taxes  → per-year form (authority + year + amount) → creditor
+//      row on schedEF_pri + IRS/state account-transcript request in the
+//      document portal + § dischargeability attorney-review flag.
+//   2. Child support → per-recipient form (name + mailing address +
+//      arrears) → creditor row on schedEF_pri + clearinghouse / SDU
+//      statement request.
+//   3. Alimony / spousal support → same shape as child support.
+//
+// No prefill from intake — the client is asked fresh. SDManualStepShell
+// (Prompt 96) handles the yes/no + add-another + continue affordances;
+// only the per-form bodies are specialized to capture the right fields
+// for each priority-debt type (taxes have year + authority; DSOs have
+// recipient name + mailing address + arrears).
+//
+// Document portal requests are non-blocking writes to pending_doc_requests
+// (same convention used by InlineStatementCapture.handleDefer at locked-file
+// line ~17209). The client can always proceed.
+//
+// All rows are stored on the existing BLANK_SECURED shape so downstream
+// (SectionSummary, BCI export, paralegal review) keeps working unchanged.
+
+function SETaxYearForm({ clientId, onSave, onCancel }) {
+  const [authority, setAuthority] = useState("");     // "IRS" | "state"
+  const [stateName, setStateName] = useState("");
+  const [taxYear, setTaxYear]   = useState("");
+  const [amount, setAmount]     = useState("");
+
+  const authorityLabel = authority === "IRS"
+    ? "Internal Revenue Service (IRS)"
+    : authority === "state"
+      ? (stateName ? `${stateName} Department of Revenue` : "State Department of Revenue")
+      : "";
+
+  // IRS PO Box for the Special Procedures office in Philadelphia — same address
+  // the existing TAX_AUTHORITIES table in CreditorList uses for IRS rows
+  // (locked-file line ~13473). We pre-fill it so the client doesn't need to
+  // look it up. State addresses are left blank for paralegal lookup.
+  const IRS_ADDR = { addr1: "PO Box 7346", city: "Philadelphia", state: "Pennsylvania", zip: "19101" };
+
+  const yearNum = parseInt(taxYear, 10);
+  const validYear = !isNaN(yearNum) && yearNum >= 1990 && yearNum <= new Date().getFullYear();
+  const canSave = !!authority && !!amount.trim() && validYear
+    && (authority !== "state" || !!stateName.trim());
+
+  const save = async () => {
+    if (!canSave) return;
+    const addr = authority === "IRS" ? IRS_ADDR : { addr1: "", city: "", state: stateName.trim(), zip: "" };
+    const consideration = `Back taxes — ${authority === "IRS" ? "IRS" : stateName.trim()} ${taxYear}`;
+    const docType = `tax_transcript_${taxYear}`;
+    onSave({
+      name: authorityLabel,
+      ...addr,
+      amount: amount.trim(),
+      consideration,
+      _category: "priority_tax",
+      _taxYear: yearNum,
+      _taxAuthority: authority,
+      _flagAttorneyReview: true,
+      _attorneyReviewReason: "tax_dischargeability",
+      _attorneyReviewNote: `Tax year ${taxYear} — review for dischargeability under 11 U.S.C. § 523(a)(1) (three-year rule, two-year rule, 240-day rule).`,
+    });
+    // Fire-and-forget portal request — non-blocking, same pattern as
+    // InlineStatementCapture.handleDefer.
+    try {
+      await supabase.from("pending_doc_requests").insert({
+        client_id: clientId,
+        document_type: docType,
+        document_category: "tax-transcripts",
+        context_ref: `schedE_tax_${authority}_${taxYear}`,
+        label: `${authorityLabel} — Account Transcript for ${taxYear}`,
+        status: "pending",
+        notes: "Auto-requested from Schedule E manual flow — attorney will review dischargeability once transcript arrives.",
+      });
+    } catch (_) { /* non-blocking */ }
+    // Reset
+    setAuthority(""); setStateName(""); setTaxYear(""); setAmount("");
+  };
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/40 p-5">
+      <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Add a tax year you owe on</p>
+
+      {/* Authority */}
+      <div>
+        <p className="text-xs font-semibold text-white mb-2">Who do you owe the tax to?</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "IRS",   label: "Internal Revenue Service (federal)" },
+            { id: "state", label: "State Department of Revenue" },
+          ].map(opt => (
+            <button key={opt.id} type="button"
+              onClick={() => setAuthority(opt.id)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                authority === opt.id
+                  ? "bg-amber-400/15 border-amber-400/60 text-amber-300"
+                  : "bg-slate-800/40 border-slate-700 text-slate-300 hover:border-slate-500"
+              }`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {authority === "state" && (
+          <div className="sm:col-span-2">
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Which state's revenue department?</label>
+            <input type="text" value={stateName}
+              onChange={e => setStateName(e.target.value)}
+              placeholder="e.g. Arizona"
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+          </div>
+        )}
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Tax year</label>
+          <input type="text" value={taxYear} maxLength={4} inputMode="numeric"
+            onChange={e => setTaxYear(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="2021"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Amount owed / behind</label>
+          <input type="text" inputMode="decimal" value={amount}
+            onChange={e => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="0.00"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-xs text-blue-200 leading-relaxed">
+        <strong className="text-blue-300">We'll request your account transcript.</strong>{" "}
+        When you save this entry, we add a request to your document portal for the{" "}
+        {authority === "IRS" ? "IRS" : (stateName || "state revenue department")}{" "}
+        account transcript for {taxYear || "this year"} so your attorney can review whether
+        the tax debt is dischargeable under 11 U.S.C. § 523(a)(1) (the three-year /
+        two-year / 240-day rules).
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800">
+        <button type="button" onClick={save} disabled={!canSave}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            canSave
+              ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+              : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+          }`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+          Save tax year + request transcript
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}
+            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 transition-colors">
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SEDSOForm({ clientId, dsoKind, onSave, onCancel }) {
+  // dsoKind: "child_support" | "alimony"
+  const [name, setName]   = useState("");
+  const [addr1, setAddr1] = useState("");
+  const [city, setCity]   = useState("");
+  const [state, setState] = useState("");
+  const [zip, setZip]     = useState("");
+  const [arrears, setArrears] = useState("");
+
+  const consideration = dsoKind === "child_support" ? "Child support" : "Alimony";
+
+  const canSave = !!name.trim() && !!addr1.trim() && !!city.trim() && !!state.trim() && !!arrears.trim();
+
+  const save = async () => {
+    if (!canSave) return;
+    onSave({
+      name: name.trim(),
+      addr1: addr1.trim(),
+      city: city.trim(),
+      state: state.trim(),
+      zip: zip.trim(),
+      amount: arrears.trim(),
+      consideration,
+      _category: "priority_dso",
+      _dsoKind: dsoKind,
+      _flagAttorneyReview: true,
+      _attorneyReviewReason: "dso_arrears_verification",
+      _attorneyReviewNote: "Domestic support obligation — verify arrears with State Disbursement Unit / clearinghouse before filing.",
+    });
+    try {
+      await supabase.from("pending_doc_requests").insert({
+        client_id: clientId,
+        document_type: "support_clearinghouse_stmt",
+        document_category: "domestic-support",
+        context_ref: `schedE_dso_${dsoKind}_${name.trim().toLowerCase().replace(/\s+/g, "_")}`,
+        label: `${name.trim()} — Support clearinghouse / SDU arrears statement`,
+        status: "pending",
+        notes: "Auto-requested from Schedule E manual flow — verify arrears before filing.",
+      });
+    } catch (_) { /* non-blocking */ }
+    setName(""); setAddr1(""); setCity(""); setState(""); setZip(""); setArrears("");
+  };
+
+  return (
+    <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/40 p-5">
+      <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+        {dsoKind === "child_support" ? "Add a child support recipient" : "Add an alimony recipient"}
+      </p>
+
+      <div className="rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3 text-xs text-blue-200 leading-relaxed">
+        <strong className="text-blue-300">The recipient must be notified.</strong>{" "}
+        Federal bankruptcy law requires that the person receiving the support be served notice of your
+        bankruptcy filing, so we need their full name and mailing address. We'll also request a
+        statement from your State Disbursement Unit / support clearinghouse to verify the exact arrears
+        amount before filing.
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="sm:col-span-2">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Recipient's full name</label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="e.g. Jane A. Doe"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Street address</label>
+          <input type="text" value={addr1} onChange={e => setAddr1(e.target.value)}
+            placeholder="123 Main St"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div>
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">City</label>
+          <input type="text" value={city} onChange={e => setCity(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">State</label>
+            <input type="text" value={state} onChange={e => setState(e.target.value)}
+              placeholder="AZ"
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+          </div>
+          <div>
+            <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">ZIP</label>
+            <input type="text" value={zip} onChange={e => setZip(e.target.value.replace(/\D/g, "").slice(0, 5))}
+              maxLength={5} inputMode="numeric"
+              placeholder="85001"
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+          </div>
+        </div>
+        <div className="sm:col-span-2">
+          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Amount behind (arrears)</label>
+          <input type="text" inputMode="decimal" value={arrears}
+            onChange={e => setArrears(e.target.value.replace(/[^0-9.]/g, ""))}
+            placeholder="0.00"
+            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800">
+        <button type="button" onClick={save} disabled={!canSave}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+            canSave
+              ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+              : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+          }`}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+          Save recipient + request clearinghouse statement
+        </button>
+        {onCancel && (
+          <button type="button" onClick={onCancel}
+            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 transition-colors">
+            Cancel
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SectionSchedEManual({ d, u, clientId }) {
+  const sd = d.schedEF_pri || { creditors: [], taxDebts: [] };
+
+  // Question queue — three fixed yes/no asks.
+  const queue = [
+    { kind: "tax" },
+    { kind: "child_support" },
+    { kind: "alimony" },
+    { kind: "done" },
+  ];
+
+  const stepRaw = sd._manualStep || 0;
+  const step = Math.min(Math.max(stepRaw, 0), queue.length - 1);
+  const setStep = (n) => u("schedEF_pri", { ...sd, _manualStep: Math.min(Math.max(n, 0), queue.length - 1) });
+  const advance = () => setStep(step + 1);
+  const goBack  = () => setStep(step - 1);
+  const current = queue[step];
+
+  // Push a row to schedEF_pri.creditors, reading the latest slice so
+  // "Add another" within the same step doesn't clobber earlier writes.
+  const pushPri = (patch) => {
+    const sfNow = d.schedEF_pri || { creditors: [], taxDebts: [] };
+    const row = {
+      ...BLANK_SECURED,
+      _confirmed: true,
+      _confirmedAt: new Date().toISOString(),
+      _confirmedBy: "client",
+      _manualEntry: true,
+      ...patch,
+    };
+    u("schedEF_pri", { ...sfNow, creditors: [...(sfNow.creditors || []), row] });
+  };
+
+  const renderStep = () => {
+    if (!current) return null;
+
+    if (current.kind === "tax") {
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Back taxes`}
+          question="Do you owe any back taxes?"
+          helper="Income tax for any year (federal IRS or state). Each year is listed separately. Payroll/business taxes are also priority debts — list them too, picking the year they were owed."
+          yesLabel="Yes — add a tax year"
+          noLabel="No back taxes"
+          addAnotherLabel="Add another tax year"
+          doneLabel="Done with taxes — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SETaxYearForm
+              clientId={clientId}
+              onSave={(patch) => { pushPri(patch); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "child_support") {
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Child support`}
+          question="Do you owe any back child support?"
+          helper="Past-due child support ordered by a court. The recipient must be notified of your bankruptcy filing, so we'll collect their mailing address."
+          yesLabel="Yes — add a recipient"
+          noLabel="No back child support"
+          addAnotherLabel="Add another recipient"
+          doneLabel="Done with child support — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SEDSOForm
+              clientId={clientId}
+              dsoKind="child_support"
+              onSave={(patch) => { pushPri(patch); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "alimony") {
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Alimony / spousal support`}
+          question="Do you owe any alimony or spousal support?"
+          helper="Past-due alimony or spousal support ordered by a court. Recipient must be notified."
+          yesLabel="Yes — add a recipient"
+          noLabel="No alimony / spousal support"
+          addAnotherLabel="Add another recipient"
+          doneLabel="Done with alimony — continue"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SEDSOForm
+              clientId={clientId}
+              dsoKind="alimony"
+              onSave={(patch) => { pushPri(patch); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current.kind === "done") {
+      const rows = (d.schedEF_pri?.creditors || []);
+      const taxRows = rows.filter(c => c._category === "priority_tax");
+      const dsoRows = rows.filter(c => c._category === "priority_dso");
+      const totalTax = taxRows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+      const totalDSO = dsoRows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+      const total    = totalTax + totalDSO;
+      return (
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-5 space-y-4">
+          <p className="text-xs font-bold text-green-400 uppercase tracking-widest">All set — review your entries</p>
+          <h3 className="text-lg font-bold text-white">You've finished the guided Schedule E walkthrough.</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Below is everything you entered. Use the previous-question link to fix anything that's wrong;
+            otherwise click Next to continue to Schedule F.
+          </p>
+
+          {taxRows.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-white">Back taxes ({taxRows.length})</p>
+              <ul className="space-y-1.5">
+                {taxRows.map((c, ci) => (
+                  <li key={ci} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{c.name || "(no authority)"}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{c.consideration}</p>
+                      <p className="text-[10px] text-blue-300/80">⤴ transcript requested in your document portal · attorney will review dischargeability</p>
+                    </div>
+                    <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500 italic">Tax total: <span className="text-amber-300 font-semibold">${totalTax.toLocaleString()}</span></p>
+            </div>
+          )}
+
+          {dsoRows.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-white">Domestic support ({dsoRows.length})</p>
+              <ul className="space-y-1.5">
+                {dsoRows.map((c, ci) => (
+                  <li key={ci} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">{c.name || "(no recipient)"}</p>
+                      <p className="text-[11px] text-slate-400 truncate">{c.consideration} · {[c.city, c.state].filter(Boolean).join(", ")}</p>
+                      <p className="text-[10px] text-blue-300/80">⤴ clearinghouse statement requested in your document portal · recipient will be served notice</p>
+                    </div>
+                    <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-xs text-slate-500 italic">Support arrears total: <span className="text-amber-300 font-semibold">${totalDSO.toLocaleString()}</span></p>
+            </div>
+          )}
+
+          {rows.length === 0 && (
+            <p className="text-xs text-slate-500 italic">No priority creditors entered. If you have back taxes or unpaid child support / alimony, use the previous-question link above to go back and add them.</p>
+          )}
+
+          {rows.length > 0 && (
+            <div className="flex items-center justify-between gap-3 bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-3">
+              <span className="text-xs font-semibold text-slate-400">Total priority debt entered</span>
+              <span className="text-base font-bold text-amber-400">${total.toLocaleString()}</span>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-amber-400" style={{fontFamily:"'Georgia',serif"}}>
+            Schedule E — Priority Creditors
+          </h2>
+          <p className="text-xs text-slate-500">Step {step + 1} of {queue.length} · guided manual entry.</p>
+        </div>
+        {step > 0 && (
+          <button type="button" onClick={goBack}
+            className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5 transition-colors">
+            ← Previous question
+          </button>
+        )}
+      </div>
+
+      {renderStep()}
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Need to fix an earlier answer? Use the <strong className="text-slate-300">Previous question</strong> link above.
+        Each entry is saved as soon as you click <strong className="text-slate-300">Save</strong>.
+      </p>
+    </div>
+  );
+}
+
 function SectionSchedE({ d, u, imp, ImportBanner, clientId }) {
   const sd = d.schedEF_pri || { creditors: [], taxDebts: [] };
   const [showCreditorList, setShowCreditorList] = useState(() => !!sd._intakeDone);
   const [checkedTypes, setCheckedTypes] = useState(() => sd._checkedTypes || {});
+
+  // Prompt 97 (BAN-88) — manual-path short-circuit. When the client chose
+  // "Enter creditors manually" on the Creditor Source step, render the
+  // guided three-question wizard (taxes / child support / alimony) instead
+  // of the legacy intake-questions + CreditorList body. All useState hooks
+  // above run on every render regardless, so React hooks ordering is
+  // preserved.
+  if (d.creditorSource?.choice === "manual") {
+    return <SectionSchedEManual d={d} u={u} clientId={clientId}/>;
+  }
 
   const toggleType = (id, val) => {
     const next = { ...checkedTypes, [id]: val };
@@ -12206,6 +12595,143 @@ function CreditReportReviewModal({ accounts: rawAccounts, schedDAssets, onConfir
   );
 }
 
+// ─── Prompt 98 (BAN-89) — Schedule F manual flow ───────────────────────────────
+//
+// A single flat list step for clients on the manual path: "list your
+// remaining (unsecured) creditors — credit cards, medical bills, personal
+// loans, collections, store cards, etc." Reuses SDManualCreditorForm (the
+// same 4-field form used on Schedule D) so the client experience is
+// consistent across the three secured/priority/unsecured surfaces. Each
+// "Add another" pushes a row onto schedEF_np.creditors with the same
+// BLANK_SECURED shape every other surface uses; statement upload + defer
+// path (pending_doc_requests) is handled by InlineStatementCapture inside
+// the form. No prefill from intake — ask fresh.
+
+function SectionSchedFManual({ d, u, clientId }) {
+  const sd = d.schedEF_np || { creditors: [] };
+
+  // Two-step wizard: the "list" step uses SDManualStepShell's yes/no +
+  // add-another affordance; the "done" step shows the review summary.
+  const queue = [{ kind: "list" }, { kind: "done" }];
+  const stepRaw = sd._manualStep || 0;
+  const step = Math.min(Math.max(stepRaw, 0), queue.length - 1);
+  const setStep = (n) => u("schedEF_np", { ...sd, _manualStep: Math.min(Math.max(n, 0), queue.length - 1) });
+  const advance = () => setStep(step + 1);
+  const goBack  = () => setStep(step - 1);
+  const current = queue[step];
+
+  // Always read the latest slice when pushing so "Add another" in the same
+  // step doesn't clobber earlier saves.
+  const pushF = (patch) => {
+    const sfNow = d.schedEF_np || { creditors: [] };
+    const row = {
+      ...BLANK_SECURED,
+      _confirmed: true,
+      _confirmedAt: new Date().toISOString(),
+      _confirmedBy: "client",
+      _manualEntry: true,
+      _category: "other",
+      ...patch,
+    };
+    u("schedEF_np", { ...sfNow, creditors: [...(sfNow.creditors || []), row] });
+  };
+
+  const renderStep = () => {
+    if (current?.kind === "list") {
+      return (
+        <SDManualStepShell
+          badge={`Step ${step + 1} of ${queue.length} — Unsecured creditors`}
+          question="Do you have any unsecured creditors to list?"
+          helper="Credit cards, medical bills, personal loans, collections, store cards, payday loans, anything not tied to specific collateral. List each one as a separate entry."
+          yesLabel="Yes — add an unsecured creditor"
+          noLabel="No, I have no unsecured creditors"
+          addAnotherLabel="Add another unsecured creditor"
+          doneLabel="Done — review my entries"
+          advance={advance}
+          renderForm={(closeForm) => (
+            <SDManualCreditorForm
+              clientId={clientId}
+              titleLabel="Unsecured creditor"
+              docType="unsecured_stmt"
+              category="unsecured-creditors"
+              collateralHint=""
+              liabilityKind="unsecured"
+              onSave={(patch) => { pushF(patch); closeForm(); }}
+            />
+          )}
+        />
+      );
+    }
+
+    if (current?.kind === "done") {
+      const rows = (d.schedEF_np?.creditors || []).filter(c => c._manualEntry || (!c._fromCreditReport && c._category !== "priority_tax" && c._category !== "priority_dso"));
+      const total = rows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+      return (
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-5 space-y-4">
+          <p className="text-xs font-bold text-green-400 uppercase tracking-widest">All set — review your entries</p>
+          <h3 className="text-lg font-bold text-white">You've finished Schedule F.</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Below is everything you entered. Use the previous-step link to go back and add more;
+            otherwise click Next to continue.
+          </p>
+
+          {rows.length === 0 ? (
+            <p className="text-xs text-slate-500 italic">No unsecured creditors entered.</p>
+          ) : (
+            <>
+              <ul className="space-y-1.5">
+                {rows.map((c, ci) => (
+                  <li key={ci} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-white truncate">
+                        {c.name || "(no name)"}
+                        {c.acct && <span className="text-slate-500 font-mono"> · ****{c.acct}</span>}
+                      </p>
+                      {c._statementStale && <p className="text-[10px] text-rose-300">⚠ statement &gt; 30 days — needs replacement before drafting</p>}
+                    </div>
+                    <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex items-center justify-between gap-3 bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-3">
+                <span className="text-xs font-semibold text-slate-400">Total unsecured debt entered</span>
+                <span className="text-base font-bold text-amber-400">${total.toLocaleString()}</span>
+              </div>
+            </>
+          )}
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold text-amber-400" style={{fontFamily:"'Georgia',serif"}}>
+            Schedule F — Unsecured Creditors
+          </h2>
+          <p className="text-xs text-slate-500">Step {step + 1} of {queue.length} · guided manual entry.</p>
+        </div>
+        {step > 0 && (
+          <button type="button" onClick={goBack}
+            className="text-xs text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 rounded-lg px-3 py-1.5 transition-colors">
+            ← Previous step
+          </button>
+        )}
+      </div>
+
+      {renderStep()}
+
+      <p className="text-[11px] text-slate-500 italic leading-snug">
+        Each creditor is saved as soon as you click <strong className="text-slate-300">Save</strong>.
+      </p>
+    </div>
+  );
+}
+
 function SectionSchedF({ d, u, imp, ImportBanner, clientId }) {
   const sd = d.schedEF_np || { creditors: [] };
   const allCreds = sd.creditors || [];
@@ -12218,6 +12744,15 @@ function SectionSchedF({ d, u, imp, ImportBanner, clientId }) {
 
   // Credit report review modal
   const [crModalAccounts, setCrModalAccounts] = useState(null); // null = closed, array = open
+
+  // Prompt 98 (BAN-89) — manual-path short-circuit. When the client chose
+  // "Enter creditors manually" on the Creditor Source step, render the
+  // simple flat-list manual flow instead of the category-tabbed legacy
+  // body. All useState hooks above run on every render so React hooks
+  // ordering is preserved.
+  if (d.creditorSource?.choice === "manual") {
+    return <SectionSchedFManual d={d} u={u} clientId={clientId}/>;
+  }
 
   const setAnswer = (id, val) => {
     const next = { ...catAnswers, [id]: val };
@@ -20101,6 +20636,12 @@ export default function BankruptcyDocumentQuestionnaire({ updateMode = false } =
       case "personalInfo": return withAll(<SectionVoluntaryPetition d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedAB":     return withAll(<SectionSchedAB d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedC":      return withAll(<SectionSchedC d={data} u={updateSection}/>);
+      // Prompt 94 (BAN-86) — new creditor-source-choice step between
+      // Schedule C and Schedule D. Not in SUMMARY_SECTIONS / COMMUNITY_SECTIONS
+      // / SECTION_INTROS sets, so withAll() applies the standard Back/Next
+      // chrome with `canAdvance` defaulting true — the client may pick an
+      // option (or none) and proceed to Schedule D.
+      case "creditorSource": return withAll(<SectionCreditorSource d={data} u={updateSection} clientId={clientId}/>);
       case "schedD":      return withAll(<SectionSchedD d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId} summaryConfirmed={summaryConfirmed} onSummaryConfirm={onSummaryConfirm} updateMode={updateMode} hasUnreviewedChanges={hasUnreviewedChanges}/>);
       case "schedEF_pri": return withAll(<SectionSchedE d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
       case "schedEF_np":  return withAll(<SectionSchedF d={data} u={updateSection} imp={imp} ImportBanner={ImportBanner} clientId={clientId}/>);
