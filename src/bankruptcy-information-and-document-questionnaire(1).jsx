@@ -9489,139 +9489,94 @@ Return ONLY valid JSON — no markdown fences, no extra text. Include every sing
 // (BAN-86 backend work: API key + pull RPC + result-mapping logic).
 const ENABLE_ISOFTPULL = false;
 
+// Prompt 100 (BAN-90) — stubbed list of imported creditors used by the
+// dark iSoftpull dropdown inside the Schedule D lien-step flow. Stays
+// empty until BAN-86 clears; ENABLE_ISOFTPULL gates the UI regardless.
+// Shape (each entry): { name, balance, monthlyPayment, dateIncurred, acct }.
+const IMPORTED_CREDITORS = [];
+
+// Prompt 101 (BAN-91) — per-client eligibility for the soft pull. In
+// production this resolves backend-side from the case's billing/retention
+// state: TRUE for Ch. 7 retained at full standard fee, OR Ch. 13 retained
+// with the upfront portion paid, OR a bifurcated case past the bifurcated
+// minimum. The accounting tab and the retention/payment plan write the
+// trigger; this stub stays FALSE until the eligibility RPC lands. ALSO
+// gated by ENABLE_ISOFTPULL, so flipping ISOFTPULL_ELIGIBLE alone is not
+// enough — both must be true to show the "Pull my credit" card.
+const ISOFTPULL_ELIGIBLE = false;
+
 function SectionCreditorSource({ d, u, clientId }) {
   const cs = d.creditorSource || {};
   const choice = cs.choice || null; // null | "manual" | "pdf" | "isoftpull"
 
   const pick = (next) => u("creditorSource", { ...cs, choice: next, chosenAt: new Date().toISOString() });
 
-  const OPTIONS = [
-    {
-      id: "manual",
-      title: "Enter creditors manually",
-      blurb:
-        "You will type each creditor's name, address, account number, and balance directly into Schedules D, E, and F. No additional charge. Best if you have your statements handy and only have a small number of creditors.",
-      tags: ["No additional charge", "Full control"],
-      disabled: false,
-    },
-    {
-      id: "pdf",
-      title: "Upload a credit report (PDF)",
-      blurb:
-        "Upload a PDF of your credit report (from AnnualCreditReport.com or any bureau). We'll read every tradeline, auto-sort each one into Schedule D (secured), E (priority), or F (non-priority), and show you a review screen before importing. You can still edit anything afterwards.",
-      tags: ["Fastest", "Captures everything", "Reviewable before import"],
-      disabled: false,
-    },
-    {
-      id: "isoftpull",
-      title: "iSoftpull (soft credit pull)",
-      blurb:
-        "We pull your credit report directly using a soft inquiry that does NOT affect your credit score. Results land here automatically.",
-      tags: ENABLE_ISOFTPULL ? ["Soft inquiry — no score impact"] : ["Available soon"],
-      disabled: !ENABLE_ISOFTPULL,
-    },
-  ];
+  // Prompt 101 — local state for the iSoftpull explanation + consent panel.
+  // Surfaces only after the client clicks the (flag-gated) "Pull my credit"
+  // card. Persistent state (choice + consentedAt) lives on form_data via
+  // pick()/u() below; this useState only drives the in-page panel toggle.
+  const [showIsoftpullPanel, setShowIsoftpullPanel] = useState(false);
+
+  // Stubbed pull action — BAN-86 will swap this in for the real iSoftpull
+  // API call + IMPORTED_CREDITORS population. Today it's a no-op record;
+  // we still write the consent metadata so paralegals / accounting can see
+  // the client authorized the soft pull and the routing is set up.
+  const fireIsoftpullStub = async () => {
+    // TODO BAN-86 — call iSoftpull API + populate IMPORTED_CREDITORS.
+    u("creditorSource", {
+      ...cs,
+      choice: "isoftpull",
+      chosenAt: new Date().toISOString(),
+      isoftpullConsentedAt: new Date().toISOString(),
+      isoftpullStatus: "stubbed_no_call_yet",
+    });
+    setShowIsoftpullPanel(false);
+  };
 
   return (
     <div className="space-y-6">
+      {/* Prompt 101 — short page intro. The large "What Is Schedule D"
+          disclosure block that used to live here (relocated by Prompt 96)
+          was removed because per-section intros (e.g. the Schedule D intro
+          card from Prompt 100, plus the simplified Sched A/B page from
+          Prompt 99) already cover that ground at the right moment. */}
       <div>
         <h2 className="text-2xl font-bold text-white mb-2">
           How will you give us your creditors?
         </h2>
         <p className="text-sm text-slate-400 leading-relaxed max-w-2xl">
-          Pick one of the options below. The next three sections (Schedule D — Secured,
-          Schedule E — Priority, Schedule F — Non-Priority) all read from the same creditor
-          list, so this choice decides whether you type them in by hand, upload a credit
-          report we'll auto-sort for you, or pull a fresh soft inquiry.
+          The next sections (Schedule D — Secured, Schedule E — Priority, Schedule F — Non-Priority)
+          all read from the same creditor list. This choice decides how that list gets populated.
         </p>
       </div>
 
-      {/* ── Prompt 96 — Schedule D disclosures (moved from SectionSchedD) ── */}
-      {/* The disclosure copy that used to live inside the Schedule D intro
-          gate and inside SchedDHomeTab / SchedDVehicleTab step 1 has been
-          consolidated here so the client reads it once, before the
-          source-choice cards, instead of seeing it again at every D / E / F
-          step. SectionSchedD's intro gate is trimmed in this prompt to
-          avoid duplication. */}
-      <div className="rounded-2xl border border-slate-600 bg-slate-800/50 overflow-hidden">
-        <div className="px-6 py-5 border-b border-slate-700 bg-slate-800/80">
-          <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-1">Important — Schedule D Disclosures</p>
-          <h3 className="text-xl font-bold text-white" style={{fontFamily:"'Georgia',serif"}}>What Is Schedule D?</h3>
-        </div>
-        <div className="px-6 py-5 space-y-4">
-          <p className="text-sm text-slate-300 leading-relaxed">
-            Schedule D is an <strong className="text-white">official document</strong> included in your bankruptcy filing. It lists every creditor that holds a <strong className="text-white">secured claim</strong> — meaning they have a legal right to take back a specific piece of property if you stop making payments.
-          </p>
-
-          {/* What is a secured creditor */}
-          <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
-            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What Is a Secured Creditor?</p>
-            <p className="text-xs text-slate-400 mb-3 leading-relaxed">A secured creditor is any lender whose loan is backed by collateral — something they can take if you don't pay. Common examples include:</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {[
-                { icon: "🏠", label: "Mortgage on your home" },
-                { icon: "🚗", label: "Vehicle loan on your car, truck, or motorcycle" },
-                { icon: "🔑", label: "Title loan or registration loan" },
-                { icon: "🏘️", label: "HOA dues (statutory lien on your property)" },
-                { icon: "🏦", label: "Home Equity Loan or HELOC" },
-                { icon: "⚖️", label: "IRS or judgment liens attached to property" },
-              ].map((ex, i) => (
-                <div key={i} className="flex items-center gap-2.5 bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2">
-                  <span className="text-base shrink-0">{ex.icon}</span>
-                  <span className="text-xs text-slate-300">{ex.label}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* What we need */}
-          <div className="bg-slate-900/60 border border-slate-700 rounded-xl px-4 py-4">
-            <p className="text-xs font-bold text-amber-400 uppercase tracking-widest mb-3">What You Will Need to Provide</p>
-            <p className="text-xs text-slate-400 mb-3 leading-relaxed">For each secured creditor, you must provide verification showing:</p>
-            <div className="space-y-2">
-              {[
-                "Current loan balance (from your most recent statement)",
-                "Current monthly payment amount",
-                "Account number",
-                "Interest rate",
-                "Whether the loan is current or past due",
-              ].map((item, i) => (
-                <div key={i} className="flex items-center gap-2.5">
-                  <span className="w-5 h-5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-xs font-bold text-amber-300 shrink-0">{i+1}</span>
-                  <span className="text-xs text-slate-300">{item}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Every secured creditor must be listed */}
-          <div className="bg-amber-400/8 border border-amber-400/30 rounded-xl px-4 py-3 flex items-start gap-3">
-            <svg className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-            <div>
-              <p className="text-xs font-bold text-amber-300 mb-1">Every Secured Creditor Must Be Listed</p>
-              <p className="text-xs text-slate-400 leading-relaxed">Federal law requires that all secured creditors receive proper notice of your bankruptcy filing. Omitting a secured creditor can create serious problems for your case. If you are unsure whether a creditor belongs here, include them — your attorney will review.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {OPTIONS.map(opt => {
+      {/* Two always-on cards: manual + PDF upload. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {[
+          {
+            id: "manual",
+            title: "Enter creditors manually",
+            blurb: "Type each creditor's name, balance, and payment directly into Schedules D / E / F. No additional charge. Best if you only have a small number of creditors.",
+            tags: ["No additional charge", "Full control"],
+          },
+          {
+            id: "pdf",
+            title: "Upload a credit report (PDF)",
+            blurb: "Upload a PDF of your credit report (from AnnualCreditReport.com or any bureau). We'll read every tradeline, sort each into Secured or Unsecured, and show you a review screen before importing.",
+            tags: ["Fastest", "Captures everything", "Reviewable before import"],
+          },
+        ].map(opt => {
           const isSelected = choice === opt.id;
-          const isDisabled = opt.disabled;
           return (
             <button
               key={opt.id}
               type="button"
-              onClick={() => { if (!isDisabled) pick(opt.id); }}
-              disabled={isDisabled}
+              onClick={() => pick(opt.id)}
               aria-pressed={isSelected}
               className={`text-left rounded-2xl border p-5 transition-all ${
-                isDisabled
-                  ? "border-slate-800 bg-slate-900/40 opacity-60 cursor-not-allowed"
-                  : isSelected
-                    ? "border-amber-400 bg-amber-400/10 ring-2 ring-amber-400/40"
-                    : "border-slate-700 bg-slate-900/60 hover:border-slate-500 hover:bg-slate-900"
+                isSelected
+                  ? "border-amber-400 bg-amber-400/10 ring-2 ring-amber-400/40"
+                  : "border-slate-700 bg-slate-900/60 hover:border-slate-500 hover:bg-slate-900"
               }`}
             >
               <div className="flex items-start justify-between gap-3 mb-2">
@@ -9631,20 +9586,11 @@ function SectionCreditorSource({ d, u, clientId }) {
                     Selected
                   </span>
                 )}
-                {isDisabled && (
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 px-2 py-1 rounded-full bg-slate-800 border border-slate-700 flex-shrink-0">
-                    Coming soon
-                  </span>
-                )}
               </div>
               <p className="text-xs text-slate-400 leading-relaxed mb-3">{opt.blurb}</p>
               <div className="flex flex-wrap gap-1.5">
                 {opt.tags.map(t => (
-                  <span key={t} className={`text-[10px] font-semibold px-2 py-1 rounded-full ${
-                    isDisabled
-                      ? "bg-slate-800 text-slate-500"
-                      : "bg-slate-800 text-slate-300"
-                  }`}>
+                  <span key={t} className="text-[10px] font-semibold px-2 py-1 rounded-full bg-slate-800 text-slate-300">
                     {t}
                   </span>
                 ))}
@@ -9653,6 +9599,98 @@ function SectionCreditorSource({ d, u, clientId }) {
           );
         })}
       </div>
+
+      {/* Prompt 101 — "Pull my credit" (iSoftpull) card. Gated behind both
+          ENABLE_ISOFTPULL and ISOFTPULL_ELIGIBLE. Today both are false so
+          this entire block is dead. When BAN-86 + the eligibility RPC land
+          and the accounting backend writes true, the card renders alongside
+          the manual + PDF cards and the consent panel below it becomes the
+          entry point to a real pull. */}
+      {ENABLE_ISOFTPULL && ISOFTPULL_ELIGIBLE && (
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => setShowIsoftpullPanel(true)}
+            aria-pressed={choice === "isoftpull"}
+            className={`w-full text-left rounded-2xl border p-5 transition-all ${
+              choice === "isoftpull"
+                ? "border-emerald-400 bg-emerald-400/10 ring-2 ring-emerald-400/40"
+                : "border-emerald-500/40 bg-emerald-500/5 hover:border-emerald-400 hover:bg-emerald-500/10"
+            }`}
+          >
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div className="flex items-center gap-2">
+                <svg className="w-5 h-5 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <h3 className="text-base font-bold text-white">Pull my credit (soft inquiry)</h3>
+              </div>
+              {choice === "isoftpull" && (
+                <span className="text-[10px] font-bold uppercase tracking-widest text-emerald-300 px-2 py-1 rounded-full bg-emerald-400/15 border border-emerald-400/40 flex-shrink-0">
+                  Selected
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed mb-3">
+              We pull a fresh soft inquiry on your behalf — <strong className="text-white">no impact</strong> to
+              your credit score. The full creditor list with balances is retrieved automatically and made
+              available to match on each Schedule D lien step.
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-200">No score impact</span>
+              <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-200">Included with your case</span>
+              <span className="text-[10px] font-semibold px-2 py-1 rounded-full bg-emerald-900/40 text-emerald-200">Auto-matches on Schedule D</span>
+            </div>
+          </button>
+
+          {showIsoftpullPanel && (
+            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-5 space-y-4">
+              <div>
+                <h3 className="text-base font-bold text-white mb-1">Authorize a soft credit inquiry</h3>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  This authorizes our office to perform a <strong className="text-white">soft</strong> credit
+                  inquiry on your behalf. Soft inquiries are <strong className="text-white">not visible to
+                  other lenders and do not affect your credit score</strong>. You may revoke this
+                  authorization at any time by contacting our office.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-900/20 px-4 py-3 space-y-2">
+                <p className="text-xs font-bold text-emerald-300 uppercase tracking-widest">What we retrieve</p>
+                <ul className="text-xs text-slate-300 leading-relaxed space-y-1 list-disc pl-4">
+                  <li>Your <strong className="text-white">creditor list with current balances</strong> from the major credit bureaus.</li>
+                  <li>Each tradeline becomes available to <strong className="text-white">match on Schedule D</strong> from a dropdown — pick the matching imported creditor and it's copied onto Schedule D for review.</li>
+                  <li>Each pulled creditor is also <strong className="text-white">added to your document list</strong> so we can collect the most recent statement.</li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-slate-700 bg-slate-900/60 px-4 py-3 text-xs text-slate-400 leading-relaxed">
+                <p className="font-semibold text-slate-300 mb-1">FCRA authorization</p>
+                <p>
+                  Under the Fair Credit Reporting Act (15 U.S.C. § 1681b), you authorize our firm to obtain
+                  a consumer report from one or more credit reporting agencies for the limited purpose of
+                  preparing your bankruptcy filing. By clicking <strong className="text-white">"I authorize the soft pull"</strong>{" "}
+                  below, you electronically sign this authorization.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-emerald-700/40">
+                <button
+                  type="button"
+                  onClick={() => { void fireIsoftpullStub(); }}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-colors">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+                  I authorize the soft pull
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowIsoftpullPanel(false)}
+                  className="text-xs text-slate-400 hover:text-white px-3 py-1.5 transition-colors">
+                  Cancel — go back to options
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Branch body — what shows below the cards depends on the choice. */}
       {choice === "manual" && (
@@ -9682,15 +9720,16 @@ function SectionCreditorSource({ d, u, clientId }) {
         </div>
       )}
 
-      {choice === "isoftpull" && !ENABLE_ISOFTPULL && (
-        // Defensive — pick() blocks selecting the disabled option, but if a
-        // saved row already carries choice === "isoftpull" we still render a
-        // clear message instead of nothing.
-        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            iSoftpull is not available yet. Pick one of the other two options
-            for now; we will reach out to re-run a soft pull once it's enabled
-            (tracked as <span className="font-mono text-slate-300">BAN-86</span>).
+      {choice === "isoftpull" && (
+        <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/5 p-5">
+          <h3 className="text-sm font-bold text-white mb-2 flex items-center gap-2">
+            <svg className="w-4 h-4 text-emerald-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+            Soft pull authorized
+          </h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            {ENABLE_ISOFTPULL && ISOFTPULL_ELIGIBLE
+              ? <>Your authorization is on file. Click <strong className="text-white">Next</strong> to head to Schedule D — imported creditors will appear in a dropdown on each lien step so you can match them.</>
+              : <>This choice is saved on your file. The actual pull will run once iSoftpull is enabled for your case (BAN-86); we'll notify your attorney when the imported creditors are available.</>}
           </p>
         </div>
       )}
@@ -10683,11 +10722,17 @@ function SDManualCreditorForm({
   onSave,              // (creditorPatch) => void
   onSaveJudgment,      // (creditorPatch) => void — called when picked type is "judgment"
   onCancel,            // optional — closes the form without saving
+  // Prompt 100 (BAN-90) additions — all optional + backward-compatible:
+  showDateIncurred = false, // true → swap last-4-acct input for a "date incurred" input (lien-driven flow's 4 fields)
+  initialValues = null,     // pre-fill fields (used by the review-step Edit affordance)
+  resetOnSave = true,       // false → keep the form populated after Save (edit mode)
+  saveLabel,                // optional override for the save button text
 }) {
-  const [name, setName] = useState("");
-  const [acct4, setAcct4] = useState("");
-  const [balance, setBalance] = useState("");
-  const [monthly, setMonthly] = useState("");
+  const [name, setName]       = useState(initialValues?.name        || "");
+  const [acct4, setAcct4]     = useState(initialValues?.acct        || "");
+  const [dateIncurred, setDateIncurred] = useState(initialValues?.dateIncurred || "");
+  const [balance, setBalance] = useState(initialValues?.amount       || "");
+  const [monthly, setMonthly] = useState(initialValues?.monthlyPayment || "");
   const [stmtExtracted, setStmtExtracted] = useState(null);
   const [stmtDate, setStmtDate] = useState("");
   const [stmtStale, setStmtStale] = useState(false);
@@ -10741,7 +10786,11 @@ function SDManualCreditorForm({
       : collateralHint;
     const patch = {
       name: name.trim(),
-      acct: acct4,
+      // When showDateIncurred is true the form replaces last-4-acct with
+      // date-incurred (Prompt 100's lien-driven 4 fields), so we skip the
+      // acct field in that mode.
+      ...(showDateIncurred ? {} : { acct: acct4 }),
+      ...(showDateIncurred ? { dateIncurred: dateIncurred.trim() } : (dateIncurred ? { dateIncurred: dateIncurred.trim() } : {})),
       amount: balance.trim(),
       monthlyPayment: monthly.trim(),
       collateral,
@@ -10752,10 +10801,12 @@ function SDManualCreditorForm({
     };
     if (isJudgment && onSaveJudgment) onSaveJudgment(patch);
     else onSave(patch);
-    // Reset for the next creditor in the same step.
-    setName(""); setAcct4(""); setBalance(""); setMonthly("");
-    setStmtExtracted(null); setStmtDate(""); setStmtStale(false);
-    if (typePicker) setPickedType("");
+    if (resetOnSave) {
+      // Reset for the next creditor in the same step.
+      setName(""); setAcct4(""); setDateIncurred(""); setBalance(""); setMonthly("");
+      setStmtExtracted(null); setStmtDate(""); setStmtStale(false);
+      if (typePicker) setPickedType("");
+    }
   };
 
   return (
@@ -10800,11 +10851,23 @@ function SDManualCreditorForm({
             className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
         </div>
         <div>
-          <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Last 4 of account number</label>
-          <input type="text" value={acct4} maxLength={4}
-            onChange={e => setAcct4(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            placeholder="1234"
-            className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+          {showDateIncurred ? (
+            <>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Date incurred</label>
+              <input type="text" value={dateIncurred}
+                onChange={e => setDateIncurred(e.target.value)}
+                placeholder="MM/DD/YYYY or approximate year"
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+            </>
+          ) : (
+            <>
+              <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Last 4 of account number</label>
+              <input type="text" value={acct4} maxLength={4}
+                onChange={e => setAcct4(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                placeholder="1234"
+                className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white font-mono placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+            </>
+          )}
         </div>
         <div>
           <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Exact balance owed</label>
@@ -10865,7 +10928,7 @@ function SDManualCreditorForm({
               : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
           }`}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
-          {isJudgment ? "Save (routes to Schedule F for attorney review)" : "Save this creditor"}
+          {saveLabel || (isJudgment ? "Save (routes to Schedule F for attorney review)" : "Save this creditor")}
         </button>
         {onCancel && (
           <button type="button" onClick={onCancel}
@@ -10953,39 +11016,44 @@ function SDManualStepShell({
 function SectionSchedDManual({ d, u, clientId }) {
   const sd = d.schedD || { creditors: [] };
   const properties = d.schedAB_re?.properties || [];
-  const hasRE      = d.schedAB_re?.hasRE === "Yes" && properties.length > 0;
-  const vehicles   = d.schedAB_phy?.vehicles || [];
 
-  // Build the queue once per render. Order: per-property mortgage / HOA /
-  // other liens, then per-vehicle loan / other liens, then a single
-  // "any other secured creditors?" catch-all, then the done step.
+  // Prompt 100 — per-lien step queue, built from each property's
+  // property.liens array (set on Schedule A/B per Prompt 99). Order:
+  // properties first, in the order they appear on schedAB_re, with one
+  // step per selected lien type per property. Ends with a "review" step
+  // that lists all entered secured creditors with edit / add / remove
+  // affordances. Falls back to a single "review" step (with the
+  // "Add a property I missed" mini-form) if no properties carry liens.
   const queue = [];
-  if (hasRE) {
-    properties.forEach((p, pi) => {
-      queue.push({ kind: "home_mort", propIdx: pi });
-      if (p.hasHOA === "yes") queue.push({ kind: "home_hoa", propIdx: pi });
-      queue.push({ kind: "home_other", propIdx: pi });
+  properties.forEach((p, pi) => {
+    (p.liens || []).forEach(lt => {
+      queue.push({ kind: "lien_step", propIdx: pi, lienType: lt });
     });
-  }
-  vehicles.forEach((_, vi) => {
-    queue.push({ kind: "veh_loan", vehIdx: vi });
-    queue.push({ kind: "veh_other", vehIdx: vi });
   });
-  queue.push({ kind: "other_q" });
-  queue.push({ kind: "done" });
+  queue.push({ kind: "review" });
 
   const stepRaw = sd._manualStep || 0;
   const step = Math.min(Math.max(stepRaw, 0), queue.length - 1);
   const setStep = (n) => u("schedD", { ...sd, _manualStep: Math.min(Math.max(n, 0), queue.length - 1) });
   const advance = () => setStep(step + 1);
   const goBack  = () => setStep(step - 1);
-
   const current = queue[step];
 
-  // Creditor write helpers ----------------------------------------------------
-  // Always read the latest sd / sf state when we push (rather than the
-  // closure-captured copy at the top of the render) so that an "Add
-  // another" within the same step doesn't drop earlier writes.
+  // Per-lien-type metadata — drives the statement doc-type, the collateral
+  // string prefix, and which lien types carry the §522(f) attorney-review
+  // markers (judgment liens only, per Prompt 100 PART 1 revision).
+  const LIEN_META = {
+    "1st mortgage":   { docType: "mortgage_stmt", prefix: "1st mortgage",  isJudgment: false, isHOA: false },
+    "2nd mortgage":   { docType: "mortgage_stmt", prefix: "2nd mortgage",  isJudgment: false, isHOA: false },
+    "HELOC":          { docType: "mortgage_stmt", prefix: "HELOC",         isJudgment: false, isHOA: false },
+    "HOA lien":       { docType: "hoa_stmt",      prefix: "HOA lien",      isJudgment: false, isHOA: true  },
+    "IRS tax lien":   { docType: "tax_lien_doc",  prefix: "IRS tax lien",  isJudgment: false, isHOA: false },
+    "state tax lien": { docType: "tax_lien_doc",  prefix: "State tax lien",isJudgment: false, isHOA: false },
+    "judgment lien":  { docType: "judgment_doc",  prefix: "Judgment lien", isJudgment: true,  isHOA: false },
+  };
+
+  // Read the latest schedD slice on every push/replace/remove so multiple
+  // edits inside the same step don't clobber each other.
   const pushDCreditor = (patch) => {
     const sdNow = d.schedD || { creditors: [] };
     const row = {
@@ -10999,264 +11067,366 @@ function SectionSchedDManual({ d, u, clientId }) {
     u("schedD", { ...sdNow, creditors: [...(sdNow.creditors || []), row] });
   };
 
-  const pushJudgmentLien = (patch) => {
-    // Judgment liens land on Schedule F with §522(f) review markers so the
-    // attorney can evaluate a motion to avoid the lien on a case-by-case
-    // basis. The note string mirrors the existing inline language used
-    // elsewhere in the locked file.
-    const sfNow = d.schedEF_np || { creditors: [] };
-    const row = {
-      ...BLANK_SECURED,
+  const replaceDCreditor = (idx, patch) => {
+    const sdNow = d.schedD || { creditors: [] };
+    const arr = [...(sdNow.creditors || [])];
+    if (idx < 0 || idx >= arr.length) return;
+    arr[idx] = { ...arr[idx], ...patch, _editedAt: new Date().toISOString() };
+    u("schedD", { ...sdNow, creditors: arr });
+  };
+
+  const removeDCreditor = (idx) => {
+    const sdNow = d.schedD || { creditors: [] };
+    const arr = [...(sdNow.creditors || [])];
+    arr.splice(idx, 1);
+    u("schedD", { ...sdNow, creditors: arr });
+  };
+
+  // Build the row patch for a lien step, applying judgment markers when
+  // applicable. Used by both the manual form-save and the iSoftpull match.
+  const buildLienPatch = (lt, propIdx, addr) => {
+    const meta = LIEN_META[lt] || { docType: "secured_stmt", prefix: lt, isJudgment: false, isHOA: false };
+    const collateralStr = `${meta.prefix} — ${addr || "Property"}`;
+    const judgmentMarkers = meta.isJudgment ? {
       _flagAttorneyReview: true,
       _attorneyReviewReason: "522f_avoid_judicial_lien",
       _attorneyReviewNote: "Judicial lien — review for 11 U.S.C. § 522(f) motion to avoid lien impairing exemption.",
-      _confirmed: true,
-      _confirmedAt: new Date().toISOString(),
-      _confirmedBy: "client",
-      _manualEntry: true,
-      _fromSchedDManualJudgment: true,
-      ...patch,
+    } : {};
+    return {
+      collateral: collateralStr,
+      consideration: collateralStr,
+      propertyAddr: addr,
+      _propIdx: propIdx,
+      _lienType: lt,
+      ...(meta.isHOA ? { _isHOA: true } : {}),
+      ...judgmentMarkers,
     };
-    u("schedEF_np", { ...sfNow, creditors: [...(sfNow.creditors || []), row] });
   };
 
-  // Step body renderer --------------------------------------------------------
-  const renderStep = () => {
-    if (!current) return null;
+  // ── Review-step state ───────────────────────────────────────────────────
+  // Local-only state for the "Edit"/"Add another"/"Add property I missed"
+  // affordances on the review step. Not persisted — pure UI state.
+  const [editingIdx, setEditingIdx] = useState(null);            // index in schedD.creditors being edited
+  const [addingCustom, setAddingCustom] = useState(false);       // "Add another secured creditor" form open
+  const [addingProperty, setAddingProperty] = useState(false);   // "Add a property I missed" form open
+  const [propAddrDraft, setPropAddrDraft] = useState("");
+  const [propLiensDraft, setPropLiensDraft] = useState([]);
 
-    if (current.kind === "home_mort") {
-      const p = properties[current.propIdx];
-      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
-      const collateralHint = `Real Property — ${addr || "Primary Residence"}`;
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — Your home`}
-          question={`You listed a home${addr ? ` at ${addr}` : ""}. Do you owe a mortgage on it?`}
-          helper="Include any first mortgage, deed of trust, or primary lien on the property. You will be asked about HOA and other liens next."
-          yesLabel="Yes — I have a mortgage"
-          noLabel="No, no mortgage on the home"
-          addAnotherLabel="Add another mortgage on this home"
-          doneLabel="Done with mortgages — continue"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel={`Mortgage on ${addr || "the home"}`}
-              docType="mortgage_stmt"
-              category="secured-creditors"
-              collateralHint={collateralHint}
-              liabilityKind="mortgage"
-              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr }); closeForm(); }}
-            />
-          )}
-        />
-      );
+  const PROP_LIEN_TYPES = ["1st mortgage", "2nd mortgage", "HELOC", "IRS tax lien", "state tax lien", "HOA lien", "judgment lien"];
+  const togglePropLienDraft = (lt) => {
+    setPropLiensDraft(prev => prev.includes(lt) ? prev.filter(x => x !== lt) : [...prev, lt]);
+  };
+
+  const saveMissingProperty = () => {
+    if (!propAddrDraft.trim()) return;
+    const re = d.schedAB_re || { properties: [] };
+    const newProp = {
+      addr: propAddrDraft.trim(),
+      city: "", state: "", zip: "", county: "",
+      description: "", interest: "Fee Simple", value: "",
+      debtorPct: "100", purchaseDate: "",
+      hasHOA: propLiensDraft.includes("HOA lien") ? "yes" : "no",
+      hasSecondLien: (propLiensDraft.includes("2nd mortgage") || propLiensDraft.includes("HELOC")) ? "yes" : "no",
+      liens: [...propLiensDraft],
+      _addedFromSchedD: true,
+    };
+    u("schedAB_re", { ...re, hasRE: "Yes", properties: [...(re.properties || []), newProp] });
+    setAddingProperty(false);
+    setPropAddrDraft("");
+    setPropLiensDraft([]);
+    // After adding a property with liens, the queue rebuilds on next render;
+    // step back to the first lien step on the new property.
+    if (propLiensDraft.length > 0) {
+      const newPropIdx = (re.properties || []).length;
+      const firstNewStep = (() => {
+        // Recompute the queue size — properties + their liens, before this
+        // property was appended. The first new step's index equals the
+        // accumulated lien count across all earlier properties.
+        let n = 0;
+        (re.properties || []).forEach(pp => { n += (pp.liens || []).length; });
+        return n;
+      })();
+      void newPropIdx;
+      setStep(firstNewStep);
     }
+  };
 
-    if (current.kind === "home_hoa") {
-      const p = properties[current.propIdx];
-      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
-      const collateralHint = `HOA Statutory Lien — ${addr || "Property"}`;
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — HOA on your home`}
-          question="You said the property has an HOA. Do you have an HOA balance or past-due dues to list?"
-          helper="HOAs have an automatic statutory lien — it must be listed even if you're current."
-          yesLabel="Yes — list the HOA"
-          noLabel="No HOA balance / no HOA"
-          addAnotherLabel="Add another HOA"
-          doneLabel="Done with HOA — continue"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel={`HOA — ${addr || "the home"}`}
-              docType="hoa_stmt"
-              category="secured-creditors"
-              collateralHint={collateralHint}
-              liabilityKind="hoa"
-              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr, _isHOA: true }); closeForm(); }}
-            />
-          )}
-        />
-      );
-    }
+  // ─── Renderers ──────────────────────────────────────────────────────────
+  const renderLienStep = (curr) => {
+    const p = properties[curr.propIdx];
+    const lt = curr.lienType;
+    const meta = LIEN_META[lt] || { docType: "secured_stmt", prefix: lt, isJudgment: false, isHOA: false };
+    const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
+    const collateralStr = `${meta.prefix} — ${addr || "Property"}`;
 
-    if (current.kind === "home_other") {
-      const p = properties[current.propIdx];
-      const addr = [p?.addr, p?.city, p?.state].filter(Boolean).join(", ");
-      const collateralHint = `${addr || "the home"}`;
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — Other liens on your home`}
-          question={`Any other liens on the home${addr ? ` at ${addr}` : ""}?`}
-          helper="HELOC / 2nd mortgage, IRS or state tax lien, mechanic's / contractor lien, judgment lien, or any other recorded lien."
-          yesLabel="Yes — add a lien"
-          noLabel="No other liens on the home"
-          addAnotherLabel="Add another lien"
-          doneLabel="Done with home liens — continue"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel={`Other lien — ${addr || "the home"}`}
-              docType="secured_stmt"
-              category="secured-creditors"
-              collateralHint={collateralHint}
-              liabilityKind="other_lien"
-              typePicker
-              onSave={(patch) => { pushDCreditor({ ...patch, propertyAddr: addr }); closeForm(); }}
-              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, propertyAddr: addr, consideration: "Judgment lien (home)" }); closeForm(); }}
-            />
-          )}
-        />
-      );
-    }
+    // Count of creditors already saved for this exact (property, lienType).
+    const savedForThis = (sd.creditors || []).filter(c => c._propIdx === curr.propIdx && c._lienType === lt).length;
 
-    if (current.kind === "veh_loan") {
-      const v = vehicles[current.vehIdx];
-      const label = [v?.year, v?.make, v?.model].filter(Boolean).join(" ") || `Vehicle ${current.vehIdx + 1}`;
-      const collateralHint = label;
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — ${label}`}
-          question={`You listed a ${label}. Do you owe a loan on it?`}
-          helper={v?.hasLoan === "yes"
-            ? "You told us in Schedule A/B that there is a loan — confirm the details below."
-            : "If there's a title loan, registration loan, or any lender that can take the vehicle back, list it here."}
-          yesLabel="Yes — I have a loan on this vehicle"
-          noLabel="No, no loan on this vehicle"
-          addAnotherLabel="Add another loan on this vehicle"
-          doneLabel="Done with this vehicle's loan — continue"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel={`Vehicle loan — ${label}`}
-              docType="auto_loan"
-              category="secured-creditors"
-              collateralHint={collateralHint}
-              liabilityKind="vehicle_loan"
-              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
-            />
-          )}
-        />
-      );
-    }
-
-    if (current.kind === "veh_other") {
-      const v = vehicles[current.vehIdx];
-      const label = [v?.year, v?.make, v?.model].filter(Boolean).join(" ") || `Vehicle ${current.vehIdx + 1}`;
-      const collateralHint = label;
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — Other liens on ${label}`}
-          question={`Any other liens on the ${label}?`}
-          helper="Mechanic's lien, judgment lien tied to the vehicle, or any other recorded lien."
-          yesLabel="Yes — add a lien"
-          noLabel="No other liens on this vehicle"
-          addAnotherLabel="Add another lien"
-          doneLabel="Done with this vehicle — continue"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel={`Other lien — ${label}`}
-              docType="secured_stmt"
-              category="secured-creditors"
-              collateralHint={collateralHint}
-              liabilityKind="other_lien"
-              typePicker
-              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
-              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, consideration: `Judgment lien (${label})` }); closeForm(); }}
-            />
-          )}
-        />
-      );
-    }
-
-    if (current.kind === "other_q") {
-      return (
-        <SDManualStepShell
-          badge={`Step ${step + 1} of ${queue.length} — Anything else`}
-          question="Do you have any other secured creditors not yet listed?"
-          helper="Personal property liens, business equipment loans, title loans on items other than vehicles, anything you've signed collateral over to a lender."
-          yesLabel="Yes — add another creditor"
-          noLabel="No, that's all my secured creditors"
-          addAnotherLabel="Add another secured creditor"
-          doneLabel="Done — review my entries"
-          advance={advance}
-          renderForm={(closeForm) => (
-            <SDManualCreditorForm
-              clientId={clientId}
-              titleLabel="Other secured creditor"
-              docType="secured_stmt"
-              category="secured-creditors"
-              collateralHint="Other secured collateral"
-              liabilityKind="other"
-              typePicker
-              onSave={(patch) => { pushDCreditor({ ...patch }); closeForm(); }}
-              onSaveJudgment={(patch) => { pushJudgmentLien({ ...patch, consideration: "Judgment lien" }); closeForm(); }}
-            />
-          )}
-        />
-      );
-    }
-
-    if (current.kind === "done") {
-      const dRows = (d.schedD?.creditors || []);
-      const fJudgmentRows = (d.schedEF_np?.creditors || []).filter(c => c._fromSchedDManualJudgment);
-      const totalD = dRows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
-      return (
-        <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-5 space-y-4">
-          <p className="text-xs font-bold text-green-400 uppercase tracking-widest">All set — review your entries</p>
-          <h3 className="text-lg font-bold text-white">You've finished the guided Schedule D walkthrough.</h3>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Below is everything you entered. Use the previous-question link to fix anything that's wrong; otherwise
-            click Next to continue to Schedule E.
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-5 space-y-3">
+          <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+            Step {step + 1} of {queue.length} — {addr || `Property ${curr.propIdx + 1}`}
           </p>
+          <h3 className="text-lg font-bold text-white leading-snug">
+            {lt}: who is the creditor?
+          </h3>
+          <p className="text-xs text-slate-400 leading-relaxed">
+            You marked a <strong className="text-white">{lt}</strong> on {addr || "this property"} in Schedule A/B. Please enter the creditor's name, when the debt was incurred, the exact balance, and the exact monthly payment.
+          </p>
+          {meta.isJudgment && (
+            <div className="rounded-xl border border-amber-400/30 bg-amber-400/8 px-4 py-3 text-xs text-amber-200 leading-relaxed">
+              <strong className="text-amber-300">Your attorney will review this.</strong>{" "}
+              A judicial lien may be avoidable under <strong className="text-white">11 U.S.C. § 522(f)</strong> if it impairs an exemption. We record this on Schedule D as a secured claim and flag it for the attorney's §&nbsp;522(f) review.
+            </div>
+          )}
+          {savedForThis > 0 && (
+            <p className="text-xs text-green-400">✓ {savedForThis} creditor{savedForThis === 1 ? "" : "s"} already saved for this lien.</p>
+          )}
+        </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-bold text-white">Schedule D — Secured creditors ({dRows.length})</p>
-            {dRows.length === 0
-              ? <p className="text-xs text-slate-500 italic">No secured creditors entered.</p>
-              : <ul className="space-y-1.5">
-                  {dRows.map((c, ci) => (
-                    <li key={ci} className="flex items-center justify-between gap-3 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2">
-                      <div className="min-w-0">
-                        <p className="text-xs font-semibold text-white truncate">{c.name || "(no name)"} {c.acct && <span className="text-slate-500 font-mono">· ****{c.acct}</span>}</p>
-                        <p className="text-[11px] text-slate-400 truncate">{c.collateral}</p>
-                        {c._statementStale && <p className="text-[10px] text-rose-300">⚠ statement &gt; 30 days — needs replacement before drafting</p>}
-                      </div>
-                      <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
-                    </li>
-                  ))}
-                </ul>
-            }
-            <p className="text-xs text-slate-500 italic">Total: <span className="text-amber-300 font-semibold">${totalD.toLocaleString()}</span></p>
+        {/* iSoftpull dropdown — gated dark behind ENABLE_ISOFTPULL. Renders
+            only when the flag is true AND IMPORTED_CREDITORS has entries
+            (BAN-86 will populate). Today the flag is false so this never
+            renders; the code is in place so flipping the flag is the only
+            change needed when the integration lands. */}
+        {ENABLE_ISOFTPULL && IMPORTED_CREDITORS.length > 0 && (
+          <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4 space-y-2">
+            <p className="text-xs font-semibold text-blue-300 uppercase tracking-widest">Or — match to an imported creditor</p>
+            <p className="text-[11px] text-slate-400 leading-relaxed">
+              Pick one of your imported tradelines to copy it straight onto Schedule D for this lien. The matched creditor will also be added to your document checklist.
+            </p>
+            <select
+              defaultValue=""
+              onChange={e => {
+                const idx = parseInt(e.target.value, 10);
+                if (isNaN(idx)) return;
+                const imp = IMPORTED_CREDITORS[idx];
+                pushDCreditor({
+                  name: imp.name || "",
+                  amount: imp.balance || "",
+                  monthlyPayment: imp.monthlyPayment || "",
+                  dateIncurred: imp.dateIncurred || "",
+                  ...(imp.acct ? { acct: String(imp.acct).slice(-4) } : {}),
+                  ...buildLienPatch(lt, curr.propIdx, addr),
+                  _fromImported: true,
+                  _importedSource: "iSoftpull",
+                });
+                // Reset the select so the same option can be picked again.
+                e.target.value = "";
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-blue-400">
+              <option value="">Select an imported creditor…</option>
+              {IMPORTED_CREDITORS.map((imp, idx) => (
+                <option key={idx} value={String(idx)}>
+                  {imp.name} — ${imp.balance}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <SDManualCreditorForm
+          clientId={clientId}
+          titleLabel={collateralStr}
+          docType={meta.docType}
+          category="secured-creditors"
+          collateralHint={collateralStr}
+          liabilityKind={meta.prefix}
+          showDateIncurred
+          onSave={(patch) => {
+            pushDCreditor({ ...patch, ...buildLienPatch(lt, curr.propIdx, addr) });
+          }}
+        />
+
+        <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-slate-800">
+          <button type="button" onClick={advance}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/15 border border-green-500/40 text-green-300 font-semibold text-sm transition-colors hover:bg-green-500/25">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+            Done with this lien — continue
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderReview = () => {
+    const rows = sd.creditors || [];
+    const total = rows.reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+
+    return (
+      <div className="space-y-5">
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/5 p-5 space-y-2">
+          <p className="text-xs font-bold text-green-400 uppercase tracking-widest">Review all secured creditors</p>
+          <h3 className="text-lg font-bold text-white">Are these all the secured creditors with liens on your property?</h3>
+          <p className="text-xs text-slate-300 leading-relaxed">
+            Below is everything you entered. Edit any row that's wrong, remove ones that don't belong,
+            and use the buttons below to add a property you missed or any other secured creditor.
+          </p>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-5">
+            <p className="text-xs text-slate-500 italic">No secured creditors entered yet. Use the buttons below to add a property or a custom creditor.</p>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {rows.map((c, ci) => {
+              const isEditing = editingIdx === ci;
+              return (
+                <li key={ci} className="rounded-2xl border border-slate-700 bg-slate-900/40 overflow-hidden">
+                  <div className="flex items-start justify-between gap-3 px-4 py-3 bg-slate-900/60">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-white truncate">
+                        {c.name || "(no name)"}
+                        {c.dateIncurred && <span className="text-slate-500 font-mono"> · {c.dateIncurred}</span>}
+                      </p>
+                      <p className="text-xs text-slate-400 truncate">{c.collateral || c.consideration}</p>
+                      {c._flagAttorneyReview && (
+                        <p className="text-[10px] text-amber-300 mt-0.5">⚖ flagged for § 522(f) attorney review</p>
+                      )}
+                      {c._statementStale && (
+                        <p className="text-[10px] text-rose-300 mt-0.5">⚠ statement &gt; 30 days — needs replacement before drafting</p>
+                      )}
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className="text-sm font-bold text-amber-300 tabular-nums">${parseFloat(c.amount || "0").toLocaleString()}</p>
+                      {c.monthlyPayment && (
+                        <p className="text-[11px] text-slate-500 tabular-nums">${parseFloat(c.monthlyPayment).toLocaleString()}/mo</p>
+                      )}
+                    </div>
+                  </div>
+                  {!isEditing ? (
+                    <div className="flex items-center justify-end gap-2 px-4 py-2 border-t border-slate-800 bg-slate-900/30">
+                      <button type="button" onClick={() => setEditingIdx(ci)}
+                        className="text-xs text-amber-400 hover:text-amber-300 px-2 py-1 transition-colors">
+                        Edit
+                      </button>
+                      <button type="button" onClick={() => removeDCreditor(ci)}
+                        className="text-xs text-rose-400 hover:text-rose-300 px-2 py-1 transition-colors">
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="p-4 border-t border-slate-800">
+                      <SDManualCreditorForm
+                        clientId={clientId}
+                        titleLabel={`Edit — ${c.collateral || c.name || "secured creditor"}`}
+                        docType="secured_stmt"
+                        category="secured-creditors"
+                        collateralHint={c.collateral || c.consideration || ""}
+                        liabilityKind={c._lienType || "edit"}
+                        showDateIncurred
+                        initialValues={c}
+                        resetOnSave={false}
+                        saveLabel="Save changes"
+                        onSave={(patch) => {
+                          replaceDCreditor(ci, patch);
+                          setEditingIdx(null);
+                        }}
+                        onCancel={() => setEditingIdx(null)}
+                      />
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+
+        {rows.length > 0 && (
+          <div className="flex items-center justify-between gap-3 bg-slate-800/40 border border-slate-700 rounded-xl px-4 py-3">
+            <span className="text-xs font-semibold text-slate-400">Total secured debt entered</span>
+            <span className="text-base font-bold text-amber-400">${total.toLocaleString()}</span>
+          </div>
+        )}
+
+        {/* Add controls */}
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/40 p-5 space-y-3">
+          <p className="text-xs font-bold text-amber-400 uppercase tracking-widest">Missing something?</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => { setAddingProperty(true); setAddingCustom(false); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-amber-400/40 bg-amber-400/10 text-amber-300 text-xs font-semibold hover:bg-amber-400/20 transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+              Add a property I missed
+            </button>
+            <button type="button" onClick={() => { setAddingCustom(true); setAddingProperty(false); }}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-600 hover:border-slate-400 text-slate-300 hover:text-white text-xs font-semibold transition-colors">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+              Add another secured creditor
+            </button>
           </div>
 
-          {fJudgmentRows.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-bold text-white">Routed to Schedule F for attorney review ({fJudgmentRows.length})</p>
-              <ul className="space-y-1.5">
-                {fJudgmentRows.map((c, ci) => (
-                  <li key={ci} className="flex items-center justify-between gap-3 bg-amber-400/8 border border-amber-400/30 rounded-lg px-3 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-amber-200 truncate">{c.name || "(no name)"} {c.acct && <span className="text-slate-500 font-mono">· ****{c.acct}</span>}</p>
-                      <p className="text-[11px] text-amber-300/80 truncate">Judgment lien — flagged for § 522(f) review</p>
-                    </div>
-                    <p className="text-xs font-bold text-amber-300 tabular-nums shrink-0">${parseFloat(c.amount || "0").toLocaleString()}</p>
-                  </li>
-                ))}
-              </ul>
+          {addingProperty && (
+            <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4 space-y-3">
+              <p className="text-xs font-semibold text-white">Add a property that wasn't listed on Schedule A/B</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed">
+                Enter the address and click all the lien types that apply. The property will be added to Schedule A/B, and we'll create one Schedule D step for each lien you check below.
+              </p>
+              <div>
+                <label className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1 block">Property address</label>
+                <input type="text" value={propAddrDraft} onChange={e => setPropAddrDraft(e.target.value)}
+                  placeholder="123 Main St, Phoenix, AZ"
+                  className="w-full px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-400"/>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-1">Liens on this property</p>
+                <div className="flex flex-wrap gap-2">
+                  {PROP_LIEN_TYPES.map(lt => {
+                    const isSelected = propLiensDraft.includes(lt);
+                    return (
+                      <button key={lt} type="button" onClick={() => togglePropLienDraft(lt)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                          isSelected
+                            ? "bg-amber-400/20 border-amber-400/60 text-amber-300"
+                            : "bg-slate-800/40 border-slate-700 text-slate-300 hover:border-slate-500"
+                        }`}>
+                        {isSelected && <span className="mr-1">✓</span>}
+                        {lt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
+                <button type="button" onClick={saveMissingProperty} disabled={!propAddrDraft.trim()}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition-colors ${
+                    propAddrDraft.trim()
+                      ? "bg-amber-400 hover:bg-amber-300 text-slate-950"
+                      : "bg-slate-700 text-slate-500 cursor-not-allowed opacity-60"
+                  }`}>
+                  Save property + add lien steps
+                </button>
+                <button type="button" onClick={() => { setAddingProperty(false); setPropAddrDraft(""); setPropLiensDraft([]); }}
+                  className="text-xs text-slate-400 hover:text-white px-3 py-1.5 transition-colors">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {addingCustom && (
+            <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-4">
+              <p className="text-xs font-semibold text-white mb-2">Add a secured creditor that doesn't fit a property lien</p>
+              <SDManualCreditorForm
+                clientId={clientId}
+                titleLabel="Other secured creditor"
+                docType="secured_stmt"
+                category="secured-creditors"
+                collateralHint="Other secured collateral"
+                liabilityKind="other_secured"
+                showDateIncurred
+                onSave={(patch) => {
+                  pushDCreditor({ ...patch, _customSecured: true });
+                  setAddingCustom(false);
+                }}
+                onCancel={() => setAddingCustom(false)}
+              />
             </div>
           )}
         </div>
-      );
-    }
-
-    return null;
+      </div>
+    );
   };
 
   return (
@@ -11266,7 +11436,9 @@ function SectionSchedDManual({ d, u, clientId }) {
           <h2 className="text-lg font-bold text-amber-400" style={{fontFamily:"'Georgia',serif"}}>
             Schedule D — Secured Creditors
           </h2>
-          <p className="text-xs text-slate-500">Step {step + 1} of {queue.length} · guided manual entry.</p>
+          <p className="text-xs text-slate-500">
+            Step {step + 1} of {queue.length} · driven by the liens you marked on Schedule A/B.
+          </p>
         </div>
         {step > 0 && (
           <button type="button" onClick={goBack}
@@ -11276,7 +11448,16 @@ function SectionSchedDManual({ d, u, clientId }) {
         )}
       </div>
 
-      {renderStep()}
+      {/* Prompt 100 PART 2 — explanatory intro, always visible */}
+      <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5">
+        <p className="text-xs font-bold text-blue-300 uppercase tracking-widest mb-1">About Schedule D</p>
+        <p className="text-sm text-white leading-relaxed">
+          Here we're covering Schedule D — your secured creditors. Schedule D lists every creditor that holds a lien on your property. Please confirm they're all listed.
+        </p>
+      </div>
+
+      {current?.kind === "lien_step" && renderLienStep(current)}
+      {current?.kind === "review"    && renderReview()}
 
       <p className="text-[11px] text-slate-500 italic leading-snug">
         Need to fix an earlier answer? Use the <strong className="text-slate-300">Previous question</strong> link above.
