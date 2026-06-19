@@ -36,6 +36,19 @@ import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
 import type { NavFlags } from './lib/useFirmFlags';
 import SigningReview from './components/SigningReview';
+// RulesAuditProvider — required by SigningReview's LongFormDeductionPanel
+// + Ch13Eligibility (both call useRulesAudit). Wraps the two top-level
+// signing-review views below so the lawyer path doesn't throw
+// "useRulesAudit must be used inside RulesAuditProvider". Latent
+// pre-existing bug fix — see commit log.
+//
+// Scope choice (per-mount, NOT root): the store today is in-memory only
+// and the codebase intentionally keeps parallel scaffolds for the
+// firm-tier and platform-tier audit logs (see src/admin/ReferenceRulesTab.tsx:44-48).
+// LawFirmSettings.tsx:147 mounts its own; we match that pattern here.
+// When persistence lands, all wraps resolve to one backing table per
+// the original author's design.
+import { RulesAuditProvider } from './components/law-firm-settings/rulesAuditStore';
 import GetHelpEntry from './components/get-help/GetHelpEntry';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
@@ -687,7 +700,11 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SigningReview portalChapter="7" /></div>
+        <div className="pb-24">
+          <RulesAuditProvider>
+            <SigningReview portalChapter="7" />
+          </RulesAuditProvider>
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -697,7 +714,11 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SigningReview portalChapter="13" /></div>
+        <div className="pb-24">
+          <RulesAuditProvider>
+            <SigningReview portalChapter="13" />
+          </RulesAuditProvider>
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
