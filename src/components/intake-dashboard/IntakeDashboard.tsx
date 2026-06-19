@@ -55,7 +55,9 @@ import {
   Calendar, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Clock,
   Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search,
   Users, Voicemail, ListChecks, Delete, PlayCircle,
-  AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, X,
+  AlertCircle, AlertTriangle, Sparkles, ClipboardList, BellRing, BellOff, X,
+  Mail, MessageSquare, MessageCircle, Send, Target, UserCheck,
+  Coffee, ArrowRightLeft,
 } from "lucide-react";
 import ConsultSchedulerPanel, {
   type StaffDetail as SchedulerStaffDetail,
@@ -70,12 +72,10 @@ import CommsPillBar from "../comms-pill/CommsPillBar";
 // Legal dashboards can mount the same widgets. Every component receives
 // data via props — no intake-specific assumptions inside the module.
 import {
-  DashboardGrid,
-  AllTasksWidget, LeftModeToggle,
-  AttentionBubble,
-  TopBubblesRow,
-  ConsolidatedMessagingWidget,
+  TaskScopeToggle,
+  RetentionBubble,
   Card, CardHeader, CountBadge, EmptyHint, SampleChip,
+  BubbleCard, COLOR_CFG,
   INTAKE_METRICS,
   FIRM_TZ, todayInFirmTz, nextBusinessDay, relativeTime,
 } from "../department-dashboard";
@@ -217,11 +217,11 @@ async function sbPatch(table: string, id: string, body: object): Promise<void> {
 // Imported at the top of this file under the same name. Same TODO still
 // applies: read firm timezone from firms.timezone instead of hardcoded LA.
 
-// TODO per-staffer work-hours config doesn't exist yet — using firm default 8a–6p.
-// When the work-hours surface lands (likely a staff_availability extension or
-// a new staff_work_hours table), swap to the signed-in staffer's hours.
-const BUSINESS_HOUR_START = 8;   // 8 AM
-const BUSINESS_HOUR_END   = 18;  // 6 PM (exclusive upper bound — last slot is 5pm–6pm)
+// Prompt 85 — the per-staffer business-hours constants
+// (BUSINESS_HOUR_START / BUSINESS_HOUR_END) were retired with the old
+// TodayByHourWidget. The new week-at-a-glance calendar surfaces booked
+// appointments on a per-day list; the per-staff work-hours config will
+// land alongside the scheduler-backend open-slot RPC.
 
 // Layer 1 — Next Task engine.
 const IMMINENT_APPT_WINDOW_MIN = 15;
@@ -248,17 +248,8 @@ const TIER_RANK:    Record<ToDoTier, number> = { emergency: 0, yellow: 1, new: 2
 
 // todayInFirmTz + nextBusinessDay moved to ../department-dashboard
 // during Slice-1 (Prompt 54). Imported under the same names. The
-// intake-only helper hourOfIsoInFirmTz stays here.
-
-/** Hour (0–23) in the firm timezone for the given ISO timestamp. */
-function hourOfIsoInFirmTz(iso: string): number {
-  return parseInt(
-    new Date(iso).toLocaleTimeString("en-US", {
-      hour: "numeric", hour12: false, timeZone: FIRM_TZ,
-    }),
-    10,
-  );
-}
+// intake-only helper hourOfIsoInFirmTz was retired with the old
+// TodayByHourWidget (Prompt 85).
 
 /** Localized "Tue, Jun 10" style label from a YYYY-MM-DD string. */
 function formatDayLabel(dateStr: string): string {
@@ -299,11 +290,7 @@ function formatDuration(seconds: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function formatHourLabel(hour: number): string {
-  const am = hour < 12;
-  const h12 = hour % 12 === 0 ? 12 : hour % 12;
-  return `${h12} ${am ? "AM" : "PM"}`;
-}
+// formatHourLabel retired with the old hourly TodayByHourWidget (Prompt 85).
 
 /**
  * Compact due-time label for a task row.
@@ -384,6 +371,158 @@ interface IntakeDashboardProps {
   timeClockActions: TimeClockActions;
 }
 
+// ─── Prompt 89 — Staff Directory (LEFT rail) ─────────────────────────────────
+//
+// Department-grouped list of active staff. Reads from the existing
+// `staffPool` (intake_leads → staff_members) the dashboard already loads
+// at mount, so this adds no fetches.
+//
+// Honest-data: per-person live availability (available / in-office /
+// on-break / out) has no source today — there's no cross-staff presence
+// column or telephony channel. We render a neutral "status unavailable"
+// dot per row and a `title=` note pointing at BAN-85 instead of
+// fabricating who is on break / out.
+//
+// Per-person "Transfer" affordance is a hover-only label, clearly marked
+// as coming with the telephony integration (BAN-85). It does NOT
+// initiate a real call transfer.
+//
+// Prompt 89-fix — hoisted above IntakeDashboard so the JSX usage of
+// <StaffDirectory /> in the dashboard body appears AFTER the function
+// declaration in source order. Previously declared lower in the file;
+// JavaScript hoisting made that legal but a stale Vite HMR cache could
+// resolve <StaffDirectory /> to undefined when the file was edited in
+// place. Source-order match eliminates that class of HMR confusion.
+function StaffDirectory({
+  staffPool,
+  embedded = false,
+}: {
+  staffPool: SchedulerStaffDetail[];
+  // Prompt 92 — `embedded` toggles render mode. When false (default,
+  // backward-compatible), the directory renders as a standalone Card
+  // with a CardHeader, sticky positioning, and a tall scroll region —
+  // the legacy "rail" surface. When true, the directory renders as a
+  // bare column inside another card (today: ClockHub's left column),
+  // dropping the Card wrapper, the sticky positioning, and using the
+  // same compact uppercase-label header pattern the sibling columns
+  // (Priority queue, Comms, Clock+Appts) use, so the four read as one
+  // continuous surface.
+  embedded?: boolean;
+}) {
+  // Bucket by role. `role` (lowercased) is matched against well-known
+  // substrings; everything else falls into "Other" rather than being
+  // dropped. Empty groups don't render.
+  const groups = useMemo(() => {
+    const out: Record<string, SchedulerStaffDetail[]> = {
+      Attorneys: [], Paralegals: [], Intake: [], Accounting: [], Other: [],
+    };
+    for (const s of staffPool) {
+      const role = (s.role ?? "").toLowerCase();
+      if      (role.includes("attorney"))                              out.Attorneys.push(s);
+      else if (role.includes("paralegal"))                             out.Paralegals.push(s);
+      else if (role.includes("intake"))                                out.Intake.push(s);
+      else if (role.includes("accounting") || role.includes("billing"))out.Accounting.push(s);
+      else                                                              out.Other.push(s);
+    }
+    return out;
+  }, [staffPool]);
+
+  const total = staffPool.length;
+
+  // Shared body: department grouping, neutral status dots (BAN-85),
+  // Transfer placeholders (BAN-85), BAN-85 footer note. Identical in
+  // both render modes — only the surrounding chrome differs.
+  const body = (
+    <>
+      {total === 0 ? (
+        <EmptyHint>No active staff loaded.</EmptyHint>
+      ) : (
+        (Object.entries(groups) as [string, SchedulerStaffDetail[]][])
+          .filter(([, members]) => members.length > 0)
+          .map(([label, members]) => (
+            <div key={label}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-1 px-1">
+                {label} · <span className="text-[#FAFAF7] tabular-nums">{members.length}</span>
+              </p>
+              <ul className="space-y-0.5">
+                {members.map(m => <StaffDirectoryRow key={m.id} staff={m} />)}
+              </ul>
+            </div>
+          ))
+      )}
+      <p className="text-[9px] text-[#6B6B66] italic px-1 leading-snug">
+        Status + call transfer arrive with the telephony + presence
+        backend.
+        {/* TODO BAN-85 — wire live availability (available / in-office /
+            on-break / out) from telephony presence + the time-clock
+            backend; surface real Transfer over the call channel. */}
+      </p>
+    </>
+  );
+
+  if (embedded) {
+    // Prompt 92 — embedded render. Lives inside ClockHub's BubbleCard
+    // as the leftmost column. Header is the same compact
+    // uppercase-label pattern the Priority-queue column uses; the
+    // body scrolls inside a capped region (~30 staff makes the full
+    // list taller than the sibling columns, so we cap at 260px to
+    // sit comfortably within the NOW card).
+    return (
+      <div className="min-w-0 space-y-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+          Staff Directory · <span className="text-[#FAFAF7] tabular-nums">{total}</span>
+        </p>
+        <div className="space-y-3 overflow-y-auto pr-1" style={{ maxHeight: 260 }}>
+          {body}
+        </div>
+      </div>
+    );
+  }
+
+  // Legacy standalone render — kept for any caller still mounting the
+  // directory as its own rail (none on the intake dashboard after
+  // Prompt 92, but the prop default preserves the old shape).
+  return (
+    <Card className="flex flex-col sticky top-4">
+      <CardHeader
+        icon={<Users className="w-4 h-4" />}
+        title="Staff Directory"
+        badge={<CountBadge value={total} />}
+      />
+      <div className="p-3 space-y-3 overflow-y-auto" style={{ maxHeight: 720 }}>
+        {body}
+      </div>
+    </Card>
+  );
+}
+
+function StaffDirectoryRow({ staff }: { staff: SchedulerStaffDetail }) {
+  return (
+    <li className="group flex items-center gap-2 px-2 py-1 rounded hover:bg-[#0F0F0E] transition-colors">
+      {/* Neutral status dot — see BAN-85 note above. We do NOT fabricate
+          per-staff availability. */}
+      <span
+        className="w-1.5 h-1.5 rounded-full bg-[#3A3A36] flex-shrink-0"
+        title="Status unavailable — live availability lands with BAN-85"
+      />
+      <span className="text-xs text-[#FAFAF7] truncate flex-1">{staff.name}</span>
+      <span className="text-[9px] text-[#6B6B66] italic flex-shrink-0">
+        status —
+      </span>
+      <button
+        onClick={() => {
+          // TODO BAN-85 — initiate real call transfer over the telephony
+          // backend. Today this is a labelled placeholder.
+        }}
+        title="Transfer call — telephony pending (BAN-85)"
+        className="opacity-0 group-hover:opacity-100 flex items-center gap-1 text-[10px] text-[#6B6B66] hover:text-[#B8945F] transition-opacity flex-shrink-0"
+      >
+        <ArrowRightLeft className="w-3 h-3" /> Transfer
+      </button>
+    </li>
+  );
+}
+
 export default function IntakeDashboard({
   session, leads, calEvents,
   skippedIds, setSkippedIds,
@@ -406,9 +545,16 @@ export default function IntakeDashboard({
   const [phonePopoverOpen, setPhonePopoverOpen] = useState(false);
   const [escalateOpen, setEscalateOpen] = useState(false);
   const [askForHelpOpen, setAskForHelpOpen] = useState(false);
+  // Prompt 86 — Perf/Goals lives in a modal opened from the dashboard's
+  // header link instead of being a permanent body card.
+  const [perfGoalsOpen, setPerfGoalsOpen] = useState(false);
 
-  // ── Left column — Tasks vs. Schedule toggle ──────────────────────────────
-  const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
+  // Prompt 85 — consolidated relayout. The previous LEFT-column toggle
+  // (Tasks ⇆ Schedule) is gone: the centre column always shows the
+  // priority TASK LIST (Up Next + Outreach Queue), the LEFT rail always
+  // shows My Schedule + Performance/Goals. The `setLeftMode` setter has
+  // been removed with its callers; the Accounting + Legal dashboards
+  // keep their own AllTasksWidget+toggle composition unchanged.
   // ── My-tasks vs Shared-pool scope (Prompt 52) ──────────────────────────
   //
   // Defaults to "mine" so the signed-in staffer's view is theirs by default;
@@ -545,7 +691,9 @@ export default function IntakeDashboard({
   // the SMS / Email tabs (the threads table itself has no channel column).
   const [clientThreads, setClientThreads] = useState<(ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[]>([]);
   const [staffMsgs, setStaffMsgs] = useState<StaffMessage[]>([]);
-  const [msgsLoading, setMsgsLoading] = useState(true);
+  // The previous `msgsLoading` flag fed the removed ConsolidatedMessagingWidget;
+  // CompactMessagesPreview just renders the current state. Effect still
+  // populates threads + staffMsgs.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -577,7 +725,6 @@ export default function IntakeDashboard({
         last_channel: firstByThread.get(t.id)?.channel ?? null,
       })));
       setStaffMsgs(dms);
-      setMsgsLoading(false);
     })();
     return () => { cancelled = true; };
   }, [session.id]);
@@ -873,11 +1020,10 @@ export default function IntakeDashboard({
   // can't be overdue (per spec — no fabricated due dates). Drives the banner.
   // Reads from filteredTasks so "Mine" mode's banner reflects MY overdue
   // count, not the firm-wide overdue count.
-  const overdueTasks = useMemo(
-    () => filteredTasks.filter(t => !!t.due && new Date(t.due).getTime() < Date.now()),
-    [filteredTasks]
-  );
-  const overdueCount = overdueTasks.length;
+  // overdueTasks / overdueCount drove the old AttentionBubble (removed in
+  // Prompt 86 — the red overdue banner is gone). The filteredTasks memo
+  // still feeds the priority queue counts in ClockHub; overdue weighting
+  // for auto-assignment lands with BAN-82.
 
   // ── Action handlers (Today's Work log-result panel) ───────────────────────
 
@@ -994,7 +1140,15 @@ export default function IntakeDashboard({
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 
   return (
-    <div className="space-y-4">
+    /*
+     * Prompt 92 — the StaffDirectory rail has been merged INTO ClockHub
+     * as its leftmost column, so the dashboard body returns to a single
+     * full-width column. Order: greeting → action row → ClockHub (which
+     * now contains the directory + priority + comms + clock/appts) →
+     * Schedule & Task card → Week calendar. The earlier two-column page
+     * grid + <aside> wrapper (Prompts 89 + 90) is gone.
+     */
+    <div className="space-y-4 min-w-0">
       {/*
         TOPMOST — greeting line. Was previously inside the header-row beside
         the comms pill + clock + action buttons; pulled out so the dashboard
@@ -1011,34 +1165,13 @@ export default function IntakeDashboard({
       </div>
 
       {/*
-        AttentionBubble — the red overdue bubble now consolidates:
-          - the "You have N overdue tasks" heading + overdue list (kept)
-          - "Ask for help" button (new scaffold; opens AskForHelpModal)
-          - the Employee Time Clock compact pill (MOVED from the header row)
-          - a compact unread-by-type messaging summary (MOVED from
-            OverviewBubble — Overview now shows priority breakdown instead)
-        Always renders (so the moved clock + messaging summary have a home
-        even when nothing is overdue). The heading + red tone toggle based
-        on overdueCount.
+        Prompt 86 — header action row. The red AttentionBubble is gone; the
+        CommsPillBar moved into ClockHub below. What's left here: client
+        search + the top action buttons (Escalate / Existing Leads / New
+        Client Lead) + a single link to Performance / Goals (which now
+        opens as a modal instead of rendering inline in the body).
       */}
-      <AttentionBubble
-        overdueCount={overdueCount}
-        overdueTasks={overdueTasks}
-        staffMsgs={staffMsgs}
-        clientThreads={clientThreads}
-        timeClock={timeClock}
-        timeClockActions={timeClockActions}
-        onOpenMessagingPanel={onOpenView}
-        onAskForHelp={() => setAskForHelpOpen(true)}
-        onRequestTimeOff={(_kind) => {
-          void _kind;
-          onChangeTab("my_schedule");
-        }}
-      />
-
-      {/* Client search row — searches the existing `leads` array by
-          name/phone/email and routes a click into the lead detail panel. */}
-      <div className="flex items-center justify-end">
+      <div className="flex items-start gap-3 relative flex-wrap">
         <ClientSearchBar
           className="w-full sm:w-80 lg:w-96"
           leads={leads}
@@ -1049,23 +1182,17 @@ export default function IntakeDashboard({
           onBrowseAll={() => onChangeTab("leads")}
           placeholder="Search clients by name or phone…"
         />
-      </div>
 
-      <div className="flex items-start gap-3 relative flex-wrap">
-        <div className="flex-1 min-w-0 flex items-center gap-3">
-          {/* Comms pill bar (header) — quick-reply popovers per channel +
-              tasks-due indicator. Stays in the header; distinct from the
-              AttentionBubble's read-only messaging summary which just shows
-              unread counts by type. */}
-          <CommsPillBar
-            staffMsgs={staffMsgs}
-            clientThreads={clientThreads}
-            sharedTasksCount={sharedTasks.length}
-            onOpenMessagingPanel={onOpenView}
-            onOpenPhoneDialer={() => setPhonePopoverOpen(true)}
-            onOpenTasks={() => { /* tasks live in the LEFT column below; no-op for now */ }}
-          />
-        </div>
+        <div className="flex-1" />
+
+        {/* Performance / Goals link — replaces the dashboard-body bubble. */}
+        <button
+          onClick={() => setPerfGoalsOpen(true)}
+          title="Open Performance / Goals report"
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36] px-3 py-1.5 rounded transition-colors"
+        >
+          <Target className="w-3.5 h-3.5" /> Performance & Goals
+        </button>
 
         {/* Escalate to Supervisor — scaffold modal (TODO: route to supervisor). */}
         <button
@@ -1085,6 +1212,15 @@ export default function IntakeDashboard({
           <Users className="w-3.5 h-3.5" /> Existing Client Leads
         </button>
 
+        {/* Ask for help — Prompt 86: moved out of the removed AttentionBubble. */}
+        <button
+          onClick={() => setAskForHelpOpen(true)}
+          title="Ask a teammate for help — flag a task or lead for reassignment"
+          className="flex-shrink-0 flex items-center gap-1.5 text-xs font-semibold text-[#FAFAF7] bg-[#2A2A28] hover:bg-[#3A3A36] border border-[#3A3A36] px-3 py-1.5 rounded transition-colors"
+        >
+          <Users className="w-3.5 h-3.5" /> Ask for help
+        </button>
+
         {/* New Client Lead — unchanged (gold, far right). */}
         {onLogNewLead && (
           <button
@@ -1101,90 +1237,110 @@ export default function IntakeDashboard({
         )}
       </div>
 
-      {/* Top bubbles — Overview (now priority breakdown) + Performance / Goals.
-          Clock + messaging summary moved into the AttentionBubble above;
-          this row is now two equal columns.
-          departments={[INTAKE_METRICS]} preserves the pre-Slice-1 behavior;
-          Accounting + Legal will pass their own DeptMetricSet entries. */}
-      <TopBubblesRow
-        sharedTasks={sharedTasks}
-        departments={[INTAKE_METRICS]}
+      {/*
+        Prompt 86 — CLOCK HUB (TOP, full width). Consolidated top-of-
+        dashboard hub. Folds in: current time + work-clock pill + upcoming
+        appointments (live countdown); the full CommsPillBar icon row +
+        compact recent-messages preview (the old standalone Messages panel
+        is gone); priority-tier counts.
+      */}
+      <ClockHub
+        todaysAppts={todaysAppts}
+        upcomingAppts={upcomingAppts}
+        /* Priority-tier counts respect the Mine/Shared scope toggle so
+           the ClockHub numbers match what the centre task queue actually
+           renders for the signed-in staffer. */
+        sharedTasks={filteredTasks}
+        staffMsgs={staffMsgs}
+        clientThreads={clientThreads}
+        timeClock={timeClock}
+        timeClockActions={timeClockActions}
+        sharedTasksCount={sharedTasks.length}
+        staffPool={staffPool}
+        onOpenMessagingPanel={onOpenView}
+        onOpenPhoneDialer={() => setPhonePopoverOpen(true)}
+        onOpenTasks={() => { /* the task queue is the next section below */ }}
+        onRequestTimeOff={(_kind) => {
+          void _kind;
+          onChangeTab("my_schedule");
+        }}
       />
 
       {/*
-        Three-column body via the shared DashboardGrid primitive (Slice-1).
-          LEFT   (compact)  — AllTasksWidget OR ScheduleColumnView (toggle)
-          MIDDLE (flex)     — Up Next & Outreach Queue
-          RIGHT  (flex)     — Today hour-by-hour
-        On narrow viewports the columns stack vertically.
+        Prompt 86 — consolidated MAIN PANEL. My Schedule on the left, the
+        priority task queue + Mine/Shared toggle on the right. Single
+        bordered card so the two functional areas read as one panel. On
+        narrow viewports the two areas stack vertically.
       */}
-      <DashboardGrid
-        left={leftMode === "tasks" ? (
-          <AllTasksWidget
-            tasks={filteredTasks}
-            sharedCount={sharedTasks.length}
-            mode={leftMode}
-            onChangeMode={setLeftMode}
-            scope={taskScope}
-            onChangeScope={setTaskScope}
-            onOpenMyTasks={() => onChangeTab("staff_tasks")}
-          />
-        ) : (
-          <ScheduleColumnView
-            mode={leftMode}
-            onChangeMode={setLeftMode}
-            range={scheduleRange}
-            onChangeRange={setScheduleRange}
-            calEvents={calEvents}
-            todayLocal={todayLocal}
-            nextDayLocal={nextDayLocal}
-            nextDayAppts={nextDayAppts}
-            upcomingAppts={upcomingAppts}
-            staffPool={staffPool}
-            schedSelection={schedSelection}
-            onChangeSchedSelection={setSchedSelection}
-            currentSessionId={session.id}
-            onChangeTab={onChangeTab}
-          />
-        )}
+      <Card>
+        <CardHeader
+          icon={<ListChecks className="w-4 h-4" />}
+          title="Schedule & Task Queue"
+        />
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          {/* LEFT — My Schedule */}
+          <div className="lg:border-r lg:border-[#2A2A28]">
+            <ScheduleColumnView
+              range={scheduleRange}
+              onChangeRange={setScheduleRange}
+              calEvents={calEvents}
+              todayLocal={todayLocal}
+              nextDayLocal={nextDayLocal}
+              nextDayAppts={nextDayAppts}
+              upcomingAppts={upcomingAppts}
+              staffPool={staffPool}
+              schedSelection={schedSelection}
+              onChangeSchedSelection={setSchedSelection}
+              currentSessionId={session.id}
+              onChangeTab={onChangeTab}
+            />
+          </div>
 
-        middle={
-          <TasksAndAppointmentsWidget
-            toDoQueue={toDoQueue}
-            nextTask={nextTask}
-            expandedRowId={expandedRowId}
-            setExpandedRowId={setExpandedRowId}
-            onStartAppointment={handleStartAppointment}
-            onStartLeadCall={handleStartLeadCall}
-            onSkip={handleSkip}
-            onChoose={handleChoose}
-            onScheduleConsult={handleScheduleConsult}
-            onDoIntakeNow={handleDoIntakeNow}
-            onLeftMessage={handleLeftMessage}
-            onNoAnswer={handleNoAnswer}
-            onAddToFollowUp={handleAddToFollowUp}
-            onCancelExpansion={handleCollapse}
-            onChangeTab={onChangeTab}
-            onOpenMessages={() => onOpenView("messages")}
-          />
-        }
+          {/* RIGHT — Mine/Shared toggle + Up Next & Outreach Queue */}
+          <div className="flex flex-col gap-2 min-w-0">
+            <div className="px-4 pt-3">
+              <TaskScopeToggle
+                scope={taskScope}
+                onChangeScope={setTaskScope}
+                sharedCount={toDoQueue.length}
+                mineCount={filteredToDoQueue.length}
+              />
+            </div>
+            <TasksAndAppointmentsWidget
+              toDoQueue={toDoQueue}
+              nextTask={nextTask}
+              expandedRowId={expandedRowId}
+              setExpandedRowId={setExpandedRowId}
+              onStartAppointment={handleStartAppointment}
+              onStartLeadCall={handleStartLeadCall}
+              onSkip={handleSkip}
+              onChoose={handleChoose}
+              onScheduleConsult={handleScheduleConsult}
+              onDoIntakeNow={handleDoIntakeNow}
+              onLeftMessage={handleLeftMessage}
+              onNoAnswer={handleNoAnswer}
+              onAddToFollowUp={handleAddToFollowUp}
+              onCancelExpansion={handleCollapse}
+              onChangeTab={onChangeTab}
+              onOpenMessages={() => onOpenView("messages")}
+            />
+          </div>
+        </div>
+      </Card>
 
-        right={
-          <ConsolidatedMessagingWidget
-            threads={clientThreads}
-            staffMsgs={staffMsgs}
-            loading={msgsLoading}
-            onOpenView={onOpenView}
-          />
-        }
-      />
-
-      {/* Today hour-by-hour — full-width row below the 3-column grid. */}
-      <TodayByHourWidget
-        todaysAppts={todaysAppts}
+      {/*
+        Prompt 85 — BOTTOM (full width) week-at-a-glance calendar. Clicking
+        a day expands a panel showing that day's booked consultations.
+        Open-slot availability is the scheduler-backend seam (real once the
+        open-slot RPC lands).
+      */}
+      <WeekAtAGlanceCalendar
+        calEvents={calEvents}
         todayLocal={todayLocal}
-        onChangeTab={onChangeTab}
       />
+
+      {/* Perf/Goals modal — opens from the header link above. */}
+      {perfGoalsOpen && <PerfGoalsModal onClose={() => setPerfGoalsOpen(false)} />}
 
       {escalateOpen && (
         <EscalateModal
@@ -1214,100 +1370,625 @@ export default function IntakeDashboard({
   );
 }
 
-// ─── TODAY — hour-by-hour grid (REAL, from calEvents) ────────────────────────
-
-function TodayByHourWidget({
-  todaysAppts, todayLocal, onChangeTab,
+// ─── Prompt 86 — ClockHub (TOP, full width) ──────────────────────────────────
+//
+// Consolidated top-hub that replaces the old red AttentionBubble + separate
+// CommsPillBar header row + standalone ConsolidatedMessagingWidget panel +
+// the Prompt-85 IntakeOverviewClock. Three columns inside one BubbleCard:
+//
+//   LEFT  — current time + date + work-clock pill (ClockBubble from the
+//           shared shell) + up-to-3 upcoming appointments with a LIVE
+//           countdown until the next start.
+//   MID   — the full CommsPillBar icon row (phone/chat/email/contacts/
+//           send/@/bell w/ counts) + a CompactMessagesPreview (up to 5
+//           recent messages, read/unread toggle). Replaces the removed
+//           standalone Messages panel.
+//   RIGHT — priority-tier counts (Hot/Mid/Present/Sched).
+//
+// All inputs are props the host already derives; no new fetches.
+function ClockHub({
+  todaysAppts, upcomingAppts, sharedTasks,
+  staffMsgs, clientThreads,
+  timeClock, timeClockActions,
+  sharedTasksCount,
+  staffPool,
+  onOpenMessagingPanel, onOpenPhoneDialer, onOpenTasks,
+  onRequestTimeOff,
 }: {
   todaysAppts: ApptRow[];
-  todayLocal: string;
-  onChangeTab: (tab: TabId) => void;
+  upcomingAppts: ApptRow[];
+  sharedTasks: TaskEntry[];
+  staffMsgs: StaffMessage[];
+  clientThreads: (ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[];
+  timeClock: TimeClockState;
+  timeClockActions: TimeClockActions;
+  sharedTasksCount: number;
+  // Prompt 92 — staffPool drives the embedded StaffDirectory column
+  // (the leftmost column inside this card). Same array the dashboard
+  // already loads from intake_leads → staff_members.
+  staffPool: SchedulerStaffDetail[];
+  onOpenMessagingPanel: (view: "messages" | "staff_comms") => void;
+  onOpenPhoneDialer: () => void;
+  onOpenTasks: () => void;
+  onRequestTimeOff: (kind: "pto" | "sto") => void;
 }) {
-  // Bucket appts by start-hour (firm tz). An appt belongs to the slot of its
-  // start hour even if it spills into the next slot.
-  const byHour = useMemo(() => {
-    const m = new Map<number, ApptRow[]>();
-    for (const a of todaysAppts) {
-      const h = hourOfIsoInFirmTz(a.start_time);
-      const list = m.get(h) ?? [];
-      list.push(a);
-      m.set(h, list);
+  const [now, setNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Combine today's + further-out appts, keep only future starts, take 3.
+  const upcoming = useMemo(() => {
+    const all: ApptRow[] = [...todaysAppts, ...upcomingAppts];
+    return all
+      .filter(a => new Date(a.start_time).getTime() > now)
+      .sort((a, b) => a.start_time.localeCompare(b.start_time))
+      .slice(0, 3);
+  }, [todaysAppts, upcomingAppts, now]);
+
+  // Priority breakdown — same shape the old OverviewBubble used.
+  const counts = useMemo(() => {
+    const c: Record<TaskColor, number> = { red: 0, orange: 0, yellow: 0, blue: 0 };
+    for (const t of sharedTasks) c[t.color]++;
+    return c;
+  }, [sharedTasks]);
+
+  const totalTasks = sharedTasks.length;
+  const timeLabel = new Date(now).toLocaleTimeString("en-US", {
+    hour: "numeric", minute: "2-digit", timeZone: FIRM_TZ,
+  });
+  const dateLabel = new Date(now).toLocaleDateString("en-US", {
+    weekday: "long", month: "long", day: "numeric", timeZone: FIRM_TZ,
+  });
+
+  // Prompt 89 — DND visual toggle (local state only). Real notification
+  // silencing + reflecting DND to other staff is BAN-85 (telephony +
+  // presence backend). Today this is purely an indicator.
+  const [dnd, setDnd] = useState(false);
+
+  // Prompt 89 — work-clock states. Drive the EXISTING TimeClockActions —
+  // real, not stubs. The labeled buttons below replace the previous
+  // ClockBubble pill (which hid clock-out/lunch/break behind a popup).
+  const isClockedIn = timeClock.clockedInAt != null;
+  const onLunch     = timeClock.onLunchSince != null;
+  const onBreak     = timeClock.onBreakSince != null;
+
+  return (
+    <BubbleCard
+      title="Now"
+      icon={<Clock className="w-4 h-4" />}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        {/* LEFTMOST — Prompt 92: StaffDirectory merged in as a true
+            column of the NOW card. Renders without its own Card
+            wrapper (embedded mode) so the four columns read as one
+            continuous surface. No left border (it IS the left edge).
+            On narrow viewports it stacks above the other columns. */}
+        <div className="lg:col-span-3 min-w-0">
+          <StaffDirectory staffPool={staffPool} embedded />
+        </div>
+
+        {/* Priority queue — Prompt 89 placed this column here; Prompt
+            92 narrowed its span (col-span-3 → col-span-2) to make
+            room for the directory column and added the standard
+            lg:border-l lg:pl-5 divider so all four internal columns
+            are separated by consistent dividers. */}
+        <div className="lg:col-span-2 min-w-0 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
+            Priority queue · <span className="text-[#FAFAF7]">{totalTasks}</span> open
+          </p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+            {(["red", "orange", "yellow", "blue"] as const).map(color => {
+              const cfg = COLOR_CFG[color];
+              const n = counts[color];
+              return (
+                <div key={color} className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${cfg.dot}`} />
+                  <span className="text-[10px] text-[#6B6B66] flex-1 truncate">{cfg.label}</span>
+                  <span className={`text-xs font-bold flex-shrink-0 tabular-nums ${n > 0 ? "text-[#FAFAF7]" : "text-[#6B6B66]"}`}>
+                    {n}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[9px] text-[#6B6B66] italic mt-2 leading-snug">
+            Same RED / ORANGE / YELLOW / BLUE tiers as the centre task list.
+          </p>
+        </div>
+
+        {/* MIDDLE — full icon row (bigger glyphs) + DND toggle + compact
+            messages preview. Replaces the removed standalone messaging
+            panel. */}
+        <div className="lg:col-span-4 min-w-0 space-y-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CommsPillBar
+              staffMsgs={staffMsgs}
+              clientThreads={clientThreads}
+              sharedTasksCount={sharedTasksCount}
+              onOpenMessagingPanel={onOpenMessagingPanel}
+              onOpenPhoneDialer={onOpenPhoneDialer}
+              onOpenTasks={onOpenTasks}
+              size="lg"
+            />
+            {/* Prompt 89 — DND visual toggle. Lives next to phone controls.
+                Backend (real notification silencing + reflecting DND to
+                other staff over telephony presence) lands with BAN-85. */}
+            <button
+              type="button"
+              onClick={() => {
+                // TODO BAN-85 — wire to real notification-silencing +
+                // broadcast DND state to other staff over telephony
+                // presence. Today: visual toggle only.
+                setDnd(d => !d);
+              }}
+              title={dnd ? "Do Not Disturb is ON — visual only (real silencing lands with BAN-85)" : "Toggle Do Not Disturb (visual only — BAN-85)"}
+              aria-pressed={dnd}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-widest border transition-colors ${
+                dnd
+                  ? "bg-red-900/30 border-red-700/60 text-red-300"
+                  : "bg-[#1A1A18] border-[#2A2A28] text-[#6B6B66] hover:text-[#FAFAF7] hover:border-[#3A3A36]"
+              }`}
+            >
+              {dnd ? <BellOff className="w-3.5 h-3.5" /> : <BellRing className="w-3.5 h-3.5" />}
+              {dnd ? "DND on" : "DND"}
+            </button>
+          </div>
+          <CompactMessagesPreview
+            threads={clientThreads}
+            staffMsgs={staffMsgs}
+            onOpenView={onOpenMessagingPanel}
+          />
+        </div>
+
+        {/* RIGHT (was LEFT) — Prompt 89: time + work-clock buttons +
+            upcoming appointments. Prompt 92 narrowed the span
+            (col-span-4 → col-span-3) to keep the total at 12 after
+            the directory column was added on the left. */}
+        <div className="lg:col-span-3 min-w-0 space-y-3 lg:border-l lg:border-[#2A2A28]/60 lg:pl-5">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <p className="text-3xl font-bold text-[#FAFAF7] tabular-nums leading-none">
+              {timeLabel}
+            </p>
+            <p className="text-[10px] text-[#6B6B66] uppercase tracking-widest">
+              {dateLabel}
+            </p>
+          </div>
+
+          {/* Prompt 89 — labeled work-clock buttons. Replaces the
+              previous ClockBubble pill (which hid actions inside a
+              popup). Drives the EXISTING TimeClockActions — real,
+              backed by the same in-session state. */}
+          <div className="flex flex-wrap items-center gap-2">
+            {!isClockedIn && (
+              <button
+                onClick={timeClockActions.clockIn}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-emerald-700 hover:bg-emerald-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> Clock in
+              </button>
+            )}
+            {isClockedIn && !onLunch && !onBreak && (
+              <>
+                <button
+                  onClick={timeClockActions.startBreak}
+                  title="Start a break — drives the existing time-clock state"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded bg-sky-900/30 hover:bg-sky-900/50 text-sky-200 border border-sky-700/40 transition-colors"
+                >
+                  <Coffee className="w-3.5 h-3.5" /> I'm going on break
+                </button>
+                <button
+                  onClick={timeClockActions.startLunch}
+                  title="Start lunch — drives the existing time-clock state"
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded bg-amber-900/30 hover:bg-amber-900/50 text-amber-200 border border-amber-700/40 transition-colors"
+                >
+                  <Coffee className="w-3.5 h-3.5" /> I'm going on lunch
+                </button>
+                <button
+                  onClick={timeClockActions.clockOut}
+                  title="End your shift"
+                  className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-[#3A1E1E] hover:bg-[#4A2424] text-[#FAFAF7] border border-red-900/40 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" /> Clock out
+                </button>
+              </>
+            )}
+            {onLunch && (
+              <button
+                onClick={timeClockActions.endLunch}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-amber-700 hover:bg-amber-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> End lunch
+              </button>
+            )}
+            {onBreak && (
+              <button
+                onClick={timeClockActions.endBreak}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded bg-sky-700 hover:bg-sky-600 text-white transition-colors"
+              >
+                <PlayCircle className="w-3.5 h-3.5" /> End break
+              </button>
+            )}
+          </div>
+          {/* Compact request-time-off line — routes to MyScheduleTab's
+              TimeOffTab so the PTO/STO form is still reachable now that
+              the ClockBubble popup is gone. */}
+          <div className="flex items-center gap-3 text-[10px] text-[#6B6B66]">
+            <button
+              onClick={() => onRequestTimeOff("pto")}
+              className="hover:text-[#FAFAF7] transition-colors"
+            >
+              Request PTO
+            </button>
+            <span>·</span>
+            <button
+              onClick={() => onRequestTimeOff("sto")}
+              className="hover:text-[#FAFAF7] transition-colors"
+            >
+              Request STO
+            </button>
+          </div>
+
+          {upcoming.length === 0 ? (
+            <p className="text-[11px] text-[#6B6B66] italic">
+              No upcoming appointments — your calendar is clear.
+            </p>
+          ) : (
+            <ul className="space-y-1.5">
+              {upcoming.map(a => {
+                const startMs = new Date(a.start_time).getTime();
+                const minutesUntil = Math.max(0, Math.floor((startMs - now) / 60_000));
+                const startLabel = new Date(startMs).toLocaleTimeString("en-US", {
+                  hour: "numeric", minute: "2-digit", timeZone: FIRM_TZ,
+                });
+                const dayLabel = new Date(startMs).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+                const todayStr = new Date(now).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+                const isToday = dayLabel === todayStr;
+                const countdownText =
+                  minutesUntil < 60
+                    ? `${minutesUntil} min${minutesUntil === 1 ? "" : "s"}`
+                    : `${Math.floor(minutesUntil / 60)}h ${minutesUntil % 60}m`;
+                return (
+                  <li
+                    key={a.id}
+                    className="flex items-center gap-2 px-2 py-1.5 rounded border border-[#2A2A28] bg-[#0F0F0E]"
+                  >
+                    <Calendar className="w-3 h-3 text-[#B8945F] flex-shrink-0" />
+                    <span className="text-[11px] font-mono text-[#B8945F] flex-shrink-0">
+                      {isToday ? startLabel : `${dayLabel} · ${startLabel}`}
+                    </span>
+                    <span className="text-xs text-[#FAFAF7] truncate flex-1">
+                      {a.client_name}
+                      {a.chapter ? <span className="text-[#6B6B66]"> · Ch.{a.chapter}</span> : null}
+                    </span>
+                    <span
+                      className={`text-[10px] font-semibold tabular-nums flex-shrink-0 ${
+                        minutesUntil <= 15 ? "text-red-300" : minutesUntil <= 60 ? "text-amber-300" : "text-[#6B6B66]"
+                      }`}
+                      title={`${minutesUntil} minutes until start`}
+                    >
+                      in {countdownText}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+    </BubbleCard>
+  );
+}
+
+// ─── Prompt 86 — Compact messages preview (inside ClockHub) ──────────────────
+//
+// Replaces the full ConsolidatedMessagingWidget panel. Merges staffMsgs +
+// clientThreads into a single chronological list (most-recent first), then
+// shows the top 5. A small All / Unread toggle filters. Channel glyph is
+// rendered larger than the old widget per the prompt brief ("bigger
+// message-type icons"). Clicking a row routes through the host's
+// onOpenView so the full messaging surface still owns deep navigation.
+function CompactMessagesPreview({
+  threads, staffMsgs, onOpenView,
+}: {
+  threads: (ClientMessageThread & { client_name?: string; preview?: string; last_channel?: string | null })[];
+  staffMsgs: StaffMessage[];
+  onOpenView: (view: "messages" | "staff_comms") => void;
+}) {
+  const [filter, setFilter] = useState<"all" | "unread">("all");
+
+  interface PreviewRow {
+    id: string;
+    sender: string;
+    preview: string;
+    timestamp: string;
+    channel: "sms" | "email" | "dm" | "phone_note" | "other";
+    unread: boolean;
+    onOpen: () => void;
+  }
+
+  const rows: PreviewRow[] = useMemo(() => {
+    const out: PreviewRow[] = [];
+    for (const t of threads) {
+      const ch = (t.last_channel ?? "").toLowerCase();
+      const channel: PreviewRow["channel"] =
+        ch === "sms" ? "sms" : ch === "email" ? "email" : "other";
+      out.push({
+        id: `client-${t.id}`,
+        sender: t.client_name ?? "Client",
+        preview: t.preview || "(no preview)",
+        timestamp: t.last_message_at ?? t.updated_at,
+        channel,
+        unread: (t.unread_count ?? 0) > 0,
+        onOpen: () => onOpenView("messages"),
+      });
+    }
+    for (const m of staffMsgs) {
+      const channel: PreviewRow["channel"] =
+        m.channel === "sms"        ? "sms"   :
+        m.channel === "email"      ? "email" :
+        m.channel === "dm"         ? "dm"    :
+        m.channel === "phone_note" ? "phone_note" : "other";
+      out.push({
+        id: `staff-${m.id}`,
+        sender: m.sender_name,
+        preview: m.subject || m.body.slice(0, 80),
+        timestamp: m.created_at,
+        channel,
+        unread: !m.read,
+        onOpen: () => onOpenView("staff_comms"),
+      });
+    }
+    out.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+    return out;
+  }, [threads, staffMsgs, onOpenView]);
+
+  const visible = filter === "unread" ? rows.filter(r => r.unread) : rows;
+  const top = visible.slice(0, 5);
+  const unreadCount = rows.filter(r => r.unread).length;
+
+  // Bigger 16px channel glyphs (vs the 14px in the old widget per the
+  // prompt brief).
+  function ChannelGlyph({ channel }: { channel: PreviewRow["channel"] }) {
+    if (channel === "sms")        return <MessageSquare className="w-4 h-4 text-[#B8945F]" />;
+    if (channel === "email")      return <Mail          className="w-4 h-4 text-[#B8945F]" />;
+    if (channel === "dm")         return <Send          className="w-4 h-4 text-[#B8945F]" />;
+    if (channel === "phone_note") return <Phone         className="w-4 h-4 text-[#B8945F]" />;
+    return <MessageCircle className="w-4 h-4 text-[#B8945F]" />;
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+          Recent messages
+        </p>
+        <div className="ml-auto flex items-center gap-1 rounded border border-[#2A2A28] p-0.5 bg-[#0F0F0E]">
+          <button
+            onClick={() => setFilter("all")}
+            className={`text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded transition-colors ${
+              filter === "all" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
+            }`}
+          >
+            All · {rows.length}
+          </button>
+          <button
+            onClick={() => setFilter("unread")}
+            className={`text-[10px] font-semibold uppercase tracking-widest px-2 py-0.5 rounded transition-colors ${
+              filter === "unread" ? "bg-[#2A2A28] text-[#FAFAF7]" : "text-[#6B6B66] hover:text-[#FAFAF7]"
+            }`}
+          >
+            Unread · {unreadCount}
+          </button>
+        </div>
+      </div>
+      {top.length === 0 ? (
+        <EmptyHint>
+          {filter === "unread" ? "No unread messages." : "No recent messages."}
+        </EmptyHint>
+      ) : (
+        <ul className="space-y-1">
+          {top.map(r => (
+            <li key={r.id}>
+              <button
+                onClick={r.onOpen}
+                className={`w-full text-left flex items-start gap-2 px-2 py-1.5 rounded border transition-colors ${
+                  r.unread
+                    ? "border-[#B8945F]/30 bg-[#1A1A18] hover:bg-[#2A2A28]"
+                    : "border-[#2A2A28] bg-[#0F0F0E] hover:bg-[#2A2A28]"
+                }`}
+              >
+                <ChannelGlyph channel={r.channel} />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs truncate ${r.unread ? "text-[#FAFAF7] font-semibold" : "text-[#FAFAF7]"}`}>
+                      {r.sender}
+                    </span>
+                    {r.unread && <span className="w-1.5 h-1.5 rounded-full bg-[#B8945F] flex-shrink-0" />}
+                  </div>
+                  <p className="text-[10px] text-[#6B6B66] truncate mt-0.5">{r.preview}</p>
+                </div>
+                <span className="text-[10px] text-[#6B6B66] tabular-nums flex-shrink-0">
+                  {relativeTime(r.timestamp)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ─── Prompt 86 — Performance/Goals modal (header link) ───────────────────────
+//
+// The Performance/Goals box is no longer rendered in the dashboard body.
+// A small link in the dashboard's header opens this modal, which wraps the
+// existing shared-shell RetentionBubble unchanged.
+function PerfGoalsModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Performance and Goals"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-2xl border border-[#2A2A28] bg-[#1A1A18] shadow-2xl flex flex-col" style={{ maxHeight: "92vh" }}>
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-[#2A2A28] flex-shrink-0">
+          <Target className="w-4 h-4 text-[#B8945F]" />
+          <h3 className="text-sm font-semibold text-[#FAFAF7]">Performance / Goals Report</h3>
+          <button onClick={onClose} aria-label="Close" className="ml-auto text-[#6B6B66] hover:text-[#FAFAF7]">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto">
+          <RetentionBubble departments={[INTAKE_METRICS]} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Prompt 85 — Week-at-a-glance calendar (BOTTOM, full width) ──────────────
+//
+// 7-day strip starting today (firm tz). Click a day to expand a panel listing
+// that day's booked consultations (real calendar_events data, filtered the
+// same way the rest of the dashboard does). Open-slot availability is a
+// clearly-marked seam: the existing scheduler backend's open-slot RPC
+// (ConsultSchedulerPanel) is the wiring target — we render a placeholder
+// note, never fabricated availability.
+function WeekAtAGlanceCalendar({
+  calEvents, todayLocal,
+}: {
+  calEvents: CalEvent[];
+  todayLocal: string;
+}) {
+  const [selectedDay, setSelectedDay] = useState<string>(todayLocal);
+
+  // Re-anchor the selection if the host's todayLocal shifts (date rolled).
+  useEffect(() => {
+    setSelectedDay(prev => prev < todayLocal ? todayLocal : prev);
+  }, [todayLocal]);
+
+  // 7 ISO date strings starting at todayLocal.
+  const days = useMemo(() => {
+    const [y, m, d] = todayLocal.split("-").map(Number);
+    const start = new Date(Date.UTC(y, m - 1, d));
+    const out: string[] = [];
+    for (let i = 0; i < 7; i++) {
+      const dt = new Date(start);
+      dt.setUTCDate(start.getUTCDate() + i);
+      out.push(dt.toISOString().slice(0, 10));
+    }
+    return out;
+  }, [todayLocal]);
+
+  // Bucket consult events by day-in-firm-tz. Drop cancelled/no-show/rescheduled.
+  const apptsByDay = useMemo(() => {
+    const m = new Map<string, CalEvent[]>();
+    for (const e of calEvents) {
+      if (e.event_subtype !== "consultation") continue;
+      if (["cancelled", "no_show", "rescheduled"].includes(e.status)) continue;
+      const d = new Date(e.start_time).toLocaleDateString("en-CA", { timeZone: FIRM_TZ });
+      const list = m.get(d) ?? [];
+      list.push(e);
+      m.set(d, list);
+    }
+    // Per-day chronological sort.
+    for (const [, list] of m) {
+      list.sort((a, b) => a.start_time.localeCompare(b.start_time));
     }
     return m;
-  }, [todaysAppts]);
+  }, [calEvents]);
 
-  const hours: number[] = [];
-  for (let h = BUSINESS_HOUR_START; h < BUSINESS_HOUR_END; h++) hours.push(h);
-
-  const currentHour = hourOfIsoInFirmTz(new Date().toISOString());
+  const selectedAppts = apptsByDay.get(selectedDay) ?? [];
 
   return (
     <Card>
       <CardHeader
-        icon={<Clock className="w-4 h-4" />}
-        title={`Today — ${formatDayLabel(todayLocal)}`}
-        badge={<CountBadge value={todaysAppts.length} />}
-        chip={
-          <button
-            onClick={() => onChangeTab("calendar")}
-            className="text-[10px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] transition-colors"
-          >
-            Open calendar â†’
-          </button>
-        }
+        icon={<CalendarDays className="w-4 h-4" />}
+        title="Week at a Glance"
+        badge={<CountBadge value={days.reduce((s, d) => s + (apptsByDay.get(d)?.length ?? 0), 0)} />}
       />
-      <div className="p-4">
-        <ul className="space-y-1">
-          {hours.map(h => {
-            const items = byHour.get(h) ?? [];
-            const isCurrent = h === currentHour;
+      <div className="p-4 space-y-4">
+        {/* 7-day strip */}
+        <div className="grid grid-cols-7 gap-2">
+          {days.map(d => {
+            const count = (apptsByDay.get(d) ?? []).length;
+            const isToday = d === todayLocal;
+            const isSelected = d === selectedDay;
+            const [, mm, dd] = d.split("-");
+            const dow = new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
             return (
-              <li
-                key={h}
-                className={`flex items-start gap-3 px-2 py-1.5 rounded ${
-                  isCurrent ? "bg-[#B8945F]/10 border border-[#B8945F]/30" : ""
+              <button
+                key={d}
+                onClick={() => setSelectedDay(d)}
+                className={`flex flex-col items-start px-2.5 py-2 rounded border transition-colors text-left ${
+                  isSelected
+                    ? "border-[#B8945F] bg-[#B8945F]/10"
+                    : "border-[#2A2A28] bg-[#0F0F0E] hover:bg-[#1A1A18]"
                 }`}
+                title={isToday ? "Today" : undefined}
               >
-                <div className="w-14 flex-shrink-0">
-                  <p className={`text-[11px] font-mono ${isCurrent ? "text-[#B8945F] font-bold" : "text-[#6B6B66]"}`}>
-                    {formatHourLabel(h)}
-                  </p>
-                </div>
-                <div className="flex-1 min-w-0">
-                  {items.length === 0 ? (
-                    <p className="text-[11px] text-[#3A3A36] italic">—</p>
-                  ) : (
-                    <ul className="space-y-1">
-                      {items.map(e => (
-                        <li key={e.id}>
-                          <button
-                            onClick={() => onChangeTab("calendar")}
-                            className="w-full text-left flex items-center gap-2 px-2 py-1 rounded bg-[#0F0F0E] hover:bg-[#2A2A28] border border-[#2A2A28] transition-colors"
-                          >
-                            <Calendar className="w-3 h-3 text-[#B8945F] flex-shrink-0" />
-                            <span className="text-[11px] font-mono text-[#B8945F] flex-shrink-0">
-                              {formatTimeRange(e.start_time, e.end_time)}
-                            </span>
-                            <span className="text-xs text-[#FAFAF7] truncate flex-1">
-                              {e.client_name}
-                            </span>
-                            {e.chapter && (
-                              <span className="text-[10px] text-[#6B6B66] flex-shrink-0">Ch.{e.chapter}</span>
-                            )}
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </li>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">{dow}</p>
+                <p className={`text-lg font-semibold tabular-nums leading-none mt-0.5 ${isToday ? "text-[#B8945F]" : "text-[#FAFAF7]"}`}>
+                  {Number(dd)}
+                  <span className="text-[10px] font-normal text-[#6B6B66] ml-1">{Number(mm)}/{Number(dd)}</span>
+                </p>
+                <p className={`text-[10px] mt-1 tabular-nums ${count > 0 ? "text-[#B8945F]" : "text-[#3A3A36]"}`}>
+                  {count} booked
+                </p>
+              </button>
             );
           })}
-        </ul>
-        <p className="text-[10px] text-[#6B6B66] italic mt-3 px-2">
-          Showing firm business hours ({formatHourLabel(BUSINESS_HOUR_START)}–{formatHourLabel(BUSINESS_HOUR_END)}).
-          {/* TODO: per-staff work-hours config doesn't exist yet — swap to staffer's hours when it lands. */}
-        </p>
+        </div>
+
+        {/* Selected-day panel — booked appointments + open-slot seam */}
+        <div className="border-t border-[#2A2A28]/60 pt-3">
+          <div className="flex items-center gap-2 mb-2">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66]">
+              {formatDayLabel(selectedDay)}
+            </p>
+            <span className="text-[10px] text-[#6B6B66]">·</span>
+            <span className="text-[10px] text-[#FAFAF7] tabular-nums">
+              {selectedAppts.length} booked
+            </span>
+          </div>
+
+          {selectedAppts.length === 0 ? (
+            <EmptyHint>No consultations booked for this day.</EmptyHint>
+          ) : (
+            <ul className="space-y-1">
+              {selectedAppts.map(e => (
+                <li key={e.id}>
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded border border-[#2A2A28] bg-[#0F0F0E]">
+                    <Calendar className="w-3 h-3 text-[#B8945F] flex-shrink-0" />
+                    <span className="text-[11px] font-mono text-[#B8945F] flex-shrink-0">
+                      {formatTimeRange(e.start_time, e.end_time)}
+                    </span>
+                    <span className="text-xs text-[#FAFAF7] truncate flex-1">
+                      {e.client_name || e.title || "—"}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* Open-slot availability — scheduler-backend seam. We do NOT
+              fabricate open slots here. When the scheduler RPC lands the
+              placeholder swaps for per-day open-slot rows. */}
+          <div className="mt-3 rounded border border-dashed border-[#3A3A36] bg-[#0F0F0E] px-3 py-2">
+            <p className="text-[11px] text-[#6B6B66] italic leading-snug">
+              Open-slot availability — pending scheduler backend.
+              {/* TODO Phase B: wire to the open-slot RPC used by
+                   ConsultSchedulerPanel so each day surfaces real
+                   available windows next to the booked ones. */}
+            </p>
+          </div>
+        </div>
       </div>
     </Card>
   );
@@ -1338,8 +2019,63 @@ interface TasksAndAppointmentsWidgetProps {
   onOpenMessages: () => void;
 }
 
+// ─── Prompt 87 — Disposition kinds (local-only; BAN-83 wires real sends) ────
+
+type DispositionKind =
+  | "start_intake"     // staffer began the intake flow during the call
+  | "lvm"              // staffer left a voicemail (manual)
+  | "no_answer"        // no answer — row gets a Follow-up tag
+  | "leave_message"    // automated message — TODO BAN-83 (no real send)
+  | "send_email"       // automated email   — TODO BAN-83 (no real send)
+  | "send_sms";        // automated SMS     — TODO BAN-83 (no real send)
+
+const DISPOSITION_LABEL: Record<DispositionKind, string> = {
+  start_intake:  "Started intake",
+  lvm:           "Left voicemail",
+  no_answer:     "No answer",
+  leave_message: "Leave message",
+  send_email:    "Send email",
+  send_sms:      "Send SMS",
+};
+
+/**
+ * Lead → scheduled-ISO derivation for the per-row scheduled-time chip and
+ * the Up Next countdown. Prefers next_follow_up_at (precise timestamp);
+ * falls back to consultation_date (date-only — countdown skipped because
+ * we don't fabricate a time, but the chip still renders the date).
+ */
+function getLeadScheduledIso(lead: Lead): string | null {
+  if (lead.next_follow_up_at) return lead.next_follow_up_at;
+  return null;
+}
+
+/** Render a compact "in 12m" / "5h ago" / "in 2d" relative chunk. */
+function formatRelativeMin(diffMin: number): string {
+  const abs = Math.abs(diffMin);
+  let text: string;
+  if (abs < 60)        text = `${abs}m`;
+  else if (abs < 60*24) text = `${Math.floor(abs / 60)}h ${abs % 60}m`;
+  else                 text = `${Math.floor(abs / (60*24))}d`;
+  return diffMin >= 0 ? `in ${text}` : `${text} ago`;
+}
+
 function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
   const { toDoQueue, nextTask, onChangeTab } = props;
+
+  // Prompt 87 — local tick so per-row countdowns + the Up Next countdown
+  // refresh without leaning on the parent. 30s cadence matches ClockHub.
+  const [nowMs, setNowMs] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Prompt 87 — local disposition state, keyed by lead.id. UI only.
+  // Persistence + real outreach (send/retry/requeue) lands with BAN-83.
+  const [dispositions, setDispositions] = useState<Record<string, DispositionKind>>({});
+  function recordDisposition(leadId: string, kind: DispositionKind) {
+    setDispositions(prev => ({ ...prev, [leadId]: kind }));
+  }
 
   return (
     <Card className="flex flex-col">
@@ -1370,6 +2106,7 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
           <UpNextCard
             nextTask={nextTask}
             queue={toDoQueue}
+            nowMs={nowMs}
             onStartAppointment={props.onStartAppointment}
             onStartLeadCall={props.onStartLeadCall}
             onSkip={props.onSkip}
@@ -1387,12 +2124,11 @@ function TasksAndAppointmentsWidget(props: TasksAndAppointmentsWidgetProps) {
                   key={row.lead.id}
                   row={row}
                   expanded={props.expandedRowId === row.lead.id}
+                  nowMs={nowMs}
+                  disposition={dispositions[row.lead.id] ?? null}
+                  onRecordDisposition={(kind) => recordDisposition(row.lead.id, kind)}
                   onCall={() => props.onStartLeadCall(row.lead.id)}
-                  onScheduleConsult={() => props.onScheduleConsult(row.lead)}
                   onDoIntakeNow={() => props.onDoIntakeNow(row.lead)}
-                  onLeftMessage={() => props.onLeftMessage(row.lead)}
-                  onNoAnswer={() => props.onNoAnswer(row.lead)}
-                  onAddToFollowUp={() => props.onAddToFollowUp(row.lead)}
                   onCancel={props.onCancelExpansion}
                 />
               ))}
@@ -1431,10 +2167,13 @@ function TierChip({ tier }: { tier: ToDoTier }) {
 // ─── Up Next card (Layer 1) ──────────────────────────────────────────────────
 
 function UpNextCard({
-  nextTask, queue, onStartAppointment, onStartLeadCall, onSkip, onChoose, onOpenMessages,
+  nextTask, queue, nowMs, onStartAppointment, onStartLeadCall, onSkip, onChoose, onOpenMessages,
 }: {
   nextTask: NextTask;
   queue: ToDoRow[];
+  /** Live tick from the parent widget; drives the lead-variant countdown
+   *  (appointment variants carry their own `minutesUntilStart` already). */
+  nowMs: number;
   onStartAppointment: () => void;
   onStartLeadCall: (leadId: string) => void;
   onSkip: (taskId: string) => void;
@@ -1569,6 +2308,15 @@ function UpNextCard({
     nextTask.kind === "lead-new" ? "first contact / set appointment" :
     "fee-quoted follow-up";
 
+  // Prompt 87 — live countdown for lead variants. We derive from
+  // intake_leads.next_follow_up_at (a real timestamp). consultation_date
+  // is date-only so we DON'T fabricate a clock time for it — the row chip
+  // (see ToDoRowItem) still shows the date even when no countdown applies.
+  const scheduledIso = getLeadScheduledIso(lead);
+  const minutesUntil = scheduledIso
+    ? Math.floor((new Date(scheduledIso).getTime() - nowMs) / 60_000)
+    : null;
+
   return (
     <UpNextShell tone={isEmergency ? "emergency" : "lead"}>
       <UpNextHeader label={isEmergency ? "Up Next — emergency" : "Up Next"}>
@@ -1576,6 +2324,16 @@ function UpNextCard({
         {overdue && !isEmergency && (
           <span className="text-[9px] font-bold uppercase tracking-widest px-1 py-0.5 rounded border border-red-700/60 bg-red-900/30 text-red-300">
             Overdue
+          </span>
+        )}
+        {minutesUntil !== null && (
+          <span
+            className={`text-[10px] font-mono tabular-nums ${
+              minutesUntil <= 0 ? "text-red-300" : minutesUntil <= 60 ? "text-amber-300" : "text-[#B8945F]"
+            }`}
+            title={`Scheduled ${new Date(scheduledIso ?? "").toLocaleString("en-US", { timeZone: FIRM_TZ })}`}
+          >
+            {formatRelativeMin(minutesUntil)}
           </span>
         )}
       </UpNextHeader>
@@ -1707,23 +2465,47 @@ function ChoosePicker({
   );
 }
 
-// ─── To-do row + log-result panel ────────────────────────────────────────────
+// ─── To-do row + disposition window (Prompt 87) ─────────────────────────────
 
 function ToDoRowItem({
-  row, expanded, onCall,
-  onScheduleConsult, onDoIntakeNow, onLeftMessage, onNoAnswer, onAddToFollowUp, onCancel,
+  row, expanded, nowMs, disposition, onRecordDisposition,
+  onCall, onDoIntakeNow, onCancel,
 }: {
   row: ToDoRow;
   expanded: boolean;
+  /** Live tick from the parent widget; drives the scheduled-time chip
+   *  countdown so each row's "in 12m" / "5h ago" stays accurate. */
+  nowMs: number;
+  /** Recorded disposition for this lead (null = not recorded yet). */
+  disposition: DispositionKind | null;
+  /** Records the chosen disposition to local state. Backend write/send
+   *  is BAN-83 — see DispositionWindow for TODO markers. */
+  onRecordDisposition: (kind: DispositionKind) => void;
   onCall: () => void;
-  onScheduleConsult: () => void;
   onDoIntakeNow: () => void;
-  onLeftMessage: () => void;
-  onNoAnswer: () => void;
-  onAddToFollowUp: () => void;
   onCancel: () => void;
 }) {
   const { lead, tier } = row;
+
+  // Prompt 87 — per-row scheduled time chip. Prefers next_follow_up_at
+  // (real timestamp → countdown); falls back to consultation_date
+  // (date-only → date label, no countdown).
+  const scheduledIso = getLeadScheduledIso(lead);
+  const consultDate = !scheduledIso && lead.consultation_date ? lead.consultation_date : null;
+  const minutesUntil = scheduledIso
+    ? Math.floor((new Date(scheduledIso).getTime() - nowMs) / 60_000)
+    : null;
+  const scheduledLabel: string | null =
+    scheduledIso
+      ? new Date(scheduledIso).toLocaleString("en-US", {
+          month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: FIRM_TZ,
+        })
+      : consultDate
+        ? `Consult ${formatDayLabel(consultDate)}`
+        : null;
+
+  const isFollowUp = disposition === "no_answer";
+
   return (
     <li className="rounded-lg border border-transparent hover:border-[#2A2A28] transition-colors">
       <div className="flex items-center gap-3 px-3 py-2">
@@ -1736,71 +2518,187 @@ function ToDoRowItem({
             {lead.chapter_interest && <span> Â· Ch.{lead.chapter_interest}</span>}
           </p>
         </div>
+
+        {/* Scheduled time chip — display only. Shows a date (consultation)
+            or live countdown (next_follow_up_at). Both come from real
+            intake_leads columns; we never fabricate a time. */}
+        {scheduledLabel && (
+          <span
+            title={scheduledIso ? `Scheduled ${new Date(scheduledIso).toLocaleString("en-US", { timeZone: FIRM_TZ })}` : `Consult on ${consultDate}`}
+            className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-[#B8945F] bg-[#0F0F0E] border border-[#2A2A28] px-2 py-0.5 rounded flex-shrink-0"
+          >
+            <Calendar className="w-3 h-3" /> {scheduledLabel}
+            {minutesUntil !== null && (
+              <span
+                className={`tabular-nums ${
+                  minutesUntil <= 0 ? "text-red-300" : minutesUntil <= 60 ? "text-amber-300" : "text-[#6B6B66]"
+                }`}
+              >
+                · {formatRelativeMin(minutesUntil)}
+              </span>
+            )}
+          </span>
+        )}
+
+        {/* Follow-up tag — surfaces locally when the staffer recorded a
+            No-Answer disposition. BAN-83 will replace this with the
+            backed requeue + outreach auto-retry state. */}
+        {isFollowUp && (
+          <span
+            title="Recorded as No Answer — back in follow-up queue (BAN-83 wires the real requeue)"
+            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-300 bg-red-900/30 border border-red-700/60 px-2 py-0.5 rounded-full flex-shrink-0"
+          >
+            <BellRing className="w-3 h-3" /> Follow-up
+          </span>
+        )}
+
+        {/* Assignee chip — DISPLAY ONLY (Prompt 86; BAN-82 wires the real
+            auto-assignment). Hidden when unassigned. */}
+        {lead.assigned_name && (
+          <span
+            title={`Assigned to ${lead.assigned_name} — auto-assignment lands with BAN-82`}
+            className="hidden md:inline-flex items-center gap-1 text-[10px] font-semibold text-[#B8945F] bg-[#0F0F0E] border border-[#2A2A28] px-2 py-0.5 rounded-full flex-shrink-0"
+          >
+            <UserCheck className="w-3 h-3" /> {lead.assigned_name}
+          </span>
+        )}
+
         <TierChip tier={tier} />
+
         {!expanded && (
           <button
             onClick={onCall}
             className="flex items-center gap-1 text-[11px] font-semibold text-[#B8945F] hover:text-[#FAFAF7] border border-[#B8945F]/40 hover:border-[#B8945F] px-2 py-1 rounded transition-colors"
           >
-            <Phone className="w-3 h-3" /> Call
+            <Phone className="w-3 h-3" /> Start call
           </button>
         )}
       </div>
 
       {expanded && (
-        <div className="border-t border-[#2A2A28] mx-3 mb-3 mt-1 pt-3 px-1">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
-            Log call result {lead.phone ? <span className="font-mono text-[#B8945F]">Â· {lead.phone}</span> : null}
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            {/* Primary actions */}
-            <button
-              onClick={onScheduleConsult}
-              className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
-            >
-              <Calendar className="w-3 h-3" /> Schedule consult
-            </button>
-            <button
-              onClick={onDoIntakeNow}
-              className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
-            >
-              <ClipboardList className="w-3 h-3" /> Do intake now
-            </button>
-            {/* Call-outcome shortcuts — both "Left message" and "No answer"
-                route the lead to the Follow-Up sub-tab of the unified Leads
-                view (sets intake_leads.follow_up_queue='priority'). */}
-            <div className="flex items-center gap-3 ml-auto">
-              <button
-                onClick={onLeftMessage}
-                title="Log: left a voicemail. Lead moves to Follow-Up."
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                Left message
-              </button>
-              <button
-                onClick={onNoAnswer}
-                title="Log: no answer. Lead moves to Follow-Up."
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                No answer
-              </button>
-              <button
-                onClick={onAddToFollowUp}
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors flex items-center gap-1"
-              >
-                <BellRing className="w-3 h-3" /> Add to follow-up
-              </button>
-              <button
-                onClick={onCancel}
-                className="text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <DispositionWindow
+          lead={lead}
+          disposition={disposition}
+          onRecord={onRecordDisposition}
+          onStartIntake={onDoIntakeNow}
+          onClose={onCancel}
+        />
       )}
     </li>
+  );
+}
+
+/**
+ * Prompt 87 — Start-call disposition window. Inline panel that opens when
+ * the staffer clicks the row's "Start call" button.
+ *
+ * Two groups:
+ *   1. Primary dispositions — call-outcome buckets (Start Intake / Left
+ *      voicemail / No answer). Only "Start Intake" navigates (calls the
+ *      host's onDoIntakeNow). LVM + No Answer are recorded locally.
+ *   2. Actions — automated outreach (Leave Message / Send Email /
+ *      Send SMS). All three are RECORD-ONLY today; real send/retry/
+ *      requeue lands with BAN-83.
+ *
+ * No sends fire from this UI. The descriptive note on "No Answer" spells
+ * out the intended auto-retry/missed-you/requeue behavior as TEXT so the
+ * staffer knows what the future automation will do, without us implying a
+ * timer started or a message went out.
+ */
+function DispositionWindow({
+  lead, disposition, onRecord, onStartIntake, onClose,
+}: {
+  lead: Lead;
+  disposition: DispositionKind | null;
+  onRecord: (kind: DispositionKind) => void;
+  onStartIntake: () => void;
+  onClose: () => void;
+}) {
+  function handleClick(kind: DispositionKind) {
+    onRecord(kind);
+    // TODO BAN-83 — when outreach automation lands, dispatch the
+    // corresponding effect (auto-retry timer, missed-you SMS, requeue
+    // to follow-up). Today this is record-only — no timer, no send.
+    if (kind === "start_intake") {
+      // Start Intake is a real navigation, not just a recorded outcome;
+      // hand off to the host so the intake flow opens immediately.
+      onStartIntake();
+    }
+  }
+
+  const recordedLabel = disposition ? DISPOSITION_LABEL[disposition] : null;
+
+  return (
+    <div className="border-t border-[#2A2A28] mx-3 mb-3 mt-1 pt-3 px-1">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-[#6B6B66] mb-2">
+        Disposition {lead.phone ? <span className="font-mono text-[#B8945F]">Â· {lead.phone}</span> : null}
+      </p>
+
+      {/* Primary dispositions */}
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          onClick={() => handleClick("start_intake")}
+          className="flex items-center gap-1.5 bg-[#B8945F] hover:bg-[#C8A46F] text-[#0F0F0E] font-bold text-xs px-3 py-1.5 rounded transition-colors"
+        >
+          <ClipboardList className="w-3 h-3" /> Start Intake
+        </button>
+        <button
+          onClick={() => handleClick("lvm")}
+          className="flex items-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold px-3 py-1.5 rounded border border-[#3A3A36] transition-colors"
+        >
+          <Voicemail className="w-3 h-3" /> Leave Voicemail
+        </button>
+        <button
+          onClick={() => handleClick("no_answer")}
+          className="flex items-center gap-1.5 bg-[#2A2A28] hover:bg-[#3A3A36] text-[#FAFAF7] text-xs font-semibold px-3 py-1.5 rounded border border-[#3A3A36] transition-colors"
+        >
+          <PhoneMissed className="w-3 h-3" /> No Answer
+        </button>
+      </div>
+
+      {/* Secondary actions */}
+      <div className="flex flex-wrap items-center gap-2 mt-2">
+        <p className="text-[9px] font-semibold uppercase tracking-widest text-[#6B6B66] mr-1">Actions</p>
+        <button
+          onClick={() => handleClick("leave_message")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <MessageSquare className="w-3 h-3" /> Leave Message
+        </button>
+        <button
+          onClick={() => handleClick("send_email")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <Mail className="w-3 h-3" /> Send Email
+        </button>
+        <button
+          onClick={() => handleClick("send_sms")}
+          className="flex items-center gap-1 text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] border border-[#2A2A28] hover:border-[#3A3A36] px-2 py-1 rounded transition-colors"
+        >
+          <Send className="w-3 h-3" /> Send SMS
+        </button>
+        <button
+          onClick={onClose}
+          className="ml-auto text-[11px] text-[#6B6B66] hover:text-[#FAFAF7] transition-colors"
+        >
+          Close
+        </button>
+      </div>
+
+      {/* Descriptive note — text only, NOT a behavior. */}
+      <p className="text-[10px] text-[#6B6B66] italic mt-2 leading-snug">
+        <strong className="text-[#B8945F] not-italic">On No Answer:</strong> system will auto-retry,
+        send a missed-you message, and requeue the lead for follow-up. Real send/retry/requeue
+        lands with outreach automation (BAN-83) — today this just records the disposition locally.
+      </p>
+
+      {recordedLabel && (
+        <p className="text-[11px] text-[#FAFAF7] mt-2 px-2.5 py-1.5 rounded border border-emerald-700/40 bg-emerald-900/20">
+          <CheckCircle2 className="w-3 h-3 inline mr-1 text-emerald-400" />
+          Recorded as <strong>{recordedLabel}</strong> — will send when outreach automation is live (BAN-83).
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -1987,8 +2885,10 @@ function CallDirectionIcon({ direction, status }: { direction: "inbound" | "outb
 // ─── Schedule column view — toggle alternate for the LEFT column ─────────────
 
 interface ScheduleColumnViewProps {
-  mode: "tasks" | "schedule";
-  onChangeMode: (m: "tasks" | "schedule") => void;
+  // Prompt 85 — `mode` / `onChangeMode` (LeftModeToggle) removed. The LEFT
+  // rail no longer swaps between Tasks and Schedule; it always shows the
+  // schedule. The internal range selector (Next day / 5-day / Monthly)
+  // stays — it's the schedule-internal time-window picker.
   range: "next_day" | "five_day" | "monthly";
   onChangeRange: (r: "next_day" | "five_day" | "monthly") => void;
   calEvents: CalEvent[];
@@ -2005,7 +2905,7 @@ interface ScheduleColumnViewProps {
 
 function ScheduleColumnView(props: ScheduleColumnViewProps) {
   const {
-    mode, onChangeMode, range, onChangeRange,
+    range, onChangeRange,
     calEvents, todayLocal, nextDayLocal,
     nextDayAppts, upcomingAppts, staffPool,
     schedSelection, onChangeSchedSelection, currentSessionId,
@@ -2027,7 +2927,6 @@ function ScheduleColumnView(props: ScheduleColumnViewProps) {
             Open full â†’
           </button>
         </div>
-        <LeftModeToggle mode={mode} onChangeMode={onChangeMode} />
         <div className="flex items-center gap-1 mt-2 rounded border border-[#2A2A28] p-0.5 bg-[#0F0F0E]">
           {(["next_day", "five_day", "monthly"] as const).map(r => (
             <button

@@ -372,56 +372,56 @@ function PaymentPanel({
     new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-100 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="w-full sm:max-w-lg bg-[#0d1221] border border-slate-700 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl"
+        className="w-full sm:max-w-lg bg-slate-50 border border-slate-200 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-800 flex items-start justify-between gap-4 flex-shrink-0">
+        <div className="px-6 py-5 border-b border-slate-200 flex items-start justify-between gap-4 flex-shrink-0">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-bold uppercase tracking-widest text-sky-400">{CASE_TYPE_LABEL}</span>
+              <span className="text-xs font-bold uppercase tracking-widest text-sky-600">{CASE_TYPE_LABEL}</span>
             </div>
-            <h2 className="text-lg font-bold text-white" style={{ fontFamily: "'Georgia', serif" }}>Payment Summary</h2>
+            <h2 className="text-lg font-bold text-slate-900" style={{ fontFamily: "'Georgia', serif" }}>Payment Summary</h2>
             <p className="text-xs text-slate-500 mt-0.5">{CASE_DATA.clientName} · Chapter {CASE_DATA.chapter}</p>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-white transition-colors flex-shrink-0 mt-1">
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 transition-colors flex-shrink-0 mt-1">
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Progress bar */}
-        <div className="px-6 py-4 border-b border-slate-800 bg-slate-900/40 flex-shrink-0">
+        <div className="px-6 py-4 border-b border-slate-200 bg-slate-100 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-400">{fmt(CASE_DATA.paidToDate)} paid</span>
-            <span className="text-xs font-semibold text-slate-400">{fmt(remaining)} remaining</span>
+            <span className="text-xs font-semibold text-slate-600">{fmt(CASE_DATA.paidToDate)} paid</span>
+            <span className="text-xs font-semibold text-slate-600">{fmt(remaining)} remaining</span>
           </div>
-          <div className="w-full bg-slate-800 rounded-full h-2">
+          <div className="w-full bg-white rounded-full h-2">
             <div className="h-2 rounded-full bg-sky-500 transition-all duration-500" style={{ width: `${paidPct}%` }} />
           </div>
           <div className="flex items-center justify-between mt-2">
-            <span className="text-[11px] text-slate-600">{paidPct}% of {fmt(CASE_DATA.totalFee)}</span>
-            <span className="text-[11px] text-slate-600">Payoff by {fmtDate(CASE_DATA.payoffDate)}</span>
+            <span className="text-[11px] text-slate-400">{paidPct}% of {fmt(CASE_DATA.totalFee)}</span>
+            <span className="text-[11px] text-slate-400">Payoff by {fmtDate(CASE_DATA.payoffDate)}</span>
           </div>
 
           {CASE_DATA.case_type === "regular" && (
             <div className="mt-3 flex items-start gap-2 bg-sky-500/8 border border-sky-500/20 rounded-xl px-3.5 py-2.5">
-              <Info className="w-3.5 h-3.5 text-sky-400 flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-sky-200/80 leading-relaxed">
-                <strong className="text-white">Ch. 7 — Prepaid:</strong> Your case cannot be filed until the full attorney fee is paid. Once paid in full, your case moves to signing and filing.
+              <Info className="w-3.5 h-3.5 text-sky-600 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-sky-700 leading-relaxed">
+                <strong className="text-slate-900">Ch. 7 — Prepaid:</strong> Your case cannot be filed until the full attorney fee is paid. Once paid in full, your case moves to signing and filing.
               </p>
             </div>
           )}
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-800 flex-shrink-0">
+        <div className="flex border-b border-slate-200 flex-shrink-0">
           {(["history", "upcoming", "pay"] as const).map(t => (
             <button
               key={t}
               onClick={() => setActiveTab(t)}
-              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-all border-b-2 -mb-px ${activeTab === t ? "border-sky-500 text-sky-400" : "border-transparent text-slate-500 hover:text-slate-300"}`}
+              className={`flex-1 py-3 text-xs font-bold uppercase tracking-wide transition-all border-b-2 -mb-px ${activeTab === t ? "border-sky-500 text-sky-600" : "border-transparent text-slate-500 hover:text-slate-700"}`}
             >
               {t === "history" ? "Payments Made" : t === "upcoming" ? "Upcoming" : "Pay Balance"}
             </button>
@@ -433,25 +433,25 @@ function PaymentPanel({
           {activeTab === "history" && (
             <div className="space-y-2.5">
               {PAYMENT_HISTORY.length === 0 ? (
-                <p className="text-xs text-slate-600 py-6 text-center">No payments recorded yet.</p>
+                <p className="text-xs text-slate-400 py-6 text-center">No payments recorded yet.</p>
               ) : PAYMENT_HISTORY.map(p => (
-                <div key={p.id} className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-4 py-3">
+                <div key={p.id} className="bg-slate-100/60 border border-slate-200 rounded-xl px-4 py-3">
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <CreditCard className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
-                      <span className="text-sm font-bold text-white">{fmt(p.amount)}</span>
+                      <CreditCard className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                      <span className="text-sm font-bold text-slate-900">{fmt(p.amount)}</span>
                       <span className="text-[10px] text-slate-500">{p.type}</span>
                     </div>
-                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Paid</span>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">Paid</span>
                   </div>
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                     <span className="text-[11px] text-slate-500">{fmtDate(p.date)} · {p.method}</span>
                     {p.confirmation && (
-                      <span className="text-[11px] font-mono text-sky-400">Conf: {p.confirmation}</span>
+                      <span className="text-[11px] font-mono text-sky-600">Conf: {p.confirmation}</span>
                     )}
                   </div>
                   {p.confirmed_at && (
-                    <p className="text-[10px] text-slate-600 mt-0.5">Confirmed by processor: {fmtDateTime(p.confirmed_at)}</p>
+                    <p className="text-[10px] text-slate-400 mt-0.5">Confirmed by processor: {fmtDateTime(p.confirmed_at)}</p>
                   )}
                 </div>
               ))}
@@ -462,24 +462,24 @@ function PaymentPanel({
             <div className="space-y-2.5">
               {changeRequestSent && (
                 <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-3.5 py-3 mb-3">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                  <p className="text-xs text-emerald-300 font-semibold">Your change request has been sent. Our team will follow up with you.</p>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  <p className="text-xs text-emerald-700 font-semibold">Your change request has been sent. Our team will follow up with you.</p>
                 </div>
               )}
               {UPCOMING_SCHEDULE.map(s => {
                 const withinWindow = isWithin24Hours(s.due_date);
                 const alreadyRequested = changeRequestSent === s.id;
                 return (
-                  <div key={s.id} className="bg-slate-800/40 border border-slate-700/60 rounded-xl px-4 py-3">
+                  <div key={s.id} className="bg-slate-100/60 border border-slate-200 rounded-xl px-4 py-3">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-md bg-slate-700/60 flex items-center justify-center flex-shrink-0">
-                          <span className="text-[10px] font-bold text-slate-400">#{s.installment}</span>
+                        <div className="w-6 h-6 rounded-md bg-slate-200/60 flex items-center justify-center flex-shrink-0">
+                          <span className="text-[10px] font-bold text-slate-600">#{s.installment}</span>
                         </div>
-                        <span className="text-sm font-bold text-white">{fmt(s.amount)}</span>
+                        <span className="text-sm font-bold text-slate-900">{fmt(s.amount)}</span>
                         <span className="text-[10px] text-slate-500">due {fmtDate(s.due_date)}</span>
                       </div>
-                      <span className="text-[10px] font-semibold text-slate-400 bg-slate-700/50 border border-slate-700 px-2 py-0.5 rounded-full capitalize">{s.status}</span>
+                      <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/50 border border-slate-200 px-2 py-0.5 rounded-full capitalize">{s.status}</span>
                     </div>
                     {!alreadyRequested && (
                       <div className="mt-2.5 flex gap-2">
@@ -487,7 +487,7 @@ function PaymentPanel({
                           onClick={() => setChangeTarget(s)}
                           disabled={!withinWindow}
                           title={!withinWindow ? "Change requests must be submitted within 24 hours of the payment due date" : undefined}
-                          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all ${withinWindow ? "text-amber-400 bg-amber-500/10 border-amber-500/25 hover:bg-amber-500/20 cursor-pointer" : "text-slate-600 bg-slate-800/50 border-slate-800 cursor-not-allowed"}`}
+                          className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-semibold border transition-all ${withinWindow ? "text-blue-600 bg-blue-50 border-blue-500/25 hover:bg-blue-500/20 cursor-pointer" : "text-slate-400 bg-slate-100/70 border-slate-200 cursor-not-allowed"}`}
                         >
                           <Clock className="w-3 h-3" /> Request Change
                           {!withinWindow && <Lock className="w-3 h-3 ml-0.5" />}
@@ -495,17 +495,17 @@ function PaymentPanel({
                       </div>
                     )}
                     {alreadyRequested && (
-                      <p className="text-[10px] text-emerald-400 mt-2">Change request submitted</p>
+                      <p className="text-[10px] text-emerald-600 mt-2">Change request submitted</p>
                     )}
                     {!withinWindow && (
-                      <p className="text-[10px] text-slate-600 mt-1.5">Change requests open within 24 hrs of due date</p>
+                      <p className="text-[10px] text-slate-400 mt-1.5">Change requests open within 24 hrs of due date</p>
                     )}
                   </div>
                 );
               })}
 
               {/* Pay in full CTA */}
-              <div className="mt-4 pt-4 border-t border-slate-800">
+              <div className="mt-4 pt-4 border-t border-slate-200">
                 <button
                   onClick={() => setActiveTab("pay")}
                   className="w-full flex items-center justify-center gap-2 bg-sky-500 hover:bg-sky-400 text-white font-bold text-sm py-2.5 rounded-xl transition-all"
@@ -523,23 +523,23 @@ function PaymentPanel({
                 /* ── Success state ── */
                 <div className="flex flex-col items-center text-center py-8 gap-4">
                   <div className="w-16 h-16 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-                    <CheckCircle2 className="w-8 h-8 text-emerald-400" />
+                    <CheckCircle2 className="w-8 h-8 text-emerald-600" />
                   </div>
                   <div>
-                    <p className="text-lg font-bold text-white">Payment Successful</p>
-                    <p className="text-sm text-emerald-300 font-semibold mt-1">{fmt(paySuccess.amount)} processed</p>
+                    <p className="text-lg font-bold text-slate-900">Payment Successful</p>
+                    <p className="text-sm text-emerald-700 font-semibold mt-1">{fmt(paySuccess.amount)} processed</p>
                     <p className="text-xs text-slate-500 mt-2 leading-relaxed">
                       Your balance has been paid in full.<br />Your case is now moving to signing and filing.
                     </p>
                   </div>
-                  <div className="w-full bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-left">
+                  <div className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-left">
                     <p className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Confirmation</p>
-                    <p className="text-sm font-mono font-bold text-sky-400">{paySuccess.confirmation}</p>
+                    <p className="text-sm font-mono font-bold text-sky-600">{paySuccess.confirmation}</p>
                     <p className="text-[11px] text-slate-500 mt-1">
                       {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date())}
                     </p>
                   </div>
-                  <button onClick={onClose} className="w-full py-2.5 text-sm font-bold text-white bg-slate-700 hover:bg-slate-600 rounded-xl transition-all">
+                  <button onClick={onClose} className="w-full py-2.5 text-sm font-bold text-slate-900 bg-slate-200 hover:bg-slate-300 rounded-xl transition-all">
                     Close
                   </button>
                 </div>
@@ -549,8 +549,8 @@ function PaymentPanel({
                   {/* Amount being charged */}
                   <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3 flex items-center justify-between">
                     <div>
-                      <p className="text-xs text-slate-400">Amount to charge</p>
-                      <p className="text-2xl font-bold text-white mt-0.5">{fmt(remaining)}</p>
+                      <p className="text-xs text-slate-600">Amount to charge</p>
+                      <p className="text-2xl font-bold text-slate-900 mt-0.5">{fmt(remaining)}</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">Remaining attorney fee balance</p>
                     </div>
                     <DollarSign className="w-8 h-8 text-sky-500/50" />
@@ -558,7 +558,7 @@ function PaymentPanel({
 
                   {/* Card number */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-400 block mb-1.5">Card Number</label>
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">Card Number</label>
                     <div className="relative">
                       <input
                         type="text"
@@ -567,10 +567,10 @@ function PaymentPanel({
                         onChange={e => setCardNumber(formatCardNumber(e.target.value))}
                         placeholder="1234 5678 9012 3456"
                         maxLength={19}
-                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 pr-16 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors font-mono tracking-wider"
+                        className="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-xl px-4 py-3 pr-16 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors font-mono tracking-wider"
                       />
                       {cardDigits.length >= 4 && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 bg-slate-700 px-2 py-0.5 rounded-md">
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-600 bg-slate-200 px-2 py-0.5 rounded-md">
                           {cardBrand}
                         </span>
                       )}
@@ -580,7 +580,7 @@ function PaymentPanel({
                   {/* Expiry + CVV row */}
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs font-semibold text-slate-400 block mb-1.5">Expiry Date</label>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">Expiry Date</label>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -588,11 +588,11 @@ function PaymentPanel({
                         onChange={e => setCardExpiry(formatExpiry(e.target.value))}
                         placeholder="MM/YY"
                         maxLength={5}
-                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors font-mono"
+                        className="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-xl px-4 py-3 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors font-mono"
                       />
                     </div>
                     <div>
-                      <label className="text-xs font-semibold text-slate-400 block mb-1.5">CVV</label>
+                      <label className="text-xs font-semibold text-slate-600 block mb-1.5">CVV</label>
                       <input
                         type="password"
                         inputMode="numeric"
@@ -600,39 +600,39 @@ function PaymentPanel({
                         onChange={e => setCardCvv(e.target.value.replace(/\D/g, "").slice(0, 4))}
                         placeholder="•••"
                         maxLength={4}
-                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors font-mono"
+                        className="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-xl px-4 py-3 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors font-mono"
                       />
                     </div>
                   </div>
 
                   {/* Cardholder name */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-400 block mb-1.5">
+                    <label className="text-xs font-semibold text-slate-600 block mb-1.5">
                       Name on Card
-                      <span className="ml-2 text-[10px] font-normal text-slate-600 normal-case">must match debtor name on file</span>
+                      <span className="ml-2 text-[10px] font-normal text-slate-400 normal-case">must match debtor name on file</span>
                     </label>
                     <input
                       type="text"
                       value={cardName}
                       onChange={e => setCardName(e.target.value)}
                       placeholder={`e.g. ${CASE_DATA.clientName}`}
-                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 placeholder-slate-600 focus:outline-none focus:border-sky-500 transition-colors"
+                      className="w-full bg-white border border-slate-200 text-slate-900 text-sm rounded-xl px-4 py-3 placeholder-slate-400 focus:outline-none focus:border-sky-500 transition-colors"
                     />
-                    <p className="text-[10px] text-slate-600 mt-1.5">
-                      Accepted: <span className="text-slate-400">{CASE_DATA.clientName}</span> or <span className="text-slate-400">{CASE_DATA.spouseName}</span>
+                    <p className="text-[10px] text-slate-400 mt-1.5">
+                      Accepted: <span className="text-slate-600">{CASE_DATA.clientName}</span> or <span className="text-slate-600">{CASE_DATA.spouseName}</span>
                     </p>
                   </div>
 
                   {/* Error message */}
                   {cardError && (
                     <div className="flex items-start gap-2 bg-red-500/10 border border-red-500/25 rounded-xl px-3.5 py-2.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-red-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-300 leading-relaxed">{cardError}</p>
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700 leading-relaxed">{cardError}</p>
                     </div>
                   )}
 
                   {/* Security note */}
-                  <div className="flex items-center gap-2 text-[10px] text-slate-600">
+                  <div className="flex items-center gap-2 text-[10px] text-slate-400">
                     <Lock className="w-3 h-3 flex-shrink-0" />
                     <span>Payments are encrypted and processed securely. Card details are not stored.</span>
                   </div>
@@ -657,13 +657,13 @@ function PaymentPanel({
 
         {/* Change request sub-modal */}
         {changeTarget && (
-          <div className="absolute inset-0 z-10 flex items-end sm:items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm rounded-2xl">
-            <div className="w-full max-w-sm bg-[#111827] border border-slate-700 rounded-2xl p-5 shadow-2xl">
+          <div className="absolute inset-0 z-10 flex items-end sm:items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm rounded-2xl">
+            <div className="w-full max-w-sm bg-slate-50 border border-slate-200 rounded-2xl p-5 shadow-2xl">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-bold text-white">Request Payment Change</p>
-                <button onClick={() => { setChangeTarget(null); setChangeNote(""); }} className="text-slate-500 hover:text-white"><X className="w-4 h-4" /></button>
+                <p className="text-sm font-bold text-slate-900">Request Payment Change</p>
+                <button onClick={() => { setChangeTarget(null); setChangeNote(""); }} className="text-slate-500 hover:text-slate-900"><X className="w-4 h-4" /></button>
               </div>
-              <p className="text-xs text-slate-400 mb-3 leading-relaxed">
+              <p className="text-xs text-slate-600 mb-3 leading-relaxed">
                 You are requesting a change to installment #{changeTarget.installment} (
                 {new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(changeTarget.amount)}{" "}
                 due {new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(changeTarget.due_date))}).
@@ -674,14 +674,14 @@ function PaymentPanel({
                 onChange={e => setChangeNote(e.target.value)}
                 rows={3}
                 placeholder="Describe the change you need (new date, amount adjustment, etc.)…"
-                className="w-full bg-slate-800 border border-slate-700 text-white text-xs rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none mb-3"
+                className="w-full bg-white border border-slate-200 text-slate-900 text-xs rounded-xl px-3 py-2.5 placeholder-slate-400 focus:outline-none focus:border-blue-500 resize-none mb-3"
               />
               <div className="flex gap-2">
-                <button onClick={() => { setChangeTarget(null); setChangeNote(""); }} className="flex-1 py-2.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 rounded-xl transition-all">Cancel</button>
+                <button onClick={() => { setChangeTarget(null); setChangeNote(""); }} className="flex-1 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl transition-all">Cancel</button>
                 <button
                   onClick={submitChangeRequest}
                   disabled={!changeNote.trim() || submitting}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-amber-500 hover:bg-amber-400 disabled:opacity-40 rounded-xl transition-all"
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-40 rounded-xl transition-all"
                 >
                   {submitting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Submit Request
@@ -704,11 +704,11 @@ function MyDocumentsPanel() {
       label: 'Client Registration Record',
       desc: 'Account credentials, contact information, and registration timestamp captured at sign-up.',
       status: 'On File',
-      statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
-      iconColor: 'text-sky-400',
+      statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
+      iconColor: 'text-sky-600',
       iconBg: 'bg-sky-500/10 border-sky-500/20',
       icon: (
-        <svg className="w-4 h-4 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-sky-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
         </svg>
       ),
@@ -723,10 +723,10 @@ function MyDocumentsPanel() {
       label: 'Client Disclosure Acknowledgement',
       desc: 'Signed acknowledgement of all required third-party vendor disclosures and consent authorizations.',
       status: 'Signed',
-      statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
-      iconBg: 'bg-amber-500/10 border-amber-500/20',
+      statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
+      iconBg: 'bg-blue-50 border-blue-500/20',
       icon: (
-        <svg className="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
         </svg>
       ),
@@ -744,7 +744,7 @@ function MyDocumentsPanel() {
       label: 'iSoftpull FCRA Written Consent',
       desc: 'Formal FCRA written instruction authorizing iSoftpull to obtain credit information from TransUnion, Experian, and/or Equifax for pre-qualification. Soft pull only — no credit score impact.',
       status: 'Signed',
-      statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+      statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
       iconBg: 'bg-blue-500/10 border-blue-500/20',
       icon: (
         <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -763,10 +763,10 @@ function MyDocumentsPanel() {
       label: 'Intake Agreement / Retainer',
       desc: 'Your retainer agreement, engagement letter, and fee agreement with the law firm. Added after your intake review is completed by your assigned attorney.',
       status: 'Pending Attorney',
-      statusColor: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
-      iconBg: 'bg-slate-700/40 border-slate-700',
+      statusColor: 'text-blue-600 bg-blue-50 border-blue-500/25',
+      iconBg: 'bg-slate-200/60 border-slate-200',
       icon: (
-        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
       ),
@@ -779,20 +779,20 @@ function MyDocumentsPanel() {
   ];
 
   return (
-    <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+    <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden">
       <button
         onClick={() => setExpanded(v => !v)}
-        className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors"
+        className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-100 transition-colors"
       >
         <div className="flex items-center gap-2.5">
-          <svg className="w-4 h-4 text-emerald-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="w-4 h-4 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
           </svg>
           <div className="text-left">
-            <p className="text-sm font-bold text-white leading-none">My Documents</p>
+            <p className="text-sm font-bold text-slate-900 leading-none">My Documents</p>
             <p className="text-xs text-slate-500 mt-0.5">Registration, disclosures, and signed agreements on file</p>
           </div>
-          <span className="ml-2 text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 px-2 py-0.5 rounded-full">
+          <span className="ml-2 text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/25 px-2 py-0.5 rounded-full">
             3 Signed · 1 Pending
           </span>
         </div>
@@ -800,27 +800,27 @@ function MyDocumentsPanel() {
       </button>
 
       {expanded && (
-        <div className="border-t border-slate-800 px-5 py-4 space-y-3">
+        <div className="border-t border-slate-200 px-5 py-4 space-y-3">
           <p className="text-xs text-slate-500 leading-relaxed mb-1">
             All documents below are permanently on file. These records are retained for the duration of your case and a minimum of 7 years after case closure. Contact your attorney for a certified copy.
           </p>
           {docs.map(doc => (
-            <div key={doc.id} className="flex items-start gap-3 bg-slate-800/40 border border-slate-700/60 rounded-xl px-4 py-3">
+            <div key={doc.id} className="flex items-start gap-3 bg-slate-100/60 border border-slate-200 rounded-xl px-4 py-3">
               <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 mt-0.5 ${doc.iconBg}`}>
                 {doc.icon}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2 flex-wrap mb-1">
-                  <p className="text-white text-sm font-semibold">{doc.label}</p>
+                  <p className="text-slate-900 text-sm font-semibold">{doc.label}</p>
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${doc.statusColor}`}>
                     {doc.status}
                   </span>
                 </div>
-                <p className="text-slate-400 text-xs leading-relaxed mb-2">{doc.desc}</p>
+                <p className="text-slate-600 text-xs leading-relaxed mb-2">{doc.desc}</p>
                 <ul className="space-y-0.5">
                   {doc.bullets.map(b => (
                     <li key={b} className="flex items-start gap-2 text-xs text-slate-500">
-                      <span className="w-1 h-1 rounded-full bg-slate-600 flex-shrink-0 mt-1.5" />
+                      <span className="w-1 h-1 rounded-full bg-slate-400 flex-shrink-0 mt-1.5" />
                       {b}
                     </li>
                   ))}
@@ -845,31 +845,31 @@ function QuestionsPanel({ questions, expanded, onToggle }: {
   const displayList = tab === 'pending' ? pending : questions;
 
   function statusBadge(q: ClientQuestion) {
-    if (q.attorney_answer) return <span className="text-xs font-bold text-emerald-400 bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 rounded-full whitespace-nowrap">Answered</span>;
-    if (q.status === 'needs_attorney') return <span className="text-xs font-bold text-amber-400 bg-amber-400/10 border border-amber-400/30 px-2 py-0.5 rounded-full whitespace-nowrap">Pending Attorney</span>;
-    if (q.status === 'answered') return <span className="text-xs font-bold text-slate-400 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full whitespace-nowrap">Answered by AI</span>;
-    return <span className="text-xs font-bold text-slate-500 bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full whitespace-nowrap">Logged</span>;
+    if (q.attorney_answer) return <span className="text-xs font-bold text-emerald-600 bg-emerald-400/10 border border-emerald-400/30 px-2 py-0.5 rounded-full whitespace-nowrap">Answered</span>;
+    if (q.status === 'needs_attorney') return <span className="text-xs font-bold text-blue-600 bg-blue-600/10 border border-blue-500/30 px-2 py-0.5 rounded-full whitespace-nowrap">Pending Attorney</span>;
+    if (q.status === 'answered') return <span className="text-xs font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-full whitespace-nowrap">Answered by AI</span>;
+    return <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full whitespace-nowrap">Logged</span>;
   }
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-800">
+    <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-200">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <MessageCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <MessageCircle className="w-4 h-4 text-slate-600 flex-shrink-0" />
             <div>
-              <p className="text-sm font-bold text-white leading-none">My Questions</p>
+              <p className="text-sm font-bold text-slate-900 leading-none">My Questions</p>
               <p className="text-xs text-slate-500 mt-0.5">
                 {questions.length} total
-                {pending.length > 0 && <> · <span className="text-amber-400 font-semibold">{pending.length} pending attorney review</span></>}
-                {answered.length > 0 && !pending.length && <> · <span className="text-emerald-400 font-semibold">{answered.length} answered</span></>}
+                {pending.length > 0 && <> · <span className="text-blue-600 font-semibold">{pending.length} pending attorney review</span></>}
+                {answered.length > 0 && !pending.length && <> · <span className="text-emerald-600 font-semibold">{answered.length} answered</span></>}
               </p>
             </div>
           </div>
           {pending.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-amber-400/10 border border-amber-400/25 rounded-full px-2.5 py-1">
-              <AlertTriangle className="w-3 h-3 text-amber-400" />
-              <span className="text-xs font-bold text-amber-400">{pending.length} needs review</span>
+            <div className="flex items-center gap-1.5 bg-blue-600/10 border border-blue-500/25 rounded-full px-2.5 py-1">
+              <AlertTriangle className="w-3 h-3 text-blue-600" />
+              <span className="text-xs font-bold text-blue-600">{pending.length} needs review</span>
             </div>
           )}
         </div>
@@ -877,23 +877,23 @@ function QuestionsPanel({ questions, expanded, onToggle }: {
 
       {questions.length === 0 ? (
         <div className="px-5 py-8 text-center">
-          <HelpCircle className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+          <HelpCircle className="w-8 h-8 text-slate-300 mx-auto mb-3" />
           <p className="text-slate-500 text-sm font-medium mb-1">No questions yet</p>
-          <p className="text-slate-600 text-xs max-w-xs mx-auto">
+          <p className="text-slate-400 text-xs max-w-xs mx-auto">
             Use the Case Assistant chat button to ask questions about your bankruptcy case. All questions are saved here.
           </p>
         </div>
       ) : (
         <>
-          <div className="flex border-b border-slate-800">
+          <div className="flex border-b border-slate-200">
             {(['pending', 'all'] as const).map(t => (
               <button
                 key={t}
                 onClick={() => setTab(t)}
                 className={`flex-1 px-4 py-2.5 text-xs font-semibold transition-colors ${
                   tab === t
-                    ? 'text-amber-400 border-b-2 border-amber-400 bg-amber-400/5'
-                    : 'text-slate-500 hover:text-slate-300'
+                    ? 'text-blue-600 border-b-2 border-blue-500 bg-blue-50'
+                    : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 {t === 'pending' ? `Pending Review (${pending.length})` : `All Questions (${questions.length})`}
@@ -904,29 +904,29 @@ function QuestionsPanel({ questions, expanded, onToggle }: {
           <div className="divide-y divide-slate-800 max-h-96 overflow-y-auto">
             {displayList.length === 0 ? (
               <div className="px-5 py-6 text-center">
-                <CheckCircle2 className="w-6 h-6 text-emerald-400 mx-auto mb-2" />
-                <p className="text-xs text-slate-400">No questions pending attorney review.</p>
+                <CheckCircle2 className="w-6 h-6 text-emerald-600 mx-auto mb-2" />
+                <p className="text-xs text-slate-600">No questions pending attorney review.</p>
               </div>
             ) : (
               displayList.map(q => {
                 const isExpanded = expanded === q.id;
                 return (
-                  <div key={q.id} className={`px-5 py-3.5 transition-colors ${q.status === 'needs_attorney' ? 'bg-amber-400/3' : ''}`}>
+                  <div key={q.id} className={`px-5 py-3.5 transition-colors ${q.status === 'needs_attorney' ? 'bg-blue-600/3' : ''}`}>
                     <button onClick={() => onToggle(isExpanded ? null : q.id)} className="w-full text-left">
                       <div className="flex items-start justify-between gap-3">
-                        <p className="text-sm text-white font-medium leading-snug flex-1 pr-2">{q.question}</p>
+                        <p className="text-sm text-slate-900 font-medium leading-snug flex-1 pr-2">{q.question}</p>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {statusBadge(q)}
-                          <ChevronRight className={`w-3.5 h-3.5 text-slate-600 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
+                          <ChevronRight className={`w-3.5 h-3.5 text-slate-400 transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`} />
                         </div>
                       </div>
                       <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                        {q.section_context && <span className="text-xs text-slate-600">In: {q.section_context}</span>}
-                        <span className="text-xs text-slate-700">
+                        {q.section_context && <span className="text-xs text-slate-400">In: {q.section_context}</span>}
+                        <span className="text-xs text-slate-300">
                           {new Date(q.asked_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                         </span>
                         {q.needs_additional_explanation && (
-                          <span className="text-xs text-amber-400/70 italic">Requested more detail</span>
+                          <span className="text-xs text-blue-600/70 italic">Requested more detail</span>
                         )}
                       </div>
                     </button>
@@ -934,23 +934,23 @@ function QuestionsPanel({ questions, expanded, onToggle }: {
                     {isExpanded && (
                       <div className="mt-3 space-y-2">
                         {q.ai_response && (
-                          <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-3 py-2.5">
-                            <p className="text-xs font-semibold text-slate-400 mb-1">Case Assistant:</p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{q.ai_response}</p>
+                          <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5">
+                            <p className="text-xs font-semibold text-slate-600 mb-1">Case Assistant:</p>
+                            <p className="text-xs text-slate-700 leading-relaxed">{q.ai_response}</p>
                           </div>
                         )}
                         {q.attorney_answer && (
                           <div className="bg-emerald-500/8 border border-emerald-500/25 rounded-xl px-3 py-2.5">
-                            <p className="text-xs font-semibold text-emerald-400 mb-1">
+                            <p className="text-xs font-semibold text-emerald-600 mb-1">
                               Attorney{q.answered_by ? ` (${q.answered_by})` : ''}:
                             </p>
-                            <p className="text-xs text-slate-300 leading-relaxed">{q.attorney_answer}</p>
+                            <p className="text-xs text-slate-700 leading-relaxed">{q.attorney_answer}</p>
                           </div>
                         )}
                         {q.status === 'needs_attorney' && !q.attorney_answer && (
-                          <div className="flex items-start gap-2 bg-amber-400/8 border border-amber-400/20 rounded-xl px-3 py-2.5">
-                            <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                            <p className="text-xs text-amber-200/80 leading-relaxed">
+                          <div className="flex items-start gap-2 bg-blue-600/8 border border-blue-500/20 rounded-xl px-3 py-2.5">
+                            <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                            <p className="text-xs text-blue-700/80 leading-relaxed">
                               This question has been sent to your attorney team. You will receive a response within 24–48 hours.
                             </p>
                           </div>
@@ -1233,7 +1233,7 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
     setSubmitting(false);
   }
 
-  const inp = "w-full bg-slate-800/60 border border-slate-700 text-white text-sm rounded-xl px-3 py-2.5 placeholder-slate-600 focus:outline-none focus:border-amber-400/60 transition-colors";
+  const inp = "w-full bg-slate-100 border border-slate-200 text-slate-900 text-sm rounded-xl px-3 py-2.5 placeholder-slate-400 focus:outline-none focus:border-blue-500/60 transition-colors";
   const INTENT_LABELS = { add: "Add / Report New", remove: "Remove / Report Ended", update: "Update Existing" };
   const INTENT_ICONS = {
     add: <Plus className="w-4 h-4" />,
@@ -1242,16 +1242,16 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
-      <div className="w-full sm:max-w-2xl bg-[#0d1221] border border-slate-700 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-100 backdrop-blur-sm">
+      <div className="w-full sm:max-w-2xl bg-slate-50 border border-slate-200 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl overflow-hidden">
 
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center gap-3 flex-shrink-0 bg-amber-400/5">
-          <div className="w-8 h-8 rounded-xl bg-amber-400/15 flex items-center justify-center flex-shrink-0">
-            <Edit3 className="w-4 h-4 text-amber-400" />
+        <div className="px-6 py-4 border-b border-slate-200 flex items-center gap-3 flex-shrink-0 bg-blue-50">
+          <div className="w-8 h-8 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+            <Edit3 className="w-4 h-4 text-blue-600" />
           </div>
           <div className="flex-1 min-w-0">
-            <h2 className="text-sm font-bold text-white">Update My Information</h2>
+            <h2 className="text-sm font-bold text-slate-900">Update My Information</h2>
             <p className="text-[11px] text-slate-500 mt-0.5">
               {step === "select_section" && "Select what you need to update"}
               {step === "select_intent" && section?.label}
@@ -1261,19 +1261,19 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
           </div>
           {step !== "select_section" && !submitted && (
             <button onClick={() => step === "select_intent" ? setStep("select_section") : step === "fill_form" ? setStep(section?.changeTypes.length === 1 ? "select_section" : "select_intent") : setStep("fill_form")}
-              className="flex items-center gap-1 text-xs text-slate-500 hover:text-white transition-colors">
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900 transition-colors">
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
           )}
-          <button onClick={onClose} className="text-slate-500 hover:text-white ml-1 flex-shrink-0">
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-900 ml-1 flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Progress bar */}
         {!submitted && (
-          <div className="flex h-0.5 bg-slate-800 flex-shrink-0">
-            <div className="bg-amber-400 transition-all duration-300" style={{
+          <div className="flex h-0.5 bg-white flex-shrink-0">
+            <div className="bg-blue-600 transition-all duration-300" style={{
               width: step === "select_section" ? "25%" : step === "select_intent" ? "50%" : step === "fill_form" ? "75%" : "100%"
             }} />
           </div>
@@ -1285,21 +1285,21 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
           {submitted && (
             <div className="flex flex-col items-center justify-center py-10 text-center">
               <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-4">
-                <CheckCircle2 className="w-7 h-7 text-emerald-400" />
+                <CheckCircle2 className="w-7 h-7 text-emerald-600" />
               </div>
-              <h3 className="text-lg font-bold text-white mb-2">Update Request Submitted</h3>
-              <p className="text-sm text-slate-400 max-w-sm leading-relaxed mb-1">
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Update Request Submitted</h3>
+              <p className="text-sm text-slate-600 max-w-sm leading-relaxed mb-1">
                 Your {section?.label} update has been sent to your legal team for review.
               </p>
               {isRemovingIncome && (
-                <div className="mt-4 bg-amber-400/8 border border-amber-400/20 rounded-xl px-4 py-3 max-w-sm text-left">
-                  <p className="text-[11px] font-bold text-amber-300 mb-1">Income Record Preserved</p>
-                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                <div className="mt-4 bg-blue-600/8 border border-blue-500/20 rounded-xl px-4 py-3 max-w-sm text-left">
+                  <p className="text-[11px] font-bold text-blue-600 mb-1">Income Record Preserved</p>
+                  <p className="text-[10px] text-slate-600 leading-relaxed">
                     Because the means test requires all income sources from the prior 6 months, your previous income record has been flagged as ended — not deleted. Your attorney will handle this correctly.
                   </p>
                 </div>
               )}
-              <button onClick={onClose} className="mt-6 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold text-sm px-6 py-2.5 rounded-xl transition-all">
+              <button onClick={onClose} className="mt-6 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm px-6 py-2.5 rounded-xl transition-all">
                 Close
               </button>
             </div>
@@ -1312,15 +1312,15 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {UPDATE_SECTIONS.map(s => (
                   <button key={s.id} onClick={() => selectSection(s)}
-                    className="flex items-center gap-3 text-left bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700 hover:border-amber-400/40 rounded-xl px-4 py-3.5 transition-all group">
-                    <div className="w-8 h-8 rounded-lg bg-slate-700 group-hover:bg-amber-400/15 flex items-center justify-center flex-shrink-0 text-slate-400 group-hover:text-amber-400 transition-colors">
+                    className="flex items-center gap-3 text-left bg-slate-100/60 hover:bg-slate-100 border border-slate-200 hover:border-blue-500/40 rounded-xl px-4 py-3.5 transition-all group">
+                    <div className="w-8 h-8 rounded-lg bg-slate-200 group-hover:bg-blue-100 flex items-center justify-center flex-shrink-0 text-slate-600 group-hover:text-blue-600 transition-colors">
                       {s.icon}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-white leading-tight">{s.label}</p>
+                      <p className="text-sm font-semibold text-slate-900 leading-tight">{s.label}</p>
                       <p className="text-[10px] text-slate-500 mt-0.5 leading-snug truncate">{s.description}</p>
                     </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-slate-600 group-hover:text-amber-400 flex-shrink-0 transition-colors" />
+                    <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-600 flex-shrink-0 transition-colors" />
                   </button>
                 ))}
               </div>
@@ -1330,37 +1330,37 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
           {/* ── Step 2: Select Intent ── */}
           {!submitted && step === "select_intent" && section && (
             <div className="space-y-4">
-              <div className="bg-slate-800/30 border border-slate-700 rounded-xl px-4 py-3 flex items-start gap-3">
-                <div className="w-8 h-8 rounded-lg bg-amber-400/15 flex items-center justify-center flex-shrink-0 text-amber-400">
+              <div className="bg-slate-100/50 border border-slate-200 rounded-xl px-4 py-3 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-blue-600">
                   {section.icon}
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{section.label}</p>
-                  <p className="text-xs text-slate-400 mt-0.5">{section.description}</p>
+                  <p className="text-sm font-bold text-slate-900">{section.label}</p>
+                  <p className="text-xs text-slate-600 mt-0.5">{section.description}</p>
                 </div>
               </div>
 
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">What do you need to do?</p>
+              <p className="text-xs font-semibold text-slate-600 uppercase tracking-widest">What do you need to do?</p>
               <div className="space-y-2">
                 {section.changeTypes.map(ct => (
                   <button key={ct} onClick={() => selectIntent(ct)}
-                    className="w-full flex items-center gap-3 bg-slate-800/40 hover:bg-slate-800 border border-slate-700 hover:border-amber-400/40 rounded-xl px-4 py-4 transition-all text-left group">
+                    className="w-full flex items-center gap-3 bg-slate-100/60 hover:bg-slate-100 border border-slate-200 hover:border-blue-500/40 rounded-xl px-4 py-4 transition-all text-left group">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
-                      ct === "add" ? "bg-emerald-500/10 text-emerald-400 group-hover:bg-emerald-500/20" :
-                      ct === "remove" ? "bg-red-500/10 text-red-400 group-hover:bg-red-500/20" :
-                      "bg-sky-500/10 text-sky-400 group-hover:bg-sky-500/20"
+                      ct === "add" ? "bg-emerald-500/10 text-emerald-600 group-hover:bg-emerald-500/20" :
+                      ct === "remove" ? "bg-red-500/10 text-red-600 group-hover:bg-red-500/20" :
+                      "bg-sky-500/10 text-sky-600 group-hover:bg-sky-500/20"
                     }`}>
                       {INTENT_ICONS[ct]}
                     </div>
                     <div>
-                      <p className="text-sm font-bold text-white">{INTENT_LABELS[ct]}</p>
+                      <p className="text-sm font-bold text-slate-900">{INTENT_LABELS[ct]}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {ct === "add" ? "Report something new that wasn't previously listed" :
                          ct === "remove" ? "Report that something has changed or ended" :
                          "Correct or update existing information"}
                       </p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-slate-600 group-hover:text-amber-400 ml-auto flex-shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 ml-auto flex-shrink-0" />
                   </button>
                 ))}
               </div>
@@ -1372,12 +1372,12 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
             <div className="space-y-4">
               {/* Income / means test warning */}
               {isRemovingIncome && (
-                <div className="bg-amber-400/8 border border-amber-400/25 rounded-xl px-4 py-3.5 flex items-start gap-3">
-                  <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                <div className="bg-blue-600/8 border border-blue-500/25 rounded-xl px-4 py-3.5 flex items-start gap-3">
+                  <ShieldAlert className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-amber-300 mb-1">Important — Means Test Requirement</p>
-                    <p className="text-xs text-slate-300 leading-relaxed">
-                      Federal bankruptcy law requires that <strong className="text-white">all income sources from the prior 6 months be listed on the means test</strong>, even if they have ended. Your previous income record will <strong className="text-white">not be deleted</strong> — it will be flagged as ended and your attorney will handle it correctly. Please fill in the details below.
+                    <p className="text-xs font-bold text-blue-600 mb-1">Important — Means Test Requirement</p>
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      Federal bankruptcy law requires that <strong className="text-slate-900">all income sources from the prior 6 months be listed on the means test</strong>, even if they have ended. Your previous income record will <strong className="text-slate-900">not be deleted</strong> — it will be flagged as ended and your attorney will handle it correctly. Please fill in the details below.
                     </p>
                   </div>
                 </div>
@@ -1387,8 +1387,8 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
               <div className="space-y-3">
                 {section.fields.map(f => (
                   <div key={f.key}>
-                    <label className="text-xs font-semibold text-slate-400 mb-1.5 block">
-                      {f.label}{f.required && <span className="text-red-400 ml-0.5">*</span>}
+                    <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                      {f.label}{f.required && <span className="text-red-600 ml-0.5">*</span>}
                     </label>
                     {f.type === "textarea" ? (
                       <textarea
@@ -1427,7 +1427,7 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
 
               {/* Additional notes */}
               <div>
-                <label className="text-xs font-semibold text-slate-400 mb-1.5 block">Additional Notes for Your Attorney</label>
+                <label className="text-xs font-semibold text-slate-600 mb-1.5 block">Additional Notes for Your Attorney</label>
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
@@ -1440,7 +1440,7 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
               <button
                 onClick={() => { if (allRequiredFilled) setStep("confirm"); }}
                 disabled={!allRequiredFilled}
-                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-sm py-3 rounded-xl transition-all">
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm py-3 rounded-xl transition-all">
                 Review Before Submitting <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -1449,16 +1449,16 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
           {/* ── Step 4: Confirm ── */}
           {!submitted && step === "confirm" && section && intent && (
             <div className="space-y-4">
-              <div className="bg-slate-800/30 border border-slate-700 rounded-xl overflow-hidden">
-                <div className="px-4 py-3 border-b border-slate-700 flex items-center gap-2">
-                  <div className="w-6 h-6 rounded-lg bg-amber-400/15 flex items-center justify-center text-amber-400 flex-shrink-0 text-xs">
+              <div className="bg-slate-100/50 border border-slate-200 rounded-xl overflow-hidden">
+                <div className="px-4 py-3 border-b border-slate-200 flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 flex-shrink-0 text-xs">
                     {section.icon}
                   </div>
-                  <span className="text-sm font-bold text-white">{section.label}</span>
+                  <span className="text-sm font-bold text-slate-900">{section.label}</span>
                   <span className={`ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                    intent === "add" ? "bg-emerald-500/15 text-emerald-400" :
-                    intent === "remove" ? "bg-red-500/15 text-red-400" :
-                    "bg-sky-500/15 text-sky-400"
+                    intent === "add" ? "bg-emerald-500/15 text-emerald-600" :
+                    intent === "remove" ? "bg-red-500/15 text-red-600" :
+                    "bg-sky-500/15 text-sky-600"
                   }`}>{INTENT_LABELS[intent]}</span>
                 </div>
                 <div className="px-4 py-3 space-y-2">
@@ -1468,30 +1468,30 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
                     return (
                       <div key={f.key} className="flex items-start justify-between gap-3 text-xs">
                         <span className="text-slate-500 flex-shrink-0">{f.label}</span>
-                        <span className="text-white text-right">{val}</span>
+                        <span className="text-slate-900 text-right">{val}</span>
                       </div>
                     );
                   })}
                   {notes && (
-                    <div className="flex items-start justify-between gap-3 text-xs border-t border-slate-700/60 pt-2 mt-2">
+                    <div className="flex items-start justify-between gap-3 text-xs border-t border-slate-200 pt-2 mt-2">
                       <span className="text-slate-500 flex-shrink-0">Notes</span>
-                      <span className="text-white text-right">{notes}</span>
+                      <span className="text-slate-900 text-right">{notes}</span>
                     </div>
                   )}
                 </div>
               </div>
 
               {isRemovingIncome && (
-                <div className="bg-amber-400/8 border border-amber-400/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
-                  <ShieldAlert className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    This income record will be <strong className="text-white">preserved</strong> as required by the means test. Your attorney will be notified that it has ended.
+                <div className="bg-blue-600/8 border border-blue-500/20 rounded-xl px-4 py-3 flex items-start gap-2.5">
+                  <ShieldAlert className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-slate-700 leading-relaxed">
+                    This income record will be <strong className="text-slate-900">preserved</strong> as required by the means test. Your attorney will be notified that it has ended.
                   </p>
                 </div>
               )}
 
               <div className="bg-sky-500/8 border border-sky-500/20 rounded-xl px-4 py-3">
-                <p className="text-[11px] text-slate-400 leading-relaxed">
+                <p className="text-[11px] text-slate-600 leading-relaxed">
                   This request will be sent to your legal team. They will review and apply the update, and may contact you if clarification is needed.
                 </p>
               </div>
@@ -1499,7 +1499,7 @@ function UpdateInformationModal({ onClose }: { onClose: () => void }) {
               <button
                 onClick={submit}
                 disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-slate-950 font-bold text-sm py-3 rounded-xl transition-all">
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-bold text-sm py-3 rounded-xl transition-all">
                 {submitting ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {submitting ? "Submitting…" : "Submit Update Request"}
               </button>
@@ -1646,22 +1646,22 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0e1a] text-white" style={{ fontFamily: "'Trebuchet MS', sans-serif" }}>
+    <div className="min-h-screen bg-white text-slate-900" style={{ fontFamily: "'Trebuchet MS', sans-serif" }}>
 
       {/* ── Staff Impersonation Banner ── */}
       {staffImpersonation && (
-        <div className="sticky top-0 z-50 bg-amber-500 text-black flex items-center justify-between px-4 py-2 text-sm font-semibold shadow-lg">
+        <div className="sticky top-0 z-50 bg-blue-600 text-white flex items-center justify-between px-4 py-2 text-sm font-semibold shadow-lg">
           <div className="flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
             </svg>
             <span>Staff View — Navigating as <strong>{staffImpersonation.clientName}</strong></span>
-            <span className="text-black/60 font-normal">({staffImpersonation.staffName})</span>
+            <span className="text-white/70 font-normal">({staffImpersonation.staffName})</span>
           </div>
           <button
             onClick={staffImpersonation.onExit}
-            className="flex items-center gap-1.5 px-3 py-1 bg-black/15 hover:bg-black/25 rounded-lg text-xs font-bold transition-colors"
+            className="flex items-center gap-1.5 px-3 py-1 bg-white/15 hover:bg-white/25 rounded-lg text-xs font-bold transition-colors"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
@@ -1673,14 +1673,14 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
       {/* ── Firm welcome message banner (dismissible) ── */}
       {firmBranding?.client_portal_welcome_message && !welcomeDismissed && (
-        <div className="bg-[#0d1221]/95 border-b border-amber-500/20">
+        <div className="bg-white/95 border-b border-blue-500/20">
           <div className="max-w-7xl mx-auto px-5 py-2.5 flex items-start justify-between gap-3">
-            <p className="text-xs text-slate-300 leading-relaxed flex-1">
+            <p className="text-xs text-slate-700 leading-relaxed flex-1">
               {firmBranding.client_portal_welcome_message}
             </p>
             <button
               onClick={() => setWelcomeDismissed(true)}
-              className="flex-shrink-0 p-1 text-slate-600 hover:text-white transition-colors mt-0.5"
+              className="flex-shrink-0 p-1 text-slate-400 hover:text-slate-900 transition-colors mt-0.5"
               aria-label="Dismiss welcome message"
             >
               <X className="w-3.5 h-3.5" />
@@ -1690,7 +1690,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
       )}
 
       {/* ── Top Navigation ── */}
-      <header className="bg-[#0d1221]/95 border-b border-slate-800/60 sticky top-0 z-30 backdrop-blur">
+      <header className="bg-white/95 border-b border-slate-200 sticky top-0 z-30 backdrop-blur">
         <PageContainer className="py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
@@ -1703,28 +1703,28 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 />
               ) : (
                 <>
-                  <div className="w-7 h-7 rounded-lg bg-amber-400 flex items-center justify-center">
-                    <Scale className="w-4 h-4 text-slate-950" />
+                  <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center">
+                    <Scale className="w-4 h-4 text-white" />
                   </div>
-                  <span className="font-bold text-white text-lg tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
+                  <span className="font-bold text-slate-900 text-lg tracking-tight" style={{ fontFamily: "'Georgia', serif" }}>
                     {firmBranding?.display_name ?? (
-                      <>bankruptcy<span className="text-amber-400">.ai</span></>
+                      <>bankruptcy<span className="text-blue-600">.ai</span></>
                     )}
                   </span>
                 </>
               )}
             </div>
-            <span className="hidden sm:block text-slate-700">|</span>
+            <span className="hidden sm:block text-slate-300" aria-hidden="true">|</span>
             <span className="hidden sm:block text-slate-500 text-xs font-medium tracking-wide uppercase">
               {firmBranding?.short_name ? `${firmBranding.short_name} Client Portal` : 'Client Portal'}
             </span>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
-              <p className="text-white text-sm font-semibold">{CASE_DATA.clientName}</p>
+              <p className="text-slate-900 text-sm font-semibold">{CASE_DATA.clientName}</p>
               <p className="text-slate-500 text-xs">Chapter {CASE_DATA.chapter} · Case # {CASE_DATA.caseNumber}</p>
             </div>
-            <div className="w-8 h-8 rounded-full bg-amber-400/15 border border-amber-400/30 flex items-center justify-center text-amber-400 text-sm font-bold">
+            <div className="w-8 h-8 rounded-full bg-blue-100 border border-blue-500/30 flex items-center justify-center text-blue-600 text-sm font-bold">
               {CASE_DATA.clientName.charAt(0)}
             </div>
           </div>
@@ -1734,10 +1734,10 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
       <PageContainer className="py-8 space-y-8">
 
         {/* ── Where You Are Right Now — Hero Banner ── */}
-        <div className="relative overflow-hidden rounded-2xl border border-amber-400/20 bg-gradient-to-br from-[#141b2e] via-[#111827] to-[#0d1221]">
+        <div className="relative overflow-hidden rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-50 via-slate-50 to-white">
           {/* Background accent */}
-          <div className="absolute inset-0 bg-gradient-to-r from-amber-400/5 via-transparent to-transparent pointer-events-none" />
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-400/5 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-transparent pointer-events-none" />
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-50 rounded-full blur-3xl pointer-events-none" />
 
           <div className="relative px-6 py-7 sm:px-8">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6">
@@ -1745,31 +1745,31 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
               {/* Left: Current position */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="inline-flex items-center gap-1.5 bg-amber-400/15 border border-amber-400/30 text-amber-400 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">
+                  <span className="inline-flex items-center gap-1.5 bg-blue-100 border border-blue-500/30 text-blue-600 text-xs font-bold uppercase tracking-widest px-3 py-1 rounded-full">
                     <MapPin className="w-3 h-3" /> You Are Here
                   </span>
-                  <span className="text-slate-600 text-xs">·</span>
+                  <span className="text-slate-400 text-xs">·</span>
                   <span className="text-slate-500 text-xs">{completedStages} of {STAGES.length} stages complete</span>
                 </div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white mb-1" style={{ fontFamily: "'Georgia', serif" }}>
+                <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-1" style={{ fontFamily: "'Georgia', serif" }}>
                   Stage {CASE_DATA.currentStage} — {currentStageData.label}
                 </h1>
-                <p className="text-slate-400 text-sm mb-4 max-w-lg">{currentStageData.sub}</p>
+                <p className="text-slate-600 text-sm mb-4 max-w-lg">{currentStageData.sub}</p>
 
                 {/* Questionnaire progress */}
                 <div className="flex items-center gap-3 mb-1">
-                  <div className="flex-1 max-w-xs bg-slate-800 rounded-full h-2">
+                  <div className="flex-1 max-w-xs bg-white rounded-full h-2">
                     <div
-                      className="h-2 rounded-full bg-gradient-to-r from-amber-400 to-amber-300 transition-all"
+                      className="h-2 rounded-full bg-gradient-to-r from-blue-600 to-blue-500 transition-all"
                       style={{ width: `${(stepsComplete / FORM_STEPS.length) * 100}%` }}
                     />
                   </div>
-                  <span className="text-xs text-slate-400 whitespace-nowrap">
-                    <strong className="text-white">{stepsComplete}</strong>/{FORM_STEPS.length} sections done
+                  <span className="text-xs text-slate-600 whitespace-nowrap">
+                    <strong className="text-slate-900">{stepsComplete}</strong>/{FORM_STEPS.length} sections done
                   </span>
                 </div>
-                <p className="text-xs text-slate-600">
-                  Currently on: <span className="text-slate-400 font-medium">{currentActiveStep?.label}</span>
+                <p className="text-xs text-slate-400">
+                  Currently on: <span className="text-slate-600 font-medium">{currentActiveStep?.label}</span>
                 </p>
               </div>
 
@@ -1777,14 +1777,14 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
               <div className="flex flex-col gap-3 sm:items-end flex-shrink-0">
                 <button
                   onClick={handleContinueClick}
-                  className="inline-flex items-center gap-2 bg-amber-400 hover:bg-amber-300 active:bg-amber-500 text-slate-950 font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-lg shadow-amber-400/20 hover:shadow-amber-400/30"
+                  className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl text-sm transition-all shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30"
                 >
                   Continue Questionnaire
                   <ArrowRight className="w-4 h-4" />
                 </button>
                 {nextStage && (
                   <p className="text-xs text-slate-500 sm:text-right">
-                    Up next: <span className="text-slate-400">Stage {nextStage.id} — {nextStage.label}</span>
+                    Up next: <span className="text-slate-600">Stage {nextStage.id} — {nextStage.label}</span>
                   </p>
                 )}
               </div>
@@ -1797,10 +1797,10 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
           {/* Journey Tracker */}
           <div className="xl:col-span-1">
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
-              <div className="px-5 py-4 border-b border-slate-800/70">
-                <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Case Journey</p>
-                <p className="text-white font-semibold text-sm mt-0.5" style={{ fontFamily: "'Georgia', serif" }}>
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="px-5 py-4 border-b border-slate-200">
+                <p className="text-xs font-bold uppercase tracking-widest text-slate-600">Case Journey</p>
+                <p className="text-slate-900 font-semibold text-sm mt-0.5" style={{ fontFamily: "'Georgia', serif" }}>
                   Chapter {CASE_DATA.chapter} Bankruptcy
                 </p>
               </div>
@@ -1823,19 +1823,19 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                           isComplete
                             ? "bg-emerald-500 border-emerald-500"
                             : isActive
-                              ? "bg-amber-400 border-amber-400 ring-4 ring-amber-400/20"
-                              : "border-slate-700 bg-slate-900"
+                              ? "bg-blue-600 border-blue-500 ring-4 ring-blue-500/20"
+                              : "border-slate-200 bg-white"
                         }`}>
                           {isComplete
-                            ? <CheckCircle2 className="w-3.5 h-3.5 text-white" />
+                            ? <CheckCircle2 className="w-3.5 h-3.5 text-slate-900" />
                             : isActive
-                              ? <span className="w-1.5 h-1.5 bg-slate-950 rounded-full block" />
-                              : <span className="text-[10px] font-bold text-slate-600">{stage.id}</span>
+                              ? <span className="w-1.5 h-1.5 bg-white rounded-full block" />
+                              : <span className="text-[10px] font-bold text-slate-400">{stage.id}</span>
                           }
                         </div>
                         {/* Connector */}
                         {!isLast && (
-                          <div className={`w-px flex-1 my-1 min-h-[16px] ${isComplete ? "bg-emerald-500/40" : "bg-slate-800"}`} />
+                          <div className={`w-px flex-1 my-1 min-h-[16px] ${isComplete ? "bg-emerald-500/40" : "bg-white"}`} />
                         )}
                       </div>
 
@@ -1845,21 +1845,21 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                         className={`flex-1 text-left px-3 py-2.5 rounded-xl mb-0.5 transition-all group ${
                           isSelected
                             ? isCurrent
-                              ? "bg-amber-400/10 border border-amber-400/30"
+                              ? "bg-blue-600/10 border border-blue-500/30"
                               : isComplete
                                 ? "bg-emerald-500/10 border border-emerald-500/20"
-                                : "bg-slate-800 border border-slate-700"
-                            : "hover:bg-slate-800/50 border border-transparent"
+                                : "bg-white border border-slate-200"
+                            : "hover:bg-slate-100 border border-transparent"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-1.5">
                           <div className="flex items-center gap-1.5 min-w-0">
                             {isCurrent && (
-                              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                              <span className="flex-shrink-0 w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
                             )}
                             <p className={`text-xs font-semibold leading-snug truncate ${
-                              isComplete ? "text-slate-300"
-                              : isActive   ? "text-white"
+                              isComplete ? "text-slate-700"
+                              : isActive   ? "text-slate-900"
                               :              "text-slate-500"
                             }`}>
                               {stage.label}
@@ -1867,14 +1867,14 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                           </div>
                           <div className="flex items-center gap-1.5 flex-shrink-0">
                             {isCurrent && (
-                              <span className="text-[10px] bg-amber-400/15 text-amber-400 border border-amber-400/25 px-1.5 py-px rounded-full font-bold leading-none whitespace-nowrap">
+                              <span className="text-[10px] bg-blue-100 text-blue-600 border border-blue-500/25 px-1.5 py-px rounded-full font-bold leading-none whitespace-nowrap">
                                 Now
                               </span>
                             )}
-                            <ChevronRight className={`w-3 h-3 text-slate-700 group-hover:text-slate-500 transition-all ${isSelected ? 'rotate-90' : ''}`} />
+                            <ChevronRight className={`w-3 h-3 text-slate-300 group-hover:text-slate-500 transition-all ${isSelected ? 'rotate-90' : ''}`} />
                           </div>
                         </div>
-                        <p className="text-[10px] text-slate-600 mt-0.5 truncate">{stage.date}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5 truncate">{stage.date}</p>
                       </button>
                     </div>
                   );
@@ -1884,9 +1884,9 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
               {/* Journey footer — finish line */}
               <div className="mx-3 mb-3 px-4 py-3 bg-gradient-to-r from-emerald-500/10 to-teal-500/5 border border-emerald-500/20 rounded-xl">
                 <div className="flex items-center gap-2">
-                  <Flag className="w-3.5 h-3.5 text-emerald-400 flex-shrink-0" />
+                  <Flag className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
                   <div>
-                    <p className="text-xs font-bold text-emerald-400">Finish Line</p>
+                    <p className="text-xs font-bold text-emerald-600">Finish Line</p>
                     <p className="text-[10px] text-slate-500">Discharge — Est. September 2026</p>
                   </div>
                 </div>
@@ -1899,15 +1899,15 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
             {/* Stage detail or default cards */}
             {detailStage ? (
-              <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
-                <div className={`px-6 py-5 border-b border-slate-800 ${detailStage.status === "active" ? "bg-amber-400/5" : detailStage.status === "complete" ? "bg-emerald-500/5" : ""}`}>
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden">
+                <div className={`px-6 py-5 border-b border-slate-200 ${detailStage.status === "active" ? "bg-blue-50" : detailStage.status === "complete" ? "bg-emerald-500/5" : ""}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 mb-2.5 flex-wrap">
                         <span className={`inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${
-                          detailStage.status === "complete" ? "text-emerald-400 bg-emerald-400/10 border-emerald-400/30" :
-                          detailStage.status === "active"   ? "text-amber-400 bg-amber-400/10 border-amber-400/30" :
-                                                              "text-slate-500 bg-slate-800 border-slate-700"
+                          detailStage.status === "complete" ? "text-emerald-600 bg-emerald-400/10 border-emerald-400/30" :
+                          detailStage.status === "active"   ? "text-blue-600 bg-blue-600/10 border-blue-500/30" :
+                                                              "text-slate-500 bg-white border-slate-200"
                         }`}>
                           {detailStage.status === "complete"
                             ? <><CheckCircle2 className="w-3 h-3" /> Completed</>
@@ -1918,49 +1918,49 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                         </span>
                         <span className="text-xs text-slate-500">{detailStage.date}</span>
                       </div>
-                      <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Georgia', serif" }}>
+                      <h2 className="text-xl font-bold text-slate-900" style={{ fontFamily: "'Georgia', serif" }}>
                         Stage {detailStage.id} — {detailStage.label}
                       </h2>
-                      <p className="text-slate-400 text-sm mt-1">{detailStage.sub}</p>
+                      <p className="text-slate-600 text-sm mt-1">{detailStage.sub}</p>
                     </div>
-                    <button onClick={() => setActiveStageId(null)} className="text-slate-600 hover:text-slate-400 transition-colors flex-shrink-0">
+                    <button onClick={() => setActiveStageId(null)} className="text-slate-400 hover:text-slate-600 transition-colors flex-shrink-0">
                       <X className="w-5 h-5" />
                     </button>
                   </div>
                 </div>
 
-                <section className="px-6 py-5 border-b border-slate-800">
-                  <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">About This Stage</p>
-                  <p className="text-slate-300 text-sm leading-relaxed">{detailStage.purpose}</p>
+                <section className="px-6 py-5 border-b border-slate-200">
+                  <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-2">About This Stage</p>
+                  <p className="text-slate-700 text-sm leading-relaxed">{detailStage.purpose}</p>
                 </section>
 
                 {/* Stage 1 only — Registration & Signed Documents */}
                 {detailStage.id === 1 && (
-                  <section className="px-6 py-5 border-b border-slate-800">
-                    <p className="text-xs font-bold uppercase tracking-widest text-emerald-400 mb-4">Your Signed Documents — On File</p>
+                  <section className="px-6 py-5 border-b border-slate-200">
+                    <p className="text-xs font-bold uppercase tracking-widest text-emerald-600 mb-4">Your Signed Documents — On File</p>
                     <div className="space-y-3">
                       {[
                         {
                           label: 'Client Registration Record',
                           desc: 'Account credentials, personal contact information, and registration timestamp.',
                           status: 'On File',
-                          statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
-                          icon: <User className="w-4 h-4 text-sky-400" />,
+                          statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
+                          icon: <User className="w-4 h-4 text-sky-600" />,
                           iconBg: 'bg-sky-500/10 border-sky-500/20',
                         },
                         {
                           label: 'Client Disclosure Acknowledgement',
                           desc: 'Signed consent for SendGrid, Twilio, iSoftpull, Plaid, and E-SIGN Act disclosures.',
                           status: 'Signed',
-                          statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
-                          icon: <BadgeCheck className="w-4 h-4 text-amber-400" />,
-                          iconBg: 'bg-amber-500/10 border-amber-500/20',
+                          statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
+                          icon: <BadgeCheck className="w-4 h-4 text-blue-600" />,
+                          iconBg: 'bg-blue-50 border-blue-500/20',
                         },
                         {
                           label: 'iSoftpull FCRA Written Consent',
                           desc: 'FCRA-compliant written instruction authorizing soft credit pull via iSoftpull / TransUnion.',
                           status: 'Signed',
-                          statusColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+                          statusColor: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/25',
                           icon: <CreditCard className="w-4 h-4 text-blue-400" />,
                           iconBg: 'bg-blue-500/10 border-blue-500/20',
                         },
@@ -1968,40 +1968,40 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                           label: 'Intake Agreement / Retainer',
                           desc: 'Your retainer agreement and engagement letter will be added here after attorney review.',
                           status: 'Pending Attorney',
-                          statusColor: 'text-amber-400 bg-amber-500/10 border-amber-500/25',
-                          icon: <FileText className="w-4 h-4 text-slate-400" />,
-                          iconBg: 'bg-slate-700/40 border-slate-700',
+                          statusColor: 'text-blue-600 bg-blue-50 border-blue-500/25',
+                          icon: <FileText className="w-4 h-4 text-slate-600" />,
+                          iconBg: 'bg-slate-200/60 border-slate-200',
                         },
                       ].map(doc => (
-                        <div key={doc.label} className="flex items-start gap-3 bg-slate-800/50 border border-slate-700/60 rounded-xl px-4 py-3">
+                        <div key={doc.label} className="flex items-start gap-3 bg-slate-100/70 border border-slate-200 rounded-xl px-4 py-3">
                           <div className={`w-8 h-8 rounded-lg border flex items-center justify-center flex-shrink-0 ${doc.iconBg}`}>
                             {doc.icon}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2 flex-wrap">
-                              <p className="text-white text-sm font-semibold">{doc.label}</p>
+                              <p className="text-slate-900 text-sm font-semibold">{doc.label}</p>
                               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border whitespace-nowrap ${doc.statusColor}`}>
                                 {doc.status}
                               </span>
                             </div>
-                            <p className="text-slate-400 text-xs mt-0.5 leading-relaxed">{doc.desc}</p>
+                            <p className="text-slate-600 text-xs mt-0.5 leading-relaxed">{doc.desc}</p>
                           </div>
                         </div>
                       ))}
                     </div>
-                    <p className="text-slate-600 text-xs mt-3 leading-relaxed">
+                    <p className="text-slate-400 text-xs mt-3 leading-relaxed">
                       All records are retained for the duration of your case and for a minimum of 7 years following case closure. A full copy of the disclosure acknowledgement and registration record is available upon request.
                     </p>
                   </section>
                 )}
 
                 {detailStage.whatToDo.length > 0 && (
-                  <section className="px-6 py-5 border-b border-slate-800">
-                    <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-3">What You Need to Do</p>
+                  <section className="px-6 py-5 border-b border-slate-200">
+                    <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-3">What You Need to Do</p>
                     <ul className="space-y-2">
                       {detailStage.whatToDo.map(item => (
-                        <li key={item} className="flex items-start gap-3 text-sm text-slate-300">
-                          <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                        <li key={item} className="flex items-start gap-3 text-sm text-slate-700">
+                          <ChevronRight className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                           {item}
                         </li>
                       ))}
@@ -2010,8 +2010,8 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 )}
 
                 <section className="px-6 py-5">
-                  <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mb-2">What Happens Next</p>
-                  <p className="text-slate-300 text-sm leading-relaxed">{detailStage.whatHappensNext}</p>
+                  <p className="text-xs font-bold uppercase tracking-widest text-slate-600 mb-2">What Happens Next</p>
+                  <p className="text-slate-700 text-sm leading-relaxed">{detailStage.whatHappensNext}</p>
                 </section>
               </div>
             ) : (
@@ -2020,49 +2020,49 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 {/* Action: questionnaire */}
                 <button
                   onClick={handleContinueClick}
-                  className="group bg-[#0d1221] border border-amber-400/20 hover:border-amber-400/40 rounded-2xl p-5 text-left transition-all hover:bg-amber-400/5"
+                  className="group bg-slate-50 border border-blue-500/20 hover:border-blue-500/40 rounded-2xl p-5 text-left transition-all hover:bg-blue-50"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-400/15 border border-amber-400/25 flex items-center justify-center flex-shrink-0">
-                      <FileText className="w-4 h-4 text-amber-400" />
+                    <div className="w-9 h-9 rounded-xl bg-blue-100 border border-blue-500/25 flex items-center justify-center flex-shrink-0">
+                      <FileText className="w-4 h-4 text-blue-600" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Action Required</p>
-                      <p className="text-sm font-bold text-white mb-1">Continue Questionnaire</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-1">Action Required</p>
+                      <p className="text-sm font-bold text-slate-900 mb-1">Continue Questionnaire</p>
                       <p className="text-xs text-slate-500 leading-snug">
                         Step {currentActiveStep?.step} of {FORM_STEPS.length} · {currentActiveStep?.label}
                       </p>
-                      <div className="mt-2 bg-slate-800 rounded-full h-1.5">
+                      <div className="mt-2 bg-white rounded-full h-1.5">
                         <div
-                          className="h-1.5 rounded-full bg-amber-400 transition-all"
+                          className="h-1.5 rounded-full bg-blue-600 transition-all"
                           style={{ width: `${(stepsComplete / FORM_STEPS.length) * 100}%` }}
                         />
                       </div>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0 mt-1 group-hover:translate-x-0.5 transition-transform" />
+                    <ChevronRight className="w-4 h-4 text-blue-600 flex-shrink-0 mt-1 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </button>
 
                 {/* Messages from Your Legal Team — inline card */}
-                <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden flex flex-col">
+                <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden flex flex-col">
                   <button
                     onClick={() => setMessagesExpanded(v => !v)}
-                    className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors flex-shrink-0"
+                    className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-100 transition-colors flex-shrink-0"
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
-                        <MessageCircle className="w-4 h-4 text-sky-400" />
+                        <MessageCircle className="w-4 h-4 text-sky-600" />
                       </div>
                       <div className="text-left">
                         <div className="flex items-center gap-2">
-                          <p className="text-xs font-bold uppercase tracking-widest text-sky-400 mb-0">Messages</p>
+                          <p className="text-xs font-bold uppercase tracking-widest text-sky-600 mb-0">Messages</p>
                           {msgUnread > 0 && (
                             <span className="bg-sky-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                               {msgUnread}
                             </span>
                           )}
                         </div>
-                        <p className="text-sm font-bold text-white leading-snug mt-0.5">
+                        <p className="text-sm font-bold text-slate-900 leading-snug mt-0.5">
                           {clientMessages.length === 0 ? "No messages yet" : `${clientMessages.length} from your legal team`}
                         </p>
                       </div>
@@ -2070,12 +2070,12 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                     <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform flex-shrink-0 ${messagesExpanded ? "rotate-180" : ""}`} />
                   </button>
                   {messagesExpanded && (
-                    <div className="border-t border-slate-800 flex-1 overflow-y-auto max-h-64">
+                    <div className="border-t border-slate-200 flex-1 overflow-y-auto max-h-64">
                       {clientMessages.length === 0 ? (
                         <div className="px-5 py-8 text-center">
-                          <MessageCircle className="w-7 h-7 text-slate-700 mx-auto mb-2" />
+                          <MessageCircle className="w-7 h-7 text-slate-300 mx-auto mb-2" />
                           <p className="text-sm text-slate-500">No messages yet</p>
-                          <p className="text-xs text-slate-700 mt-1">Your legal team will send important updates here.</p>
+                          <p className="text-xs text-slate-300 mt-1">Your legal team will send important updates here.</p>
                         </div>
                       ) : (
                         <div className="divide-y divide-slate-800/60">
@@ -2088,8 +2088,8 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                               in_app:      <MessageCircle className="w-3 h-3" />,
                             };
                             const channelColors: Record<string, string> = {
-                              sms: "text-emerald-400", email: "text-sky-400", voice: "text-amber-400",
-                              google_meet: "text-teal-400", in_app: "text-slate-400",
+                              sms: "text-emerald-600", email: "text-sky-600", voice: "text-blue-600",
+                              google_meet: "text-teal-400", in_app: "text-slate-600",
                             };
                             const channelLabels: Record<string, string> = {
                               sms: "SMS", email: "Email", voice: "Voice", google_meet: "Video Meeting", in_app: "In-App",
@@ -2099,23 +2099,23 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                               <div key={msg.id} className="px-4 py-3">
                                 <div className="flex items-start justify-between gap-2 mb-1.5">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-xs font-semibold text-slate-300">{msg.sender_name}</span>
-                                    <span className="text-[10px] text-slate-600 capitalize">{msg.sender_role}</span>
+                                    <span className="text-xs font-semibold text-slate-700">{msg.sender_name}</span>
+                                    <span className="text-[10px] text-slate-400 capitalize">{msg.sender_role}</span>
                                     {isNew && (
-                                      <span className="text-[9px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 rounded px-1.5 py-0.5">NEW</span>
+                                      <span className="text-[9px] font-bold text-sky-600 bg-sky-500/10 border border-sky-500/20 rounded px-1.5 py-0.5">NEW</span>
                                     )}
                                   </div>
                                   <div className="flex items-center gap-1 text-[10px] flex-shrink-0">
                                     <span className={`flex items-center gap-0.5 ${channelColors[msg.channel] ?? "text-slate-500"}`}>
                                       {channelIcons[msg.channel] ?? <MessageCircle className="w-3 h-3" />}
                                     </span>
-                                    <span className="text-slate-600">{new Date(msg.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                                    <span className="text-slate-400">{new Date(msg.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
                                   </div>
                                 </div>
                                 {msg.subject && (
-                                  <p className="text-[11px] font-semibold text-white mb-1">{msg.subject}</p>
+                                  <p className="text-[11px] font-semibold text-slate-900 mb-1">{msg.subject}</p>
                                 )}
-                                <p className="text-xs text-slate-300 leading-relaxed line-clamp-3">{msg.body}</p>
+                                <p className="text-xs text-slate-700 leading-relaxed line-clamp-3">{msg.body}</p>
                                 {msg.meet_link && (
                                   <a href={msg.meet_link} target="_blank" rel="noreferrer"
                                     className="mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-teal-400 bg-teal-500/10 border border-teal-500/20 rounded-lg px-2.5 py-1 hover:bg-teal-500/20 transition-colors">
@@ -2123,7 +2123,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                                   </a>
                                 )}
                                 {msg.related_document && (
-                                  <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-600">
+                                  <div className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
                                     <FileText className="w-2.5 h-2.5" />Re: {msg.related_document}
                                   </div>
                                 )}
@@ -2139,19 +2139,19 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 {/* Action: payment */}
                 <button
                   onClick={() => setShowPaymentPanel(true)}
-                  className="group bg-[#0d1221] border border-slate-800 hover:border-sky-500/30 rounded-2xl p-5 text-left transition-all hover:bg-sky-500/5"
+                  className="group bg-slate-50 border border-slate-200 hover:border-sky-500/30 rounded-2xl p-5 text-left transition-all hover:bg-sky-500/5"
                 >
                   <div className="flex items-start gap-3">
                     <div className="w-9 h-9 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center flex-shrink-0">
-                      <CreditCard className="w-4 h-4 text-sky-400" />
+                      <CreditCard className="w-4 h-4 text-sky-600" />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2 mb-1">
                         <p className="text-xs font-bold uppercase tracking-widest text-sky-500">Make / Adjust Payments</p>
                       </div>
-                      <p className="text-sm font-bold text-white mb-1">${CASE_DATA.paidToDate.toLocaleString()} of ${CASE_DATA.totalFee.toLocaleString()} paid</p>
+                      <p className="text-sm font-bold text-slate-900 mb-1">${CASE_DATA.paidToDate.toLocaleString()} of ${CASE_DATA.totalFee.toLocaleString()} paid</p>
                       <p className="text-xs text-slate-500">${remaining.toLocaleString()} remaining · payoff by {CASE_DATA.payoffDate}</p>
-                      <div className="mt-2 bg-slate-800 rounded-full h-1.5">
+                      <div className="mt-2 bg-white rounded-full h-1.5">
                         <div
                           className="h-1.5 rounded-full bg-sky-500 transition-all"
                           style={{ width: `${paidPct}%` }}
@@ -2165,18 +2165,18 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 {/* Action: Update My Information */}
                 <button
                   onClick={() => setShowUpdateModal(true)}
-                  className="group bg-[#0d1221] border border-slate-800 hover:border-amber-400/30 rounded-2xl p-5 text-left transition-all hover:bg-amber-400/5"
+                  className="group bg-slate-50 border border-slate-200 hover:border-blue-500/30 rounded-2xl p-5 text-left transition-all hover:bg-blue-50"
                 >
                   <div className="flex items-start gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-400/10 border border-amber-400/20 flex items-center justify-center flex-shrink-0">
-                      <Edit3 className="w-4 h-4 text-amber-400" />
+                    <div className="w-9 h-9 rounded-xl bg-blue-600/10 border border-blue-500/20 flex items-center justify-center flex-shrink-0">
+                      <Edit3 className="w-4 h-4 text-blue-600" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold uppercase tracking-widest text-amber-500 mb-1">Update My Information</p>
-                      <p className="text-sm font-bold text-white mb-1">Report a change to your case file</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-1">Update My Information</p>
+                      <p className="text-sm font-bold text-slate-900 mb-1">Report a change to your case file</p>
                       <p className="text-xs text-slate-500 leading-snug">Address, employer, income, assets, creditors, documents & more</p>
                     </div>
-                    <ChevronRight className="w-4 h-4 text-amber-600 flex-shrink-0 mt-1 group-hover:translate-x-0.5 transition-transform" />
+                    <ChevronRight className="w-4 h-4 text-blue-600 flex-shrink-0 mt-1 group-hover:translate-x-0.5 transition-transform" />
                   </div>
                 </button>
 
@@ -2184,32 +2184,32 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 <div className={`sm:col-span-2 rounded-2xl border p-5 transition-all ${
                   schedulingApproved
                     ? "bg-emerald-500/8 border-emerald-500/25 hover:border-emerald-500/40"
-                    : "bg-[#0d1221] border-slate-800"
+                    : "bg-slate-50 border-slate-200"
                 }`}>
                   <div className="flex items-start gap-3">
                     <div className={`w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                      schedulingApproved ? "bg-emerald-500/15 border border-emerald-500/30" : "bg-slate-800 border border-slate-700"
+                      schedulingApproved ? "bg-emerald-500/15 border border-emerald-500/30" : "bg-white border border-slate-200"
                     }`}>
                       {schedulingApproved
-                        ? <CalendarCheck className="w-4 h-4 text-emerald-400" />
-                        : <Lock className="w-4 h-4 text-slate-600" />
+                        ? <CalendarCheck className="w-4 h-4 text-emerald-600" />
+                        : <Lock className="w-4 h-4 text-slate-400" />
                       }
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className={`text-xs font-bold uppercase tracking-widest ${schedulingApproved ? "text-emerald-400" : "text-slate-600"}`}>
+                        <p className={`text-xs font-bold uppercase tracking-widest ${schedulingApproved ? "text-emerald-600" : "text-slate-400"}`}>
                           {schedulingApproved ? "Ready to Schedule" : "Locked"}
                         </p>
                         {schedulingApproved && (
-                          <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
+                          <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-500/10 border border-emerald-500/20 px-1.5 py-0.5 rounded-full">
                             <BadgeCheck className="w-2.5 h-2.5" /> Attorney Approved
                           </span>
                         )}
                       </div>
-                      <p className={`text-sm font-bold mb-1 ${schedulingApproved ? "text-white" : "text-slate-600"}`}>
+                      <p className={`text-sm font-bold mb-1 ${schedulingApproved ? "text-slate-900" : "text-slate-400"}`}>
                         Schedule Signing Appointment
                       </p>
-                      <p className={`text-xs leading-snug ${schedulingApproved ? "text-slate-400" : "text-slate-600"}`}>
+                      <p className={`text-xs leading-snug ${schedulingApproved ? "text-slate-600" : "text-slate-400"}`}>
                         {schedulingApproved
                           ? `Your attorney approved scheduling on ${new Date(schedulingApprovedAt!).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}. You may now select a date and time for your signing appointment.`
                           : schedulingBlockedReason
@@ -2228,8 +2228,8 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
                   {/* Hard blocks remaining notice — shown when not yet approved */}
                   {!schedulingApproved && (
-                    <div className="mt-3 pt-3 border-t border-slate-800">
-                      <p className="text-[10px] font-bold text-slate-600 uppercase tracking-wider mb-2">Required before scheduling opens</p>
+                    <div className="mt-3 pt-3 border-t border-slate-200">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Required before scheduling opens</p>
                       <ul className="space-y-1">
                         {[
                           "Government-issued photo ID on file",
@@ -2239,7 +2239,7 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                           "Updated mortgage statement (if applicable)",
                           "Updated auto loan statement (if applicable)",
                         ].map(item => (
-                          <li key={item} className="flex items-center gap-2 text-[11px] text-slate-600">
+                          <li key={item} className="flex items-center gap-2 text-[11px] text-slate-400">
                             <Lock className="w-2.5 h-2.5 flex-shrink-0" />
                             {item}
                           </li>
@@ -2251,27 +2251,27 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
                 {/* What's blocking */}
                 {(stepsComplete < FORM_STEPS.length || daysToPayoff > 0) && (
-                  <div className="sm:col-span-2 bg-[#0d1221] border border-red-500/20 rounded-2xl p-5">
+                  <div className="sm:col-span-2 bg-slate-50 border border-red-500/20 rounded-2xl p-5">
                     <div className="flex items-start gap-3">
-                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                      <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                       <div>
-                        <p className="text-xs font-bold uppercase tracking-widest text-red-400 mb-2">What Must Be Done Before Filing</p>
+                        <p className="text-xs font-bold uppercase tracking-widest text-red-600 mb-2">What Must Be Done Before Filing</p>
                         <ul className="space-y-1.5">
                           {stepsComplete < FORM_STEPS.length && (
-                            <li className="text-xs text-slate-300 flex items-center gap-2">
+                            <li className="text-xs text-slate-700 flex items-center gap-2">
                               <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
                               Questionnaire incomplete — {FORM_STEPS.length - stepsComplete} section{FORM_STEPS.length - stepsComplete !== 1 ? "s" : ""} remaining
                             </li>
                           )}
                           {daysToPayoff > 0 && (
-                            <li className="text-xs text-slate-300 flex items-center gap-2">
+                            <li className="text-xs text-slate-700 flex items-center gap-2">
                               <span className="w-1 h-1 rounded-full bg-red-400 flex-shrink-0" />
                               Attorney fees not paid in full — ${remaining.toLocaleString()} still due by {CASE_DATA.payoffDate}
                             </li>
                           )}
                           {!isDocUnlocked && (
-                            <li className="text-xs text-slate-300 flex items-center gap-2">
-                              <span className="w-1 h-1 rounded-full bg-slate-500 flex-shrink-0" />
+                            <li className="text-xs text-slate-700 flex items-center gap-2">
+                              <span className="w-1 h-1 rounded-full bg-slate-400 flex-shrink-0" />
                               Document upload unlocks within {DOC_UNLOCK_THRESHOLD} days of payoff ({daysToPayoff} days away)
                             </li>
                           )}
@@ -2282,9 +2282,9 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 )}
 
                 {/* Hint to explore stages */}
-                <div className="sm:col-span-2 flex items-center gap-3 px-5 py-3 bg-slate-900/50 border border-slate-800/50 rounded-xl">
-                  <Briefcase className="w-4 h-4 text-slate-600 flex-shrink-0" />
-                  <p className="text-xs text-slate-600">
+                <div className="sm:col-span-2 flex items-center gap-3 px-5 py-3 bg-white/50 border border-slate-200/50 rounded-xl">
+                  <Briefcase className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <p className="text-xs text-slate-400">
                     Select any stage in the journey tracker to learn what happens at each point in your case.
                   </p>
                 </div>
@@ -2292,11 +2292,11 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
             )}
 
             {/* ── Case Reference ── */}
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl px-5 py-4">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl px-5 py-4">
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-slate-500">
                 <span className="flex items-center gap-1.5">
                   <User className="w-3 h-3" />
-                  <span className="text-slate-300 font-medium">{CASE_DATA.clientName}</span>
+                  <span className="text-slate-700 font-medium">{CASE_DATA.clientName}</span>
                 </span>
                 <span className="flex items-center gap-1.5">
                   <Scale className="w-3 h-3" />
@@ -2323,22 +2323,22 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
             )}
 
             {/* ── Credit Report Import ── */}
-            <div className="bg-[#0d1221] border border-slate-800 rounded-2xl overflow-hidden">
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl overflow-hidden">
               <button
                 onClick={() => setShowCreditUploader(v => !v)}
-                className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-800/40 transition-colors"
+                className="w-full px-5 py-4 flex items-center justify-between gap-3 hover:bg-slate-100 transition-colors"
               >
                 <div className="flex items-center gap-2.5">
-                  <FileText className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                  <FileText className="w-4 h-4 text-slate-600 flex-shrink-0" />
                   <div className="text-left">
-                    <p className="text-sm font-bold text-white leading-none">Credit Report — Creditor Import</p>
+                    <p className="text-sm font-bold text-slate-900 leading-none">Credit Report — Creditor Import</p>
                     <p className="text-xs text-slate-500 mt-0.5">Upload from Stretto, Experian, TransUnion, or Equifax</p>
                   </div>
                 </div>
                 <ChevronDown className={`w-4 h-4 text-slate-500 transition-transform ${showCreditUploader ? "rotate-180" : ""}`} />
               </button>
               {showCreditUploader && (
-                <div className="border-t border-slate-800 p-5">
+                <div className="border-t border-slate-200 p-5">
                   <CreditReportUploader />
                 </div>
               )}
@@ -2375,68 +2375,68 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
 
       {/* ── Stage 2 Detail Panel ── */}
       {showStage2Panel && (
-        <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-950/90 backdrop-blur-sm">
-          <div className="w-full sm:max-w-2xl bg-[#0d1221] border border-slate-700 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl">
+        <div className="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-6 bg-slate-100 backdrop-blur-sm">
+          <div className="w-full sm:max-w-2xl bg-slate-50 border border-slate-200 rounded-none sm:rounded-2xl flex flex-col max-h-screen sm:max-h-[90vh] shadow-2xl">
 
-            <div className="px-6 py-5 border-b border-slate-800 bg-amber-400/5 flex items-start justify-between gap-4 flex-shrink-0">
+            <div className="px-6 py-5 border-b border-slate-200 bg-blue-50 flex items-start justify-between gap-4 flex-shrink-0">
               <div>
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border text-amber-400 bg-amber-400/10 border-amber-400/30">
+                  <span className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border text-blue-600 bg-blue-600/10 border-blue-500/30">
                     <Clock className="w-3 h-3" /> In Progress
                   </span>
                   <span className="text-xs text-slate-500">{stage2.date}</span>
                 </div>
-                <h2 className="text-xl font-bold text-white" style={{ fontFamily: "'Georgia', serif" }}>
+                <h2 className="text-xl font-bold text-slate-900" style={{ fontFamily: "'Georgia', serif" }}>
                   Stage 2 — {stage2.label}
                 </h2>
-                <p className="text-slate-400 text-sm mt-1">{stage2.sub}</p>
+                <p className="text-slate-600 text-sm mt-1">{stage2.sub}</p>
               </div>
-              <button onClick={() => setShowStage2Panel(false)} className="text-slate-500 hover:text-white transition-colors flex-shrink-0 mt-1">
+              <button onClick={() => setShowStage2Panel(false)} className="text-slate-500 hover:text-slate-900 transition-colors flex-shrink-0 mt-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto">
-              <section className="px-6 py-5 border-b border-slate-800 bg-amber-400/3">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">Your Fresh Start Begins Here</p>
-                <p className="text-slate-200 text-sm leading-relaxed">{stage2.purpose}</p>
+              <section className="px-6 py-5 border-b border-slate-200 bg-blue-600/3">
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-2">Your Fresh Start Begins Here</p>
+                <p className="text-slate-800 text-sm leading-relaxed">{stage2.purpose}</p>
               </section>
 
-              <section className="px-6 py-5 border-b border-slate-800">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-3">What We Are Gathering</p>
+              <section className="px-6 py-5 border-b border-slate-200">
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-3">What We Are Gathering</p>
                 <ul className="space-y-2.5">
                   {stage2.whatToDo.map(item => (
-                    <li key={item} className="flex items-start gap-3 text-sm text-slate-300">
-                      <ChevronRight className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
+                    <li key={item} className="flex items-start gap-3 text-sm text-slate-700">
+                      <ChevronRight className="w-4 h-4 text-blue-600 flex-shrink-0 mt-0.5" />
                       {item}
                     </li>
                   ))}
                 </ul>
               </section>
 
-              <section className="px-6 py-5 border-b border-slate-800">
+              <section className="px-6 py-5 border-b border-slate-200">
                 <div className="flex items-start gap-3">
-                  <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-1" />
+                  <Info className="w-4 h-4 text-sky-600 flex-shrink-0 mt-1" />
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-sky-400 mb-2">AI Tools for Faster, More Accurate Entry</p>
-                    <p className="text-slate-300 text-sm leading-relaxed mb-3">{stage2.uploadDocuments}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-sky-600 mb-2">AI Tools for Faster, More Accurate Entry</p>
+                    <p className="text-slate-700 text-sm leading-relaxed mb-3">{stage2.uploadDocuments}</p>
                     {isDocUnlocked ? (
                       <div className="flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/25 rounded-xl px-4 py-3">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                        <p className="text-emerald-300 text-sm font-semibold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                        <p className="text-emerald-700 text-sm font-semibold">
                           Document uploads are now unlocked — you are {daysToPayoff} days from payoff.
                         </p>
                       </div>
                     ) : (
-                      <div className="flex items-start gap-2 bg-slate-800 border border-slate-700 rounded-xl px-4 py-3">
-                        <Lock className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex items-start gap-2 bg-white border border-slate-200 rounded-xl px-4 py-3">
+                        <Lock className="w-4 h-4 text-slate-600 flex-shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-slate-300 text-sm font-semibold mb-0.5">Document uploads are locked</p>
-                          <p className="text-slate-400 text-sm">
+                          <p className="text-slate-700 text-sm font-semibold mb-0.5">Document uploads are locked</p>
+                          <p className="text-slate-600 text-sm">
                             {CASE_DATA.case_type === "regular"
                               ? `Your case is Ch. 7 — Prepaid. Documents and detailed information must be fully updated within 90 days of your payoff date to ensure records are current at the time of filing. Currently `
                               : `Document uploads unlock when you are within ${DOC_UNLOCK_THRESHOLD} days of payoff — currently `}
-                            <strong className="text-white">{daysToPayoff} days</strong> away.
+                            <strong className="text-slate-900">{daysToPayoff} days</strong> away.
                           </p>
                         </div>
                       </div>
@@ -2445,43 +2445,43 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 </div>
               </section>
 
-              <section className="px-6 py-5 border-b border-slate-800">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-4">Ongoing Document Requirements</p>
+              <section className="px-6 py-5 border-b border-slate-200">
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-4">Ongoing Document Requirements</p>
                 <div className="space-y-4">
                   {[
                     {
                       num: "1",
                       color: "amber",
                       title: "While Completing the Questionnaire",
-                      body: <>All information and documents must be complete before your case can be filed. <strong className="text-white">When we enter a new calendar month</strong>, updated bank statements, pay stubs, and any other time-sensitive documents will be required before we can proceed.</>,
+                      body: <>All information and documents must be complete before your case can be filed. <strong className="text-slate-900">When we enter a new calendar month</strong>, updated bank statements, pay stubs, and any other time-sensitive documents will be required before we can proceed.</>,
                     },
                     {
                       num: "2",
                       color: "amber",
                       title: "Before Filing — Signing Appointment",
-                      body: <>Once your petition is drafted and your signing appointment is scheduled, you must provide <strong className="text-white">current pay stubs and bank statements</strong> reflecting that month's records. If your signing falls in a new calendar month, updated documents are required before we can proceed.</>,
+                      body: <>Once your petition is drafted and your signing appointment is scheduled, you must provide <strong className="text-slate-900">current pay stubs and bank statements</strong> reflecting that month's records. If your signing falls in a new calendar month, updated documents are required before we can proceed.</>,
                     },
                     {
                       num: "3",
                       color: "sky",
                       title: "After Filing — Trustee Requirements",
-                      body: <>Once your case is filed, <strong className="text-white">your obligations continue.</strong> The bankruptcy trustee may request updated bank statements, tax returns, proof of income, or other records at any time. You are required by law to cooperate fully and promptly.</>,
+                      body: <>Once your case is filed, <strong className="text-slate-900">your obligations continue.</strong> The bankruptcy trustee may request updated bank statements, tax returns, proof of income, or other records at any time. You are required by law to cooperate fully and promptly.</>,
                       warning: "Failure to comply with trustee requests can result in dismissal of your case or denial of your discharge.",
                     },
                   ].map(({ num, color, title, body, warning }) => (
                     <div key={num} className="flex gap-4">
                       <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${
-                        color === "amber" ? "bg-amber-400/15 border border-amber-400/30" : "bg-sky-500/15 border border-sky-500/30"
+                        color === "amber" ? "bg-blue-100 border border-blue-500/30" : "bg-sky-500/15 border border-sky-500/30"
                       }`}>
-                        <span className={`font-bold text-xs ${color === "amber" ? "text-amber-400" : "text-sky-400"}`}>{num}</span>
+                        <span className={`font-bold text-xs ${color === "amber" ? "text-blue-600" : "text-sky-600"}`}>{num}</span>
                       </div>
                       <div>
-                        <p className={`text-sm font-bold mb-1 ${color === "amber" ? "text-amber-300" : "text-sky-300"}`}>{title}</p>
-                        <p className="text-slate-300 text-sm leading-relaxed mb-2">{body}</p>
+                        <p className={`text-sm font-bold mb-1 ${color === "amber" ? "text-blue-600" : "text-sky-700"}`}>{title}</p>
+                        <p className="text-slate-700 text-sm leading-relaxed mb-2">{body}</p>
                         {warning && (
                           <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-3">
-                            <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
-                            <p className="text-sm text-red-300 leading-relaxed"><strong className="text-white">{warning}</strong></p>
+                            <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                            <p className="text-sm text-red-700 leading-relaxed"><strong className="text-slate-900">{warning}</strong></p>
                           </div>
                         )}
                       </div>
@@ -2490,49 +2490,49 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 </div>
               </section>
 
-              <section className="px-6 py-5 border-b border-slate-800">
+              <section className="px-6 py-5 border-b border-slate-200">
                 <div className="flex items-start gap-3 bg-red-500/8 border border-red-500/25 rounded-xl px-4 py-4">
-                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                  <AlertTriangle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-widest text-red-300 mb-2">All Information Must Be True, Accurate, and Complete</p>
-                    <p className="text-slate-300 text-sm leading-relaxed mb-2">
-                      Bankruptcy is a <strong className="text-white">federal legal procedure.</strong> Every answer is submitted under penalty of perjury. Intentionally omitting information, concealing assets, or providing false answers can result in your case being dismissed, denial of your discharge, federal criminal charges, and up to 5 years in federal prison and fines up to $250,000.
+                    <p className="text-xs font-bold uppercase tracking-widest text-red-700 mb-2">All Information Must Be True, Accurate, and Complete</p>
+                    <p className="text-slate-700 text-sm leading-relaxed mb-2">
+                      Bankruptcy is a <strong className="text-slate-900">federal legal procedure.</strong> Every answer is submitted under penalty of perjury. Intentionally omitting information, concealing assets, or providing false answers can result in your case being dismissed, denial of your discharge, federal criminal charges, and up to 5 years in federal prison and fines up to $250,000.
                     </p>
-                    <p className="text-slate-400 text-sm leading-relaxed">
-                      If you are unsure whether something needs to be disclosed — <strong className="text-white">include it.</strong> Let your attorney decide. It is always better to over-disclose than to leave something out.
+                    <p className="text-slate-600 text-sm leading-relaxed">
+                      If you are unsure whether something needs to be disclosed — <strong className="text-slate-900">include it.</strong> Let your attorney decide. It is always better to over-disclose than to leave something out.
                     </p>
                   </div>
                 </div>
               </section>
 
               <section className="px-6 py-5">
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-2">What Happens When You're Done</p>
-                <p className="text-slate-300 text-sm leading-relaxed mb-4">{stage2.whatHappensNext}</p>
-                <div className="bg-slate-800/60 border border-slate-700 rounded-xl px-4 py-3 text-center">
-                  <p className="text-sm font-semibold text-white mb-1">We Are Here For You Every Step of the Way</p>
-                  <p className="text-xs text-slate-400 leading-relaxed">
-                    Please know that <strong className="text-white">everything must be submitted accurately and completely</strong> — the system will not allow you to proceed if any required information is missing or incorrect. This protects your case.{" "}
-                    <strong className="text-amber-400">We are here to guide you through every step.</strong>
+                <p className="text-xs font-bold uppercase tracking-widest text-blue-600 mb-2">What Happens When You're Done</p>
+                <p className="text-slate-700 text-sm leading-relaxed mb-4">{stage2.whatHappensNext}</p>
+                <div className="bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-center">
+                  <p className="text-sm font-semibold text-slate-900 mb-1">We Are Here For You Every Step of the Way</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Please know that <strong className="text-slate-900">everything must be submitted accurately and completely</strong> — the system will not allow you to proceed if any required information is missing or incorrect. This protects your case.{" "}
+                    <strong className="text-blue-600">We are here to guide you through every step.</strong>
                   </p>
                 </div>
               </section>
             </div>
 
-            <div className="px-6 py-5 border-t border-slate-800 bg-[#0d1221] flex-shrink-0">
+            <div className="px-6 py-5 border-t border-slate-200 bg-slate-50 flex-shrink-0">
               <label className="flex items-start gap-3 cursor-pointer mb-4 group">
                 <div
                   className={`w-5 h-5 rounded border-2 flex-shrink-0 mt-0.5 flex items-center justify-center transition-all ${
-                    acknowledged ? "bg-amber-400 border-amber-400" : "border-slate-600 group-hover:border-amber-400/60"
+                    acknowledged ? "bg-blue-600 border-blue-500" : "border-slate-300 group-hover:border-blue-500/60"
                   }`}
                   onClick={() => setAcknowledged(v => !v)}
                 >
                   {acknowledged && (
-                    <svg className="w-3 h-3 text-slate-950" fill="currentColor" viewBox="0 0 12 12">
+                    <svg className="w-3 h-3 text-slate-900" fill="currentColor" viewBox="0 0 12 12">
                       <path d="M10 3L5 8.5 2 5.5 1 6.5l4 4 6-6.5z" />
                     </svg>
                   )}
                 </div>
-                <span className="text-slate-300 text-sm leading-relaxed">
+                <span className="text-slate-700 text-sm leading-relaxed">
                   I have read and understand what is required in Stage 2. I confirm that all information I provide will be true, accurate, and complete, and I understand my ongoing document obligations before and after filing.
                 </span>
               </label>
@@ -2542,8 +2542,8 @@ export default function ClientDashboard({ onOpenQuestionnaire, onUpdateInformati
                 disabled={!acknowledged}
                 className={`w-full flex items-center justify-center gap-2 font-bold py-3 rounded-xl transition-all text-sm uppercase tracking-wide ${
                   acknowledged
-                    ? "bg-amber-400 hover:bg-amber-300 text-slate-950 cursor-pointer shadow-lg shadow-amber-400/20"
-                    : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                    ? "bg-blue-600 hover:bg-blue-500 text-white cursor-pointer shadow-lg shadow-blue-500/20"
+                    : "bg-white text-slate-400 cursor-not-allowed"
                 }`}
               >
                 Open My Questionnaire

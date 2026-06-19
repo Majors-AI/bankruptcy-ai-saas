@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import ParalegalReview from "./ParalegalReview";
 import SigningReview from "./components/SigningReview";
+import FileCabinet from "./FileCabinet";
 import DepartmentPortalLogin, {
   classifyLegalStaff,
   type DepartmentPortalSession,
@@ -29,6 +30,7 @@ import type {
   CalendarEventRow,
   AcceptanceRow,
   EcfInboxRow,
+  FiledCaseRegistryRow,
 } from "./components/legal/legalTasks";
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
@@ -74,7 +76,7 @@ const SECTIONS: SectionDef[] = [
   { id: "tasks",            label: "Tasks",            icon: <ListChecks className="w-4 h-4" />,     status: "active" },
   { id: "paralegal_review", label: "Paralegal Review", icon: <ClipboardCheck className="w-4 h-4" />, status: "active" },
   { id: "signing_review",   label: "Signing Review",   icon: <PenLine className="w-4 h-4" />,        status: "active" },
-  { id: "file_cabinet",     label: "File Cabinet",     icon: <FolderArchive className="w-4 h-4" />,  status: "placeholder" },
+  { id: "file_cabinet",     label: "File Cabinet",     icon: <FolderArchive className="w-4 h-4" />,  status: "active" },
   { id: "calendar",         label: "Calendar",         icon: <Calendar className="w-4 h-4" />,       status: "placeholder" },
   { id: "time_fees",        label: "Time & Fees",      icon: <DollarSign className="w-4 h-4" />,     status: "placeholder" },
 ];
@@ -119,9 +121,16 @@ export default function LegalDepartmentPortal() {
   // ConsolidatedMessagingWidget. One new read; ecf_tasks (already loaded)
   // is the downstream auto-task row, not the inbound notice itself.
   const [ecfInbox,              setEcfInbox]              = useState<EcfInboxRow[]>([]);
+  // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell. Cross-portal
+  // read of accounting_filed_case_registry — the same table the Accounting
+  // filed-cases tab reads. Registry has no firm_id (FK to
+  // accounting_clients scopes it); chapter is CHECK 7|13 so the bubble
+  // can show a per-chapter split with no "unknown" bucket. Pending
+  // Discharge still has no schema column (Gap #7) and remains "—".
+  const [filedRegistry,         setFiledRegistry]         = useState<FiledCaseRegistryRow[]>([]);
 
   const load = useCallback(async () => {
-    const [air, sr, pr, et, il, ce, ac, ei] = await Promise.all([
+    const [air, sr, pr, et, il, ce, ac, ei, fr] = await Promise.all([
       // Loaded broadly (no decision filter) so the L-10 RED re-review tier
       // can evaluate already-DECIDED reviews against the current ruleset
       // version. buildLegalTasks's inner `if (r.decision !== "pending")
@@ -184,6 +193,13 @@ export default function LegalDepartmentPortal() {
       api.get<EcfInboxRow>(
         "ecf_inbox?select=id,client_id,case_number,docket_entry,filing_type,filed_by,filed_date,deadline_days,status,created_at&order=created_at.desc&limit=200",
       ),
+      // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell. Mirrors the
+      // Accounting filed-cases tab query (AccountingPortal.tsx:10763:
+      // accounting_filed_case_registry?order=filed_date.desc); narrowed
+      // here to id/chapter/filed_date since the bubble only counts.
+      api.get<FiledCaseRegistryRow>(
+        "accounting_filed_case_registry?select=id,chapter,filed_date&order=filed_date.desc",
+      ),
     ]);
     setAttorneyIntakeReviews(air);
     setSigningReviews(sr);
@@ -193,6 +209,7 @@ export default function LegalDepartmentPortal() {
     setCalendarEvents(ce);
     setAcceptances(ac);
     setEcfInbox(ei);
+    setFiledRegistry(fr);
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -284,16 +301,13 @@ export default function LegalDepartmentPortal() {
             acceptances={acceptances}
             // Slice L-6 (Prompt 67) — RIGHT-column comms source.
             ecfInbox={ecfInbox}
+            // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell source.
+            filedRegistry={filedRegistry}
           />
         )}
         {section === "paralegal_review" && <ParalegalReview layout="embedded" />}
         {section === "signing_review"   && <SigningReview   layout="embedded" />}
-        {section === "file_cabinet" && (
-          <Placeholder
-            label="File Cabinet"
-            hint="Phase 2 step 2 — wire the existing FileCabinet component into this slot."
-          />
-        )}
+        {section === "file_cabinet" && <FileCabinet />}
         {section === "calendar" && (
           <Placeholder
             label="Calendar"

@@ -34,7 +34,14 @@ export function normalizeIntake(intake: AnyRecord | null | undefined): AnyRecord
     dob:             pick(intake.dob,                                       fd.dob),
     email:           pick(intake.email,                                     fd.email),
     phone:           pick(intake.phone,                                     fd.phone),
-    altPhone:        pick(intake.altPhone,        intake.alt_phone,         fd.altPhone),
+    altPhone:        pick(intake.altPhone,        intake.alt_phone,         fd.altPhone, fd.alt_phone),
+
+    // Prior names (camelCase array; consumed by petition mapper at intake.priorNames /
+    // intake.spousePriorNames). Not captured by the current intake forms — surfaced
+    // here for legacy form_data shapes and the petition-section fixture so the locked
+    // mapper sees the same key regardless of source.
+    priorNames:       pick(intake.priorNames,       intake.prior_names_json,        fd.priorNames,       fd.prior_names_json),
+    spousePriorNames: pick(intake.spousePriorNames, intake.spouse_prior_names_json, fd.spousePriorNames, fd.spouse_prior_names_json),
 
     // Spouse
     spouseFirstName: pick(intake.spouseFirstName, intake.spouse_first_name, fd.spouseFirstName),

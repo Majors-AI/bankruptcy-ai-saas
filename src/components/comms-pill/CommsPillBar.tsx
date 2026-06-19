@@ -80,6 +80,14 @@ export interface CommsPillBarProps {
   /** Optional: route to the tasks list (e.g. scroll/focus the AllTasksWidget). */
   onOpenTasks?: () => void;
   className?: string;
+  /**
+   * Prompt 89 — backward-compatible icon scale. Defaults to "sm" (the
+   * original 14px glyphs on a 28px button). The Intake ClockHub passes
+   * "lg" to surface the phone + message icons more prominently per the
+   * Prompt-89 brief. Other consumers (AttorneyIntakeDashboard,
+   * FloatingChat) keep the default "sm" unchanged.
+   */
+  size?: "sm" | "lg";
 }
 
 type ChannelKey = "phone" | "sms" | "email" | "team" | "direct" | "dept" | "tasks";
@@ -89,8 +97,14 @@ type ChannelKey = "phone" | "sms" | "email" | "team" | "direct" | "dept" | "task
 export default function CommsPillBar({
   staffMsgs, clientThreads, sharedTasksCount,
   onOpenMessagingPanel, onOpenPhoneDialer, onOpenTasks,
-  className = "",
+  className = "", size = "sm",
 }: CommsPillBarProps) {
+  // Prompt 89 — size knob. Class strings are extracted so a single source
+  // of truth controls the icon glyph + the button container together.
+  const iconCls = size === "lg" ? "w-5 h-5" : "w-3.5 h-3.5";
+  const buttonSizeCls = size === "lg" ? "w-10 h-10" : "w-7 h-7";
+  const dividerCls = size === "lg" ? "w-px h-6 bg-[#2A2A28] mx-1" : "w-px h-4 bg-[#2A2A28] mx-0.5";
+  const containerCls = size === "lg" ? "px-2.5 py-1.5 gap-1.5" : "px-2 py-1 gap-1";
   const [open, setOpen] = useState<ChannelKey | null>(null);
   const wrapRef = useRef<HTMLDivElement | null>(null);
 
@@ -129,57 +143,64 @@ export default function CommsPillBar({
 
   return (
     <div ref={wrapRef} className={`relative inline-block ${className}`}>
-      <div className="inline-flex items-center gap-1 rounded-full border border-[#2A2A28] bg-[#1A1A18] px-2 py-1">
+      <div className={`inline-flex items-center rounded-full border border-[#2A2A28] bg-[#1A1A18] ${containerCls}`}>
         <PillIconButton
-          icon={<Phone className="w-3.5 h-3.5" />}
+          icon={<Phone className={iconCls} />}
           label="Phone / voicemails"
           count={phoneCount}
           active={open === "phone"}
           onClick={() => { setOpen(null); onOpenPhoneDialer(); }}
+          sizeCls={buttonSizeCls}
         />
         <PillIconButton
-          icon={<MessageSquare className="w-3.5 h-3.5" />}
+          icon={<MessageSquare className={iconCls} />}
           label="SMS"
           count={smsCount}
           active={open === "sms"}
           onClick={() => setOpen(open === "sms" ? null : "sms")}
+          sizeCls={buttonSizeCls}
         />
         <PillIconButton
-          icon={<Mail className="w-3.5 h-3.5" />}
+          icon={<Mail className={iconCls} />}
           label="Email"
           count={emailCount}
           active={open === "email"}
           onClick={() => setOpen(open === "email" ? null : "email")}
+          sizeCls={buttonSizeCls}
         />
         <PillIconButton
-          icon={<Users className="w-3.5 h-3.5" />}
+          icon={<Users className={iconCls} />}
           label="Team chat"
           count={teamCount}
           active={open === "team"}
           onClick={() => setOpen(open === "team" ? null : "team")}
+          sizeCls={buttonSizeCls}
         />
         <PillIconButton
-          icon={<Send className="w-3.5 h-3.5" />}
+          icon={<Send className={iconCls} />}
           label="Direct"
           count={directCount}
           active={open === "direct"}
           onClick={() => setOpen(open === "direct" ? null : "direct")}
+          sizeCls={buttonSizeCls}
         />
         <PillIconButton
-          icon={<AtSign className="w-3.5 h-3.5" />}
+          icon={<AtSign className={iconCls} />}
           label="Department email"
           count={deptCount}
           active={open === "dept"}
           onClick={() => setOpen(open === "dept" ? null : "dept")}
+          sizeCls={buttonSizeCls}
         />
         {/* Divider — tasks indicator sits visually apart from comms. */}
-        <span className="w-px h-4 bg-[#2A2A28] mx-0.5" aria-hidden="true" />
+        <span className={dividerCls} aria-hidden="true" />
         <PillIconButton
-          icon={<BellRing className="w-3.5 h-3.5" />}
+          icon={<BellRing className={iconCls} />}
           label="Tasks due"
           count={sharedTasksCount}
           tone="amber"
           active={open === "tasks"}
+          sizeCls={buttonSizeCls}
           onClick={() => {
             if (onOpenTasks) onOpenTasks();
             setOpen(null);
@@ -208,7 +229,7 @@ export default function CommsPillBar({
 // ─── Pill icon button ────────────────────────────────────────────────────────
 
 function PillIconButton({
-  icon, label, count, active, onClick, tone = "default",
+  icon, label, count, active, onClick, tone = "default", sizeCls = "w-7 h-7",
 }: {
   icon: React.ReactNode;
   label: string;
@@ -216,6 +237,9 @@ function PillIconButton({
   active: boolean;
   onClick: () => void;
   tone?: "default" | "amber";
+  /** Tailwind size classes — defaults to the small button. Prompt 89's
+   *  ClockHub passes "w-10 h-10" via CommsPillBar's `size="lg"`. */
+  sizeCls?: string;
 }) {
   const hasCount = count > 0;
   const badgeCls =
@@ -228,7 +252,7 @@ function PillIconButton({
       onClick={onClick}
       title={label}
       aria-label={label}
-      className={`relative flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
+      className={`relative flex items-center justify-center rounded-full transition-colors ${sizeCls} ${
         active
           ? "bg-[#2A2A28] text-[#FAFAF7]"
           : hasCount

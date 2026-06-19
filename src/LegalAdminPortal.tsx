@@ -14,6 +14,7 @@ import IntakeDashboard, {
   type ClientMessage as DashClientMessage,
   type StaffMessage as DashStaffMessage,
 } from "./components/intake-dashboard/IntakeDashboard";
+import LeadsByMonthChart from "./components/intake-dashboard/LeadsByMonthChart";
 import StaffGuidedIntake from "./components/intake-script/StaffGuidedIntake";
 import NewLeadInline from "./components/intake-new-lead/NewLeadInline";
 import ConsultSchedulerPanel, {
@@ -25,6 +26,7 @@ import ConsultSchedulerPanel, {
 import { isClaimedByOther, LeadClaimBadge, LeadClaimBanner } from "./components/lead-claim/LeadClaim";
 import FloatingChat from "./components/floating-chat/FloatingChat";
 import AllAnswersView, { ALL_ANSWERS_SCHEMA, renderAnswerValue } from "./components/intake-review/AllAnswersView";
+import FormDataInventory from "./components/intake-dashboard/FormDataInventory";
 import { calcDebtComposition } from "./AttorneyIntakeDashboard";
 import CaseAdvancementStatusBar from "./components/intake-review/CaseAdvancementStatusBar";
 import ClientTimeLog, { useClientTimeLog } from "./components/intake-review/ClientTimeLog";
@@ -2133,18 +2135,24 @@ function IntakeAttorneyReviewModal({
           )}
 
           {/* ══════════ ALL ANSWERS TAB ══════════
-              Read-only mirror of the locked client questionnaire. Reuses the
-              shared <AllAnswersView> component (same one mounted in
-              AttorneyIntakeDashboard's All Answers tab and in the non-lawyer
-              Review Intake modal). Renders nothing editable; the locked
-              questionnaire is never modified from this surface. */}
+              Prompt 84 (expanded) — replaced the curated read-only
+              AllAnswersView with FormDataInventory. FormDataInventory
+              still reuses ALL_ANSWERS_SCHEMA for the filing-document
+              groupings but additionally surfaces any top-level
+              form_data key the schema doesn't yet cover under an
+              "Other captured fields" panel, and recursively renders
+              nested objects/arrays as indented sub-lists instead of
+              raw JSON. Honest blanks throughout; strictly read-only.
+              The attorney-review-mode AllAnswersView (with per-section
+              flag toggles + submit-back-to-client) still lives on the
+              AttorneyIntakeDashboard tab and is unaffected. */}
           {activeTab === "allAnswers" && (
             <div className="space-y-3">
               {submission && submission.form_data ? (
-                <AllAnswersView
+                <FormDataInventory
                   fd={submission.form_data as Record<string, unknown>}
                   title="All Answers"
-                  subtitle="Read-only mirror of the locked client questionnaire. Blanks are flagged here and surfaced in the Summary tab so missing required fields are visible at a glance."
+                  subtitle="Read-only mirror of every field the locked client questionnaire wrote to intake_submissions.form_data. Grouped by filing document; any top-level keys the curated schema doesn't yet cover are listed under 'Other captured fields' so nothing the client submitted is hidden from review."
                 />
               ) : (
                 <div className="text-center py-10 bg-slate-900 border border-slate-800 rounded-2xl">
@@ -8872,6 +8880,21 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   const feeQuotedLeads = leads.filter(l => l.status === "fee_quoted");
   const retainedCount = leads.filter(l => l.status === "retained").length;
 
+  // Prompt 88 — today-in-firm-tz buckets for the relabeled stat cards.
+  // Both derivations use real columns (intake_leads.created_at +
+  // intake_leads.retained_at) and never fabricate a count when the
+  // backing data is absent (lead with no retained_at simply doesn't
+  // contribute). BAN-84 is the contacted-signal follow-up.
+  const todayStrTz_StatRow = todayInFirmTz();
+  const leadsToday = leads.filter(l => {
+    if (!l.created_at) return false;
+    return new Date(l.created_at).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }) === todayStrTz_StatRow;
+  }).length;
+  const retainedToday = leads.filter(l => {
+    if (l.status !== "retained" || !l.retained_at) return false;
+    return new Date(l.retained_at).toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" }) === todayStrTz_StatRow;
+  }).length;
+
   function getAcceptance(leadId: string) {
     return acceptances.find(a => a.lead_id === leadId) ?? null;
   }
@@ -9237,16 +9260,29 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
         <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
-        {/* Stats row — hidden on the dashboard tab (replaced there by the
-            three TopBubbles inside IntakeDashboard). Other tabs keep it. */}
+        {/* Prompt 88 — stat cards row. Hidden on the dashboard tab
+            (replaced there by the TopBubbles inside IntakeDashboard).
+            "Fee Quoted / Follow-Up" was removed; "Total Leads Received
+            Today" + "Retained Today" replace the lifetime totals with
+            today-scoped real counts. */}
         {activeTab !== "dashboard" && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
             {[
-              { label: "Total Leads",    val: leads.length,       color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
-              { label: "Need Scheduling",       val: newLeads.length,       color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
-              { label: "Today Appointments",    val: todayConsult.length,   color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
-              { label: "Pending Atty Review",   val: reviewQueue.length,    color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
-              { label: "Fee Quoted / Follow-Up",val: feeQuotedLeads.length, color: "text-orange-400",  icon: <DollarSign className="w-4 h-4" />,  tab: "followup" as const },
+              // Real — created_at filtered to today (firm tz).
+              { label: "Total Leads Received Today", val: leadsToday,          color: "text-slate-300",   icon: <Users className="w-4 h-4" />,       tab: "leads" as const },
+              // Real status filter today; BAN-84 will narrow this to
+              // "after SMS + email sent" when a contacted_at column
+              // (or equivalent contacted signal) lands on intake_leads.
+              // TODO BAN-84: precision upgrade once the contacted
+              // signal exists.
+              { label: "Need Scheduling",            val: newLeads.length,     color: "text-sky-400",     icon: <PhoneMissed className="w-4 h-4" />, tab: "leads" as const },
+              { label: "Today Appointments",         val: todayConsult.length, color: "text-teal-400",    icon: <Calendar className="w-4 h-4" />,    tab: "calendar" as const },
+              { label: "Pending Atty Review",        val: reviewQueue.length,  color: "text-amber-400",   icon: <Scale className="w-4 h-4" />,       tab: "leads" as const },
+              // Real — retained_at + status filter to today. If no lead
+              // has retained_at populated yet, this renders 0 (NOT a
+              // fabricated number). TODO BAN-84: revisit when the
+              // retention-event aggregator lands.
+              { label: "Retained Today",             val: retainedToday,       color: "text-emerald-400", icon: <CheckCircle2 className="w-4 h-4" />, tab: "leads" as const },
             ].map(s => (
               <button key={s.label} onClick={() => setActiveTab(s.tab)}
                 className="bg-[#0d1221] border border-slate-800 rounded-2xl p-4 flex items-center gap-3 hover:border-slate-700 transition-colors text-left">
@@ -9258,6 +9294,14 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
               </button>
             ))}
           </div>
+        )}
+
+        {/* Prompt 88 — leads-by-month bar graph. Uses the same `leads`
+            array the stat cards do. Annual = 12 months of selected year;
+            Monthly = days of selected month. Honest empty state if no
+            leads in the period; never fabricated. */}
+        {activeTab !== "dashboard" && (
+          <LeadsByMonthChart leads={leads} />
         )}
 
         {/* ── DASHBOARD TAB (legal_admin / super_admin only — attorneys never see this) ── */}

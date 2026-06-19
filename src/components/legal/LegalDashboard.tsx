@@ -53,6 +53,7 @@ import {
   type CalendarEventRow,
   type AcceptanceRow,
   type EcfInboxRow,
+  type FiledCaseRegistryRow,
   type LegalTaskKind,
 } from "./legalTasks";
 
@@ -72,6 +73,10 @@ export interface LegalDashboardProps {
   acceptances:           ReadonlyArray<AcceptanceRow>;
   // Slice L-6 (Prompt 67) — RIGHT-column legal comms source.
   ecfInbox:              ReadonlyArray<EcfInboxRow>;
+  // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell source. From
+  // accounting_filed_case_registry (cross-portal — same table the
+  // Accounting filed-cases tab reads).
+  filedRegistry:         ReadonlyArray<FiledCaseRegistryRow>;
   /** Optional click-router; today LegalDepartmentPortal doesn't wire
    *  one (clicks no-op until L-9). */
   onSelectTask?: (kind: LegalTaskKind, id: string) => void;
@@ -80,18 +85,13 @@ export interface LegalDashboardProps {
 export default function LegalDashboard({
   session,
   attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads,
-  calendarEvents, acceptances, ecfInbox,
+  calendarEvents, acceptances, ecfInbox, filedRegistry,
   onSelectTask,
 }: LegalDashboardProps) {
-  // L-9 (per-staffer "Mine" vs "Shared pool") will use the existing
-  // DepartmentPortalSession identity. Today the values are stubbed so
-  // the toggles in AllTasksWidget render visually without doing
-  // anything substantive.
-  void session;
-
   const [leftMode, setLeftMode] = useState<"tasks" | "schedule">("tasks");
-  // L-3 default scope is "shared" until L-9 wires the per-staffer filter
-  // on top of session identity.
+  // Slice L-9 (Prompt 69) — per-staff filter scope. Default "shared"
+  // preserves the existing dashboard behavior; flipping to "mine" applies
+  // the assigned_name filter below. Mirrors the Prompt-52 Intake pattern.
   const [taskScope, setTaskScope] = useState<"mine" | "shared">("shared");
 
   // Slice L-3 (Prompt 63) — real legal task pool. Built from the four
@@ -107,6 +107,28 @@ export default function LegalDashboard({
     [attorneyIntakeReviews, signingReviews, paralegalReviews, ecfTasks, intakeLeads, onSelectTask],
   );
 
+  // Slice L-9 (Prompt 69) — per-staff filter.
+  //
+  // "shared" → pass-through (full pool, identical to pre-L-9 behavior).
+  // "mine"   → keep only tasks whose leadRef.assigned_name matches the
+  //            session staffer (case-insensitive trim compare). Tasks
+  //            with null assigned_name (signing_reviews, plus any
+  //            attorney_intake_reviews / paralegal_reviews / ecf_tasks
+  //            whose source column was empty) are DROPPED from Mine —
+  //            an unassigned task isn't "mine" by definition. Matches the
+  //            same key shape (staff_members.name) used by the Mine/
+  //            Shared toggle in IntakeDashboard's Prompt-52 implementation.
+  const filteredTasks = useMemo(() => {
+    if (taskScope === "shared") return tasks;
+    const mineKey = session.name.trim().toLowerCase();
+    if (!mineKey) return tasks;
+    return tasks.filter(t => {
+      const owner = t.leadRef?.assigned_name;
+      if (!owner) return false;
+      return owner.trim().toLowerCase() === mineKey;
+    });
+  }, [tasks, taskScope, session.name]);
+
   // Slice L-4 (Prompt 64) — MIDDLE Up Next.
   //
   // The pool is already sorted in buildLegalTasks by:
@@ -116,14 +138,17 @@ export default function LegalDashboard({
   // non-skipped task. No re-derivation here. Direct port of
   // AccountingDashboard's Slice-4 pattern; UpNextCard / UpNextActiveBody
   // are duplicated below the host until a shared shell hoist lands.
+  //
+  // Slice L-9 (Prompt 69) — Up Next picks from filteredTasks so the
+  // scope toggle affects "what's next for me" vs "what's next for the firm".
   const [skippedIds, setSkippedIds] = useState<ReadonlySet<string>>(() => new Set());
   const upNext: TaskEntry | null = useMemo(
-    () => tasks.find(t => !skippedIds.has(t.id)) ?? null,
-    [tasks, skippedIds],
+    () => filteredTasks.find(t => !skippedIds.has(t.id)) ?? null,
+    [filteredTasks, skippedIds],
   );
   const remainingCount = useMemo(
-    () => tasks.filter(t => !skippedIds.has(t.id)).length,
-    [tasks, skippedIds],
+    () => filteredTasks.filter(t => !skippedIds.has(t.id)).length,
+    [filteredTasks, skippedIds],
   );
 
   function handleSkip(id: string) {
@@ -233,10 +258,10 @@ export default function LegalDashboard({
   //   fall back to intake_leads.chapter_interest when no acceptance row
   //   matches. Group into 7 / 13 / unknown.
   //
-  // Filed-vs-Retained is PARTIAL today: filed state requires
-  // accounting_filed_case_registry (cross-portal), so the bubble shows
-  // "Filed" + "Pending Discharge" as TODO placeholders. The user said
-  // PARTIAL is expected — we don't fake those numbers.
+  // Slice L-8 (Prompt 73) — Filed-by-chapter is now wired from
+  // accounting_filed_case_registry (cross-portal); see the filedCounts
+  // memo below. Pending Discharge remains "—" — that one waits on a
+  // discharge_at / case_closed_at column that doesn't exist (Gap #7).
   const caseload = useMemo(() => {
     // Lookup map: lead_id → chapter from accepted acceptances.
     const acceptedChapter = new Map<string, number | null>();
@@ -262,6 +287,22 @@ export default function LegalDashboard({
     const totalAccepted = acceptedChapter.size;
     return { counts, totalRetained, totalAccepted };
   }, [intakeLeads, acceptances]);
+
+  // Slice L-8 (Prompt 73) — Filed count from accounting_filed_case_registry.
+  //
+  // The registry's chapter column is NOT NULL with CHECK (chapter IN (7, 13)),
+  // so every row resolves to one of the two buckets — no "unknown" tier
+  // here. Anything outside 7|13 (defensive) is silently dropped from the
+  // per-chapter split but stays in the total.
+  const filedCounts = useMemo(() => {
+    let ch7 = 0;
+    let ch13 = 0;
+    for (const r of filedRegistry) {
+      if (r.chapter === 7)       ch7++;
+      else if (r.chapter === 13) ch13++;
+    }
+    return { ch7, ch13, total: ch7 + ch13 };
+  }, [filedRegistry]);
 
   // Slice L-5 — Today's Filings & Hearings bubble derivation.
   //
@@ -405,18 +446,21 @@ export default function LegalDashboard({
               </div>
             </div>
 
-            {/* Filed + Pending Discharge — both deferred. Render dimmed
-                "—" so the slot is visible but never lies. */}
+            {/* Filed (real count, Slice L-8 / Prompt 73) + Pending
+                Discharge (still deferred — Gap #7 needs a discharge_at /
+                case_closed_at column that doesn't exist). */}
             <div className="grid grid-cols-2 gap-3 pt-3 border-t border-[#2A2A28]/60">
               <div>
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#6B6B66] mb-0.5">
                   Filed
                 </p>
-                <p className="text-base font-mono text-[#3A3A36] italic" title="Source is accounting_filed_case_registry (cross-portal). Adding it is a future-slice read.">
-                  —
+                <p className="text-2xl font-bold text-[#FAFAF7] leading-none tabular-nums">
+                  {filedCounts.total}
                 </p>
-                <p className="text-[10px] text-[#6B6B66] mt-1 italic">
-                  awaits cross-portal read
+                <p className="text-[10px] text-[#6B6B66] mt-1 tabular-nums">
+                  Ch. 7 <span className="text-[#FAFAF7]">{filedCounts.ch7}</span>
+                  {" · "}
+                  Ch. 13 <span className="text-[#FAFAF7]">{filedCounts.ch13}</span>
                 </p>
               </div>
               <div>
@@ -507,7 +551,12 @@ export default function LegalDashboard({
       <DashboardGrid
         left={
           <AllTasksWidget
-            tasks={tasks}
+            // Slice L-9 (Prompt 69) — feed the post-scope list as the
+            // visible pool. AllTasksWidget reads tasks.length as the
+            // "mine" count and sharedCount as the "shared pool · N"
+            // label, so passing filteredTasks here + tasks.length to
+            // sharedCount makes both badges accurate in either scope.
+            tasks={filteredTasks}
             sharedCount={tasks.length}
             mode={leftMode}
             onChangeMode={setLeftMode}
@@ -519,7 +568,10 @@ export default function LegalDashboard({
           <UpNextCard
             task={upNext}
             remainingCount={remainingCount}
-            totalCount={tasks.length}
+            // Slice L-9 (Prompt 69) — UpNextCard's "X of N" footer reads
+            // totalCount; reflect the active scope so the math matches
+            // what the staffer sees in the LEFT pool.
+            totalCount={filteredTasks.length}
             skippedCount={skippedIds.size}
             onSkip={handleSkip}
             onDone={handleDone}
