@@ -23,17 +23,22 @@ import {
   type RailGateContext,
 } from "./legal-portal/railEntries";
 // Matter-spine slice (§12) — selected case id flows from the URL query
-// parameter `?lead=<uuid>` into the case workspaces. Sub-phase 2 (Queue)
-// replaces the URL read with a setSelectedLeadId(...) call from the
-// case-row click handler.
+// parameter `?lead=<uuid>` into the case workspaces. Sub-phase 2's
+// Queue (below) ALSO drives the same selectedLeadId via case-row click.
 import { readLeadIdFromUrl } from "./legal-portal/caseIdentity";
+// Sub-phase 2 — R3 Queue. Replaces the prior LegalDashboard mount on
+// `section === "tasks"` (LegalDashboard moves to the utility-rail
+// "Home" panel in sub-phase 6).
+import Queue from "./legal-portal/Queue";
 import { useCurrentRole } from "./lib/AuthProvider";
 // Slice L-2 (Prompt 62) — Legal Department Dashboard. Mounts the shared
 // department-dashboard shell on the "tasks" section; replaces the
 // earlier DepartmentTaskBoard stub. LEGAL_TASK_STUBS + the stub board
 // live in src/components/department-portal/DepartmentTaskBoard.tsx and
 // are no longer imported here (L-3 supplies a real task pool).
-import LegalDashboard from "./components/legal/LegalDashboard";
+// LegalDashboard import removed at sub-phase 2 — the dashboard moves to
+// the utility-rail "Home" panel in sub-phase 6. Queue replaces it on
+// `section === "tasks"` (see import below).
 // RulesAuditProvider — required by SigningReview's LongFormDeductionPanel
 // + Ch13Eligibility (both call useRulesAudit). Pre-restyle, this portal
 // did NOT mount the provider either, but the bug was latent: it only
@@ -144,7 +149,25 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
   //
   // Sub-phase 2 SOURCE: Queue case-row click → setSelectedLeadId(row.lead_id).
   // The URL-read fallback stays as a useful dev shortcut.
-  const [selectedLeadId] = useState<string | null>(() => readLeadIdFromUrl());
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => readLeadIdFromUrl());
+
+  // Sub-phase 2 — when the Queue opens a case, route the user to the
+  // role-appropriate workspace section. For now: attorney role goes to
+  // signing_review, paralegal/client role goes to paralegal_review.
+  // Sub-phase 3+4 will refine to a dedicated case-workspace shell.
+  const openCase = useCallback((leadId: string) => {
+    setSelectedLeadId(leadId);
+    // Update URL so the leadId persists across rail-icon clicks /
+    // refreshes. history.replaceState avoids spamming the back stack.
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lead", leadId);
+      window.history.replaceState(null, "", url.toString());
+    }
+    // Default body for the selected case: paralegal → paralegal_review,
+    // attorney → signing_review. The role state controls this.
+    setSection(role === "attorney" ? "signing_review" : "paralegal_review");
+  }, [role]);
 
   // AuthProvider firm-tier role — secondary source for rail gates. The
   // PIN-gate session.user_type is the primary source; this fills in
@@ -165,7 +188,10 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
   const [attorneyIntakeReviews, setAttorneyIntakeReviews] = useState<AttorneyIntakeReviewRow[]>([]);
   const [signingReviews,        setSigningReviews]        = useState<SigningReviewRow[]>([]);
   const [paralegalReviews,      setParalegalReviews]      = useState<ParalegalReviewRow[]>([]);
-  const [ecfTasks,              setEcfTasks]              = useState<EcfTaskRow[]>([]);
+  // ecfTasks: loaded but parked. Consumed by the sub-phase 6 utility-rail
+  // "Messages" / Tasks panel; prefixed `_` here to satisfy noUnusedLocals
+  // while keeping the Promise.all read aligned with the prior shape.
+  const [_ecfTasks,             setEcfTasks]              = useState<EcfTaskRow[]>([]);
   const [intakeLeads,           setIntakeLeads]           = useState<IntakeLeadRow[]>([]);
   // Slice L-7 (Prompt 65) — today's hearings/filings footer source.
   // department=eq.legal at the query layer; firm-scoping is implicit via
@@ -186,7 +212,8 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
   // loaded attorney_intake_reviews into a StaffMessage[] list for the
   // ConsolidatedMessagingWidget. One new read; ecf_tasks (already loaded)
   // is the downstream auto-task row, not the inbound notice itself.
-  const [ecfInbox,              setEcfInbox]              = useState<EcfInboxRow[]>([]);
+  // ecfInbox: loaded but parked, same rationale as _ecfTasks above.
+  const [_ecfInbox,             setEcfInbox]              = useState<EcfInboxRow[]>([]);
   // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell. Cross-portal
   // read of accounting_filed_case_registry — the same table the Accounting
   // filed-cases tab reads. Registry has no firm_id (FK to
@@ -363,17 +390,16 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
       <RulesAuditProvider>
         <div className="max-w-7xl mx-auto">
           {section === "tasks" && (
-            <LegalDashboard
-              session={session}
+            <Queue
+              role={role}
+              intakeLeads={intakeLeads}
               attorneyIntakeReviews={attorneyIntakeReviews}
               signingReviews={signingReviews}
               paralegalReviews={paralegalReviews}
-              ecfTasks={ecfTasks}
-              intakeLeads={intakeLeads}
-              calendarEvents={calendarEvents}
               acceptances={acceptances}
-              ecfInbox={ecfInbox}
               filedRegistry={filedRegistry}
+              calendarEvents={calendarEvents}
+              onOpenCase={openCase}
             />
           )}
           {section === "paralegal_review" && (
