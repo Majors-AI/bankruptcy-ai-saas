@@ -292,6 +292,12 @@ console.log('[2/4] inserted intake_lead:', ins1.data);
 
 const submissionRow = {
   lead_id: leadId,
+  // §12 matter-spine interim convention: populate client_id with the
+  // same value as lead_id so SigningReview's legacy client_id-based
+  // reads work TODAY before §12 S1/S2 (lead_id columns on
+  // signing_reviews / paralegal_reviews) lands. Once S1/S2 ship and
+  // those tables read by lead_id directly, this dual-write goes away.
+  client_id: leadId,
   filing_type: 'individual',
   chapter_type: 'chapter_7',
   first_name: 'Mickey', last_name: 'Rourke',

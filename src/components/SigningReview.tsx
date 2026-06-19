@@ -255,10 +255,18 @@ interface SigningReviewProps {
    */
   layout?: 'full' | 'embedded';
   /**
-   * The client whose signing review this is. Defaults to 'client-demo' so
-   * existing standalone-route + demo behavior is preserved. Real callers
-   * should pass an actual clients.id (UUID) sourced from App.tsx's
-   * impersonateClient or a future session/selection context.
+   * Case spine id — the canonical `intake_leads.id` per §3 / §12 of
+   * docs/schema-changes-for-canelo.md. PREFERRED case key when set.
+   * Plumbed by LegalDepartmentPortal from `selectedLeadId` (sub-phase 1
+   * reads it from `?lead=<uuid>` in the URL; sub-phase 2 Queue replaces
+   * that with a case-row click).
+   */
+  leadId?: string;
+  /**
+   * Legacy client id. Used as the case key when `leadId` is absent (the
+   * original standalone-route + impersonate-client path). Once §12 S1
+   * ships (`signing_reviews.lead_id` column) and all callers pass
+   * `leadId`, this prop deprecates.
    */
   clientId?: string;
   /**
@@ -272,8 +280,25 @@ interface SigningReviewProps {
 }
 
 export default function SigningReview(
-  { layout = 'full', clientId = 'client-demo', portalChapter = '7' }: SigningReviewProps = {},
+  { layout = 'full', leadId, clientId, portalChapter = '7' }: SigningReviewProps = {},
 ) {
+  // Case-key resolution per docs/schema-changes-for-canelo.md §12:
+  //   - leadId (Stream A — matter spine) is preferred when set.
+  //   - clientId is the legacy fallback for standalone-route mounts.
+  //   - Neither → no case selected → empty state (NO more 'client-demo'
+  //     default; the hardcode masked legitimate "no case" states).
+  //
+  // INTERIM table-by-table column choice (until §12 S1 ships):
+  //   - intake_submissions HAS both `lead_id` and `client_id` columns —
+  //     when leadId is the source, query by `lead_id` (the canonical
+  //     column).
+  //   - signing_reviews has only `client_id` text today (S1 adds
+  //     `lead_id`). When leadId is the source, we use it AS the
+  //     client_id value — relying on the seed-script convention that
+  //     intake_leads.id === signing_reviews.client_id for new rows.
+  //     When S1 lands, switch the read column to `lead_id` directly.
+  const caseKey = leadId ?? clientId ?? null;
+  const caseKeyIsLeadId = !!leadId; // tells us which intake_submissions column to query
   const role = (import.meta.env.VITE_PLATFORM_ROLE as string | undefined) ?? 'legal_admin';
 
   if (role && !ALLOWED_ROLES.includes(role)) {
@@ -329,11 +354,20 @@ export default function SigningReview(
 
   // ── Load the client's intake form_data for the Exemptions panel ───────────
   useEffect(() => {
+    if (!caseKey) {
+      // No case selected — clear panel and skip the DB read.
+      setIntakeFormData(null);
+      setIntakeState(undefined);
+      setIntakeCounty(undefined);
+      setCaseChapter(null);
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
+        const filterColumn = caseKeyIsLeadId ? "lead_id" : "client_id";
         const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/intake_submissions?client_id=eq.${clientId}&order=created_at.desc&limit=1&select=form_data,state,county,exemption_state`,
+          `${SUPABASE_URL}/rest/v1/intake_submissions?${filterColumn}=eq.${caseKey}&order=created_at.desc&limit=1&select=form_data,state,county,exemption_state`,
           { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } },
         );
         const rows = await res.json();
@@ -368,13 +402,21 @@ export default function SigningReview(
       }
     })();
     return () => { cancelled = true; };
-  }, [clientId]);
+  }, [caseKey, caseKeyIsLeadId]);
 
   async function loadOrCreate() {
+    if (!caseKey) {
+      // No case selected — nothing to load. UI renders empty-state.
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
+      // signing_reviews has only `client_id` today (S1 adds `lead_id`).
+      // Until then, use caseKey (whether it came from leadId or clientId)
+      // as the client_id value — seed scripts populate the convention.
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/signing_reviews?client_id=eq.${clientId}&status=in.in_progress,paused&order=created_at.desc&limit=1`,
+        `${SUPABASE_URL}/rest/v1/signing_reviews?client_id=eq.${caseKey}&status=in.in_progress,paused&order=created_at.desc&limit=1`,
         { headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } }
       );
       const rows: SigningReviewRow[] = await res.json();
@@ -390,8 +432,12 @@ export default function SigningReview(
   }
 
   async function createReview() {
+    if (!caseKey) return;
     const body = {
-      client_id: clientId,
+      // Per the §12 interim convention, write caseKey to client_id. When
+      // S1 lands (`signing_reviews.lead_id`), update this body to also
+      // include lead_id and the read-by-leadId path can use it.
+      client_id: caseKey,
       firm_id: FIRM_ID,
       reviewer_role: role,
       status: 'in_progress',

@@ -680,6 +680,177 @@ When Phase 5 lands, this section is removed from the doc — every item gets a c
 
 ---
 
+## 12. Matter-spine alignment — Option A end-to-end
+
+**Why this exists.** §3 settled the Option-A decision: no `matters` table — `intake_leads.id` IS the matter id. But the existing schema has three id streams that never got reconciled:
+
+- **Stream A:** `intake_leads.id` (the matter spine)
+- **Stream B:** `intake_submissions.id`, joined to A via `intake_submissions.lead_id`
+- **Stream C:** `clients.id`, joined to B via `clients.intake_id` → `intake_submissions.id`
+
+Downstream case-bearing tables (`signing_reviews`, `paralegal_reviews`, `client_documents`, `ecf_tasks`, `ecf_inbox`, `calendar_events`, `accounting_filed_case_registry`) all key off `client_id text` or a Stream-C FK. **No enforced path from any of them back to Stream A** — a 3-hop join is required (and not all hops have non-null data).
+
+The frontend audit (see `docs/design/legal-portal-function-mapping.md` and the matter-spine recon turn) found:
+- `signing_reviews.client_id` is documented in `src/components/legal/legalTasks.ts:37–40` as "NOT necessarily an `intake_leads.id`" — different code paths populate different id types.
+- `intake_submissions.client_id` is read by `SigningReview` (`src/components/SigningReview.tsx:336`) but **NOT populated by the canonical `BankruptcyIntake.jsx` insert path** — only `lead_id` is set. The seeded Mickey Rourke and Dixon Cider test fixtures (`scripts/seed_*.mjs`) also leave `client_id` null, which means SigningReview reads return ZERO rows for any seeded case as a lawyer.
+- `calendar_events` has NO id link to a case at all — only `client_name text` + `case_number text` (string-matching gymnastics required to filter by case).
+- `client_documents.client_id` is set to `clients.id` (Stream C), but `FileCabinet.tsx:1488–1489` is inconsistent within itself — it queries `client_documents?client_id=eq.${clientId}` AND `intake_submissions?lead_id=eq.${clientId}` against the SAME variable, which only works when `clients.id === intake_leads.id` (which it doesn't).
+
+§12 is the schema delta to close the gap.
+
+### Goal
+
+Every case-bearing row in the schema reaches `intake_leads.id` (the matter spine) by either (a) holding it directly, or (b) at most ONE documented join. The current 3-hop traversal is collapsed.
+
+### Conventions for this section
+
+- **Additive + nullable**: every change adds a new column or RPC. No existing column is renamed or dropped. No existing data invalidated.
+- **NULL-tolerant**: new `lead_id` columns are nullable. Rows that pre-date this section's landing stay valid; backfills are best-effort and can run after the column is added.
+- **No CHECK constraints** that would retroactively fail historical rows. Indexes are added for query cost but not enforced as FKs in this phase (FK enforcement is a Phase B item once backfill completes and orphan rows are addressed).
+- **Convention until §S7 RPC lands**: callers can two-step from any id to the leadId client-side (the `src/legal-portal/caseIdentity.ts` module mirrors what the RPC will do, so frontend code reads the same way before and after the RPC ships).
+
+### S1 — `signing_reviews.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant — no CHECK.
+
+**Why**: `client_id text` is opaque (per `legalTasks.ts:37–40`). Adding `lead_id` lets the queue and case workspace key by the matter spine directly.
+
+**Backfill (best-effort, separate one-shot)**:
+```
+UPDATE signing_reviews sr SET lead_id = s.lead_id
+  FROM intake_submissions s, clients c
+  WHERE c.id::text = sr.client_id
+    AND c.intake_id = s.id
+    AND sr.lead_id IS NULL;
+
+-- And: where client_id happens to already be a leadId
+UPDATE signing_reviews sr SET lead_id = sr.client_id::uuid
+  WHERE sr.lead_id IS NULL
+    AND EXISTS (SELECT 1 FROM intake_leads l WHERE l.id::text = sr.client_id);
+```
+
+Rows with no resolvable path stay NULL — frontend treats null `lead_id` as "legacy row, fall back to `client_id` lookup".
+
+### S2 — `paralegal_reviews.lead_id` (uuid, nullable)
+
+Same shape and rationale as S1. Add column, index, NULL-tolerant. Same backfill pattern.
+
+### S3 — `client_documents.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant.
+
+**Why**: documents currently key off `clients.id`; reaching them from `intake_leads.id` is a 3-hop. With `lead_id` on `client_documents`, the case workspace's "open this case's documents" becomes a single-column read.
+
+**Backfill (best-effort)**:
+```
+UPDATE client_documents cd SET lead_id = s.lead_id
+  FROM clients c, intake_submissions s
+  WHERE cd.client_id = c.id
+    AND c.intake_id = s.id
+    AND cd.lead_id IS NULL;
+```
+
+### S4 — `ecf_tasks.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant. Same backfill path as S3 (through `clients.intake_id`).
+
+**Why**: ECF tasks are case-bearing but key off ambiguous `client_id`. Today's queue can't reliably show a client name for an ECF task row (falls back to truncated id).
+
+### S5 — `ecf_inbox.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant. Same backfill.
+
+**Why**: inbound PACER notices need to join to the matter spine so the queue's comms-widget can label them with the case name and the "today's hearings" footer can match by `lead_id` instead of by `client_name` string equality.
+
+### S6 — `calendar_events.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant. **Keep existing `client_name` and `case_number` text columns** — calendar events also serve non-matter purposes (court deadlines that pre-exist a lead, firm-internal events without a case context), so `lead_id` is additive, not a replacement.
+
+**Why**: today's-hearings footer (Slice L-7) currently matches by `client_name` string equality. Fragile across renames, joint cases, suffix variations.
+
+**Backfill (best-effort, manual review recommended)**:
+```
+UPDATE calendar_events ce SET lead_id = l.id
+  FROM intake_leads l
+  WHERE ce.client_name = l.full_name
+    AND ce.lead_id IS NULL
+    AND (SELECT count(*) FROM intake_leads l2 WHERE l2.full_name = ce.client_name) = 1;
+```
+Only updates where the name match is unique. Ambiguous matches (multiple leads with the same name) stay NULL and require a human pass.
+
+### S7 — `resolve_lead_id(p_any_id uuid) → uuid` RPC
+
+Document `intake_submissions.lead_id` as the canonical case id for that table. Flag `intake_submissions.client_id` for deprecation (do not drop yet — legacy SigningReview path reads it; deprecation lands when F3 frontend cutover completes).
+
+**New RPC**:
+```
+resolve_lead_id(p_any_id uuid) → uuid
+  -- Tries each path in order, returns first match:
+  --   1. intake_leads WHERE id = p_any_id
+  --   2. intake_submissions WHERE id = p_any_id → lead_id
+  --   3. clients WHERE id = p_any_id → intake_id → intake_submissions.lead_id
+  --   4. NULL (no path found)
+  -- SECURITY DEFINER, firm-scoped via RLS context. Read-only.
+```
+
+**Why**: single normalizer for legacy data still keyed on ambiguous text columns. Frontend `caseIdentity.ts` module mirrors the same logic client-side until the RPC ships; both produce the same answer.
+
+### S8 — `accounting_filed_case_registry.lead_id` (uuid, nullable)
+
+Add `lead_id uuid` column. Index `(lead_id)`. NULL-tolerant. Keep existing FK to `accounting_clients` intact — this is additive, not a replacement of accounting's data model.
+
+**Why**: cross-portal read in `LegalDashboard` (Slice L-8) currently has no path to the matter spine for the "Filed" caseload count. Without `lead_id`, the bubble can only count filed cases globally — it cannot dedupe against the same lead being counted in two surfaces or attribute filed cases back to a specific matter.
+
+**Backfill (best-effort, one-shot)**:
+```
+UPDATE accounting_filed_case_registry r SET lead_id = s.lead_id
+  FROM accounting_clients ac, clients c, intake_submissions s
+  WHERE r.client_id = ac.client_id
+    AND ac.client_id = c.id
+    AND c.intake_id = s.id
+    AND r.lead_id IS NULL;
+```
+
+### S9 — `v_matter_spine` view (NEW)
+
+Materializes one row per `intake_leads.id` joined to the latest `intake_submissions.id`, the linked `clients.id` (if any), and current `lifecycle_status` / `matter_progression` from §1.
+
+**Shape (recommended)**:
+```
+CREATE VIEW v_matter_spine AS
+SELECT
+  l.id                              AS lead_id,
+  l.firm_id                         AS firm_id,
+  l.full_name                       AS client_name,
+  l.lifecycle_status                AS lifecycle_status,
+  l.matter_progression              AS matter_progression,
+  (SELECT s.id FROM intake_submissions s
+     WHERE s.lead_id = l.id ORDER BY s.submitted_at DESC LIMIT 1) AS submission_id,
+  (SELECT c.id FROM clients c
+     INNER JOIN intake_submissions s ON c.intake_id = s.id
+     WHERE s.lead_id = l.id LIMIT 1) AS client_id,
+  l.created_at,
+  l.retained_at
+FROM intake_leads l;
+```
+
+**Why**: single read for every UI that needs to ask "what does this matter look like across all entity streams" — replaces the 3-hop ad-hoc joins scattered across LegalDashboard / FileCabinet / SigningReview. RLS-scoped via `intake_leads.firm_id` already.
+
+### Phase ordering (for Canelo's PR)
+
+S1–S6 can land in any order — they're all additive columns + indexes, no inter-dependency. S7 (RPC) and S9 (view) can land at the same time or after. S8 is the only cross-portal touch (accounting_filed_case_registry) so it may want its own PR for review hygiene.
+
+Frontend already tolerates the absence of all of these via the `caseIdentity.ts` normalize-on-read module (Phase 1 of the matter-spine vertical slice, this turn). When S1–S9 land, the frontend's two-step normalization collapses to a single-column read with no behavior change.
+
+### Out of §12 scope
+
+- No reach into accounting's data model beyond S8's additive column.
+- No deletion of `client_id` columns. Stays until every consumer is cut over and the deprecation flag (S7 docs) escalates to a removal.
+- No FK enforcement of new `lead_id` columns. Phase B item once backfill is complete and orphan rows are addressed.
+- No new `matters` table. Option A holds.
+
+---
+
 ## Phase rollout
 
 This doc is updated as each change lands. Phase 1 (now) needs:

@@ -22,6 +22,11 @@ import {
   type RailEntry,
   type RailGateContext,
 } from "./legal-portal/railEntries";
+// Matter-spine slice (§12) — selected case id flows from the URL query
+// parameter `?lead=<uuid>` into the case workspaces. Sub-phase 2 (Queue)
+// replaces the URL read with a setSelectedLeadId(...) call from the
+// case-row click handler.
+import { readLeadIdFromUrl } from "./legal-portal/caseIdentity";
 import { useCurrentRole } from "./lib/AuthProvider";
 // Slice L-2 (Prompt 62) — Legal Department Dashboard. Mounts the shared
 // department-dashboard shell on the "tasks" section; replaces the
@@ -127,6 +132,19 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
   // Sub-phase 2 wires the selected case's signals through
   // `derivePipelineStage()` and threads the resulting StageKey here.
   const [activeStage] = useState<StageKey | null>(null);
+
+  // Matter-spine slice (§12): the currently-selected case id flows
+  // through this state into the mounted SigningReview / ParalegalReview
+  // / FileCabinet so all three surfaces share case identity.
+  //
+  // Sub-phase 1 SOURCE: `?lead=<uuid>` URL query parameter (read once on
+  // mount). The interim rail icons (paralegal_review_interim,
+  // signing_review_interim) work today by appending the param manually
+  // — e.g. /...legal_dept_portal?lead=00000000-0000-0000-0000-...
+  //
+  // Sub-phase 2 SOURCE: Queue case-row click → setSelectedLeadId(row.lead_id).
+  // The URL-read fallback stays as a useful dev shortcut.
+  const [selectedLeadId] = useState<string | null>(() => readLeadIdFromUrl());
 
   // AuthProvider firm-tier role — secondary source for rail gates. The
   // PIN-gate session.user_type is the primary source; this fills in
@@ -358,9 +376,15 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
               filedRegistry={filedRegistry}
             />
           )}
-          {section === "paralegal_review" && <ParalegalReview layout="embedded" />}
-          {section === "signing_review"   && <SigningReview   layout="embedded" />}
-          {section === "file_cabinet" && <FileCabinet />}
+          {section === "paralegal_review" && (
+            <ParalegalReview layout="embedded" leadId={selectedLeadId ?? undefined} />
+          )}
+          {section === "signing_review" && (
+            <SigningReview layout="embedded" leadId={selectedLeadId ?? undefined} />
+          )}
+          {section === "file_cabinet" && (
+            <FileCabinet leadId={selectedLeadId ?? undefined} />
+          )}
           {section === "calendar" && (
             <Placeholder
               label="Calendar"

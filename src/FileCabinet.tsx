@@ -1420,9 +1420,27 @@ function BankruptcyDocumentSections({
 
 interface FileCabinetProps {
   onClientView?: (clientName: string, clientId: string) => void;
+  /**
+   * Case spine id — the canonical `intake_leads.id` per §3 / §12 of
+   * docs/schema-changes-for-canelo.md. When set by LegalDepartmentPortal,
+   * FileCabinet should pre-select the matching client (i.e., resolve
+   * leadId → clients.id via clients.intake_id → intake_submissions.lead_id)
+   * and skip the picker.
+   *
+   * SUB-PHASE 1 SCOPE: the prop is accepted to establish the API so
+   * sub-phase 6 (utility-rail Documents panel) can wire it through
+   * without breaking changes. The resolve-and-preselect logic itself
+   * lands in sub-phase 6 — for now FileCabinet still opens its client
+   * picker, and a setLeadId-aware effect that resolves to clients.id is
+   * deferred. See src/legal-portal/caseIdentity.ts for the resolver.
+   */
+  leadId?: string;
 }
 
-export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
+export default function FileCabinet({ onClientView, leadId: _leadId }: FileCabinetProps = {}) {
+  // _leadId: prop accepted but not yet consumed — see comment above.
+  // Sub-phase 6 work: resolve to clients.id and call selectClient(...)
+  // automatically on mount when _leadId is set, replacing the picker UI.
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
