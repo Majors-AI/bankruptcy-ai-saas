@@ -158,6 +158,28 @@ alter table intake_leads
 
 ---
 
+## 1.5. `firm_branding` — additive columns (Change 1)
+
+The public "Get Help" entry (Change 1) needs the firm's phone number for the **Call now** option's `tel:` link and the displayed contact string. Today `firm_branding` carries `display_name`, `short_name`, `logo_url`, `primary_color`, `accent_color`, `client_portal_welcome_message`, `client_portal_footer_message` — no phone. Add two columns:
+
+| Column | Type | Nullable | Default | Notes |
+|---|---|---|---|---|
+| `firm_phone` | `text` | yes | `null` | Display-formatted phone number, e.g. `(480) 555-0100`. Surfaced as the human-readable string on the Get-Help page and in transactional emails. |
+| `firm_phone_e164` | `text` | yes | `null` | E.164-formatted phone, e.g. `+14805550100`. Used as the `tel:` link target so `tel:` works correctly on mobile dialers. **CHECK** that it matches `^\+\d{10,15}$` so it's always dialable. |
+
+```sql
+alter table firm_branding
+  add column firm_phone text,
+  add column firm_phone_e164 text,
+  add constraint firm_branding_phone_e164_chk check (
+    firm_phone_e164 is null or firm_phone_e164 ~ '^\+\d{10,15}$'
+  );
+```
+
+No new index — `firm_branding` is one row per firm, looked up by `firm_id` which already has a unique key. RLS unchanged.
+
+**Frontend fallback until migration lands:** `src/components/get-help/GetHelpEntry.tsx` falls back to the `VITE_FIRM_PHONE` env var when the column is null/missing.
+
 ## 2. `tasks` table — NEW (Change 4)
 
 A firm-scoped task layer linked to leads / clients / matters. Replaces the per-department in-memory task pools (`legalTasks.ts`, `accountingTasks.ts`) with durable rows so tasks can be assigned, auto-generated from workflow triggers, and carried forward on handoff.
@@ -472,10 +494,189 @@ The § 109(h) flag is computed on the frontend; no DB function needed.
 | `consume_questionnaire_email_token` | `(p_token text, p_answer jsonb) returns jsonb` | Email-interview anonymous link (§5) |
 | `complete_lead_handoff_to_legal` | `(p_lead_id uuid) returns jsonb` | The Convert action (Change 1) — transactionally sets `lifecycle_status='handoff_to_legal'`, creates the legal-side opener tasks via §2, emits an audit row. |
 | `record_attorney_decision_override` | `(p_decision_id uuid, p_explanation text) returns jsonb` | The accept-gate override (Change 8). Stamps `override_*` columns on the existing `acceptances` row and writes an audit entry. |
+| `create_public_lead` | `(p_firm_slug text, p_channel text, p_full_name text, p_email text, p_phone text, p_notes text, p_captcha_token text) returns jsonb` | The anonymous "Get Help" entry from a public visitor (Change 1). See §9 for the full security spec — this is the locked-down replacement for the open anon-INSERT on `intake_leads` that today's frontend uses. |
 
-All three are SECURITY DEFINER, scoped by `app.current_firm_id`, idempotent where reasonable.
+All four are SECURITY DEFINER, scoped to a firm via either `app.current_firm_id` (authenticated) or a resolved `firm_slug` (anonymous, see §9), idempotent where reasonable.
 
 The existing `get_open_slots` + `book_consultation` RPCs are **reused as-is** (no changes needed for Change 3). Migration drift on those (2026-06-07) is a separate Canelo item.
+
+---
+
+## 9. `create_public_lead` RPC + anonymous `intake_leads` lockdown (Change 1)
+
+The public "Get Help" entry (Change 1) needs to drop a row into `intake_leads` from an anonymous visitor — no Supabase session, no JWT. Today the frontend uses the anon-INSERT policy on `intake_leads` that's already in place for `NewLeadInline` / `ClientRegistration`. **That open anon-INSERT must be locked down before the public Get Help page is exposed to a real domain.**
+
+### Lockdown
+
+Replace the open anon-INSERT policy with a **deny-all-anon** policy on `intake_leads` and route the public path through `create_public_lead` instead:
+
+```sql
+-- Drop any existing anon-INSERT policy on intake_leads.
+-- Confirm policy name in production before drop:
+--   SELECT polname FROM pg_policy WHERE polrelid = 'intake_leads'::regclass;
+-- Replace `<existing_anon_insert_policy>` with the actual name.
+drop policy if exists <existing_anon_insert_policy> on intake_leads;
+
+-- Anon role gets NO direct table access — INSERT/SELECT/UPDATE all denied.
+-- The only path for anonymous lead creation is the RPC below.
+revoke insert, select, update, delete on intake_leads from anon;
+```
+
+Existing authenticated paths (`NewLeadInline`, attorney/intake staff inserts) keep their existing policies — only the anon path closes.
+
+### The RPC
+
+```sql
+create or replace function create_public_lead(
+  p_firm_slug      text,
+  p_channel        text,
+  p_full_name      text default null,
+  p_email          text default null,
+  p_phone          text default null,
+  p_notes          text default null,
+  p_captcha_token  text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_firm_id uuid;
+  v_lead_id uuid;
+  v_ip      text := current_setting('request.headers', true)::jsonb ->> 'x-forwarded-for';
+  v_attempt_count int;
+begin
+  -- (1) Captcha verification — Canelo wires the actual provider (Turnstile /
+  -- hCaptcha) here. Fail closed: a null / invalid token returns generic error
+  -- so the response is indistinguishable from a rate-limit miss.
+  if p_captcha_token is null or not verify_captcha(p_captcha_token) then
+    raise exception 'lead_create_failed' using errcode = 'P0001';
+  end if;
+
+  -- (2) Rate-limit by source IP — 5 attempts per 10 minutes per IP.
+  -- Reuses an `auth_attempts`-style counter table OR a pg_throttle hook.
+  -- Spec the implementation as Canelo prefers; the contract is: a 6th
+  -- attempt within the window raises the same generic exception.
+  select count(*) into v_attempt_count
+    from public_lead_attempts
+    where source_ip = v_ip
+      and attempted_at > now() - interval '10 minutes';
+  if v_attempt_count >= 5 then
+    raise exception 'lead_create_failed' using errcode = 'P0001';
+  end if;
+
+  insert into public_lead_attempts (source_ip, firm_slug, channel, attempted_at, outcome)
+    values (v_ip, p_firm_slug, p_channel, now(), 'attempt');
+
+  -- (3) Resolve firm_id from the slug server-side. The slug is the only
+  -- firm identifier the caller can pass; never accept firm_id directly.
+  -- An unknown slug returns the same generic error.
+  select id into v_firm_id from firms where public_slug = p_firm_slug;
+  if v_firm_id is null then
+    raise exception 'lead_create_failed' using errcode = 'P0001';
+  end if;
+
+  -- (4) Channel validation — must be one of the §1 channel values.
+  if p_channel not in ('call_now','live_chat','sms','scheduled','self_serve','agent_assisted') then
+    raise exception 'lead_create_failed' using errcode = 'P0001';
+  end if;
+
+  -- (5) Insert the lead. firm_id is the SERVER-resolved value, never
+  -- the caller's input. New §1 columns set inline.
+  insert into intake_leads (
+    firm_id, full_name, email, phone, source, status, follow_up_queue,
+    notes, first_contact_at,
+    channel, lifecycle_status, questionnaire_completion_pct
+  ) values (
+    v_firm_id, p_full_name, p_email, p_phone, p_channel,
+    case when p_channel = 'call_now' then 'contacted' else 'new' end,
+    case when p_channel = 'call_now' then 'priority'  else 'normal' end,
+    p_notes, now(),
+    p_channel,
+    case when p_channel = 'call_now' then 'contacted' else 'new' end,
+    0
+  )
+  returning id into v_lead_id;
+
+  -- (6) Mark the attempt success so the counter stays honest.
+  update public_lead_attempts
+    set outcome = 'success', lead_id = v_lead_id
+    where source_ip = v_ip and attempted_at >= now() - interval '1 minute'
+    and lead_id is null;
+
+  return jsonb_build_object('ok', true, 'lead_id', v_lead_id);
+end;
+$$;
+
+revoke all on function create_public_lead(text,text,text,text,text,text,text) from public;
+grant execute on function create_public_lead(text,text,text,text,text,text,text) to anon;
+```
+
+**Tight-review checklist for Canelo** (same posture as §5):
+
+- ✅ **SECURITY DEFINER, INSERT-only effect.** The function only inserts into `intake_leads` + `public_lead_attempts`. No reads, no updates, no other writes.
+- ✅ **`firm_id` resolved server-side from `p_firm_slug`.** Caller cannot supply `firm_id`. Unknown slug → generic error (no enumeration of valid slugs).
+- ✅ **Channel value validated against the §1 whitelist.** Any other value → generic error.
+- ✅ **Rate-limited per source IP** via `public_lead_attempts` (5 attempts per 10-minute window). Failed attempts (captcha, rate, slug, channel) all increment the counter and log to the same table.
+- ✅ **Captcha required.** Turnstile / hCaptcha token verified server-side via `verify_captcha()` (Canelo writes the wrapper — typically a `pg_net` call out to the provider's verify endpoint).
+- ✅ **Generic error message.** Every failure path raises the same `'lead_create_failed'` exception so the caller can't distinguish captcha failure from rate-limit failure from unknown slug.
+- ✅ **No SELECT/UPDATE on intake_leads granted to anon.** The anon role can ONLY call this function; cannot read leads back, cannot update them.
+
+### `public_lead_attempts` table (NEW, supports the RPC)
+
+```sql
+create table public_lead_attempts (
+  id           bigserial primary key,
+  source_ip    text,
+  firm_slug    text,
+  channel      text,
+  outcome      text not null,         -- 'attempt' | 'success' | 'captcha_fail' | 'ratelimit' | 'invalid_slug' | 'invalid_channel'
+  lead_id      uuid,                  -- set on success
+  attempted_at timestamptz not null default now()
+);
+create index idx_pla_ip_attempted on public_lead_attempts (source_ip, attempted_at desc);
+create index idx_pla_attempted    on public_lead_attempts (attempted_at desc);
+-- No RLS — anon never sees this table directly; only the RPC writes.
+revoke all on public_lead_attempts from anon;
+```
+
+### `firms.public_slug` (NEW column)
+
+The RPC resolves `firm_id` via `firms.public_slug`. Today `firms` has no `public_slug` column. Add one:
+
+```sql
+alter table firms
+  add column public_slug text,
+  add constraint firms_public_slug_format check (public_slug is null or public_slug ~ '^[a-z0-9-]{2,40}$'),
+  add constraint firms_public_slug_unique unique (public_slug);
+```
+
+The slug is the firm's URL identifier — e.g., `majorslawgroup` resolves to MLG. For the MLG pilot, set `update firms set public_slug = 'majorslawgroup' where id = '<MLG firm id>'`. Future pilots set their own slug.
+
+### Frontend posture once §9 lands
+
+`src/lib/createLead.ts` flips from `supabase.from("intake_leads").insert(...)` to `supabase.rpc("create_public_lead", { p_firm_slug, p_channel, ... })`. The frontend resolves `firm_slug` from one of:
+
+1. The URL subdomain (`majorslawgroup.bankruptcy.ai`),
+2. A path segment (`/firm/majorslawgroup/get-help`),
+3. For the MLG-only pilot today: the `VITE_FIRM_SLUG` env var.
+
+**Heads-up on the current `VITE_FIRM_ID` pattern (Phase 2 of v1):** the current `createLead.ts` reads `firm_id` from the `VITE_FIRM_ID` build-env var. That's fine for the MLG-only deployment but **does not serve multiple firms from a single build**. Multi-firm pilot requires the slug-from-URL resolution above. Flagged for the pilot phase: when a second firm onboards, swap the build-env scoping for slug-from-URL before deploying.
+
+---
+
+## 10. Deferred Change-1 items — scheduled, not lost
+
+Phase 2 shipped the public Get-Help entry + lead-creation helper + lifecycle enum + scheduling adapter, but Change 1 has three more pieces explicitly deferred to a later phase. **Tracked here so they're not lost.**
+
+| Item | What it is | Target phase |
+|---|---|---|
+| **Lifecycle-status filter on Intake dashboard** | The existing `IntakeDashboard.tsx` lead board needs a filter chip set keyed to the new `lifecycle_status` enum (with backward-compat read from legacy `status` via `resolveLifecycle` from `leadLifecycle.ts`). Assignment column reuses the existing assignment engine. | Phase 5 (Intake dashboard refinement) — after Change 2 ships so the questionnaire-completion % flows in. |
+| **Per-lead detail view** | The lead-detail surface needs to surface channel, consultation, questionnaire-progress %, and the generated document checklist. Today's detail UI is partial; this is its v1 completion. | Phase 5. |
+| **Convert action → handoff to Legal** | A "Convert" button on the lead detail that promotes `lifecycle_status` → `'converted'` then `'handoff_to_legal'` via `complete_lead_handoff_to_legal` (this section §8). Routes through the existing assignment engine; creates the matching legal-side opener tasks via §2. **Core Change 1 functionality — do not lose.** | Phase 5, paired with Phase 4's tasks consumer landing so the handoff actually creates the legal-side tasks. |
+
+When Phase 5 lands, this section is removed from the doc — every item gets a checkmark and the schema spec for the supporting work goes inline above.
 
 ---
 

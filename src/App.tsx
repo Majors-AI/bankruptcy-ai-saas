@@ -36,6 +36,7 @@ import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
 import type { NavFlags } from './lib/useFirmFlags';
 import SigningReview from './components/SigningReview';
+import GetHelpEntry from './components/get-help/GetHelpEntry';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -57,7 +58,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_review_ch13' | 'signing_appt_portal' | 'signing_appt_portal_ch13' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal' | 'law_firm_settings';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_review_ch13' | 'signing_appt_portal' | 'signing_appt_portal_ch13' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal' | 'law_firm_settings' | 'get_help';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -971,6 +972,29 @@ function App() {
           onOpenAttorneyReview={(leadId) => { setPreselectLeadId(leadId); setView('attorney'); }}
           onOpenView={(v) => setView(v)}
         /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  // Public "Get Help" entry (Change 1) — the new front door for inbound
+  // leads. Six entry options (Call now / Chat now / Text us / Schedule /
+  // Self-serve / Email). Reachable via setView('get_help') from a public
+  // link or from the nav. Each option creates a firm-scoped lead via
+  // src/lib/createLead.ts and routes to the next step.
+  if (view === 'get_help') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <GetHelpEntry
+          onSelfServe={() => setView('intake')}
+          onChatNow={() => setView('intake')}
+          // ↑ FloatingChat is not a full questionnaire walk-through yet
+          // (that lands in Change 2); for now, "Chat now" creates the
+          // lead and routes the visitor into the existing intake surface
+          // alongside the chat widget. When the shared questionnaire
+          // engine + chat-bot lands, swap this for a dedicated chat view.
+        />
         <PortalToggle />
       </ErrorBoundary>
     );
