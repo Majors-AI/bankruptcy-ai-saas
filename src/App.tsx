@@ -747,7 +747,17 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><LegalDepartmentPortal /></div>
+        <div className="pb-24">
+          <LegalDepartmentPortal
+            // Sub-phase 1 of the legal portal restyle — utility-rail
+            // entries whose destinations live in the legal_admin view
+            // (Leads / Messages / Settings / Out-of-Office / Manual
+            // Clients) jump cross-portal here. Sub-phase 6 folds them
+            // into proper rail panels; until then this keeps every
+            // back-office surface one click away.
+            onNavigateToAdmin={() => setView('legal_admin')}
+          />
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
