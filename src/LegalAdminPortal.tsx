@@ -8787,10 +8787,25 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // ConsultIntakeModal). On submit the wrapper advances the lead and bounces back.
   const [guidedIntakeLead, setGuidedIntakeLead] = useState<Lead | null>(null);
 
-  // Default tab by role: attorneys land on attorney review queue (unchanged);
-  // legal admins + super admins land on the new dashboard. Pure attorneys
-  // never see the dashboard tab — gated below in TABS.
-  const defaultTab = isAtty && !isSuperAdmin ? "followup" : "dashboard";
+  // Attorney review mode is the simplified review-only experience (Review
+  // Queue + Completed Reviews). Every attorney role lands here by default,
+  // including attorney_super_admin — that's how most working attorneys at
+  // this firm are configured. Toggling it off (header button below) opens
+  // the fuller admin portal for users who also hold admin permissions.
+  // Pure non-attorney roles (legal_admin, super_admin, intake, etc.)
+  // default to admin mode — the toggle isn't shown to them (attorney
+  // review queue isn't theirs to enter).
+  const [attorneyReviewMode, setAttorneyReviewMode] = useState<boolean>(isAtty);
+  // The user can flip back to admin mode in two cases: (1) they hold
+  // admin permissions (canManageLeads || isSuperAdmin), (2) they are an
+  // attorney_super_admin (covered by both). This drives whether the
+  // toggle button renders in the header.
+  const canEnterAdminMode = canManageLeads || isSuperAdmin;
+
+  // Default tab routing follows the mode. Attorneys in review mode land
+  // on the Review Queue; everyone else (and any attorney who toggled
+  // into admin mode) lands on the Dashboard.
+  const defaultTab = attorneyReviewMode ? "followup" : "dashboard";
   // "availability" + "timeoff" were consolidated into "my_schedule"; the
   // union keeps the historical values as safe fallbacks for any external
   // caller passing a stale tab id.
@@ -9121,23 +9136,25 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   });
   const followUpBadge = priorityQueue.length + botQueueLeads.length || null;
 
-  // Pure-attorney strip: a pure `attorney` role (not attorney_super_admin
-  // and not super_admin) only ever sees two tabs — Review Queue +
-  // Completed Reviews. Everything else (Dashboard, Leads, Calendar,
-  // Messages, My Tasks, Manual Clients, Settings, My Schedule) stays in
-  // the fuller portal for intake specialists / supervising attorneys.
-  const isPureAttorney = isAtty && !isSuperAdmin;
-
-  // Tabs visible per role:
-  // pure attorney: Review Queue + Completed Reviews ONLY
-  // legal_admin: Dashboard, Leads, Calendar, Messages, My Tasks, My Schedule, Settings
-  // attorney_super_admin / super_admin: everything
+  // Attorney review mode collapses the portal to two tabs — Review Queue +
+  // Completed Reviews — for ANY attorney role (attorney or
+  // attorney_super_admin). Other admin roles (legal_admin, pure
+  // super_admin without attorney) skip this branch. attorney_super_admin
+  // toggles back to admin mode via the header button to reach Leads /
+  // Calendar / Messages / Settings on demand.
+  //
+  // Tabs visible per mode:
+  // attorneyReviewMode === true:  Review Queue + Completed Reviews ONLY
+  // attorneyReviewMode === false: Dashboard, Leads, Calendar, Messages,
+  //                               My Tasks, My Schedule, Settings (per
+  //                               existing canManageLeads / isSuperAdmin
+  //                               sub-gates)
   const TABS = [
-    // Dashboard — legal_admin / super_admin only. Pure attorneys never see this tab.
-    ...( canManageLeads && !isPureAttorney
+    // Dashboard — legal_admin / super_admin only, and only in admin mode.
+    ...( canManageLeads && !attorneyReviewMode
       ? [{ id: "dashboard" as const, label: "Dashboard", icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }]
       : []),
-    ...( (canManageLeads || isSuperAdmin) && showLeadsTab && !isPureAttorney
+    ...( (canManageLeads || isSuperAdmin) && showLeadsTab && !attorneyReviewMode
       ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }]
       : []),
     // V1 — Manual Clients tab HIDDEN from the inner nav (being replaced later).
@@ -9146,33 +9163,28 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     ...(false
       ? [{ id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null }]
       : []),
-    // Follow-Up tab consolidated into the Leads tab for legal_admin /
-    // super_admin (it lives as a "Follow-Up" sub-nav inside Leads). Attorneys
-    // still see "Review Queue" here because that surface renders the
-    // AttorneyReviewQueue component — different from FollowUpQueue.
+    // Review Queue — surfaces the AttorneyReviewQueue component when an
+    // attorney is in review mode. In admin mode it shows the FollowUpQueue
+    // (the legal_admin/super_admin pipeline view) — same tab id, different
+    // body in the render branch below.
     ...(isAtty
       ? [{ id: "followup" as const, label: "Review Queue", icon: <BellRing className="w-3.5 h-3.5" />, badge: (reviewQueue.length + feeQuotedLeads.length) || null }]
       : []),
-    // Completed Reviews — pure attorney only. Read-only firm-wide history
-    // of decided attorney_intake_reviews. Per the attorney-strip spec,
-    // this replaces the prior Calendar/Messages/My Tasks tabs for the
-    // pure-attorney role.
-    ...(isPureAttorney
+    // Completed Reviews — review mode only. Read-only firm-wide history
+    // of decided attorney_intake_reviews.
+    ...(attorneyReviewMode
       ? [{ id: "attorney_completed" as const, label: "Completed Reviews", icon: <CheckCircle2 className="w-3.5 h-3.5" />, badge: null }]
       : []),
-    ...(!isPureAttorney
+    ...(!attorneyReviewMode
       ? [{ id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null }]
       : []),
     // Messages — opens the same ConsolidatedMessagingWidget the dashboard
-    // mounts, full-width here so staff can work the inbox without leaving
-    // the portal. Hidden for pure attorneys per strip spec.
-    ...(!isPureAttorney
+    // mounts, full-width here. Hidden in attorney review mode.
+    ...(!attorneyReviewMode
       ? [{ id: "messages" as const,     label: "Messages",     icon: <MessageCircle className="w-3.5 h-3.5" />, badge: null }]
       : []),
-    // My Tasks — staff-member task page (resolved + outstanding tasks for
-    // the viewer). Also reachable via a link in the dashboard's AllTasks
-    // widget header. Hidden for pure attorneys per strip spec.
-    ...(!isPureAttorney
+    // My Tasks — staff-member task page. Hidden in attorney review mode.
+    ...(!attorneyReviewMode
       ? [{ id: "staff_tasks" as const,  label: "My Tasks",     icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }]
       : []),
     // My Schedule consolidates the prior "Availability" + "Time Off" tabs.
@@ -9231,6 +9243,42 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
                 onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
               >
                 <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
+              </button>
+            )}
+            {/* Attorney review / admin mode toggle. Shown only to users
+                who can use both surfaces — i.e. attorneys who ALSO hold
+                admin permissions (attorney_super_admin / similar). Pure
+                attorneys have no admin to switch to; non-attorney admins
+                have no review queue to switch to — neither sees this
+                button. */}
+            {isAtty && canEnterAdminMode && (
+              <button
+                onClick={() => {
+                  const next = !attorneyReviewMode;
+                  setAttorneyReviewMode(next);
+                  // Route to the mode's natural landing tab so the user
+                  // doesn't get stuck on a tab that's now hidden.
+                  setActiveTab(next ? "followup" : "dashboard");
+                }}
+                title={attorneyReviewMode
+                  ? "Switch to admin tools (Leads, Calendar, Messages, Settings)"
+                  : "Switch back to the attorney review queue"}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1A1A18', color: '#FAFAF7', border: '1px solid #2A2A28', borderRadius: 4, padding: '8px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'background 150ms ease-out' }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A2A28'; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1A1A18'; }}
+              >
+                {attorneyReviewMode ? (
+                  <>
+                    <Shield style={{ width: 14, height: 14, strokeWidth: 1.5 }} />
+                    Admin tools
+                    <ArrowRight style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+                  </>
+                ) : (
+                  <>
+                    <ArrowLeft style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+                    Back to review queue
+                  </>
+                )}
               </button>
             )}
             <button onClick={load} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
@@ -9614,8 +9662,8 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           </>
         )}
 
-        {/* ── COMPLETED REVIEWS TAB (pure attorney only — read-only history) ── */}
-        {activeTab === "attorney_completed" && isAtty && !isSuperAdmin && (
+        {/* ── COMPLETED REVIEWS TAB (attorney review mode — read-only history) ── */}
+        {activeTab === "attorney_completed" && attorneyReviewMode && (
           <AttorneyCompletedReviews
             // Local IntakeReview lacks `updated_at` in its TS surface (it
             // does exist on the DB row); shared AttorneyIntakeReviewRow
@@ -9628,9 +9676,10 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           />
         )}
 
-        {/* ── FOLLOW-UP TAB (attorneys only — Review Queue) ── */}
+        {/* ── FOLLOW-UP TAB (Review Queue for attorneys in review mode;
+             FollowUpQueue otherwise — see attorneyReviewMode state) ── */}
         {activeTab === "followup" && (
-          isAtty && !isSuperAdmin
+          attorneyReviewMode
             ? <AttorneyReviewQueue leads={leads} acceptances={acceptances} onSelect={l => {
                 // Sent for attorney review + has linked submission → route to
                 // AttorneyIntakeDashboard (canonical attorney review surface).
