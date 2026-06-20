@@ -2549,11 +2549,18 @@ function CaseRow({ sub, onSelect, isSelected }: { sub: Submission; onSelect: () 
 
 export default function AttorneyIntakeDashboard({
   onSwitchToCaseManagement,
+  onSwitchToLegalDept,
   preselectLeadId,
   onPreselectConsumed,
   viewerIsLawyer = false,
 }: {
   onSwitchToCaseManagement?: () => void;
+  /** Navigate to the Legal Department portal (view === 'legal_dept_portal').
+   *  Surfaces a "Legal Department" button in the header — attorneys
+   *  spend most of their time in that portal's case-workspace; the
+   *  Case Review page is their LANDING but rarely where they finish
+   *  the day. Set by App.tsx; undefined hides the button. */
+  onSwitchToLegalDept?: () => void;
   preselectLeadId?: string | null;
   onPreselectConsumed?: () => void;
   /** True when the viewer holds a bar number (attorney / attorney_super_admin
@@ -3143,6 +3150,20 @@ export default function AttorneyIntakeDashboard({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Legal Department portal toggle — most attorney work
+                continues in the case workspace (Queue / Paralegal review
+                / Signing review) inside the Legal Department portal.
+                This page is the LANDING; the button is the one-click
+                hand-off to where the rest of the day happens. */}
+            {onSwitchToLegalDept && (
+              <button
+                onClick={onSwitchToLegalDept}
+                title="Open the Legal Department portal (Queue / Paralegal review / Signing review)"
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all"
+              >
+                <Briefcase size={12} /> Legal Department
+              </button>
+            )}
             {onSwitchToCaseManagement && (
               <button
                 onClick={onSwitchToCaseManagement}

@@ -738,6 +738,12 @@ function App() {
             preselectLeadId={preselectLeadId}
             onPreselectConsumed={() => setPreselectLeadId(null)}
             viewerIsLawyer={isLawyerViewer}
+            // Hands the attorney off to the Legal Department portal —
+            // the case-workspace surface (Queue / Paralegal review /
+            // Signing review) where they spend most of their time.
+            // navigateTo() respects firm-feature gates, but
+            // canBypassFeatureGates lets firm-tier admins through.
+            onSwitchToLegalDept={() => navigateTo('legal_dept_portal')}
           />
         </div>
         <PortalToggle />
