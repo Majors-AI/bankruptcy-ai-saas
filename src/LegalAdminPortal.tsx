@@ -9349,10 +9349,11 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
 
         {/* Prompt 88 — stat cards row. Hidden on the dashboard tab
             (replaced there by the TopBubbles inside IntakeDashboard).
-            "Fee Quoted / Follow-Up" was removed; "Total Leads Received
-            Today" + "Retained Today" replace the lifetime totals with
-            today-scoped real counts. */}
-        {activeTab !== "dashboard" && (
+            ALSO hidden in attorney review mode — these are intake stats
+            (Leads Received / Need Scheduling / Today Appointments), not
+            attorney review tasks. The attorney's caseload counts live
+            inside AttorneyReviewQueue's muted header line. */}
+        {activeTab !== "dashboard" && !attorneyReviewMode && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
             {[
               // Real — created_at filtered to today (firm tz).
@@ -9385,9 +9386,10 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
 
         {/* Prompt 88 — leads-by-month bar graph. Uses the same `leads`
             array the stat cards do. Annual = 12 months of selected year;
-            Monthly = days of selected month. Honest empty state if no
-            leads in the period; never fabricated. */}
-        {activeTab !== "dashboard" && (
+            Monthly = days of selected month. Hidden on dashboard tab
+            (replaced by IntakeDashboard) AND in attorney review mode
+            (this is intake telemetry, not review work). */}
+        {activeTab !== "dashboard" && !attorneyReviewMode && (
           <LeadsByMonthChart leads={leads} />
         )}
 
