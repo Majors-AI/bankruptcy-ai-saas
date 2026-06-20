@@ -160,7 +160,17 @@ function MoonIcon() {
 }
 
 function App() {
-  const [view, setView] = useState<View>('legal_admin');
+  // Default view is set lazily once auth resolves (see effect below).
+  // A brief loading shim renders until then — per the spec, "correct
+  // landing beats avoiding a flash." VITE_DEFAULT_VIEW is an immediate
+  // override that bypasses the loading wait.
+  const initialOverride = (import.meta.env.VITE_DEFAULT_VIEW as string | undefined);
+  const overrideView: View | null =
+    initialOverride === 'attorney' || initialOverride === 'legal_admin'
+      ? (initialOverride as View)
+      : null;
+  const [view, setView] = useState<View>(overrideView ?? 'legal_admin');
+  const [viewInitialized, setViewInitialized] = useState<boolean>(overrideView !== null);
   // Lead id to preselect when AttorneyIntakeDashboard opens — set by
   // LegalAdminPortal's queue click for leads in 'sent_for_attorney_review'.
   const [preselectLeadId, setPreselectLeadId] = useState<string | null>(null);
@@ -182,7 +192,7 @@ function App() {
   // see OPERATOR_EMAILS comment above. Still UI-only; NOT a security
   // boundary. The user email is now read from the AuthProvider's ambient
   // session instead of an ad-hoc getUser() round-trip on mount.
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const authedEmail = user?.email ?? null;
   const isSuperAdmin =
     sessionRole === 'super_admin_bankruptcy_ai'
@@ -222,20 +232,46 @@ function App() {
   // gate toast on the initial silent redirect (app start → gated view → fallback).
   const flagsLoadedRef = useRef(false);
 
+  // Admin tiers that should bypass per-firm feature-flag gates. The
+  // platform super-admin (`super_admin_bankruptcy_ai`) has always been
+  // exempt; here we extend that to firm-tier admins (`firm_super_admin`,
+  // `law_firm_owner`) — they own the firm's portals and shouldn't be
+  // gated out of their own surfaces. Without this, a firm super-admin
+  // trying to toggle to a view whose feature flag isn't set on
+  // firm_features gets redirected to FALLBACK_VIEW silently OR sees the
+  // "feature not available" toast on a manual click. Both are
+  // user-hostile for someone with effective admin rights.
+  const canBypassFeatureGates = isSuperAdmin || isFirmSuperAdmin || isLawFirmOwner;
+
+  // ── Landing routing — runs once auth resolves ─────────────────────────
+  // Routes attorneys (any kind) to the bankruptcy.AI Case Review page
+  // (view === 'attorney'). Everyone else keeps the pre-existing
+  // legal_admin landing. Runs exactly once — PortalToggle clicks after
+  // this point are never re-overridden. The loading shim below renders
+  // until this effect fires (or until VITE_DEFAULT_VIEW provides an
+  // immediate-paint override).
+  useEffect(() => {
+    if (viewInitialized) return;
+    if (authLoading) return;
+    setView(isAttorneyRole ? 'attorney' : 'legal_admin');
+    setViewInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, isAttorneyRole, viewInitialized]);
+
   // Gate enforcement: when flags arrive or view changes, redirect away from any
   // view whose flag is OFF. First redirect (on flags load) is silent; subsequent
   // explicit navigation attempts surface the toast.
   useEffect(() => {
     if (!flags) return;
     const flagKey = VIEW_FLAGS[view];
-    if (!isSuperAdmin && flagKey && !flags[flagKey]) {
+    if (!canBypassFeatureGates && flagKey && !flags[flagKey]) {
       setView(FALLBACK_VIEW);
       if (flagsLoadedRef.current) {
         setGateToast('This feature is not yet available for your firm.');
       }
     }
     flagsLoadedRef.current = true;
-  }, [view, flags, isSuperAdmin]);
+  }, [view, flags, canBypassFeatureGates]);
 
   // Auto-dismiss gate toast after 4 s.
   useEffect(() => {
@@ -273,7 +309,11 @@ function App() {
 
   // Navigate to a view, blocking gated destinations and surfacing the toast.
   function navigateTo(nextView: View) {
-    if (flags && !isSuperAdmin) {
+    // Firm super-admins / law-firm-owners / platform super-admins bypass
+    // the firm-feature gate — they own the portals. Pure attorneys /
+    // legal admins / intake / etc. still respect the firm_features
+    // configuration so unfinished surfaces stay hidden behind the flag.
+    if (flags && !canBypassFeatureGates) {
       const flagKey = VIEW_FLAGS[nextView];
       if (flagKey && !flags[flagKey]) {
         setGateToast('This feature is not yet available for your firm.');
@@ -297,6 +337,25 @@ function App() {
             d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
         {gateToast}
+      </div>
+    );
+  }
+
+  // Brief loading shim while auth resolves the runtime role used to pick
+  // the landing view. Shown ONLY when no VITE_DEFAULT_VIEW override is
+  // present AND the useEffect above hasn't fired yet. Once viewInitialized
+  // flips true, this shim is skipped on every subsequent render.
+  if (!viewInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="flex items-center gap-3 text-slate-500">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span className="text-xs">Loading…</span>
+        </div>
       </div>
     );
   }
