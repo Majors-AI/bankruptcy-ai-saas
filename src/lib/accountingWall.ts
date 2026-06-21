@@ -47,7 +47,9 @@ function isAccountingOperatorEmail(email: string | null | undefined): boolean {
  *  Blocked (explicit):
  *    - legal_admin, attorney, attorney_super_admin (Legal-tier)
  *    - intake (Intake-tier)
- *    - client, paralegal
+ *    - paralegal (Legal-tier — see src/lib/portalAccess.ts for the
+ *      single-department wall enforcing paralegal → Legal Dept only)
+ *    - client
  */
 export interface AccountingWallContext {
   role: PlatformRole | null | undefined;

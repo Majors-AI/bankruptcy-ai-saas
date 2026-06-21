@@ -14,6 +14,7 @@ export type PlatformRole =
   | 'firm_super_admin'
   | 'attorney'
   | 'legal_admin'
+  | 'paralegal'
   | 'intake'
   | 'accounting'
   | 'client';
@@ -29,6 +30,7 @@ export function isFirmStaff(role: PlatformRole | null | undefined): boolean {
     role === 'firm_super_admin' ||
     role === 'attorney' ||
     role === 'legal_admin' ||
+    role === 'paralegal' ||
     role === 'intake' ||
     role === 'accounting'
   );
@@ -72,6 +74,11 @@ export function mapIntakePortalRoleToPlatformRole(
       return 'attorney';
     case 'legal_admin':
       return 'legal_admin';
+    case 'paralegal':
+      // PIN-gate paralegals resolve to the paralegal PlatformRole — the
+      // single-department wall in portalAccess.ts then routes them only
+      // to the Legal Department portal.
+      return 'paralegal';
     default:
       return null;
   }

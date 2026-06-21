@@ -53,6 +53,13 @@ import { RulesAuditProvider } from './components/law-firm-settings/rulesAuditSto
 // blocked from the Accounting portal; they get fee/payment visibility
 // via the §15 payment view on the legal client file instead.
 import { canAccessAccountingPortal } from './lib/accountingWall';
+import {
+  canAccessPortal,
+  canSeeNavItem,
+  homePortalFor,
+  viewForPortal,
+  viewToPortal,
+} from './lib/portalAccess';
 import GetHelpEntry from './components/get-help/GetHelpEntry';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
@@ -248,19 +255,25 @@ function App() {
   const canBypassFeatureGates = isSuperAdmin || isFirmSuperAdmin || isLawFirmOwner;
 
   // ── Landing routing — runs once auth resolves ─────────────────────────
-  // Routes attorneys (any kind) to the bankruptcy.AI Case Review page
-  // (view === 'attorney'). Everyone else keeps the pre-existing
-  // legal_admin landing. Runs exactly once — PortalToggle clicks after
-  // this point are never re-overridden. The loading shim below renders
-  // until this effect fires (or until VITE_DEFAULT_VIEW provides an
-  // immediate-paint override).
+  // Routes each role to ITS home portal per the single-department wall
+  // (src/lib/portalAccess.ts → homePortalFor):
+  //   attorney         → case_review (view='attorney')
+  //   paralegal        → legal_dept  (view='legal_dept_portal')
+  //   accounting       → accounting  (view='accounting')
+  //   legal_admin      → intake      (view='legal_admin')
+  //   firm_super_admin / super_admin_bankruptcy_ai → intake by default
+  //
+  // Runs exactly once — PortalToggle clicks after this point are never
+  // re-overridden. The loading shim below renders until this effect fires
+  // (or until VITE_DEFAULT_VIEW provides an immediate-paint override).
   useEffect(() => {
     if (viewInitialized) return;
     if (authLoading) return;
-    setView(isAttorneyRole ? 'attorney' : 'legal_admin');
+    const home = homePortalFor(sessionRole);
+    setView(viewForPortal(home) as View);
     setViewInitialized(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authLoading, isAttorneyRole, viewInitialized]);
+  }, [authLoading, sessionRole, viewInitialized]);
 
   // Gate enforcement: when flags arrive or view changes, redirect away from any
   // view whose flag is OFF. First redirect (on flags load) is silent; subsequent
@@ -276,6 +289,24 @@ function App() {
     }
     flagsLoadedRef.current = true;
   }, [view, flags, canBypassFeatureGates]);
+
+  // Single-department wall (functional-readme §2 / src/lib/portalAccess).
+  // When the current view's portal isn't accessible to the caller, route
+  // them back to their home portal and surface a "restricted" toast.
+  // Accounting keeps its bespoke message screen below (route branch); this
+  // sibling effect catches every OTHER cross-department attempt for the
+  // walled regular roles (paralegal / legal_admin / accounting). Super-
+  // admin tier bypasses inside canAccessPortal.
+  useEffect(() => {
+    const portal = viewToPortal(view);
+    if (!portal) return; // portal-agnostic view → PortalToggle filter is the gate
+    const ctx = { role: sessionRole, isLawFirmOwner, authedEmail };
+    if (canAccessPortal(portal, ctx)) return;
+    const home = homePortalFor(sessionRole);
+    setView(viewForPortal(home) as View);
+    setGateToast('That portal is restricted to a different department.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, sessionRole, isLawFirmOwner, authedEmail]);
 
   // Auto-dismiss gate toast after 4 s.
   useEffect(() => {
@@ -604,12 +635,22 @@ function App() {
 
   // ── Portal toggle bar ─────────────────────────────────────────────────────
   function PortalToggle() {
-    // While flags are loading show all items; once loaded, hide gated ones.
-    // Super admin always sees everything.
-    const visibleItems = (flags && !isSuperAdmin
+    // Two-stage visibility filter:
+    //   1. firm feature flags — hide items the firm hasn't enabled
+    //      (super-admin tier bypasses this layer)
+    //   2. single-department wall (src/lib/portalAccess.ts) — hide items
+    //      whose portal the caller can't reach. Portal-agnostic items
+    //      (firm Settings, platform admin, comms, training, productivity)
+    //      stay super-admin-tier ONLY — regular staff must NOT see firm
+    //      Settings, even though Settings doesn't map to a department
+    //      portal.
+    const flagFiltered = flags && !isSuperAdmin
       ? NAV_ITEMS.filter(item => !item.flagKey || flags[item.flagKey])
-      : NAV_ITEMS
-    ).filter(item => !item.hidden);
+      : NAV_ITEMS;
+    const wallCtx = { role: sessionRole, isLawFirmOwner, authedEmail };
+    const visibleItems = flagFiltered
+      .filter(item => !item.hidden)
+      .filter(item => canSeeNavItem(item.id, wallCtx));
 
     return (
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-0.5 p-1 rounded-2xl shadow-2xl pointer-events-none

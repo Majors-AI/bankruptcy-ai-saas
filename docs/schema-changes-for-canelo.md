@@ -1014,6 +1014,95 @@ non-empty. Frontend tolerates absence via the typed interface's `unwired` / `emp
 
 ---
 
+## 14. Seed three regular-role TEST users — single-department wall verification
+
+**Purpose.** Stand up three TEST accounts in the dev firm so the new single-department wall
+(functional-readme §2, `src/lib/portalAccess.ts`) can be exercised end-to-end without
+real-staff data. Each user verifies one regular-role wall: paralegal → Legal Department
+only, `legal_admin` → Intake only, `accounting` → Accounting only. No admin/supervisor
+bypass, no cross-portal switching, reporting scope resolves to `'self'`.
+
+These are **TEST accounts** — not real personnel. Domain `@majorslawgroup.test` is the
+RFC 2606 reserved `.test` TLD; SMTP cannot deliver to it, which is the point. Do **not**
+seed in production.
+
+### S14.1 — `auth.users` entries (via Supabase Studio or service-role API)
+
+Create the three Supabase auth users (Studio → Authentication → Users → Add user):
+
+| Email                                       | Password   | Email confirm |
+| ------------------------------------------- | ---------- | ------------- |
+| `cardi.burdette@majorslawgroup.test`        | (set + share via 1Password) | yes |
+| `carmelo.anthony@majorslawgroup.test`       | (set + share via 1Password) | yes |
+| `justin.timberlake@majorslawgroup.test`     | (set + share via 1Password) | yes |
+
+### S14.2 — `user_profiles` rows
+
+Insert one row per user. `<firm_id>` = the dev firm id (`VITE_FIRM_ID` default
+`00000000-0000-0000-0000-000000000001`). `<auth_user_id_*>` = the UUID from §S14.1.
+
+```sql
+INSERT INTO public.user_profiles (user_id, firm_id, role, full_name)
+VALUES
+  ('<auth_user_id_cardi>',   '<firm_id>', 'paralegal',   'Cardi Burdette [TEST]'),
+  ('<auth_user_id_carmelo>', '<firm_id>', 'legal_admin', 'Carmelo Anthony [TEST]'),
+  ('<auth_user_id_justin>',  '<firm_id>', 'accounting',  'Justin Timberlake [TEST]');
+```
+
+The `role` column is the `platform_role` Postgres enum from
+`20260527020000_firms_and_user_profiles.sql`. **`'paralegal'` is a new enum value** — see
+§S14.3.
+
+### S14.3 — Add `'paralegal'` to `platform_role` enum
+
+```sql
+ALTER TYPE public.platform_role ADD VALUE IF NOT EXISTS 'paralegal';
+```
+
+Run before §S14.2 (Postgres won't accept the insert otherwise). Matches the frontend
+PlatformRole union in `src/lib/auth.ts` after this slice.
+
+### S14.4 — Optional: `staff_members` rows for PIN-gate sign-in
+
+The Legal Department portal (`LegalDepartmentPortal`) and Intake portal
+(`LegalAdminPortal`) layer a per-portal PIN gate on top of the Supabase auth session. If
+you want Cardi / Carmelo to sign into the inner portal too (not just hit App.tsx), seed
+matching `staff_members` rows with `intake_portal_role` = `'paralegal'` (Cardi) or
+`'legal_admin'` (Carmelo). Justin doesn't need one — Accounting has no PIN gate.
+
+```sql
+-- Adjust columns to your staff_members schema (DM + email + intake_portal_role).
+INSERT INTO public.staff_members (firm_id, full_name, email, intake_portal_role)
+VALUES
+  ('<firm_id>', 'Cardi Burdette [TEST]',   'cardi.burdette@majorslawgroup.test',   'paralegal'),
+  ('<firm_id>', 'Carmelo Anthony [TEST]',  'carmelo.anthony@majorslawgroup.test',  'legal_admin');
+```
+
+### S14.5 — Verification checklist (after seeds land)
+
+Sign in as each user and confirm:
+
+1. **Landing portal** matches the role:
+   - Cardi → `view='legal_dept_portal'` (Legal Department)
+   - Carmelo → `view='legal_admin'` (Intake)
+   - Justin → `view='accounting'`
+2. **PortalToggle (bottom bar)** shows ONLY the entries for that user's department.
+   No firm Settings, no platform admin, no Productivity, no cross-portal entries.
+3. **Manual URL nav** to a blocked view (e.g., Cardi → `?view=accounting`) redirects
+   back to home portal + surfaces the "restricted to a different department" toast.
+4. **Reporting access** (when D7 lands): `reportingScopeFor(role)` returns `'self'` for
+   all three; no department/firm reporting surface visible.
+
+### S14.6 — Out of scope
+
+- Real account-creation UI (FirmDirectory's "Add employee" modal is in-memory only).
+  Building the Supabase auth user + user_profiles row from the UI is a separate slice.
+- Department supervisor seeding — these three users are explicitly REGULAR (non-admin,
+  non-supervisor). Supervisor wiring lives behind `staff_members.is_department_supervisor`
+  or similar and is not exercised here.
+
+---
+
 ## Phase rollout
 
 This doc is updated as each change lands. Phase 1 (now) needs:
