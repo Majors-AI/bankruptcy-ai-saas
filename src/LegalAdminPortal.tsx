@@ -35,6 +35,13 @@ import UpdateIntakeInfoModal from "./components/intake-review/UpdateIntakeInfoMo
 // history of decided attorney_intake_reviews). Only rendered for the
 // pure-attorney role (isAtty && !isSuperAdmin).
 import AttorneyCompletedReviews from "./legal-portal/AttorneyCompletedReviews";
+// D1 — unified department shell. Intake portal adopts the shared shell
+// (functional-readme §1); inner 14-tab body stays per halfway refactor
+// directive. Sidebar/header chrome now lives in LegalPortalShell.
+import LegalPortalShell from "./legal-portal/LegalPortalShell";
+import type { RailEntry, RailGateContext } from "./legal-portal/railEntries";
+import { scopeFilterForDepartment } from "./lib/departmentScope";
+import type { LucideIcon } from "lucide-react";
 import StaffSettingsPanel, { type StaffSettingsViewerRole } from "./components/staff-settings/StaffSettingsPanel";
 import DepartmentSettingsPanel, { type DepartmentSettingsViewerRole } from "./components/admin-settings/DepartmentSettingsPanel";
 import { setCurrentAttorneyName, clearCurrentAttorneyName, getCurrentAttorneyName } from "./lib/currentAttorney";
@@ -6947,15 +6954,15 @@ function LogContactModal({ lead, onClose, onSaved }: {
 
 // ─── Attorney Review Queue ────────────────────────────────────────────────────
 
-// Simplified attorney review queue per the role-strip spec. Three sections:
+// Simplified attorney review queue. Two sections:
 //   1. Cases Needing Review (status='sent_for_attorney_review')
 //   2. Pending Case Presentations (status='attorney_accepted')
-//   3. Welcome Calls Needed (status IN consultation_scheduled / new / contacted)
 //
-// The legacy "Fee Quoted — Follow Up" section and the 4 colored summary
-// tiles at the top were removed: lead-list / colored-banner surfaces are
-// out-of-scope for the attorney view. Intake-specialist roles retain
-// their full set of leads tools elsewhere in this portal.
+// D1 removed the prior "Welcome Calls Needed" section per Master Spec v2
+// §4 (welcome call is no longer a pre-signing gate — it's a post-
+// retention task scheduled via the §3 call list once D2 ships). The
+// "Fee Quoted — Follow Up" section and the colored summary tiles were
+// removed in the earlier attorney-strip work.
 function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
   leads: Lead[];
   acceptances: Acceptance[];
@@ -6963,7 +6970,6 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
 }) {
   const needsReview   = leads.filter(l => l.status === "sent_for_attorney_review");
   const readyPresent  = leads.filter(l => l.status === "attorney_accepted");
-  const welcomeCalls  = leads.filter(l => ["consultation_scheduled","new","contacted"].includes(l.status));
 
   function hasDecision(lead: Lead) {
     return acceptances.some(a => a.lead_id === lead.id);
@@ -7018,19 +7024,19 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
     );
   }
 
-  const total = needsReview.length + readyPresent.length + welcomeCalls.length;
+  const total = needsReview.length + readyPresent.length;
 
   return (
     <div className="space-y-5">
       {/* Caseload summary — single muted line replacing the prior colored
           4-tile banner. Intentionally low-visual: this surface is for
-          reviewing cases, not for monitoring KPIs. */}
+          reviewing cases, not for monitoring KPIs. Welcome-call count
+          dropped here per Master Spec v2 §4 — welcome calls live on
+          the §3 call list (D2). */}
       <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
         <span>{needsReview.length} needing review</span>
         <span className="text-slate-700">·</span>
         <span>{readyPresent.length} pending presentation</span>
-        <span className="text-slate-700">·</span>
-        <span>{welcomeCalls.length} welcome calls</span>
       </div>
 
       {total === 0 && (
@@ -7045,9 +7051,6 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
 
       <Section title="Pending Case Presentations" desc="Case accepted — present options to client (welcome call may be needed first)"
         leads={readyPresent} accent="bg-emerald-500/15 text-emerald-400" icon={<UserCheck className="w-3.5 h-3.5 text-emerald-400" />} />
-
-      <Section title="Welcome Calls Needed" desc="New leads and scheduled consultations awaiting an attorney welcome call"
-        leads={welcomeCalls} accent="bg-sky-500/15 text-sky-400" icon={<PhoneCall className="w-3.5 h-3.5 text-sky-400" />} />
     </div>
   );
 }
@@ -8844,7 +8847,10 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   const load = useCallback(async () => {
     setLoading(true);
     const [ls, acs, evts, avail, toff, staff, atr] = await Promise.all([
-      sbGet<Lead>("intake_leads?order=created_at.desc&limit=200"),
+      // D1 — Intake department scope (functional-readme §2): potential
+      // clients only. Excludes retained (Legal scope) + closed states.
+      // Real wall = RLS on intake_leads (Canelo).
+      sbGet<Lead>(`intake_leads?${scopeFilterForDepartment("intake")}&order=created_at.desc&limit=200`),
       sbGet<Acceptance>("attorney_case_acceptances?order=created_at.desc&limit=200"),
       sbGet<CalEvent>("calendar_events?department=eq.intake&order=start_time.asc&limit=300"),
       sbGet<StaffAvailability>("staff_availability?department=eq.intake&order=day_of_week.asc"),
@@ -9217,133 +9223,115 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     // as a defensive fallback.
   ];
 
+  // ── D1 — TABS → Sidebar entries adapter ──────────────────────────────
+  //
+  // Convert the TABS array into RailEntry shape so the unified Sidebar
+  // (220px labeled) inside LegalPortalShell renders Intake's nav.
+  // Extracts the LucideIcon component from each TAB's instantiated JSX
+  // icon (t.icon.type). The shared sidebar reads RailEntry.icon as a
+  // component (renders <Icon size={...} />), not as JSX.
+  const sidebarEntries: RailEntry[] = TABS.map(t => {
+    const IconComp = (t.icon as React.ReactElement)?.type as LucideIcon;
+    return {
+      key: t.id,
+      label: t.label,
+      icon: IconComp,
+      badge: t.badge ?? null,
+    };
+  });
+
+  // Rail gate context — every entry's gate is already pre-filtered inside
+  // the TABS array construction (the `...(canManageLeads ? [...] : [])`
+  // spreads). The shared Sidebar's filter is a no-op on these entries.
+  // We still pass a complete context object so the Sidebar type-checks.
+  const railCtx: RailGateContext = {
+    sessionUserType: ROLE_CONFIG[role].label,
+    sessionRole: role,
+    canManageLeads,
+    canManageStaff,
+    isSuperAdmin,
+    canCreateClient,
+  };
+
+  // Header right-action slot — Intake's New Lead button, Admin toggle,
+  // and Refresh. Sign-out is handled by the shell's session.onSignOut
+  // (no longer needs its own button here).
+  const headerActions = (
+    <>
+      {canManageLeads && activeTab === "leads" && (
+        <button
+          onClick={() => setNewLeadWindow(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#16233A', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
+        </button>
+      )}
+      {isAtty && canEnterAdminMode && (
+        <button
+          onClick={() => {
+            const next = !attorneyReviewMode;
+            setAttorneyReviewMode(next);
+            setActiveTab(next ? "followup" : "dashboard");
+          }}
+          title={attorneyReviewMode
+            ? "Switch to admin tools (Leads, Calendar, Messages, Settings)"
+            : "Switch back to the attorney review queue"}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.04)', color: '#FAFAF7', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {attorneyReviewMode ? (
+            <>
+              <Shield style={{ width: 14, height: 14, strokeWidth: 1.5 }} />
+              Admin tools
+              <ArrowRight style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+            </>
+          ) : (
+            <>
+              <ArrowLeft style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+              Back to review queue
+            </>
+          )}
+        </button>
+      )}
+      <button
+        onClick={load}
+        title="Refresh"
+        style={{ background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, padding: 6, cursor: 'pointer' }}
+      >
+        <RefreshCw style={{ width: 14, height: 14, color: '#94a3b8', strokeWidth: 1.5 }} />
+      </button>
+    </>
+  );
+
   return (
-    <div className="min-h-screen text-white" style={{ background: '#0F0F0E' }}>
-      {/* Top bar — 56px, 1px bottom border, no shadow */}
-      <div className="sticky top-0 z-30 px-6" style={{ height: 56, background: '#0F0F0E', borderBottom: '1px solid #2A2A28', display: 'flex', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-          {/* Issue 3: bare icon, no container */}
-          <Briefcase style={{ width: 20, height: 20, color: '#FAFAF7', strokeWidth: 1.5, flexShrink: 0 }} />
-          <div>
-            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 18, letterSpacing: '-0.02em', color: '#FAFAF7' }}>
-              Intake Portal
-            </span>
-          </div>
-          <div className="ml-auto flex items-center gap-3 flex-wrap justify-end">
-            {/* Removed from this top bar (now lives elsewhere or has been retired
-                for this surface): emergency + pending-review chips, the user
-                identity span, and IAmSickButton. The greeting block inside the
-                dashboard already personalizes the surface; the chips were
-                duplicating the badges already shown on the side-nav tabs. */}
-            {canManageLeads && activeTab === "leads" && (
-              <button
-                onClick={() => setNewLeadWindow(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#111111', color: '#FAFAF7', border: 'none', borderRadius: 4, padding: '8px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'background 150ms ease-out' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A2F'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
-              >
-                <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
-              </button>
-            )}
-            {/* Attorney review / admin mode toggle. Shown only to users
-                who can use both surfaces — i.e. attorneys who ALSO hold
-                admin permissions (attorney_super_admin / similar). Pure
-                attorneys have no admin to switch to; non-attorney admins
-                have no review queue to switch to — neither sees this
-                button. */}
-            {isAtty && canEnterAdminMode && (
-              <button
-                onClick={() => {
-                  const next = !attorneyReviewMode;
-                  setAttorneyReviewMode(next);
-                  // Route to the mode's natural landing tab so the user
-                  // doesn't get stuck on a tab that's now hidden.
-                  setActiveTab(next ? "followup" : "dashboard");
-                }}
-                title={attorneyReviewMode
-                  ? "Switch to admin tools (Leads, Calendar, Messages, Settings)"
-                  : "Switch back to the attorney review queue"}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#1A1A18', color: '#FAFAF7', border: '1px solid #2A2A28', borderRadius: 4, padding: '8px 12px', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'background 150ms ease-out' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#2A2A28'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1A1A18'; }}
-              >
-                {attorneyReviewMode ? (
-                  <>
-                    <Shield style={{ width: 14, height: 14, strokeWidth: 1.5 }} />
-                    Admin tools
-                    <ArrowRight style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
-                  </>
-                ) : (
-                  <>
-                    <ArrowLeft style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
-                    Back to review queue
-                  </>
-                )}
-              </button>
-            )}
-            <button onClick={load} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <RefreshCw style={{ width: 14, height: 14, color: '#6B6B66', strokeWidth: 1.5 }} />
-            </button>
-            <button onClick={onLogout} title="Sign out" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <X style={{ width: 14, height: 14, color: '#6B6B66', strokeWidth: 1.5 }} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Body: sidebar + content */}
-      <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
-
-        {/* Issue 5: Left sidebar nav, 220px, text-only, no icons */}
-        <aside className="hidden lg:flex" style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', flexDirection: 'column', gap: 2 }}>
-          {/* Staff identity block in sidebar */}
-          <div style={{ padding: '0 20px 20px', borderBottom: '1px solid #2A2A28', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#2A2A28', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, fontWeight: 500, color: '#FAFAF7' }}>
-                  {session.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                </span>
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 500, color: '#FAFAF7', lineHeight: 1.3 }}>{session.name}</p>
-                <p style={{ fontSize: 11, color: '#6B6B66', marginTop: 1 }}>{ROLE_CONFIG[role].label}</p>
-              </div>
-            </div>
-          </div>
-
-          {TABS.map(t => {
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '9px 20px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderLeft: isActive ? '2px solid #1E3A2F' : '2px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'border-color 150ms ease-out',
-                  textAlign: 'left',
-                }}
-              >
-                <span style={{ fontSize: 14, fontWeight: isActive ? 500 : 400, color: isActive ? '#FAFAF7' : '#6B6B66', fontFamily: "'Inter', system-ui, sans-serif", transition: 'color 150ms ease-out' }}>
-                  {t.label}
-                </span>
-                {t.badge != null && (
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Courier New', monospace", fontSize: 11, color: isActive ? '#FAFAF7' : '#6B6B66', marginLeft: 8 }}>
-                    {t.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </aside>
-
-        {/* Main content */}
+    <>
+      <LegalPortalShell
+        // Intake portal — no role tabs (Paralegal/Attorney/Client is a
+        // Legal-department concept; Intake uses tab-based navigation
+        // exclusively).
+        showRoleTabs={false}
+        activeStage={null}
+        railEntries={sidebarEntries}
+        railCtx={railCtx}
+        railActiveKey={activeTab}
+        onRailSelect={(entry) => setActiveTab(entry.key as typeof activeTab)}
+        session={{
+          name: session.name,
+          userType: ROLE_CONFIG[role].label,
+          onSignOut: onLogout,
+        }}
+        departmentLabel="Intake Portal"
+        brandSubtitle="Intake"
+        headerActions={headerActions}
+        // Intake portal body is hardcoded dark (#090e1a / #0d1221 cards)
+        // pending a full restyle. Render the shell chrome dark so the
+        // header + sidebar match the body instead of creating a
+        // white-over-dark mismatch. Legal Department uses the default
+        // light theme.
+        theme="dark"
+      >
+        {/* Main content — preserved from the pre-shell chrome. Halfway
+            refactor per D1 directive #4: outer wrap adopts the shell now,
+            inner 14-tab body stays for incremental refactor. */}
         <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
@@ -9867,7 +9855,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           <div className="lg:hidden h-16" />
           </div>{/* end space-y-5 */}
         </div>{/* end main content */}
-      </div>{/* end body flex */}
+      </LegalPortalShell>
 
       {/* Mobile bottom nav — hidden on lg+, horizontal scroll, scrollbar hidden */}
       <nav
@@ -9941,7 +9929,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           "I'm here" dismiss reach the staffer on every screen now. The
           overlay itself is a createPortal anchor (see IntakePortalInner). */}
       {idleWarningOverlay}
-    </div>
+    </>
   );
 }
 

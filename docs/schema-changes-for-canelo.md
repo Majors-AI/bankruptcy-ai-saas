@@ -851,6 +851,169 @@ Frontend already tolerates the absence of all of these via the `caseIdentity.ts`
 
 ---
 
+## 13. `v_legal_client_payments` — Legal-side read-only payment view (companion to functional readme §15)
+
+**Why this exists.** Functional readme §15 ("Payment View & BK Forms") requires the Legal client file to display, next to the client name: *amount paid · third-party name (if applicable) · paid-in-full date · filing fee Y/N · process stage*. The same view feeds Disclosure of Compensation (Form 2030) and SOFA (incl. payment dates). Per readme §2, Legal does NOT access the Accounting portal — Legal gets these fields via this **read-only derived view** (the "payment-data exception" to the accounting wall).
+
+The frontend ships in D1 against a typed interface (`src/lib/legalClientPayments.ts` + `<PaymentDataStrip>`); today it renders honest empty / "Not yet connected" states. When this view lands, swap the implementation in that one module — UI doesn't change.
+
+### Goal
+
+One read-only view, lead-scoped (matter spine per §3 / §12), aggregating accounting data the Legal department needs. Legal can SELECT for leads in their firm. Accounting retains exclusive write authority on the underlying tables. The view never exposes fields outside the §15 inventory (no installment schedules, no IOLTA balances, no autopay-card detail).
+
+### Conventions
+
+- Additive: no changes to existing accounting tables (one exception flagged in S15.3 below — adding `is_third_party` + `payer_name` to `accounting_payments` is required to surface per-payment third-party attribution; today only `autopay_enrollments` carries third-party info and that's recurring-only).
+- RLS: SELECT-only for Legal-tier roles (`legal_admin` / `attorney` / `attorney_super_admin` / `firm_super_admin` / `law_firm_owner` / `super_admin_bankruptcy_ai`). NO mutation rights through the view.
+- Firm-scoped: every row carries `firm_id`; RLS predicate joins to viewer's firm.
+
+### S13.1 — View columns
+
+```sql
+CREATE VIEW v_legal_client_payments AS
+SELECT
+  l.id                                                       AS lead_id,
+  l.firm_id                                                  AS firm_id,
+  l.full_name                                                AS client_name,
+
+  -- amount paid: SUM of recorded, non-voided payments applied to the
+  -- attorney fee (excludes refunds, disbursements, cancellations).
+  COALESCE(SUM(p.amount) FILTER (
+    WHERE p.voided = false
+      AND p.payment_type IN ('attorney_fee', 'retainer')
+  ), 0)::numeric                                             AS amount_paid_attorney_fee,
+
+  -- date paid in full: latest payment_date when cumulative payments
+  -- ≥ fee_structure.attorney_fee. NULL until that threshold is reached.
+  -- See helper note S13.2 — express as a window subquery so the view
+  -- stays a single SELECT.
+  (SELECT MAX(p2.payment_date) FROM accounting_payments p2
+    WHERE p2.client_id = ac.client_id
+      AND p2.voided = false
+      AND p2.payment_type IN ('attorney_fee', 'retainer')
+      AND (SELECT SUM(p3.amount) FROM accounting_payments p3
+           WHERE p3.client_id = ac.client_id
+             AND p3.voided = false
+             AND p3.payment_type IN ('attorney_fee', 'retainer')
+             AND p3.payment_date <= p2.payment_date)
+          >= fs.attorney_fee
+  )                                                          AS paid_in_full_at,
+
+  -- filing fee paid? Y/N — direct read from the fee structure flag set
+  -- by accounting when CFF is recorded. Boolean; never derive from sums
+  -- (sums can race with CFF allocation logic).
+  COALESCE(fs.cff_paid, false)                               AS filing_fee_paid,
+  fs.cff_paid_at                                             AS filing_fee_paid_at,
+
+  -- third-party payer: presence + name when a payment was made by
+  -- someone other than the debtor. See S13.3 — requires per-payment
+  -- `is_third_party` + `payer_name` columns on accounting_payments;
+  -- until those land, the view returns the autopay-enrollment fallback
+  -- for recurring-payer cases, NULL otherwise.
+  (
+    SELECT p4.payer_name FROM accounting_payments p4
+    WHERE p4.client_id = ac.client_id
+      AND p4.voided = false
+      AND p4.is_third_party = true
+    ORDER BY p4.payment_date DESC
+    LIMIT 1
+  )                                                          AS third_party_payer_name,
+  EXISTS (
+    SELECT 1 FROM accounting_payments p5
+    WHERE p5.client_id = ac.client_id
+      AND p5.voided = false
+      AND p5.is_third_party = true
+  )                                                          AS has_third_party_payer,
+
+  -- Process stage — sourced from intake_leads' lifecycle/matter columns
+  -- (§1 additive columns). The Legal client file's "process stage" tile
+  -- consumes this without re-deriving.
+  l.lifecycle_status                                         AS lifecycle_status,
+  l.matter_progression                                       AS matter_progression,
+
+  -- Fee structure for the legal client file's Disclosure of Comp /
+  -- SOFA Q.16 surface (read-only context). Not for accounting reuse.
+  fs.attorney_fee                                            AS attorney_fee_agreed,
+  fs.court_filing_fee                                        AS court_filing_fee_agreed,
+  fs.total_fee                                               AS total_fee_agreed
+
+FROM intake_leads l
+LEFT JOIN intake_submissions s
+  ON s.lead_id = l.id
+LEFT JOIN clients c
+  ON c.intake_id = s.id
+LEFT JOIN accounting_clients ac
+  ON ac.client_id = c.id
+LEFT JOIN accounting_fee_structures fs
+  ON fs.client_id = ac.client_id
+LEFT JOIN accounting_payments p
+  ON p.client_id = ac.client_id
+    AND p.voided = false
+    AND p.payment_type IN ('attorney_fee', 'retainer')
+GROUP BY
+  l.id, l.firm_id, l.full_name, l.lifecycle_status,
+  l.matter_progression, ac.client_id,
+  fs.cff_paid, fs.cff_paid_at,
+  fs.attorney_fee, fs.court_filing_fee, fs.total_fee;
+```
+
+(Pseudocode — Canelo writes the production SQL. The fields and intent are the spec; the
+exact aggregate form may need tuning when run against real data volumes.)
+
+### S13.2 — Performance helper
+
+The `paid_in_full_at` subquery is the heaviest read. Recommend a helper function
+`fn_payment_paid_in_full_at(p_client_id uuid, p_threshold numeric) → timestamptz` that
+the view calls, OR an indexed materialized aggregate. Canelo's call. The frontend
+contract is the column shape; the implementation is internal.
+
+### S13.3 — `accounting_payments` columns to add (additive, nullable)
+
+Per readme §15: "if a third party paid, name them." Today's `accounting_payments` carries
+no per-payment third-party signal. `autopay_enrollments.is_third_party` covers recurring
+charges only — one-off payments by friends/family aren't captured.
+
+Add to `accounting_payments`:
+- `is_third_party boolean NOT NULL DEFAULT false`
+- `payer_name text NULL` (free-form; only populated when `is_third_party = true`)
+
+Both columns are additive + NULL/default-safe. Backfill: best-effort from `autopay_enrollments` for currently active third-party enrollments; manual review for historical one-off payments.
+
+### S13.4 — RLS posture
+
+The view's RLS predicate is firm-scoped (rows where `l.firm_id = current_firm_id()`).
+
+Grant SELECT to: `legal_admin`, `attorney`, `attorney_super_admin`, `firm_super_admin`,
+`law_firm_owner`, `super_admin_bankruptcy_ai`.
+
+Explicitly NOT granted: `intake`, `accounting` (accounting has direct access to source tables;
+no need to read the view), `client`, `paralegal` (paralegals read the same view per
+post-petition workflow needs but their gate is per-row matter assignment — Phase B).
+
+UPDATE / INSERT / DELETE: never granted. The view is read-only by design.
+
+### S13.5 — Form 2030 / SOFA wiring (UI work — separate slice)
+
+The Disclosure of Compensation (Form 2030) and SOFA Question 16 surfaces consume the same
+view to auto-populate fee/payment fields. That UI wiring is deferred from D1 (the spec lives
+here; the consumer ships in D1.5 / D2). UI today reads `accounting_fee_structures` directly
+inside FileCabinet — that read path stays until D1.5 cuts it over to the view.
+
+### S13.6 — Out of scope for this section
+
+- IOLTA balances, trust-account state, autopay enrollment detail.
+- Payment-method tokens, processor confirmations.
+- Anything tied to fee disputes / refunds / reversals beyond the `voided=false` filter.
+- Schedules — the view returns aggregates, not installment timelines.
+
+### Phase ordering hint
+
+Land S13.1 (the view) + S13.4 (RLS) first; S13.2 (perf helper) when load profiles call for
+it; S13.3 (`accounting_payments` columns) before D1.5 ships so the third-party fields are
+non-empty. Frontend tolerates absence via the typed interface's `unwired` / `empty` states.
+
+---
+
 ## Phase rollout
 
 This doc is updated as each change lands. Phase 1 (now) needs:

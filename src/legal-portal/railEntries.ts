@@ -45,11 +45,17 @@ export interface RailGateContext {
 
 export interface RailEntry {
   key:    string;
-  label:  string;     // tooltip text
+  label:  string;     // tooltip text + sidebar label
   icon:   LucideIcon;
-  dest:   RailDest;
+  /** Optional — only relevant when the caller wants the rail itself to
+   *  drive navigation (LegalDepartmentPortal). Surfaces like Intake's
+   *  LegalAdminPortal handle their own tab routing in `onRailSelect`
+   *  and can omit this. */
+  dest?:  RailDest;
   /** Optional role-gate. If omitted, entry is always shown. */
   gate?:  (ctx: RailGateContext) => boolean;
+  /** Optional badge (count) rendered next to the label. */
+  badge?: number | string | null;
 }
 
 // Default entry set per §5 of legal-portal-function-mapping.md. Order is

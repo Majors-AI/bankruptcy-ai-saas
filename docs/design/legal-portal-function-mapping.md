@@ -422,6 +422,39 @@ After approval of §8, the restyle proceeds sub-phase by sub-phase with a stop-a
 
 ---
 
+## 12 · PARKED — Sub-phases 3–6 (resume into D1 shared shell)
+
+Status (2026-06-20): sub-phases 3–6 of this restyle plan are **PARKED** in
+favor of the cross-department D1 build (Master Spec v2 + functional readme).
+D1 unifies all three department portals on one shared shell with a 220px
+labeled sidebar — that shell is the chrome the remaining restyle phases
+will build INTO.
+
+Why the pause: rebuilding the case workspace (sub-phase 3 Paralegal R4–R8 /
+sub-phase 4 Attorney R4–R8) against the prior 56px icon-rail chrome would
+mean redoing the same work after D1 replaces it. Parking now avoids the
+double effort.
+
+Resume order — pick up after D1 ships:
+
+| Sub-phase | What | Reads from |
+|---|---|---|
+| 3 — Paralegal workspace | R4 Sidebar (Schedules + Documents) + R5 ScheduleVerify + R6 DocCard + R8 footer | D1 shared shell |
+| 4 — Attorney workspace | R4 Sidebar (Forms to be filed) + R7 FieldMap + R8 footer + Eligibility/Issues/All Answers/Decision tab switcher | D1 shared shell |
+| 5 — Scheduling + FinMgmt + Client Portal | R9 3-step Scheduling + R10 FinMgmtGate + R11 ClientPortal | D1 shared shell |
+| 6 — Utility-rail panels | Leads / Calendar / Messages / Tasks / My Schedule / Settings / Out-of-Office / Manual Clients / Home / Documents / Time & Fees | D1 shared shell (these are now sidebar entries inside the unified chrome, not a separate rail) |
+
+Sub-phase 6 specifically gets RE-SCOPED by D1 — the "utility rail" concept
+becomes the unified 220px sidebar itself. The labeled entries replace the
+icons-only rail. So "Utility-rail panels" in sub-phase 6 is now "Sidebar
+panels" — same idea, different visual.
+
+No code from this restyle is reverted. The shipped sub-phase 1 (chrome
+skeleton) + sub-phase 2 (Queue) work continues to apply; only the rail
+visual changes to a labeled sidebar via D1's `Sidebar.tsx`.
+
+---
+
 ## 10 · Four-zeros audit — pre-flight for sub-phase 1
 
 Confirmation gate the user required before sub-phase 1 starts. Audit run 2026-06-19 against the §4 mapping table.

@@ -4,6 +4,10 @@ import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase 
 import TrusteeSubmissionWidget from "./admin/TrusteeSubmissionWidget";
 import BciExportWidget from "./admin/BciExportWidget";
 import ClientZipDownloadButton from "./admin/ClientZipDownloadButton";
+// D1 — Payment data strip (functional-readme §15). Renders next to the
+// client name on the Legal client file. Today the hook is unwired and
+// every field shows honest "Not yet connected" pills.
+import PaymentDataStrip from "./legal-portal/PaymentDataStrip";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1907,6 +1911,19 @@ export default function FileCabinet({ onClientView, leadId: _leadId }: FileCabin
                         <span className="text-slate-500">Paralegal:</span> {selectedClient.assigned_paralegal}
                       </span>
                     )}
+                  </div>
+
+                  {/* D1 — Payment data strip (functional-readme §15).
+                      Renders next to the client identity block. Today the
+                      hook is unwired (Canelo's §13 view hasn't shipped) →
+                      every field shows an honest "Not yet connected"
+                      pill. The leadId source needs a resolve step
+                      (clients.id → intake_id → intake_submissions.lead_id)
+                      when the hook gets a real implementation; for D1
+                      honest-states era it's fine to pass clientId since
+                      the unwired branch ignores the value. */}
+                  <div className="mt-3 -mx-1 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <PaymentDataStrip leadId={selectedClient?.id ?? null} />
                   </div>
                 </div>
 

@@ -1,3 +1,8 @@
+// @deprecated — replaced by Sidebar (220px labeled) per D1 unified-layout
+// directive (functional-readme §1). LegalPortalShell no longer imports
+// this. File kept temporarily for any straggler import; remove in the
+// next sweep once direct references are confirmed zero.
+//
 // UtilityRail — left-edge icon-only navigation column.
 //
 // Component-ONLY file (no named non-component exports) so that

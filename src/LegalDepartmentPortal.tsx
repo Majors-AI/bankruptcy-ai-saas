@@ -26,6 +26,9 @@ import {
 // parameter `?lead=<uuid>` into the case workspaces. Sub-phase 2's
 // Queue (below) ALSO drives the same selectedLeadId via case-row click.
 import { readLeadIdFromUrl } from "./legal-portal/caseIdentity";
+// D1 — department client scope (functional-readme §2). Legal portal
+// pulls retained-only leads.
+import { scopeFilterForDepartment } from "./lib/departmentScope";
 // Sub-phase 2 — R3 Queue. Replaces the prior LegalDashboard mount on
 // `section === "tasks"` (LegalDashboard moves to the utility-rail
 // "Home" panel in sub-phase 6).
@@ -263,8 +266,12 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
       // Slice L-5 (Prompt 66) widens the select to include status,
       // chapter_interest, retained_at for the Active Caseload bubble
       // (retained-by-chapter count). Same single read.
+      // D1 — apply Legal department client scope (functional-readme §2):
+      // Legal sees retained-only. scopeFilterForDepartment('legal')
+      // returns "status=eq.retained". UX-side filter only; real wall
+      // = RLS on intake_leads (Canelo).
       api.get<IntakeLeadRow>(
-        "intake_leads?select=id,full_name,status,chapter_interest,retained_at&order=created_at.desc&limit=500",
+        `intake_leads?select=id,full_name,status,chapter_interest,retained_at&${scopeFilterForDepartment("legal")}&order=created_at.desc&limit=500`,
       ),
       // Slice L-7 (Prompt 65) — today's hearings/filings footer.
       // Loaded broadly here; LegalDashboard filters client-side to
@@ -340,14 +347,19 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
   }, [session, sessionRole]);
 
   const onRailSelect = useCallback((entry: RailEntry) => {
-    if (entry.dest.kind === "intra") {
-      setSection(entry.dest.section as Section);
+    // dest is optional per the D1 RailEntry shape (LegalAdminPortal's
+    // tab entries omit it). Guard defensively — Legal Department's
+    // entries always supply dest, but the type system can't see that.
+    const dest = entry.dest;
+    if (!dest) return;
+    if (dest.kind === "intra") {
+      setSection(dest.section as Section);
       return;
     }
     // CROSS: route to the legal_admin view (where Leads / Messages /
     // Settings / Out-of-Office / Manual Clients currently live). The
     // App.tsx parent supplies the callback.
-    if (entry.dest.target === "legal_admin") {
+    if (dest.kind === "cross" && dest.target === "legal_admin") {
       onNavigateToAdmin?.();
     }
   }, [onNavigateToAdmin]);
@@ -382,6 +394,8 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
         userType: session.user_type,
         onSignOut: () => setSession(null),
       }}
+      departmentLabel="Legal Department"
+      brandSubtitle="Case review"
     >
       {/* Active section content — preserved from the pre-restyle shell.
           Sub-phase 1 swaps the outer chrome AND wraps the body in

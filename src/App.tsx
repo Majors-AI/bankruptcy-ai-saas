@@ -49,6 +49,10 @@ import SigningReview from './components/SigningReview';
 // When persistence lands, all wraps resolve to one backing table per
 // the original author's design.
 import { RulesAuditProvider } from './components/law-firm-settings/rulesAuditStore';
+// D1 — accounting wall gate (functional-readme §2). Legal-tier roles
+// blocked from the Accounting portal; they get fee/payment visibility
+// via the §15 payment view on the legal client file instead.
+import { canAccessAccountingPortal } from './lib/accountingWall';
 import GetHelpEntry from './components/get-help/GetHelpEntry';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
@@ -910,6 +914,40 @@ function App() {
   }
 
   if (view === 'accounting') {
+    // D1 — accounting wall (functional-readme §2). Block legal-tier,
+    // intake, and paralegal roles from the Accounting portal. Allowed
+    // tiers (Fix B per D1 directive): accounting role + firm_super_admin
+    // + super_admin_bankruptcy_ai + law_firm_owner + ops allowlist.
+    if (!canAccessAccountingPortal({
+      role: sessionRole,
+      isLawFirmOwner,
+      authedEmail,
+    })) {
+      return (
+        <ErrorBoundary>
+          <GateToastOverlay />
+          <div className="min-h-screen flex items-center justify-center bg-slate-950 p-8">
+            <div className="max-w-md text-center">
+              <h1 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Georgia', serif" }}>
+                Accounting portal — restricted
+              </h1>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Legal / Intake staff and regular attorneys don't access the Accounting
+                portal. Fee and payment visibility on the legal client file is provided
+                via a derived view (see Bankruptcy.AI functional readme §15).
+              </p>
+              <button
+                onClick={() => setView('legal_admin')}
+                className="mt-6 px-4 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg"
+              >
+                Back to Intake
+              </button>
+            </div>
+          </div>
+          <PortalToggle />
+        </ErrorBoundary>
+      );
+    }
     return (
       <ErrorBoundary>
         <GateToastOverlay />
