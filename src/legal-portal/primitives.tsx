@@ -17,8 +17,8 @@ import { c, STAGE_BY_KEY, stageTone, type StageKey, type StageTone } from "./leg
 const PILL_TONES: Record<StageTone, { bg: string; fg: string; bd: string }> = {
   ok:      { bg: c.tealSoft,  fg: c.teal,  bd: c.tealLine },
   flag:    { bg: c.amberSoft, fg: c.amber, bd: c.amberLine },
-  pending: { bg: "#EEF1F6",   fg: c.slate, bd: c.line },
-  ink:     { bg: "rgba(22,35,58,0.06)", fg: c.ink, bd: c.line },
+  pending: { bg: c.bgWarm,    fg: c.slate, bd: c.line },
+  ink:     { bg: "rgba(255,255,255,0.06)", fg: c.ink, bd: c.line },
 };
 
 export function Pill({ tone = "ink", children }: { tone?: StageTone; children: ReactNode }) {
@@ -86,7 +86,7 @@ export function InitialsAvatar({ name, size = 22 }: { name: string; size?: numbe
   return (
     <span
       className="rounded-full flex items-center justify-center font-bold"
-      style={{ width: size, height: size, background: c.ink, color: "#fff", fontSize: 10 }}
+      style={{ width: size, height: size, background: "#1e293b", color: c.ink, fontSize: 10 }}
       title={name}
     >
       {init}

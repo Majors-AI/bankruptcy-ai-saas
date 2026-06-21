@@ -66,7 +66,7 @@ function StatusBanner({ result }: { result: HookResult<LegalClientPaymentSummary
   if (result.status === "loading") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-        style={{ background: "#EEF1F6", color: "#5B6677", border: "1px solid #DDE3EC" }}>
+        style={{ background: "#0f1729", color: "#94a3b8", border: "1px solid #1e293b" }}>
         Loading…
       </span>
     );
@@ -74,7 +74,7 @@ function StatusBanner({ result }: { result: HookResult<LegalClientPaymentSummary
   if (result.status === "error") {
     return (
       <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider"
-        style={{ background: "#F8E9E9", color: "#B23B3B", border: "1px solid #B23B3B" }}>
+        style={{ background: "rgba(248,113,113,0.12)", color: "#F87171", border: "1px solid rgba(248,113,113,0.35)" }}>
         Error — {result.error ?? "unknown"}
       </span>
     );
@@ -125,7 +125,7 @@ function PaidInFullCell({ result }: { result: HookResult<LegalClientPaymentSumma
         result.data.paidInFullAt ? (
           <Value>{formatDate(result.data.paidInFullAt)}</Value>
         ) : (
-          <Value style={{ color: "#5B6677" }}>Not yet</Value>
+          <Value style={{ color: "#94a3b8" }}>Not yet</Value>
         )
       ) : (
         <PendingDash />
@@ -144,7 +144,7 @@ function FilingFeeCell({ result }: { result: HookResult<LegalClientPaymentSummar
             <CheckCircle2 className="w-3 h-3" /> Paid
           </span>
         ) : (
-          <span className="inline-flex items-center gap-1" style={{ color: "#5B6677" }}>
+          <span className="inline-flex items-center gap-1" style={{ color: "#94a3b8" }}>
             <Circle className="w-3 h-3" /> Not paid
           </span>
         )
@@ -176,7 +176,7 @@ function StageCell({ result }: { result: HookResult<LegalClientPaymentSummary> }
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
-    <span className="font-semibold uppercase tracking-wider text-[9px]" style={{ color: "#8A95A6" }}>
+    <span className="font-semibold uppercase tracking-wider text-[9px]" style={{ color: "#64748b" }}>
       {children}
     </span>
   );
@@ -184,7 +184,7 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function Value({ children, style }: { children: React.ReactNode; style?: React.CSSProperties }) {
   return (
-    <span className="text-xs font-semibold" style={{ color: "#16233A", ...style }}>
+    <span className="text-xs font-semibold" style={{ color: "#FAFAF7", ...style }}>
       {children}
     </span>
   );
@@ -196,7 +196,7 @@ function PendingDash() {
   return (
     <span
       className="font-semibold text-xs"
-      style={{ color: "#8A95A6", fontStyle: "italic" }}
+      style={{ color: "#64748b", fontStyle: "italic" }}
       title="Source not yet connected — see schema-changes-for-canelo.md §13"
     >
       —

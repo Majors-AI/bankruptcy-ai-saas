@@ -8,9 +8,10 @@ import DepartmentPortalLogin, {
 } from "./components/department-portal/DepartmentPortalLogin";
 // Sub-phase 1 of the legal portal restyle — see
 // docs/design/legal-portal-function-mapping.md §11. Wraps the existing
-// section router in the new LegalPortalShell (light theme · 3 role-tab
+// section router in the new LegalPortalShell (dark theme · 3 role-tab
 // pill · left utility rail · R2 Pipeline) without altering routing
-// behavior. Old dark-theme header + horizontal sub-nav replaced.
+// behavior. Legal Department renders as one dark surface; the `c`
+// palette in legalPortalTokens is the single source.
 import LegalPortalShell from "./legal-portal/LegalPortalShell";
 import {
   c,
@@ -396,6 +397,9 @@ export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepart
       }}
       departmentLabel="Legal Department"
       brandSubtitle="Case review"
+      // Dept-wide dark theme — `c` palette is now dark (legalPortalTokens),
+      // so the shell chrome matches the portal body as one dark surface.
+      theme="dark"
     >
       {/* Active section content — preserved from the pre-restyle shell.
           Sub-phase 1 swaps the outer chrome AND wraps the body in

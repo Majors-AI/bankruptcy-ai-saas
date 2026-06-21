@@ -50,7 +50,7 @@ export default function RoleTabs({ role, onChange, showClient = true }: RoleTabs
             style={{
               background: active ? c.paper : "transparent",
               color: active ? c.ink : c.slate,
-              boxShadow: active ? "0 1px 3px rgba(22,35,58,0.12)" : "none",
+              boxShadow: active ? "0 1px 3px rgba(0,0,0,0.4)" : "none",
             }}
           >
             <Icon size={15} style={{ color: active ? c.teal : c.slateLight }} />

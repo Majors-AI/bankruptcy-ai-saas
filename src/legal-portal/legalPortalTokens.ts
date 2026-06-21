@@ -32,25 +32,35 @@ import {
   CheckCircle2, GraduationCap, Award, Archive,
 } from "lucide-react";
 
-// ── Color palette (light theme) ─────────────────────────────────────────
+// ── Color palette (dark theme) ──────────────────────────────────────────
+//
+// Flipped from the original light palette so the Legal Department portal
+// renders as one dark surface, matching Intake / Case Review / Accounting
+// / Signing. Teal stays as the brand accent. Amber + red lifted for
+// dark-bg contrast; their accompanying *Soft/*Line variants moved to
+// translucent overlays (mix with the dark surface naturally).
+//
+// Anything that depended on a light `c.X` (PALETTES.light inside the
+// shell + Sidebar, RoleTabs, PipelineBar, Queue, primitives, the Legal
+// Department portal itself) is now dark via this one source.
 
 export const c = {
-  ink:        "#16233A",
-  inkSoft:    "#27364F",
-  paper:      "#FFFFFF",
-  bg:         "#EEF1F6",
-  bgWarm:     "#F6F8FB",
-  line:       "#DDE3EC",
+  ink:        "#FAFAF7",
+  inkSoft:    "#E5E7EB",
+  paper:      "#0d1221",
+  bg:         "#090e1a",
+  bgWarm:     "#0f1729",
+  line:       "#1e293b",
   teal:       "#0E9C7A",
-  tealSoft:   "#E4F4EF",
-  tealLine:   "#A9DECD",
-  amber:      "#C2680F",
-  amberSoft:  "#FBEFDF",
-  amberLine:  "#EAC79B",
-  red:        "#B23B3B",
-  redSoft:    "#F8E9E9",
-  slate:      "#5B6677",
-  slateLight: "#8A95A6",
+  tealSoft:   "rgba(14,156,122,0.12)",
+  tealLine:   "rgba(14,156,122,0.35)",
+  amber:      "#FBBF24",
+  amberSoft:  "rgba(251,191,36,0.12)",
+  amberLine:  "rgba(251,191,36,0.35)",
+  red:        "#F87171",
+  redSoft:    "rgba(248,113,113,0.12)",
+  slate:      "#94a3b8",
+  slateLight: "#64748b",
 } as const;
 
 export const mono = "ui-monospace, SFMono-Regular, Menlo, monospace";
