@@ -40,8 +40,9 @@ function isAccountingOperatorEmail(email: string | null | undefined): boolean {
  *    - accounting
  *    - firm_super_admin
  *    - super_admin_bankruptcy_ai
+ *    - law_firm_owner (first-class PlatformRole — readme §5)
  *  Additional non-role allowances:
- *    - law_firm_owner (derived from VITE_FIRM_ROLE='law_firm_owner' or env)
+ *    - isLawFirmOwner=true (env fallback for dev/unauthed mode)
  *    - operator email allowlist (above)
  *
  *  Blocked (explicit):
@@ -64,16 +65,20 @@ export function canAccessAccountingPortal(ctx: AccountingWallContext): boolean {
   if (isAccountingOperatorEmail(ctx.authedEmail)) return true;
 
   // Explicit allow list (Fix B per D1 directive — firm_super_admin
-  // included; super admin MAY see accounting).
+  // included; super admin MAY see accounting). Owner is included as a
+  // first-class PlatformRole (readme §5).
   if (
     ctx.role === "accounting" ||
     ctx.role === "firm_super_admin" ||
-    ctx.role === "super_admin_bankruptcy_ai"
+    ctx.role === "super_admin_bankruptcy_ai" ||
+    ctx.role === "law_firm_owner"
   ) {
     return true;
   }
 
-  // Law firm owner (env-derived flag, not a PlatformRole on its own).
+  // Env-derived isLawFirmOwner fallback — kept for dev/unauthed mode
+  // where no Supabase session is present. Real-auth callers resolve
+  // through the role check above.
   if (ctx.isLawFirmOwner === true) return true;
 
   // Everyone else (legal_admin / attorney / attorney_super_admin / intake

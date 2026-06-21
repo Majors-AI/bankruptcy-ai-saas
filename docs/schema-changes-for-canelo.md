@@ -1103,6 +1103,59 @@ Sign in as each user and confirm:
 
 ---
 
+## 15. Promote `law_firm_owner` to a first-class `platform_role` enum value
+
+**Purpose.** Developer-readme §5 lists `law_firm_owner` as a first-class PlatformRole
+above `firm_super_admin`. The frontend has been updated to match — `PlatformRole` now
+includes `'law_firm_owner'`, `homePortalFor('law_firm_owner')` returns the new
+`owner_portal` PortalKey (Portal #20), and the Owner Portal is reachable only by the
+owner (super admin is BLOCKED there per readme §5). The DB enum needs the matching
+value before any `user_profiles` row can use it.
+
+### S15.1 — ALTER TYPE
+
+```sql
+ALTER TYPE public.platform_role ADD VALUE IF NOT EXISTS 'law_firm_owner';
+```
+
+Same pattern as `'paralegal'` in §S14.3. Run BEFORE any owner `user_profiles` insert.
+Postgres requires `ADD VALUE` to be committed before the value can be used in subsequent
+DML in the same transaction — keep this on its own migration step.
+
+### S15.2 — Reconciliation note (no SQL — informational)
+
+The frontend previously derived "is law firm owner" from `VITE_FIRM_ROLE='law_firm_owner'`
+and conflated it with `isSuperAdmin` (so platform ops could test owner-side surfaces).
+After this slice:
+
+- `isLawFirmOwner` is **decoupled** from `isSuperAdmin`. Super admins are blocked from the
+  Owner Portal per readme §5.
+- Real-auth path: `user_profiles.role = 'law_firm_owner'` → `useCurrentRole()` returns
+  `'law_firm_owner'` → `isLawFirmOwner=true` and `isSuperAdmin=false` (unless they ALSO
+  hold a super-admin role, which they shouldn't).
+- Dev/unauthed path: `VITE_FIRM_ROLE='law_firm_owner'` → `envPlatformRoleFallback()`
+  returns `'law_firm_owner'` (previously returned `'firm_super_admin'`). Same effective
+  routing.
+
+No DB change beyond §S15.1; the rest is frontend.
+
+### S15.3 — Seed a TEST owner row (optional, for end-to-end verification)
+
+Same pattern as §S14 — TEST account on the `.test` TLD. Append the owner row to S14.2
+or run separately:
+
+```sql
+INSERT INTO public.user_profiles (user_id, firm_id, role, full_name)
+VALUES
+  ('<auth_user_id_owner>', '<firm_id>', 'law_firm_owner', 'Owner [TEST]');
+```
+
+Suggested email: `owner@majorslawgroup.test`. After login, the user should land at
+`view='law_firm_owner_portal'` (the Owner Portal), see the full PortalToggle including
+the Owner Portal entry, and have unrestricted cross-department access.
+
+---
+
 ## Phase rollout
 
 This doc is updated as each change lands. Phase 1 (now) needs:

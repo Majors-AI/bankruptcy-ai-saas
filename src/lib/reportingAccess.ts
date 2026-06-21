@@ -28,7 +28,12 @@ export type ReportingScope =
 export function reportingScopeFor(role: PlatformRole | null | undefined): ReportingScope {
   if (
     role === "super_admin_bankruptcy_ai" ||
-    role === "firm_super_admin"
+    role === "firm_super_admin" ||
+    // Owner sees everything super-admin sees + deeper owner-only
+    // revenue/financial metrics (readme §5 / §11). The owner-only
+    // metrics are content inside the Owner portal, not a separate
+    // scope; the 'all' tier is the right floor for them here.
+    role === "law_firm_owner"
   ) return "all";
   // Department supervisors aren't represented as a distinct PlatformRole
   // today — they're identified via staff_members.is_department_supervisor
@@ -39,11 +44,12 @@ export function reportingScopeFor(role: PlatformRole | null | undefined): Report
 }
 
 /** True when this caller can export billable-time data.
- *  Per §13: super-admin tier only. */
+ *  Per readme §11: super-admin tier (which now includes the owner). */
 export function canExportBillableTime(role: PlatformRole | null | undefined): boolean {
   return (
     role === "super_admin_bankruptcy_ai" ||
-    role === "firm_super_admin"
+    role === "firm_super_admin" ||
+    role === "law_firm_owner"
   );
 }
 

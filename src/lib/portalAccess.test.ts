@@ -27,6 +27,7 @@ import type { PlatformRole } from "./auth";
 const ROLES = [
   "super_admin_bankruptcy_ai",
   "firm_super_admin",
+  "law_firm_owner",
   "attorney",
   "legal_admin",
   "paralegal",
@@ -40,6 +41,7 @@ const ALL_PORTALS = [
   "legal_dept",
   "accounting",
   "case_review",
+  "owner_portal",
 ] as const satisfies ReadonlyArray<PortalKey>;
 
 function ctx(
@@ -54,7 +56,9 @@ function ctx(
 
 describe("canAccessPortal — wall matrix", () => {
   // Per the wall matrix in src/lib/portalAccess.ts:
-  //   super-admin tier      → every portal
+  //   law_firm_owner        → every portal INCLUDING owner_portal
+  //   super-admin tier      → every department portal (NOT owner_portal —
+  //                           readme §5 blocks super admin there)
   //   attorney              → case_review (home) + intake + legal_dept
   //   paralegal             → legal_dept only
   //   legal_admin           → intake only
@@ -62,6 +66,7 @@ describe("canAccessPortal — wall matrix", () => {
   //   accounting            → accounting only
   //   client                → nothing (handled by separate client app)
   const EXPECTED: Record<PlatformRole, ReadonlyArray<PortalKey>> = {
+    law_firm_owner:            ["intake", "legal_dept", "accounting", "case_review", "owner_portal"],
     super_admin_bankruptcy_ai: ["intake", "legal_dept", "accounting", "case_review"],
     firm_super_admin:          ["intake", "legal_dept", "accounting", "case_review"],
     attorney:                  ["intake", "legal_dept", "case_review"],
@@ -81,10 +86,20 @@ describe("canAccessPortal — wall matrix", () => {
     }
   }
 
-  test("isLawFirmOwner=true grants every portal even on a regular role", () => {
+  test("isLawFirmOwner=true grants every portal (incl. owner_portal) even on a regular role", () => {
+    // Env-derived owner fallback for dev/unauthed mode — same access as
+    // a real-auth law_firm_owner role.
     for (const portal of ALL_PORTALS) {
       expect(canAccessPortal(portal, ctx("paralegal", true))).toBe(true);
     }
+  });
+
+  test("super admins (firm_super_admin / super_admin_bankruptcy_ai) are BLOCKED from owner_portal", () => {
+    // Readme §5: super admin sees everything except the Law Firm Owner
+    // portal. This is the readme's bright line that the owner-tier
+    // check enforces before the super-admin-tier bypass.
+    expect(canAccessPortal("owner_portal", ctx("firm_super_admin"))).toBe(false);
+    expect(canAccessPortal("owner_portal", ctx("super_admin_bankruptcy_ai"))).toBe(false);
   });
 
   test("null role → blocked from every portal", () => {
@@ -98,6 +113,8 @@ describe("canAccessPortal — wall matrix", () => {
 
 describe("homePortalFor — landing portal per role", () => {
   const EXPECTED: Record<PlatformRole, PortalKey> = {
+    // Readme §5 + §17: Owner Portal is the owner's home (Portal #20).
+    law_firm_owner:            "owner_portal",
     super_admin_bankruptcy_ai: "intake",
     firm_super_admin:          "intake",
     attorney:                  "case_review",
@@ -129,11 +146,14 @@ describe("canSeeNavItem — Settings + portal-agnostic admin items", () => {
   // Firm Settings is the one the user called out explicitly; the others
   // matter for the same reason (don't accidentally surface firm-tier or
   // platform-tier surfaces to walled regular roles).
+  //
+  // NOTE: `law_firm_owner_portal` is NOT here — it maps to the
+  // `owner_portal` PortalKey (not portal-agnostic) and has its own
+  // owner-only test block further down.
   const ADMIN_VIEWS = [
     "law_firm_settings",
     "bankruptcy_ai_admin",
     "firm_super_admin_console",
-    "law_firm_owner_portal",
     "superadmin",       // Productivity
     "staff_comms",      // Comms
     "staff_dashboard",  // My Tasks (admin-tier today)
@@ -155,6 +175,9 @@ describe("canSeeNavItem — Settings + portal-agnostic admin items", () => {
   const SUPER_ADMIN_ROLES = [
     "firm_super_admin",
     "super_admin_bankruptcy_ai",
+    // Owner is ABOVE super admin (readme §5) — sees every ADMIN_VIEW
+    // that super admin sees, plus the owner-only Owner Portal.
+    "law_firm_owner",
   ] as const satisfies ReadonlyArray<PlatformRole>;
 
   describe("regular roles → ADMIN_VIEWS hidden", () => {
@@ -167,7 +190,7 @@ describe("canSeeNavItem — Settings + portal-agnostic admin items", () => {
     }
   });
 
-  describe("super-admin tier → ADMIN_VIEWS visible", () => {
+  describe("super-admin tier + owner → ADMIN_VIEWS visible", () => {
     for (const role of SUPER_ADMIN_ROLES) {
       for (const view of ADMIN_VIEWS) {
         test(`role=${role} view=${view} → visible`, () => {
@@ -175,6 +198,26 @@ describe("canSeeNavItem — Settings + portal-agnostic admin items", () => {
         });
       }
     }
+  });
+
+  describe("Owner-portal view (law_firm_owner_portal) — owner only", () => {
+    test("law_firm_owner sees it", () => {
+      expect(canSeeNavItem("law_firm_owner_portal", ctx("law_firm_owner"))).toBe(true);
+    });
+    test("firm_super_admin does NOT see it (readme §5)", () => {
+      expect(canSeeNavItem("law_firm_owner_portal", ctx("firm_super_admin"))).toBe(false);
+    });
+    test("super_admin_bankruptcy_ai does NOT see it (readme §5)", () => {
+      expect(canSeeNavItem("law_firm_owner_portal", ctx("super_admin_bankruptcy_ai"))).toBe(false);
+    });
+    test("regular roles do NOT see it", () => {
+      for (const role of ["paralegal", "legal_admin", "accounting", "attorney"] as const) {
+        expect(canSeeNavItem("law_firm_owner_portal", ctx(role))).toBe(false);
+      }
+    });
+    test("isLawFirmOwner=true env fallback grants it", () => {
+      expect(canSeeNavItem("law_firm_owner_portal", ctx("paralegal", true))).toBe(true);
+    });
   });
 
   test("isLawFirmOwner=true unlocks ADMIN_VIEWS even when role is paralegal", () => {

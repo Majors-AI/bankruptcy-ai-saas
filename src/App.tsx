@@ -214,9 +214,15 @@ function App() {
   // when nobody is signed in. Hierarchy: law_firm_owner ⊃ firm_super_admin ⊃ attorney.
   // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops.
   const firmRole = (import.meta.env.VITE_FIRM_ROLE as string | undefined);
+  // Owner tier — readme §5 promotes law_firm_owner to a first-class
+  // PlatformRole. Resolve FROM the enum value first; env-var fallback
+  // is kept for unauthed/dev mode. Critically, isLawFirmOwner is NO
+  // LONGER conflated with isSuperAdmin — readme §5 explicitly blocks
+  // super admins from the Owner portal, so the booleans must be
+  // independent.
   const isLawFirmOwner   =
-    firmRole === 'law_firm_owner'
-    || isSuperAdmin;
+    sessionRole === 'law_firm_owner'
+    || firmRole === 'law_firm_owner';
   const isFirmSuperAdmin =
     sessionRole === 'firm_super_admin'
     || firmRole === 'super_admin'
@@ -233,6 +239,7 @@ function App() {
   // not automatically a lawyer per the firm-role spec.
   const isLawyerViewer =
     sessionRole === 'attorney'
+    || sessionRole === 'law_firm_owner'
     || firmRole === 'attorney'
     || firmRole === 'law_firm_owner'
     || isSuperAdmin;

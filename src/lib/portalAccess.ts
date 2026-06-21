@@ -25,7 +25,16 @@
 import type { PlatformRole } from "./auth";
 import { canAccessAccountingPortal } from "./accountingWall";
 
-export type PortalKey = "intake" | "legal_dept" | "accounting" | "case_review";
+export type PortalKey =
+  | "intake"
+  | "legal_dept"
+  | "accounting"
+  | "case_review"
+  /** Portal #20 (readme §17). Owner-only — inherits firm Settings plus
+   *  owner-only accounting/revenue reporting + "grant features to Super
+   *  Admin" toggles. Super admin is BLOCKED here (readme §5: "Super
+   *  Admin... access to everything except the Law Firm Owner portal"). */
+  | "owner_portal";
 
 export interface PortalAccessContext {
   role: PlatformRole | null | undefined;
@@ -46,6 +55,10 @@ export function homePortalFor(
   role: PlatformRole | null | undefined,
 ): PortalKey {
   switch (role) {
+    case "law_firm_owner":
+      // Readme §5 / §17: Owner Portal is the owner's home. Inherits
+      // firm Settings plus owner-only revenue + financial reporting.
+      return "owner_portal";
     case "attorney":
       return "case_review";
     case "paralegal":
@@ -59,7 +72,7 @@ export function homePortalFor(
     case "super_admin_bankruptcy_ai":
       // Super-admin tier — pick Intake as the default landing surface
       // (matches today's behaviour). They can navigate anywhere via the
-      // PortalToggle.
+      // PortalToggle EXCEPT the Owner portal (which is owner-only).
       return "intake";
     case "client":
       // Clients aren't routed through staff portals — the client app at
@@ -75,10 +88,11 @@ export function homePortalFor(
  *  routing and the route-gate redirect. */
 export function viewForPortal(portal: PortalKey): string {
   switch (portal) {
-    case "intake":      return "legal_admin";
-    case "legal_dept":  return "legal_dept_portal";
-    case "accounting":  return "accounting";
-    case "case_review": return "attorney";
+    case "intake":       return "legal_admin";
+    case "legal_dept":   return "legal_dept_portal";
+    case "accounting":   return "accounting";
+    case "case_review":  return "attorney";
+    case "owner_portal": return "law_firm_owner_portal";
   }
 }
 
@@ -93,10 +107,16 @@ export function canAccessPortal(
   portal: PortalKey,
   ctx: PortalAccessContext,
 ): boolean {
-  // Super-admin tier sees everything.
+  // Owner-only portal — short-circuit BEFORE the super-admin bypass so
+  // super admins are blocked here (readme §5 "Super Admin... access to
+  // everything except the Law Firm Owner portal").
+  if (portal === "owner_portal") return isOwnerTier(ctx);
+
+  // Super-admin tier sees every department portal (but NOT owner_portal,
+  // which short-circuited above).
   if (isSuperAdminTier(ctx)) return true;
 
-  // Per-portal walls.
+  // Per-portal walls for everyone else.
   switch (portal) {
     case "accounting":
       // Compose with the existing accounting wall — it owns the
@@ -166,6 +186,10 @@ export function viewToPortal(view: string): PortalKey | null {
     case "attorney":
       return "case_review";
 
+    // Owner Portal (Portal #20).
+    case "law_firm_owner_portal":
+      return "owner_portal";
+
     // Portal-agnostic surfaces: firm Settings, platform admin, comms,
     // training, productivity, trustee, client-side, registration. These
     // are NOT auto-granted to regular staff — see canSeeNavItem.
@@ -194,8 +218,20 @@ export function canSeeNavItem(
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 
+/** Owner tier — first-class role for the Law Firm Owner. Used to gate
+ *  the owner_portal (Portal #20) explicitly so super admins are blocked
+ *  even though they otherwise see everything (readme §5). */
+function isOwnerTier(ctx: PortalAccessContext): boolean {
+  return ctx.role === "law_firm_owner"
+      || ctx.isLawFirmOwner === true;
+}
+
+/** Super-admin tier — bypasses department walls AND grants portal-agnostic
+ *  admin surfaces (firm Settings, platform admin, Productivity). Owner is
+ *  ABOVE super admin per readme §5, so owner is included here for the
+ *  bypass (the owner_portal-only check sits separately in canAccessPortal). */
 function isSuperAdminTier(ctx: PortalAccessContext): boolean {
   return ctx.role === "super_admin_bankruptcy_ai"
       || ctx.role === "firm_super_admin"
-      || ctx.isLawFirmOwner === true;
+      || isOwnerTier(ctx);
 }

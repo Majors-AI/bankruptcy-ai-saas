@@ -12,6 +12,7 @@
 export type PlatformRole =
   | 'super_admin_bankruptcy_ai'
   | 'firm_super_admin'
+  | 'law_firm_owner'
   | 'attorney'
   | 'legal_admin'
   | 'paralegal'
@@ -28,6 +29,7 @@ export function isFirmStaff(role: PlatformRole | null | undefined): boolean {
   if (!role) return false;
   return (
     role === 'firm_super_admin' ||
+    role === 'law_firm_owner' ||
     role === 'attorney' ||
     role === 'legal_admin' ||
     role === 'paralegal' ||
