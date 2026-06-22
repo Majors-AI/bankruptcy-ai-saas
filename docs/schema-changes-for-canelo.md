@@ -1156,6 +1156,226 @@ the Owner Portal entry, and have unrestricted cross-department access.
 
 ---
 
+## 16. `create_public_lead_and_submission` RPC — atomic intake entry (extends §9)
+
+**Purpose.** The frontend now seeds the matter spine for every public intake
+submission: `intake_leads` row first, `intake_submissions` row second with
+`lead_id` set (helper: `src/lib/createLead.ts → createLeadAndSubmission()`).
+Today this is two sequential client-side writes. Once the §9 anon-INSERT
+lockdown lands, both writes need to happen in one SECURITY DEFINER RPC so they
+are atomic and the firm_id is resolved server-side (never from caller input).
+
+### S16.1 — RPC signature
+
+```sql
+create or replace function public.create_public_lead_and_submission(
+  p_firm_slug          text,
+  p_channel            text,        -- one of: call_now | live_chat | sms |
+                                    -- scheduled | self_serve | agent_assisted
+  p_lead_fields        jsonb,       -- { full_name, email, phone, notes? }
+  p_submission_payload jsonb        -- whatever intake_submissions accepts;
+                                    -- the RPC ignores any caller-supplied
+                                    -- lead_id / firm_id / submitted_at
+) returns table(lead_id uuid, submission_id uuid)
+language plpgsql
+security definer
+set search_path = public, pg_temp
+as $$
+declare
+  v_firm_id uuid;
+  v_lead_id uuid;
+  v_submission_id uuid;
+begin
+  -- Resolve firm_id server-side from the slug. Never trust caller input.
+  select id into v_firm_id from public.firms where slug = p_firm_slug;
+  if v_firm_id is null then
+    raise exception 'unknown_firm';
+  end if;
+
+  -- Validate channel.
+  if p_channel not in ('call_now','live_chat','sms','scheduled','self_serve','agent_assisted') then
+    raise exception 'invalid_channel';
+  end if;
+
+  -- Insert the lead (matter spine anchor).
+  insert into public.intake_leads (
+    firm_id, full_name, email, phone, source, status, channel,
+    lifecycle_status, follow_up_queue, first_contact_at, notes
+  )
+  values (
+    v_firm_id,
+    p_lead_fields->>'full_name',
+    p_lead_fields->>'email',
+    p_lead_fields->>'phone',
+    p_channel,
+    case when p_channel = 'call_now' then 'contacted' else 'new' end,
+    p_channel,
+    case when p_channel = 'call_now' then 'contacted' else 'new' end,
+    case when p_channel = 'call_now' then 'priority' else 'normal' end,
+    now(),
+    p_lead_fields->>'notes'
+  )
+  returning id into v_lead_id;
+
+  -- Insert the submission with the spine link forced. Caller's payload is
+  -- the body; the RPC overrides lead_id / firm_id / submitted_at.
+  insert into public.intake_submissions
+  select
+    v_lead_id        as lead_id,
+    v_firm_id        as firm_id,
+    now()            as submitted_at,
+    -- ... remaining columns destructured from p_submission_payload
+    *
+  from jsonb_populate_record(null::public.intake_submissions, p_submission_payload)
+  returning id into v_submission_id;
+
+  return query select v_lead_id, v_submission_id;
+end;
+$$;
+```
+
+(The `jsonb_populate_record` shape is a sketch — Canelo's preferred pattern is
+fine; the contract is: caller cannot supply `lead_id`, `firm_id`, or
+`submitted_at` — those are RPC-controlled.)
+
+### S16.2 — captcha + rate-limit + INSERT-only-via-RPC
+
+Same posture as §9. Anon role keeps `EXECUTE` on this RPC only, no direct
+`INSERT` on `intake_leads` or `intake_submissions`. Captcha token verified
+server-side before the inserts run (Hcaptcha or Turnstile — same pattern §9
+specs).
+
+### S16.3 — frontend swap point
+
+When the RPC ships, `defaultInsertSubmission` and the inner `createLead` insert
+in `src/lib/createLead.ts` collapse into one `supabase.rpc('create_public_lead_and_submission', { ... })`
+call. The exported `createLeadAndSubmission()` signature and the two call sites
+(`ClientIntakeForm.tsx`, `BankruptcyIntake.jsx`) do NOT change — the helper's
+contract isolates the swap.
+
+### S16.4 — Out of scope here
+
+- Editing existing leads/submissions via RPC (this RPC is INSERT-only).
+- Conflict handling for duplicate-lead detection (separate slice — likely a
+  fuzzy-match dedupe pass at insert time).
+- Per-firm channel allow-lists (separate firm-feature toggle).
+
+### S16.5 — Partial-failure tagging convention
+
+When the frontend's two-step path (`createLead` + `insertSubmission`) is in
+flight today, the second insert can fail after the first succeeded — leaving a
+lead row with no paired submission. The frontend now tags those leads so they
+DO NOT look identical to a fresh inquiry in the staff Intake queue:
+
+- `intake_leads.source` is set to the literal string
+  `'intake_submission_failed'` (exported from `src/lib/createLead.ts` as
+  `INCOMPLETE_SUBMISSION_SOURCE`).
+- `intake_leads.notes` is set to `[INCOMPLETE SUBMISSION <ISO timestamp>]
+  <reason>` so a staffer opening the lead detail can see what happened.
+
+The lead's `status` stays at whatever `createLead` set (typically `'new'`) so
+the row remains visible in the active intake queue — the goal is *visibility
+with a marker*, not silent burial.
+
+**RPC implication.** When §16's atomic RPC ships, partial failures inside the
+RPC roll back via the transaction — so this tagging convention becomes a
+no-op for new traffic. Any backfill that turns up *historical* partial
+failures (rare; pre-RPC era) should set the same marker so the staff queue
+displays them consistently. Canelo: please surface `source =
+'intake_submission_failed'` in whatever queue/board projection you build so
+the marker is visible to staff at a glance.
+
+**Recovery path.** Today there is no UI to retry a failed-submission lead —
+staff contact the client and re-run the intake by hand. A future slice may
+add a "Retry intake" button on the lead detail that calls the helper again
+with the lead pre-set. Out of scope here.
+
+---
+
+## 17. Orphan-submission backfill — DATA TASK, do NOT auto-touch
+
+**Purpose.** Existing `intake_submissions` rows have `lead_id = NULL` because
+the prior code paths never set it. After §16's frontend helper ships, every
+new submission has `lead_id` populated. The historical orphans need to be
+backfilled in a one-time data pass that Dom + Canelo design together. **Agents
+do not run this SQL.** This section documents the strategy so the work isn't
+lost.
+
+### S17.1 — Reconnaissance query (run FIRST, before any decisions)
+
+```sql
+-- How many orphans, oldest to newest:
+SELECT COUNT(*) AS orphans
+FROM   public.intake_submissions
+WHERE  lead_id IS NULL;
+
+-- Sample for visual review:
+SELECT id, submitted_at, email, first_name, last_name, firm_id
+FROM   public.intake_submissions
+WHERE  lead_id IS NULL
+ORDER  BY submitted_at
+LIMIT  100;
+```
+
+Don't write any backfill until Dom has reviewed the orphan list.
+
+### S17.2 — Strategy options for review
+
+**(a) Match-by-identity.** Join orphans to existing `intake_leads` rows by:
+- `lower(trim(email))` exact match, AND
+- `lower(trim(last_name))` exact match, AND
+- `submitted_at` within ±48h of an `intake_leads.created_at` value, AND
+- same `firm_id`.
+
+Lowest false-positive risk if the data is clean. Multiple-match conflicts
+escalate to Dom for manual disambiguation.
+
+**(b) Synthetic lead per orphan.** For every orphan with no confident match,
+create a fresh `intake_leads` row stamped:
+- `source = 'backfilled_orphan'`
+- `channel = 'self_serve'` (the most common public-form origin)
+- `lifecycle_status = 'qualified'` (the submission itself implies intake completed)
+- `firm_id` copied from the submission
+- `full_name` / `email` / `phone` / `first_contact_at` copied from the submission
+
+Then `UPDATE intake_submissions SET lead_id = <new_lead_id> WHERE id = <orphan_id>`.
+
+Highest coverage, lowest accuracy on identity (might split a real client across
+multiple rows).
+
+**(c) Hybrid (recommended).** Run (a) first; orphans with no confident match
+fall through to (b). Most likely to give a clean spine without orphan
+explosion.
+
+### S17.3 — Verification queries after backfill
+
+```sql
+-- Should be 0 after backfill:
+SELECT COUNT(*) FROM public.intake_submissions WHERE lead_id IS NULL;
+
+-- Spot-check: every backfilled lead has at least one submission.
+SELECT l.id, l.source, COUNT(s.id) AS subs
+FROM   public.intake_leads l
+LEFT JOIN public.intake_submissions s ON s.lead_id = l.id
+WHERE  l.source = 'backfilled_orphan'
+GROUP  BY l.id
+HAVING COUNT(s.id) = 0;
+-- Expect: 0 rows.
+```
+
+### S17.4 — Hard rules for this task
+
+- **No agent SQL.** Dom + Canelo run the backfill manually after review.
+- **No silent matches.** Every (a)-style match that's ambiguous escalates to
+  Dom before being committed.
+- **Reversible.** Backfill should be wrapped in a transaction or staged in a
+  scratch table first; if (b)'s synthetic leads turn out wrong, they need to
+  be removable without losing the original submissions.
+- **One-time.** This is a historical cleanup. Going forward, §16's RPC
+  guarantees no new orphans.
+
+---
+
 ## Phase rollout
 
 This doc is updated as each change lands. Phase 1 (now) needs:

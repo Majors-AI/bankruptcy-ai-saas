@@ -160,3 +160,155 @@ export async function createLead(args: CreateLeadArgs): Promise<CreateLeadResult
 
   return { ok: true, leadId, reason: null };
 }
+
+// ─── createLeadAndSubmission ────────────────────────────────────────────
+//
+// Canonical intake-submission path. Always creates the `intake_leads` row
+// (the matter spine) FIRST, then inserts an `intake_submissions` row with
+// `lead_id` set — fixing the orphan-submission problem documented in the
+// §10 client-flow verification.
+//
+// Two callers today: src/ClientIntakeForm.tsx (channel='self_serve') and
+// src/BankruptcyIntake.jsx (channel='agent_assisted'). The locked
+// `bankruptcy-information-and-document-questionnaire(1).jsx` is NOT a
+// caller — it's a client-portal questionnaire, not an intake-creation
+// surface.
+//
+// Future: when docs/schema-changes-for-canelo.md §16 ships, this helper
+// flips to a single RPC (`create_public_lead_and_submission`) that does
+// both inserts atomically server-side. Callers don't change.
+
+/** Default submission inserter — production path, uses the real
+ *  supabase client. Tests inject a mock via `deps.insertSubmission`. */
+async function defaultInsertSubmission(
+  payload: Record<string, unknown>,
+): Promise<{ submissionId: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("intake_submissions")
+    .insert(payload)
+    .select("id")
+    .single();
+  if (error || !data?.id) {
+    return {
+      submissionId: null,
+      error: error?.message ?? "submission_insert_failed",
+    };
+  }
+  return { submissionId: data.id as string, error: null };
+}
+
+export interface CreateLeadAndSubmissionArgs extends CreateLeadArgs {
+  /** Submission payload — the existing column shape callers previously
+   *  POSTed to `intake_submissions`. When omitted, behaves exactly like
+   *  `createLead()` (lead-only; no submission inserted). The helper
+   *  always overrides `lead_id` and `submitted_at` in the final payload
+   *  so callers don't have to remember to set them. */
+  submission?: Record<string, unknown>;
+}
+
+export interface CreateLeadAndSubmissionResult {
+  ok: boolean;
+  leadId: string | null;
+  submissionId: string | null;
+  /** When `ok=true` but `submissionId=null`, the lead was recorded but
+   *  the submission insert failed — caller must surface this honestly
+   *  (no fabricated success). When `ok=false`, neither row exists. */
+  reason: string | null;
+}
+
+/** Dependency-injection seam for tests. Production callers omit `deps`. */
+export interface CreateLeadAndSubmissionDeps {
+  createLead?: (args: CreateLeadArgs) => Promise<CreateLeadResult>;
+  insertSubmission?: (
+    payload: Record<string, unknown>,
+  ) => Promise<{ submissionId: string | null; error: string | null }>;
+  /** Tag a lead as "submission insert failed" after a partial failure
+   *  (lead was created, submission insert errored). Defaults to a real
+   *  supabase patch; tests inject a mock. */
+  tagFailedLead?: (
+    leadId: string,
+    reason: string,
+  ) => Promise<void>;
+}
+
+/** Legacy `intake_leads.source` value used to mark leads whose paired
+ *  submission insert failed. Surfaces in the staff Intake queue so a
+ *  half-recorded lead doesn't look identical to a fresh inquiry. See
+ *  docs/schema-changes-for-canelo.md §16 (S16.5). */
+export const INCOMPLETE_SUBMISSION_SOURCE = "intake_submission_failed";
+
+/** Default lead-tagging path — production, real supabase. Failure-mode:
+ *  if the patch itself fails, swallow the error (the lead row is still
+ *  better than nothing, and we don't want to lose the original error by
+ *  throwing a secondary one). Tests inject a mock to assert behavior. */
+async function defaultTagFailedLead(leadId: string, reason: string): Promise<void> {
+  const marker = `[INCOMPLETE SUBMISSION ${new Date().toISOString()}] ${reason}`;
+  await supabase
+    .from("intake_leads")
+    .update({
+      source: INCOMPLETE_SUBMISSION_SOURCE,
+      notes: marker,
+    })
+    .eq("id", leadId)
+    // Tolerate patch failure — don't mask the real submission-failure reason.
+    .then(() => null, () => null);
+}
+
+export async function createLeadAndSubmission(
+  args: CreateLeadAndSubmissionArgs,
+  deps: CreateLeadAndSubmissionDeps = {},
+): Promise<CreateLeadAndSubmissionResult> {
+  const createLeadFn = deps.createLead ?? createLead;
+  const insertFn = deps.insertSubmission ?? defaultInsertSubmission;
+  const tagFn = deps.tagFailedLead ?? defaultTagFailedLead;
+
+  // 1. Create the lead first — the matter spine anchor.
+  const lead = await createLeadFn(args);
+  if (!lead.ok || !lead.leadId) {
+    return {
+      ok: false,
+      leadId: null,
+      submissionId: null,
+      reason: lead.reason ?? "lead_failed",
+    };
+  }
+
+  // 2. Lead-only mode — no submission payload supplied.
+  if (!args.submission) {
+    return { ok: true, leadId: lead.leadId, submissionId: null, reason: null };
+  }
+
+  // 3. Submission insert with the spine link set. lead_id + submitted_at
+  // are forced here so callers cannot accidentally write an orphan.
+  const submissionPayload: Record<string, unknown> = {
+    ...args.submission,
+    lead_id: lead.leadId,
+    submitted_at: new Date().toISOString(),
+  };
+  const result = await insertFn(submissionPayload);
+
+  if (!result.submissionId) {
+    // Honest partial-failure state — lead exists, submission didn't.
+    // Caller surfaces this to the UI; we do NOT roll back the lead.
+    //
+    // Tag the lead so staff in the Intake queue can distinguish a
+    // half-recorded intake from a normal fresh lead. Failure of the
+    // tag patch itself is swallowed inside `tagFn` — don't mask the
+    // real submission-failure reason.
+    const reason = result.error ?? "submission_insert_failed";
+    await tagFn(lead.leadId, reason);
+    return {
+      ok: true,
+      leadId: lead.leadId,
+      submissionId: null,
+      reason,
+    };
+  }
+
+  return {
+    ok: true,
+    leadId: lead.leadId,
+    submissionId: result.submissionId,
+    reason: null,
+  };
+}

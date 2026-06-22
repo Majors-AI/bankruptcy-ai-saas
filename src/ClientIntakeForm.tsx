@@ -5,9 +5,12 @@ import {
   Info, Heart, Building, Car, PiggyBank, ReceiptText, Landmark,
   DollarSign, Plus, Trash2, Shield, Clock, Gavel, MapPin,
 } from "lucide-react";
+import { createLeadAndSubmission } from "./lib/createLead";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// Note: prior raw `fetch()` to /rest/v1/intake_submissions used
+// VITE_SUPABASE_URL + VITE_SUPABASE_ANON_KEY consts here. Both were
+// removed when the submit path switched to the canonical helper (the
+// helper consumes the singleton supabase client from ./lib/supabase).
 
 const US_STATES = [
   "Alabama","Alaska","Arizona","Arkansas","California","Colorado","Connecticut",
@@ -2218,18 +2221,32 @@ export default function ClientIntakeForm({ onBack }: Props) {
         submitted_at: new Date().toISOString(),
       };
 
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/intake_submissions`, {
-        method: "POST",
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          "Content-Type": "application/json",
-          "Prefer": "return=minimal",
-        },
-        body: JSON.stringify(payload),
+      // Canonical intake path (src/lib/createLead.ts) — always seeds the
+      // matter spine: creates an `intake_leads` row FIRST, then inserts
+      // this submission with `lead_id` set. Replaces the prior orphan-
+      // producing raw POST to /rest/v1/intake_submissions.
+      const result = await createLeadAndSubmission({
+        channel:  "self_serve",
+        fullName: `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim() || null,
+        email:    data.email || null,
+        phone:    data.phone || null,
+        submission: payload,
       });
 
-      if (!res.ok) throw new Error(await res.text());
+      if (!result.ok) {
+        // Lead creation failed — nothing was recorded.
+        setError("There was a problem submitting your form. Please try again or contact our office directly.");
+        setSubmitting(false);
+        return;
+      }
+      if (result.submissionId === null) {
+        // Honest partial-failure state — contact info was saved as a lead
+        // but the full submission didn't go through. Tell the client; do
+        // NOT show the success screen.
+        setError("We've got your contact info, but the full intake didn't save. Please retry, or our office will follow up.");
+        setSubmitting(false);
+        return;
+      }
       setSubmitted(true);
     } catch {
       setError("There was a problem submitting your form. Please try again or contact our office directly.");
