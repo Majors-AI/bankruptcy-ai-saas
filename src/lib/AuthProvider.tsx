@@ -228,7 +228,11 @@ export function envPlatformRoleFallback(): PlatformRole | null {
   const platform = import.meta.env.VITE_PLATFORM_ROLE as string | undefined;
   if (platform === "super_admin_bankruptcy_ai") return "super_admin_bankruptcy_ai";
   const firm = import.meta.env.VITE_FIRM_ROLE as string | undefined;
-  if (firm === "law_firm_owner")  return "firm_super_admin";
+  // Owner is now a first-class PlatformRole — no longer collapsed to
+  // firm_super_admin. Readme §5: owner is ABOVE super admin and sees
+  // owner-only revenue/financial reporting + the Owner Portal that
+  // super admin doesn't see.
+  if (firm === "law_firm_owner")  return "law_firm_owner";
   if (firm === "super_admin")     return "firm_super_admin";
   if (firm === "attorney")        return "attorney";
   return null;

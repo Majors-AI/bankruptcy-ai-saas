@@ -70,6 +70,19 @@ export interface AttorneyIntakeReviewRow {
   // unlocked.
   reviewed_ruleset_version?: string | null;
   case_status?: string | null;
+  /** Free-form notes the attorney recorded when accepting / declining.
+   *  Surfaced read-only on the simplified attorney portal's Completed
+   *  Reviews tab. Optional — pre-decision rows leave it null; legacy
+   *  rows that pre-date the column come back undefined from PostgREST. */
+  decision_notes?: string | null;
+  /** Attorney's chapter decision (post-accept). Optional — null on
+   *  declined / pending rows. Used by Completed Reviews to display the
+   *  ch.7 vs ch.13 chip when an acceptance row is missing. */
+  chapter?: number | null;
+  /** Case type tag (ch7_regular / ch7_bifurcated / ch13_flat_fee, etc.).
+   *  Mirrors AcceptanceRow.case_type — included here so a review row
+   *  without a corresponding acceptance still has a fee-summary anchor. */
+  case_type?: string | null;
 }
 
 export interface SigningReviewRow {

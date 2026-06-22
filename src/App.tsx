@@ -36,6 +36,31 @@ import { validateToken } from './lib/clientAccess';
 import { useFirmFlags } from './lib/useFirmFlags';
 import type { NavFlags } from './lib/useFirmFlags';
 import SigningReview from './components/SigningReview';
+// RulesAuditProvider — required by SigningReview's LongFormDeductionPanel
+// + Ch13Eligibility (both call useRulesAudit). Wraps the two top-level
+// signing-review views below so the lawyer path doesn't throw
+// "useRulesAudit must be used inside RulesAuditProvider". Latent
+// pre-existing bug fix — see commit log.
+//
+// Scope choice (per-mount, NOT root): the store today is in-memory only
+// and the codebase intentionally keeps parallel scaffolds for the
+// firm-tier and platform-tier audit logs (see src/admin/ReferenceRulesTab.tsx:44-48).
+// LawFirmSettings.tsx:147 mounts its own; we match that pattern here.
+// When persistence lands, all wraps resolve to one backing table per
+// the original author's design.
+import { RulesAuditProvider } from './components/law-firm-settings/rulesAuditStore';
+// D1 — accounting wall gate (functional-readme §2). Legal-tier roles
+// blocked from the Accounting portal; they get fee/payment visibility
+// via the §15 payment view on the legal client file instead.
+import { canAccessAccountingPortal } from './lib/accountingWall';
+import {
+  canAccessPortal,
+  canSeeNavItem,
+  homePortalFor,
+  viewForPortal,
+  viewToPortal,
+} from './lib/portalAccess';
+import GetHelpEntry from './components/get-help/GetHelpEntry';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | null}> {
   constructor(props: {children: ReactNode}) {
@@ -57,7 +82,7 @@ class ErrorBoundary extends Component<{children: ReactNode}, {error: Error | nul
   }
 }
 
-type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_review_ch13' | 'signing_appt_portal' | 'signing_appt_portal_ch13' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal' | 'law_firm_settings';
+type View = 'dashboard' | 'questionnaire' | 'attorney' | 'attorney_sign' | 'signing_review' | 'signing_review_ch13' | 'signing_appt_portal' | 'signing_appt_portal_ch13' | 'efiling_portal' | 'ecf_notices' | 'file_a_case' | 'creditor_verification' | 'ai_bots' | 'calendar' | 'paralegal' | 'accounting' | 'intake' | 'intake_questionnaire' | 'messages' | 'file_cabinet' | 'staff_dashboard' | 'superadmin' | 'staff_comms' | 'client_view' | 'trustee' | 'training' | 'legal_admin' | 'client_register' | 'attorney_register' | 'legacy_import' | 'legal_dept_portal' | 'bankruptcy_ai_admin' | 'firm_super_admin_console' | 'law_firm_owner_portal' | 'law_firm_settings' | 'get_help';
 
 // Maps each view to its firm_features boolean column.
 // Views absent from this map are ungated (accessible to all).
@@ -146,7 +171,17 @@ function MoonIcon() {
 }
 
 function App() {
-  const [view, setView] = useState<View>('legal_admin');
+  // Default view is set lazily once auth resolves (see effect below).
+  // A brief loading shim renders until then — per the spec, "correct
+  // landing beats avoiding a flash." VITE_DEFAULT_VIEW is an immediate
+  // override that bypasses the loading wait.
+  const initialOverride = (import.meta.env.VITE_DEFAULT_VIEW as string | undefined);
+  const overrideView: View | null =
+    initialOverride === 'attorney' || initialOverride === 'legal_admin'
+      ? (initialOverride as View)
+      : null;
+  const [view, setView] = useState<View>(overrideView ?? 'legal_admin');
+  const [viewInitialized, setViewInitialized] = useState<boolean>(overrideView !== null);
   // Lead id to preselect when AttorneyIntakeDashboard opens — set by
   // LegalAdminPortal's queue click for leads in 'sent_for_attorney_review'.
   const [preselectLeadId, setPreselectLeadId] = useState<string | null>(null);
@@ -168,7 +203,7 @@ function App() {
   // see OPERATOR_EMAILS comment above. Still UI-only; NOT a security
   // boundary. The user email is now read from the AuthProvider's ambient
   // session instead of an ad-hoc getUser() round-trip on mount.
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const authedEmail = user?.email ?? null;
   const isSuperAdmin =
     sessionRole === 'super_admin_bankruptcy_ai'
@@ -179,9 +214,15 @@ function App() {
   // when nobody is signed in. Hierarchy: law_firm_owner ⊃ firm_super_admin ⊃ attorney.
   // VITE_PLATFORM_ROLE='super_admin_bankruptcy_ai' also unlocks everything for ops.
   const firmRole = (import.meta.env.VITE_FIRM_ROLE as string | undefined);
+  // Owner tier — readme §5 promotes law_firm_owner to a first-class
+  // PlatformRole. Resolve FROM the enum value first; env-var fallback
+  // is kept for unauthed/dev mode. Critically, isLawFirmOwner is NO
+  // LONGER conflated with isSuperAdmin — readme §5 explicitly blocks
+  // super admins from the Owner portal, so the booleans must be
+  // independent.
   const isLawFirmOwner   =
-    firmRole === 'law_firm_owner'
-    || isSuperAdmin;
+    sessionRole === 'law_firm_owner'
+    || firmRole === 'law_firm_owner';
   const isFirmSuperAdmin =
     sessionRole === 'firm_super_admin'
     || firmRole === 'super_admin'
@@ -198,6 +239,7 @@ function App() {
   // not automatically a lawyer per the firm-role spec.
   const isLawyerViewer =
     sessionRole === 'attorney'
+    || sessionRole === 'law_firm_owner'
     || firmRole === 'attorney'
     || firmRole === 'law_firm_owner'
     || isSuperAdmin;
@@ -208,20 +250,70 @@ function App() {
   // gate toast on the initial silent redirect (app start → gated view → fallback).
   const flagsLoadedRef = useRef(false);
 
+  // Admin tiers that should bypass per-firm feature-flag gates. The
+  // platform super-admin (`super_admin_bankruptcy_ai`) has always been
+  // exempt; here we extend that to firm-tier admins (`firm_super_admin`,
+  // `law_firm_owner`) — they own the firm's portals and shouldn't be
+  // gated out of their own surfaces. Without this, a firm super-admin
+  // trying to toggle to a view whose feature flag isn't set on
+  // firm_features gets redirected to FALLBACK_VIEW silently OR sees the
+  // "feature not available" toast on a manual click. Both are
+  // user-hostile for someone with effective admin rights.
+  const canBypassFeatureGates = isSuperAdmin || isFirmSuperAdmin || isLawFirmOwner;
+
+  // ── Landing routing — runs once auth resolves ─────────────────────────
+  // Routes each role to ITS home portal per the single-department wall
+  // (src/lib/portalAccess.ts → homePortalFor):
+  //   attorney         → case_review (view='attorney')
+  //   paralegal        → legal_dept  (view='legal_dept_portal')
+  //   accounting       → accounting  (view='accounting')
+  //   legal_admin      → intake      (view='legal_admin')
+  //   firm_super_admin / super_admin_bankruptcy_ai → intake by default
+  //
+  // Runs exactly once — PortalToggle clicks after this point are never
+  // re-overridden. The loading shim below renders until this effect fires
+  // (or until VITE_DEFAULT_VIEW provides an immediate-paint override).
+  useEffect(() => {
+    if (viewInitialized) return;
+    if (authLoading) return;
+    const home = homePortalFor(sessionRole);
+    setView(viewForPortal(home) as View);
+    setViewInitialized(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authLoading, sessionRole, viewInitialized]);
+
   // Gate enforcement: when flags arrive or view changes, redirect away from any
   // view whose flag is OFF. First redirect (on flags load) is silent; subsequent
   // explicit navigation attempts surface the toast.
   useEffect(() => {
     if (!flags) return;
     const flagKey = VIEW_FLAGS[view];
-    if (!isSuperAdmin && flagKey && !flags[flagKey]) {
+    if (!canBypassFeatureGates && flagKey && !flags[flagKey]) {
       setView(FALLBACK_VIEW);
       if (flagsLoadedRef.current) {
         setGateToast('This feature is not yet available for your firm.');
       }
     }
     flagsLoadedRef.current = true;
-  }, [view, flags, isSuperAdmin]);
+  }, [view, flags, canBypassFeatureGates]);
+
+  // Single-department wall (functional-readme §2 / src/lib/portalAccess).
+  // When the current view's portal isn't accessible to the caller, route
+  // them back to their home portal and surface a "restricted" toast.
+  // Accounting keeps its bespoke message screen below (route branch); this
+  // sibling effect catches every OTHER cross-department attempt for the
+  // walled regular roles (paralegal / legal_admin / accounting). Super-
+  // admin tier bypasses inside canAccessPortal.
+  useEffect(() => {
+    const portal = viewToPortal(view);
+    if (!portal) return; // portal-agnostic view → PortalToggle filter is the gate
+    const ctx = { role: sessionRole, isLawFirmOwner, authedEmail };
+    if (canAccessPortal(portal, ctx)) return;
+    const home = homePortalFor(sessionRole);
+    setView(viewForPortal(home) as View);
+    setGateToast('That portal is restricted to a different department.');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, sessionRole, isLawFirmOwner, authedEmail]);
 
   // Auto-dismiss gate toast after 4 s.
   useEffect(() => {
@@ -259,7 +351,11 @@ function App() {
 
   // Navigate to a view, blocking gated destinations and surfacing the toast.
   function navigateTo(nextView: View) {
-    if (flags && !isSuperAdmin) {
+    // Firm super-admins / law-firm-owners / platform super-admins bypass
+    // the firm-feature gate — they own the portals. Pure attorneys /
+    // legal admins / intake / etc. still respect the firm_features
+    // configuration so unfinished surfaces stay hidden behind the flag.
+    if (flags && !canBypassFeatureGates) {
       const flagKey = VIEW_FLAGS[nextView];
       if (flagKey && !flags[flagKey]) {
         setGateToast('This feature is not yet available for your firm.');
@@ -283,6 +379,25 @@ function App() {
             d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
         </svg>
         {gateToast}
+      </div>
+    );
+  }
+
+  // Brief loading shim while auth resolves the runtime role used to pick
+  // the landing view. Shown ONLY when no VITE_DEFAULT_VIEW override is
+  // present AND the useEffect above hasn't fired yet. Once viewInitialized
+  // flips true, this shim is skipped on every subsequent render.
+  if (!viewInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <div className="flex items-center gap-3 text-slate-500">
+          <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+          </svg>
+          <span className="text-xs">Loading…</span>
+        </div>
       </div>
     );
   }
@@ -527,12 +642,22 @@ function App() {
 
   // ── Portal toggle bar ─────────────────────────────────────────────────────
   function PortalToggle() {
-    // While flags are loading show all items; once loaded, hide gated ones.
-    // Super admin always sees everything.
-    const visibleItems = (flags && !isSuperAdmin
+    // Two-stage visibility filter:
+    //   1. firm feature flags — hide items the firm hasn't enabled
+    //      (super-admin tier bypasses this layer)
+    //   2. single-department wall (src/lib/portalAccess.ts) — hide items
+    //      whose portal the caller can't reach. Portal-agnostic items
+    //      (firm Settings, platform admin, comms, training, productivity)
+    //      stay super-admin-tier ONLY — regular staff must NOT see firm
+    //      Settings, even though Settings doesn't map to a department
+    //      portal.
+    const flagFiltered = flags && !isSuperAdmin
       ? NAV_ITEMS.filter(item => !item.flagKey || flags[item.flagKey])
-      : NAV_ITEMS
-    ).filter(item => !item.hidden);
+      : NAV_ITEMS;
+    const wallCtx = { role: sessionRole, isLawFirmOwner, authedEmail };
+    const visibleItems = flagFiltered
+      .filter(item => !item.hidden)
+      .filter(item => canSeeNavItem(item.id, wallCtx));
 
     return (
       <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex items-center gap-0.5 p-1 rounded-2xl shadow-2xl pointer-events-none
@@ -665,6 +790,12 @@ function App() {
             preselectLeadId={preselectLeadId}
             onPreselectConsumed={() => setPreselectLeadId(null)}
             viewerIsLawyer={isLawyerViewer}
+            // Hands the attorney off to the Legal Department portal —
+            // the case-workspace surface (Queue / Paralegal review /
+            // Signing review) where they spend most of their time.
+            // navigateTo() respects firm-feature gates, but
+            // canBypassFeatureGates lets firm-tier admins through.
+            onSwitchToLegalDept={() => navigateTo('legal_dept_portal')}
           />
         </div>
         <PortalToggle />
@@ -686,7 +817,11 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SigningReview portalChapter="7" /></div>
+        <div className="pb-24">
+          <RulesAuditProvider>
+            <SigningReview portalChapter="7" />
+          </RulesAuditProvider>
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -696,7 +831,11 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><SigningReview portalChapter="13" /></div>
+        <div className="pb-24">
+          <RulesAuditProvider>
+            <SigningReview portalChapter="13" />
+          </RulesAuditProvider>
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -746,7 +885,17 @@ function App() {
     return (
       <ErrorBoundary>
         <GateToastOverlay />
-        <div className="pb-24"><LegalDepartmentPortal /></div>
+        <div className="pb-24">
+          <LegalDepartmentPortal
+            // Sub-phase 1 of the legal portal restyle — utility-rail
+            // entries whose destinations live in the legal_admin view
+            // (Leads / Messages / Settings / Out-of-Office / Manual
+            // Clients) jump cross-portal here. Sub-phase 6 folds them
+            // into proper rail panels; until then this keeps every
+            // back-office surface one click away.
+            onNavigateToAdmin={() => setView('legal_admin')}
+          />
+        </div>
         <PortalToggle />
       </ErrorBoundary>
     );
@@ -813,6 +962,40 @@ function App() {
   }
 
   if (view === 'accounting') {
+    // D1 — accounting wall (functional-readme §2). Block legal-tier,
+    // intake, and paralegal roles from the Accounting portal. Allowed
+    // tiers (Fix B per D1 directive): accounting role + firm_super_admin
+    // + super_admin_bankruptcy_ai + law_firm_owner + ops allowlist.
+    if (!canAccessAccountingPortal({
+      role: sessionRole,
+      isLawFirmOwner,
+      authedEmail,
+    })) {
+      return (
+        <ErrorBoundary>
+          <GateToastOverlay />
+          <div className="min-h-screen flex items-center justify-center bg-slate-950 p-8">
+            <div className="max-w-md text-center">
+              <h1 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Georgia', serif" }}>
+                Accounting portal — restricted
+              </h1>
+              <p className="text-slate-400 text-sm leading-relaxed">
+                Legal / Intake staff and regular attorneys don't access the Accounting
+                portal. Fee and payment visibility on the legal client file is provided
+                via a derived view (see Bankruptcy.AI functional readme §15).
+              </p>
+              <button
+                onClick={() => setView('legal_admin')}
+                className="mt-6 px-4 py-2 text-xs font-bold text-slate-950 bg-amber-500 hover:bg-amber-400 rounded-lg"
+              >
+                Back to Intake
+              </button>
+            </div>
+          </div>
+          <PortalToggle />
+        </ErrorBoundary>
+      );
+    }
     return (
       <ErrorBoundary>
         <GateToastOverlay />
@@ -971,6 +1154,29 @@ function App() {
           onOpenAttorneyReview={(leadId) => { setPreselectLeadId(leadId); setView('attorney'); }}
           onOpenView={(v) => setView(v)}
         /></div>
+        <PortalToggle />
+      </ErrorBoundary>
+    );
+  }
+
+  // Public "Get Help" entry (Change 1) — the new front door for inbound
+  // leads. Six entry options (Call now / Chat now / Text us / Schedule /
+  // Self-serve / Email). Reachable via setView('get_help') from a public
+  // link or from the nav. Each option creates a firm-scoped lead via
+  // src/lib/createLead.ts and routes to the next step.
+  if (view === 'get_help') {
+    return (
+      <ErrorBoundary>
+        <GateToastOverlay />
+        <GetHelpEntry
+          onSelfServe={() => setView('intake')}
+          onChatNow={() => setView('intake')}
+          // ↑ FloatingChat is not a full questionnaire walk-through yet
+          // (that lands in Change 2); for now, "Chat now" creates the
+          // lead and routes the visitor into the existing intake surface
+          // alongside the chat widget. When the shared questionnaire
+          // engine + chat-bot lands, swap this for a dedicated chat view.
+        />
         <PortalToggle />
       </ErrorBoundary>
     );

@@ -1,5 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from "react";
 import { supabase } from "./lib/supabase";
+import { createLeadAndSubmission } from "./lib/createLead";
 import IntakeChatbot from "./components/IntakeChatbot";
 import PageContainer from "./components/layout/PageContainer";
 import irsData from "./data/irs_standards_az_wa_ca_(1).json";
@@ -1154,6 +1155,10 @@ export default function BankruptcyIntake({
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitRef, setSubmitRef] = useState("");
+  // Honest partial-failure state — surfaced in the submit area when lead
+  // creation succeeded but the submission insert didn't (per readme §4.1:
+  // no fabricated success). Cleared when the user retries.
+  const [submitError, setSubmitError] = useState("");
   const [appt, setAppt] = useState({ name:"", phone:"", email:"", preferredDate:"", preferredTime:"", notes:"", consultType:"phone" });
   const [piSubmitStatus, setPiSubmitStatus] = useState("idle"); // idle | submitting | submitted | error
   const topRef = useRef(null);
@@ -2135,6 +2140,7 @@ export default function BankruptcyIntake({
 
   const submitIntake = async () => {
     setSubmitting(true);
+    setSubmitError("");
     try {
       const ref = "BAI-" + Date.now().toString(36).toUpperCase();
       const n = (v) => parseFloat(v) || 0;
@@ -2243,11 +2249,17 @@ export default function BankruptcyIntake({
         ...(data.preferentialPaymentsInsider === "yes" ? (data.preferentialInsiderEntries || []) : []),
       ];
 
-      const { data: submission } = await supabase.from("intake_submissions").insert({
+      // Submission payload — passed to the canonical intake helper
+      // (src/lib/createLead.ts) which seeds an `intake_leads` row FIRST
+      // and inserts this submission with `lead_id` set, fixing the prior
+      // orphan-submission problem (matter spine starts at step 1).
+      //
+      // `submitted_at` and `lead_id` are intentionally omitted here — the
+      // helper sets them so callers can't accidentally write an orphan.
+      const submissionPayload = {
         reference_number: ref,
         client_id:        clientId ?? null,
         status:           "pending_review",
-        submitted_at:     new Date().toISOString(),
 
         // Dual-write: full camelCase intake state for the attorney review
         // portal + questionnaire prefill. Flat columns below remain for
@@ -2366,13 +2378,54 @@ export default function BankruptcyIntake({
         sms_email_consent: data.smsEmailConsent === true,
         sms_email_consent_at: data.smsEmailConsent === true ? new Date().toISOString() : null,
 
-        // Lead linkage — set by the staff-guided wrapper when this intake
-        // is being run on behalf of a tracked lead. Public route passes null.
-        lead_id: leadId ?? null,
-      }).select("id").single();
-      if (clientId && submission?.id) {
+      };
+
+      // Two paths converge on `submissionId`:
+      //   - leadId provided (staff-guided wrapper) → insert directly with
+      //     the wrapper's existing lead_id.
+      //   - leadId null (public route) → use createLeadAndSubmission to
+      //     atomically create the lead + submission via channel
+      //     'agent_assisted' (staff-guided form, mounted from the Intake
+      //     portal). Honest partial-failure UI when the lead succeeds
+      //     but the submission insert doesn't.
+      let submissionId = null;
+      if (leadId) {
+        const { data: submission } = await supabase
+          .from("intake_submissions")
+          .insert({
+            ...submissionPayload,
+            lead_id:      leadId,
+            submitted_at: new Date().toISOString(),
+          })
+          .select("id")
+          .single();
+        submissionId = submission?.id ?? null;
+      } else {
+        const result = await createLeadAndSubmission({
+          channel:  "agent_assisted",
+          fullName: `${data.firstName ?? ""} ${data.lastName ?? ""}`.trim() || null,
+          email:    data.email || null,
+          phone:    data.phone || null,
+          submission: submissionPayload,
+        });
+        if (!result.ok) {
+          setSubmitError("There was a problem submitting your form. Please try again or contact our office directly.");
+          setSubmitting(false);
+          return;
+        }
+        if (!result.submissionId) {
+          // Honest partial — lead recorded, full submission didn't. Do
+          // NOT advance to the success screen.
+          setSubmitError("We've got your contact info, but the full intake didn't save. Please retry, or our office will follow up.");
+          setSubmitting(false);
+          return;
+        }
+        submissionId = result.submissionId;
+      }
+
+      if (clientId && submissionId) {
         await supabase.from("clients").update({
-          intake_id: submission.id,
+          intake_id: submissionId,
           status: "intake_complete",
           last_activity: new Date().toISOString(),
           intake_completed_at: new Date().toISOString(),
@@ -2397,15 +2450,15 @@ export default function BankruptcyIntake({
           client_name: clientName || data.firstName + " " + data.lastName,
           client_email: clientEmail || data.email || "",
           client_phone: clientPhone || data.phone || "",
-          intake_id: submission.id,
+          intake_id: submissionId,
           reference_number: ref,
           status: "pending_contact",
           notified_at: new Date().toISOString(),
         });
       }
-      if (submission?.id) {
+      if (submissionId) {
         await supabase.from("intake_chats")
-          .update({ draft_id: submission.id })
+          .update({ draft_id: submissionId })
           .eq("session_id", sessionId)
           .is("draft_id", null);
       }
@@ -2413,7 +2466,7 @@ export default function BankruptcyIntake({
       setSubmitted(true);
       // Notify wrapper (StaffGuidedIntake) that submission completed so it
       // can advance the lead row. No-op for the public route.
-      if (typeof onSubmitted === 'function') onSubmitted(submission?.id ?? null);
+      if (typeof onSubmitted === 'function') onSubmitted(submissionId);
     } catch(err) {
       const ref = "BAI-" + Date.now().toString(36).toUpperCase();
       setSubmitRef(ref);
@@ -7311,6 +7364,11 @@ export default function BankruptcyIntake({
                 </button>
                 {e("smsEmailConsent") && <p className="text-xs text-red-400 mt-2">⚠ {e("smsEmailConsent")}</p>}
               </SectionCard>
+              {submitError && (
+                <div className="mb-3 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">
+                  <span className="font-bold text-red-300">Submission problem:</span> {submitError}
+                </div>
+              )}
               <div className="mb-4">
                 <button onClick={submitIntake} disabled={submitting || !data.confirmedAccurate || !data.readInfoSheet || !data.smsEmailConsent}
                   className={`w-full font-bold py-4 px-4 rounded-xl transition-all text-sm uppercase tracking-wider flex items-center justify-center gap-2 ${submitting?"bg-slate-600 text-slate-400 cursor-not-allowed":(!data.confirmedAccurate || !data.readInfoSheet || !data.smsEmailConsent)?"bg-slate-700 text-slate-500 cursor-not-allowed":"bg-amber-400 hover:bg-amber-300 text-slate-900"}`}>

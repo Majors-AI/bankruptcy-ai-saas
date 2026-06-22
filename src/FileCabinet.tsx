@@ -4,6 +4,10 @@ import { CASE_FILE_PHASES, PHASE_LABELS, PHASE_DESCRIPTIONS, type CaseFilePhase 
 import TrusteeSubmissionWidget from "./admin/TrusteeSubmissionWidget";
 import BciExportWidget from "./admin/BciExportWidget";
 import ClientZipDownloadButton from "./admin/ClientZipDownloadButton";
+// D1 — Payment data strip (functional-readme §15). Renders next to the
+// client name on the Legal client file. Today the hook is unwired and
+// every field shows honest "Not yet connected" pills.
+import PaymentDataStrip from "./legal-portal/PaymentDataStrip";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -1420,9 +1424,27 @@ function BankruptcyDocumentSections({
 
 interface FileCabinetProps {
   onClientView?: (clientName: string, clientId: string) => void;
+  /**
+   * Case spine id — the canonical `intake_leads.id` per §3 / §12 of
+   * docs/schema-changes-for-canelo.md. When set by LegalDepartmentPortal,
+   * FileCabinet should pre-select the matching client (i.e., resolve
+   * leadId → clients.id via clients.intake_id → intake_submissions.lead_id)
+   * and skip the picker.
+   *
+   * SUB-PHASE 1 SCOPE: the prop is accepted to establish the API so
+   * sub-phase 6 (utility-rail Documents panel) can wire it through
+   * without breaking changes. The resolve-and-preselect logic itself
+   * lands in sub-phase 6 — for now FileCabinet still opens its client
+   * picker, and a setLeadId-aware effect that resolves to clients.id is
+   * deferred. See src/legal-portal/caseIdentity.ts for the resolver.
+   */
+  leadId?: string;
 }
 
-export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
+export default function FileCabinet({ onClientView, leadId: _leadId }: FileCabinetProps = {}) {
+  // _leadId: prop accepted but not yet consumed — see comment above.
+  // Sub-phase 6 work: resolve to clients.id and call selectClient(...)
+  // automatically on mount when _leadId is set, replacing the picker UI.
   const [clients, setClients] = useState<Client[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -1889,6 +1911,19 @@ export default function FileCabinet({ onClientView }: FileCabinetProps = {}) {
                         <span className="text-slate-500">Paralegal:</span> {selectedClient.assigned_paralegal}
                       </span>
                     )}
+                  </div>
+
+                  {/* D1 — Payment data strip (functional-readme §15).
+                      Renders next to the client identity block. Today the
+                      hook is unwired (Canelo's §13 view hasn't shipped) →
+                      every field shows an honest "Not yet connected"
+                      pill. The leadId source needs a resolve step
+                      (clients.id → intake_id → intake_submissions.lead_id)
+                      when the hook gets a real implementation; for D1
+                      honest-states era it's fine to pass clientId since
+                      the unwired branch ignores the value. */}
+                  <div className="mt-3 -mx-1 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                    <PaymentDataStrip leadId={selectedClient?.id ?? null} />
                   </div>
                 </div>
 

@@ -1,13 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import {
-  ClipboardCheck,
-  PenLine,
-  FolderArchive,
-  Calendar,
-  DollarSign,
-  ListChecks,
-  LogOut,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import ParalegalReview from "./ParalegalReview";
 import SigningReview from "./components/SigningReview";
 import FileCabinet from "./FileCabinet";
@@ -15,12 +6,60 @@ import DepartmentPortalLogin, {
   classifyLegalStaff,
   type DepartmentPortalSession,
 } from "./components/department-portal/DepartmentPortalLogin";
+// Sub-phase 1 of the legal portal restyle — see
+// docs/design/legal-portal-function-mapping.md §11. Wraps the existing
+// section router in the new LegalPortalShell (dark theme · 3 role-tab
+// pill · left utility rail · R2 Pipeline) without altering routing
+// behavior. Legal Department renders as one dark surface; the `c`
+// palette in legalPortalTokens is the single source.
+import LegalPortalShell from "./legal-portal/LegalPortalShell";
+import {
+  c,
+  type LegalRole,
+  type StageKey,
+} from "./legal-portal/legalPortalTokens";
+import {
+  DEFAULT_RAIL_ENTRIES,
+  type RailEntry,
+  type RailGateContext,
+} from "./legal-portal/railEntries";
+// Matter-spine slice (§12) — selected case id flows from the URL query
+// parameter `?lead=<uuid>` into the case workspaces. Sub-phase 2's
+// Queue (below) ALSO drives the same selectedLeadId via case-row click.
+import { readLeadIdFromUrl } from "./legal-portal/caseIdentity";
+// D1 — department client scope (functional-readme §2). Legal portal
+// pulls retained-only leads.
+import { scopeFilterForDepartment } from "./lib/departmentScope";
+// Sub-phase 2 — R3 Queue. Replaces the prior LegalDashboard mount on
+// `section === "tasks"` (LegalDashboard moves to the utility-rail
+// "Home" panel in sub-phase 6).
+import Queue from "./legal-portal/Queue";
+import { useCurrentRole } from "./lib/AuthProvider";
 // Slice L-2 (Prompt 62) — Legal Department Dashboard. Mounts the shared
 // department-dashboard shell on the "tasks" section; replaces the
 // earlier DepartmentTaskBoard stub. LEGAL_TASK_STUBS + the stub board
 // live in src/components/department-portal/DepartmentTaskBoard.tsx and
 // are no longer imported here (L-3 supplies a real task pool).
-import LegalDashboard from "./components/legal/LegalDashboard";
+// LegalDashboard import removed at sub-phase 2 — the dashboard moves to
+// the utility-rail "Home" panel in sub-phase 6. Queue replaces it on
+// `section === "tasks"` (see import below).
+// RulesAuditProvider — required by SigningReview's LongFormDeductionPanel
+// + Ch13Eligibility (both call useRulesAudit). Pre-restyle, this portal
+// did NOT mount the provider either, but the bug was latent: it only
+// fires when isLawyer=true, and the surface was hard to reach for
+// lawyers without an explicit rail entry. Sub-phase 1's interim
+// signing_review rail icon (added 11.1 of the mapping doc) makes the
+// surface clickable for lawyers, exposing the latent error. Mounting the
+// provider here matches the LawFirmSettings.tsx + admin/ReferenceRulesTab
+// pattern (wrap at portal-mount level).
+//
+// SCOPE NOTE — this same latent bug exists at:
+//   - App.tsx view === 'signing_review'      (line 690)
+//   - App.tsx view === 'signing_review_ch13' (line 700)
+//   - LegalAdminPortal's SigningReview entry points
+// Fixing those is OUT OF SUB-PHASE-1 SCOPE — they need their own diff
+// with regression verification. Calling it out so it doesn't get lost.
+import { RulesAuditProvider } from "./components/law-firm-settings/rulesAuditStore";
 import type {
   AttorneyIntakeReviewRow,
   SigningReviewRow,
@@ -65,25 +104,79 @@ type Section =
   | "calendar"
   | "time_fees";
 
-interface SectionDef {
-  id: Section;
-  label: string;
-  icon: ReactNode;
-  status: "active" | "placeholder";
+// Map current section → rail-entry key for the active-icon highlight.
+//
+// paralegal_review + signing_review highlight against their INTERIM rail
+// entries (defined in src/legal-portal/UtilityRail.tsx). When sub-phase 2
+// lands and the Queue's case-row click becomes the canonical entry into
+// those workspaces, the interim rail entries are removed and these two
+// keys flip back to `null`.
+const SECTION_TO_RAIL_KEY: Readonly<Record<Section, string | null>> = {
+  tasks:            "tasks",
+  paralegal_review: "paralegal_review_interim", // ⚠ INTERIM — sub-phase 2 removes
+  signing_review:   "signing_review_interim",   // ⚠ INTERIM — sub-phase 2 removes
+  file_cabinet:     "documents",
+  calendar:         "calendar",
+  time_fees:        "time_fees",
+};
+
+export interface LegalDepartmentPortalProps {
+  /** Cross-portal navigation callback. The new utility rail uses this
+   *  for entries whose destination lives in the `legal_admin` view
+   *  (Leads / Messages / Settings / Out-of-Office / Manual Clients).
+   *  Sub-phase 6 will fold these into proper rail panels; sub-phase 1
+   *  routes them to the existing tabs so nothing is unreachable. */
+  onNavigateToAdmin?: () => void;
 }
 
-const SECTIONS: SectionDef[] = [
-  { id: "tasks",            label: "Tasks",            icon: <ListChecks className="w-4 h-4" />,     status: "active" },
-  { id: "paralegal_review", label: "Paralegal Review", icon: <ClipboardCheck className="w-4 h-4" />, status: "active" },
-  { id: "signing_review",   label: "Signing Review",   icon: <PenLine className="w-4 h-4" />,        status: "active" },
-  { id: "file_cabinet",     label: "File Cabinet",     icon: <FolderArchive className="w-4 h-4" />,  status: "active" },
-  { id: "calendar",         label: "Calendar",         icon: <Calendar className="w-4 h-4" />,       status: "placeholder" },
-  { id: "time_fees",        label: "Time & Fees",      icon: <DollarSign className="w-4 h-4" />,     status: "placeholder" },
-];
-
-export default function LegalDepartmentPortal() {
+export default function LegalDepartmentPortal({ onNavigateToAdmin }: LegalDepartmentPortalProps = {}) {
   const [session, setSession] = useState<DepartmentPortalSession | null>(null);
   const [section, setSection] = useState<Section>("tasks");
+  // Role-tab selection — defaults to the closest match for the PIN-gate
+  // session user type. The body content router is still section-driven
+  // in sub-phase 1; sub-phase 3+ uses role to switch between Paralegal /
+  // Attorney case workspaces.
+  const [role, setRole] = useState<LegalRole>("paralegal");
+  // Sub-phase 1: no Queue selection yet → Pipeline always hidden.
+  // Sub-phase 2 wires the selected case's signals through
+  // `derivePipelineStage()` and threads the resulting StageKey here.
+  const [activeStage] = useState<StageKey | null>(null);
+
+  // Matter-spine slice (§12): the currently-selected case id flows
+  // through this state into the mounted SigningReview / ParalegalReview
+  // / FileCabinet so all three surfaces share case identity.
+  //
+  // Sub-phase 1 SOURCE: `?lead=<uuid>` URL query parameter (read once on
+  // mount). The interim rail icons (paralegal_review_interim,
+  // signing_review_interim) work today by appending the param manually
+  // — e.g. /...legal_dept_portal?lead=00000000-0000-0000-0000-...
+  //
+  // Sub-phase 2 SOURCE: Queue case-row click → setSelectedLeadId(row.lead_id).
+  // The URL-read fallback stays as a useful dev shortcut.
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => readLeadIdFromUrl());
+
+  // Sub-phase 2 — when the Queue opens a case, route the user to the
+  // role-appropriate workspace section. For now: attorney role goes to
+  // signing_review, paralegal/client role goes to paralegal_review.
+  // Sub-phase 3+4 will refine to a dedicated case-workspace shell.
+  const openCase = useCallback((leadId: string) => {
+    setSelectedLeadId(leadId);
+    // Update URL so the leadId persists across rail-icon clicks /
+    // refreshes. history.replaceState avoids spamming the back stack.
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("lead", leadId);
+      window.history.replaceState(null, "", url.toString());
+    }
+    // Default body for the selected case: paralegal → paralegal_review,
+    // attorney → signing_review. The role state controls this.
+    setSection(role === "attorney" ? "signing_review" : "paralegal_review");
+  }, [role]);
+
+  // AuthProvider firm-tier role — secondary source for rail gates. The
+  // PIN-gate session.user_type is the primary source; this fills in
+  // permissions the PIN gate cannot resolve (legal_admin, super_admin).
+  const sessionRole = useCurrentRole();
 
   // Slice L-3 (Prompt 63) — task-pool sources. Loaded ONCE at mount; the
   // LegalDashboard receives them as props and derives the color-tiered
@@ -99,7 +192,10 @@ export default function LegalDepartmentPortal() {
   const [attorneyIntakeReviews, setAttorneyIntakeReviews] = useState<AttorneyIntakeReviewRow[]>([]);
   const [signingReviews,        setSigningReviews]        = useState<SigningReviewRow[]>([]);
   const [paralegalReviews,      setParalegalReviews]      = useState<ParalegalReviewRow[]>([]);
-  const [ecfTasks,              setEcfTasks]              = useState<EcfTaskRow[]>([]);
+  // ecfTasks: loaded but parked. Consumed by the sub-phase 6 utility-rail
+  // "Messages" / Tasks panel; prefixed `_` here to satisfy noUnusedLocals
+  // while keeping the Promise.all read aligned with the prior shape.
+  const [_ecfTasks,             setEcfTasks]              = useState<EcfTaskRow[]>([]);
   const [intakeLeads,           setIntakeLeads]           = useState<IntakeLeadRow[]>([]);
   // Slice L-7 (Prompt 65) — today's hearings/filings footer source.
   // department=eq.legal at the query layer; firm-scoping is implicit via
@@ -120,7 +216,8 @@ export default function LegalDepartmentPortal() {
   // loaded attorney_intake_reviews into a StaffMessage[] list for the
   // ConsolidatedMessagingWidget. One new read; ecf_tasks (already loaded)
   // is the downstream auto-task row, not the inbound notice itself.
-  const [ecfInbox,              setEcfInbox]              = useState<EcfInboxRow[]>([]);
+  // ecfInbox: loaded but parked, same rationale as _ecfTasks above.
+  const [_ecfInbox,             setEcfInbox]              = useState<EcfInboxRow[]>([]);
   // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell. Cross-portal
   // read of accounting_filed_case_registry — the same table the Accounting
   // filed-cases tab reads. Registry has no firm_id (FK to
@@ -170,8 +267,12 @@ export default function LegalDepartmentPortal() {
       // Slice L-5 (Prompt 66) widens the select to include status,
       // chapter_interest, retained_at for the Active Caseload bubble
       // (retained-by-chapter count). Same single read.
+      // D1 — apply Legal department client scope (functional-readme §2):
+      // Legal sees retained-only. scopeFilterForDepartment('legal')
+      // returns "status=eq.retained". UX-side filter only; real wall
+      // = RLS on intake_leads (Canelo).
       api.get<IntakeLeadRow>(
-        "intake_leads?select=id,full_name,status,chapter_interest,retained_at&order=created_at.desc&limit=500",
+        `intake_leads?select=id,full_name,status,chapter_interest,retained_at&${scopeFilterForDepartment("legal")}&order=created_at.desc&limit=500`,
       ),
       // Slice L-7 (Prompt 65) — today's hearings/filings footer.
       // Loaded broadly here; LegalDashboard filters client-side to
@@ -214,6 +315,58 @@ export default function LegalDepartmentPortal() {
 
   useEffect(() => { load(); }, [load]);
 
+  // Default the role tab to the closest match for the PIN-gate session
+  // user_type the first time the session resolves. After that, the user
+  // can switch tabs freely (it's a UI preference, not a permission).
+  useEffect(() => {
+    if (!session) return;
+    const ut = (session.user_type || "").toLowerCase();
+    if (ut.includes("attorney")) setRole("attorney");
+    else setRole("paralegal");
+    // Run on session change only — explicitly NOT a setRole dep.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.id]);
+
+  // Role-gate context for the utility rail. Sub-phase 1 uses simple
+  // PIN-gate role mapping + AuthProvider firm-tier role; sub-phase 6
+  // refines this with the canonical AuthProvider booleans App.tsx uses.
+  const railCtx = useMemo<RailGateContext>(() => {
+    const ut = (session?.user_type || "").toLowerCase();
+    const isSupervisingAttorney = ut.includes("supervising");
+    const isAnyAttorney = ut.includes("attorney");
+    const isPlatformOrFirmSuper =
+      sessionRole === "super_admin_bankruptcy_ai" || sessionRole === "firm_super_admin";
+    const isLegalAdmin = sessionRole === "legal_admin";
+    return {
+      sessionUserType: session?.user_type || "",
+      sessionRole: sessionRole ?? null,
+      canManageLeads:    isAnyAttorney || isLegalAdmin || isPlatformOrFirmSuper,
+      canManageStaff:    isSupervisingAttorney || isPlatformOrFirmSuper,
+      isSuperAdmin:      isPlatformOrFirmSuper,
+      canCreateClient:   isLegalAdmin || isSupervisingAttorney || isPlatformOrFirmSuper,
+    };
+  }, [session, sessionRole]);
+
+  const onRailSelect = useCallback((entry: RailEntry) => {
+    // dest is optional per the D1 RailEntry shape (LegalAdminPortal's
+    // tab entries omit it). Guard defensively — Legal Department's
+    // entries always supply dest, but the type system can't see that.
+    const dest = entry.dest;
+    if (!dest) return;
+    if (dest.kind === "intra") {
+      setSection(dest.section as Section);
+      return;
+    }
+    // CROSS: route to the legal_admin view (where Leads / Messages /
+    // Settings / Out-of-Office / Manual Clients currently live). The
+    // App.tsx parent supplies the callback.
+    if (dest.kind === "cross" && dest.target === "legal_admin") {
+      onNavigateToAdmin?.();
+    }
+  }, [onNavigateToAdmin]);
+
+  const railActiveKey = SECTION_TO_RAIL_KEY[section];
+
   if (!session) {
     return (
       <DepartmentPortalLogin
@@ -228,112 +381,91 @@ export default function LegalDepartmentPortal() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      {/* Portal header + sub-nav */}
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur sticky top-0 z-20">
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center">
-            <ClipboardCheck className="w-4 h-4 text-indigo-400" />
-          </div>
-          <div className="flex-1">
-            <h1 className="text-base font-bold text-white" style={{ fontFamily: "'Georgia', serif" }}>
-              Legal Department Portal
-            </h1>
-            <p className="text-[11px] text-slate-500">Paralegal Review · Signing Review · (more soon)</p>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-xs font-semibold text-white leading-none">{session.name}</p>
-              <p className="text-[10px] text-slate-500 mt-1">{session.user_type}</p>
-            </div>
-            <button
-              onClick={() => setSession(null)}
-              title="Sign out"
-              className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 hover:text-white border border-slate-700 hover:border-slate-500 px-2.5 py-1.5 rounded transition-colors"
-            >
-              <LogOut className="w-3 h-3" /> Sign out
-            </button>
-          </div>
+    <LegalPortalShell
+      role={role}
+      onRoleChange={setRole}
+      activeStage={activeStage}
+      postPetition={false}
+      railEntries={DEFAULT_RAIL_ENTRIES}
+      railCtx={railCtx}
+      railActiveKey={railActiveKey}
+      onRailSelect={onRailSelect}
+      session={{
+        name: session.name,
+        userType: session.user_type,
+        onSignOut: () => setSession(null),
+      }}
+      departmentLabel="Legal Department"
+      brandSubtitle="Case review"
+      // Dept-wide dark theme — `c` palette is now dark (legalPortalTokens),
+      // so the shell chrome matches the portal body as one dark surface.
+      theme="dark"
+    >
+      {/* Active section content — preserved from the pre-restyle shell.
+          Sub-phase 1 swaps the outer chrome AND wraps the body in
+          RulesAuditProvider (see comment above the import) so the
+          SigningReview / Ch13Eligibility surfaces work for lawyers. */}
+      <RulesAuditProvider>
+        <div className="max-w-7xl mx-auto">
+          {section === "tasks" && (
+            <Queue
+              role={role}
+              intakeLeads={intakeLeads}
+              attorneyIntakeReviews={attorneyIntakeReviews}
+              signingReviews={signingReviews}
+              paralegalReviews={paralegalReviews}
+              acceptances={acceptances}
+              filedRegistry={filedRegistry}
+              calendarEvents={calendarEvents}
+              onOpenCase={openCase}
+            />
+          )}
+          {section === "paralegal_review" && (
+            <ParalegalReview layout="embedded" leadId={selectedLeadId ?? undefined} />
+          )}
+          {section === "signing_review" && (
+            <SigningReview layout="embedded" leadId={selectedLeadId ?? undefined} />
+          )}
+          {section === "file_cabinet" && (
+            <FileCabinet leadId={selectedLeadId ?? undefined} />
+          )}
+          {section === "calendar" && (
+            <Placeholder
+              label="Calendar"
+              hint="Phase 2 step 2 — embed the firm calendar view here."
+            />
+          )}
+          {section === "time_fees" && (
+            <Placeholder
+              label="Time & Fees"
+              hint="Phase 2 step 2 — paralegal time entries + fee snapshot."
+            />
+          )}
         </div>
-
-        <nav className="max-w-7xl mx-auto px-6 flex gap-1 overflow-x-auto">
-          {SECTIONS.map(s => {
-            const isActive = section === s.id;
-            const isPlaceholder = s.status === "placeholder";
-            return (
-              <button
-                key={s.id}
-                onClick={() => setSection(s.id)}
-                className={`flex items-center gap-2 px-3 py-2 text-xs font-semibold border-b-2 transition-colors ${
-                  isActive
-                    ? "border-indigo-400 text-indigo-300"
-                    : "border-transparent text-slate-400 hover:text-slate-200"
-                } ${isPlaceholder ? "italic opacity-60" : ""}`}
-              >
-                {s.icon}
-                {s.label}
-                {isPlaceholder && (
-                  <span className="text-[9px] uppercase tracking-widest text-slate-600">Soon</span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </header>
-
-      {/* Active section content. */}
-      <main className="max-w-7xl mx-auto">
-        {section === "tasks" && (
-          // Slice L-2 (Prompt 62) — Legal Department Dashboard mounted
-          // from the shared department-dashboard shell.
-          // Slice L-3 (Prompt 63) — LEFT widget wired against the
-          // mount-level Promise.all above; no re-fetch in the dashboard.
-          <LegalDashboard
-            session={session}
-            attorneyIntakeReviews={attorneyIntakeReviews}
-            signingReviews={signingReviews}
-            paralegalReviews={paralegalReviews}
-            ecfTasks={ecfTasks}
-            intakeLeads={intakeLeads}
-            // Slice L-7 (Prompt 65) — today's hearings/filings footer.
-            calendarEvents={calendarEvents}
-            // Slice L-5 (Prompt 66) — Active Caseload bubble source.
-            acceptances={acceptances}
-            // Slice L-6 (Prompt 67) — RIGHT-column comms source.
-            ecfInbox={ecfInbox}
-            // Slice L-8 (Prompt 73) — Active Caseload "Filed" cell source.
-            filedRegistry={filedRegistry}
-          />
-        )}
-        {section === "paralegal_review" && <ParalegalReview layout="embedded" />}
-        {section === "signing_review"   && <SigningReview   layout="embedded" />}
-        {section === "file_cabinet" && <FileCabinet />}
-        {section === "calendar" && (
-          <Placeholder
-            label="Calendar"
-            hint="Phase 2 step 2 — embed the firm calendar view here."
-          />
-        )}
-        {section === "time_fees" && (
-          <Placeholder
-            label="Time & Fees"
-            hint="Phase 2 step 2 — paralegal time entries + fee snapshot."
-          />
-        )}
-      </main>
-    </div>
+      </RulesAuditProvider>
+    </LegalPortalShell>
   );
 }
 
 function Placeholder({ label, hint }: { label: string; hint: string }) {
   return (
     <div className="p-12">
-      <div className="max-w-xl">
-        <p className="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-2">{label}</p>
-        <h2 className="text-xl font-bold text-white mb-2" style={{ fontFamily: "'Georgia', serif" }}>
+      <div
+        className="max-w-xl rounded-xl p-6"
+        style={{ background: c.paper, border: `1px solid ${c.line}` }}
+      >
+        <p
+          className="text-xs font-bold uppercase mb-2"
+          style={{ color: c.slateLight, letterSpacing: "0.14em" }}
+        >
+          {label}
+        </p>
+        <h2 className="text-xl font-bold mb-2" style={{ color: c.ink }}>
           Not wired yet
         </h2>
-        <p className="text-sm text-slate-400 leading-relaxed">{hint}</p>
+        <p className="text-sm leading-relaxed" style={{ color: c.slate }}>
+          {hint}
+        </p>
       </div>
     </div>
   );

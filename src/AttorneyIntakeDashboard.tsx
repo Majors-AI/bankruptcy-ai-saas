@@ -2,8 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { supabase } from "./lib/supabase";
 import { sendSmsEmail, sendVia } from "./lib/sendGate";
 import { getCourtsForState } from "./data/courts";
-import { Scale, FileText, CheckCircle, XCircle, Clock, ChevronRight, DollarSign, MapPin, Send, AlertTriangle, Phone, Mail, Home, CreditCard, MessageSquare, TrendingUp, Briefcase, RefreshCw, ArrowUp, ArrowDown, AlertCircle, ArrowLeft, Package, Building, Car, Gem, Shield, Calendar, PhoneCall, Ligature as FileSignature, X, ClipboardList, ListChecks, ArrowRightLeft, Sun, Sunset, Moon } from "lucide-react";
-import AttorneyTaskPanel from "./components/attorney/AttorneyTaskPanel";
+import { Scale, FileText, CheckCircle, XCircle, Clock, ChevronRight, DollarSign, MapPin, Send, AlertTriangle, Phone, Mail, Home, CreditCard, MessageSquare, TrendingUp, Briefcase, RefreshCw, ArrowUp, ArrowDown, AlertCircle, ArrowLeft, Package, Building, Car, Gem, Shield, Calendar, PhoneCall, Ligature as FileSignature, X, ClipboardList, ArrowRightLeft, Sun, Sunset, Moon } from "lucide-react";
 import CaseActivityLog from "./components/admin/CaseActivityLog";
 import IncomeExpenseModal from "./components/admin/IncomeExpenseModal";
 import { getApplicableExemptions, getCaHomesteadByCounty, getWaHomesteadEligibility } from "./components/admin/exemptions";
@@ -2550,11 +2549,18 @@ function CaseRow({ sub, onSelect, isSelected }: { sub: Submission; onSelect: () 
 
 export default function AttorneyIntakeDashboard({
   onSwitchToCaseManagement,
+  onSwitchToLegalDept,
   preselectLeadId,
   onPreselectConsumed,
   viewerIsLawyer = false,
 }: {
   onSwitchToCaseManagement?: () => void;
+  /** Navigate to the Legal Department portal (view === 'legal_dept_portal').
+   *  Surfaces a "Legal Department" button in the header — attorneys
+   *  spend most of their time in that portal's case-workspace; the
+   *  Case Review page is their LANDING but rarely where they finish
+   *  the day. Set by App.tsx; undefined hides the button. */
+  onSwitchToLegalDept?: () => void;
   preselectLeadId?: string | null;
   onPreselectConsumed?: () => void;
   /** True when the viewer holds a bar number (attorney / attorney_super_admin
@@ -2588,6 +2594,12 @@ export default function AttorneyIntakeDashboard({
     );
   }
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  // Count of leads with at least one decided attorney_intake_reviews row
+  // (decision IN accepted/declined). Sourced the same way as the
+  // simplified-attorney portal's Completed Reviews log so the "Completed"
+  // KPI tile here matches that surface's row count exactly. Loaded
+  // alongside submissions on mount.
+  const [completedReviewLeadCount, setCompletedReviewLeadCount] = useState<number>(0);
   const [selected, setSelected] = useState<Submission | null>(null);
   // Detail-panel tab — Overview / Eligibility (with Ch.7/Ch.13 sub-tabs) /
   // Issues / Decision & fees. Reset to Overview every time a new case is picked.
@@ -2682,7 +2694,11 @@ export default function AttorneyIntakeDashboard({
   const [expandNonCMICh7, setExpandNonCMICh7] = useState(false);
   const [expandNonCMICh13SchedI, setExpandNonCMICh13SchedI] = useState(false);
   const gridTillRate = gridPrimeRate != null ? gridPrimeRate + 3 : null;
-  const [showTaskPanel, setShowTaskPanel] = useState(false);
+  // showTaskPanel + AttorneyTaskPanel removed per attorney-strip spec.
+  // The header "Tasks" button that opened the panel is gone; a dedicated
+  // task center belongs to the separate notifications/messages/dept-
+  // alerts build, not this pass. The AttorneyTaskPanel import has been
+  // dropped to avoid an unused-import error.
 
   // § 707(b) means-test bypass: attorney-set classification of ambiguous debt
   // buckets (personalLoanDebt for SBA, taxDebt for business taxes, etc.). When
@@ -2730,11 +2746,29 @@ export default function AttorneyIntakeDashboard({
   async function loadSubmissions() {
     setLoading(true);
     await supabase.rpc("refresh_intake_stale_flags").maybeSingle();
-    const { data } = await supabase
-      .from("intake_submissions")
-      .select("*")
-      .order("submitted_at", { ascending: true });
-    setSubmissions((data as Submission[]) ?? []);
+    // Load submissions + decided attorney reviews in parallel. The
+    // decided-reviews count feeds the "Completed" KPI tile, matching
+    // the Completed Reviews log on the simplified-attorney portal —
+    // same source (decision IN accepted/declined), same per-lead
+    // dedupe (latest row per lead_id).
+    const [submissionsResult, decidedReviewsResult] = await Promise.all([
+      supabase
+        .from("intake_submissions")
+        .select("*")
+        .order("submitted_at", { ascending: true }),
+      supabase
+        .from("attorney_intake_reviews")
+        .select("lead_id,decision")
+        .in("decision", ["accepted", "declined"]),
+    ]);
+    setSubmissions((submissionsResult.data as Submission[]) ?? []);
+    // Distinct lead count — matches the Completed Reviews log's "X total"
+    // (one row per lead, decided rounds collapsed).
+    const distinctLeadIds = new Set<string>();
+    for (const r of (decidedReviewsResult.data ?? []) as Array<{ lead_id: string | null }>) {
+      if (r.lead_id) distinctLeadIds.add(r.lead_id);
+    }
+    setCompletedReviewLeadCount(distinctLeadIds.size);
     setLoading(false);
     // 90-day stale auto-email removed pending attorney-approval gate.
     // Stale-flag refresh now runs server-side via refresh_intake_stale_flags RPC only.
@@ -3094,7 +3128,6 @@ export default function AttorneyIntakeDashboard({
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {showTaskPanel && <AttorneyTaskPanel onClose={() => setShowTaskPanel(false)} />}
       <div className="border-b border-slate-800 bg-slate-900/95 backdrop-blur-sm px-6 py-3 sticky top-0 z-20">
         <div className="max-w-[1600px] mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
@@ -3117,6 +3150,20 @@ export default function AttorneyIntakeDashboard({
           </div>
 
           <div className="flex items-center gap-2 flex-shrink-0">
+            {/* Legal Department portal toggle — most attorney work
+                continues in the case workspace (Queue / Paralegal review
+                / Signing review) inside the Legal Department portal.
+                This page is the LANDING; the button is the one-click
+                hand-off to where the rest of the day happens. */}
+            {onSwitchToLegalDept && (
+              <button
+                onClick={onSwitchToLegalDept}
+                title="Open the Legal Department portal (Queue / Paralegal review / Signing review)"
+                className="flex items-center gap-1.5 px-3 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold rounded-xl transition-all"
+              >
+                <Briefcase size={12} /> Legal Department
+              </button>
+            )}
             {onSwitchToCaseManagement && (
               <button
                 onClick={onSwitchToCaseManagement}
@@ -3125,17 +3172,11 @@ export default function AttorneyIntakeDashboard({
                 <ArrowRightLeft size={12} /> Existing Clients
               </button>
             )}
-            <button
-              onClick={() => setShowTaskPanel(true)}
-              className="flex items-center gap-1.5 px-3 py-2 bg-amber-400/10 hover:bg-amber-400/20 border border-amber-400/30 text-amber-400 text-xs font-semibold rounded-xl transition-all"
-            >
-              <ListChecks size={13} /> Tasks
-            </button>
-            <div className="flex items-center gap-1 bg-slate-800 rounded-xl p-1">
-              <div className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold ${counts.pending > 0 ? "bg-red-500 text-white" : "bg-amber-400 text-slate-900"}`}>
-                <FileText size={13} /> Case Review
-              </div>
-            </div>
+            {/* Top-right Tasks button + Case Review pill removed per
+                attorney-strip spec. The decided-vs-pending counts now
+                live in the 3 KPI tiles below the header; a dedicated
+                task center is the separate "notifications / messages /
+                department alerts" build, not this pass. */}
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
               <span className="text-xs text-slate-400">Live</span>
@@ -3146,12 +3187,21 @@ export default function AttorneyIntakeDashboard({
 
       {true && (
         <div className="max-w-[1600px] mx-auto px-6 py-6">
-          <div className="grid grid-cols-4 gap-4 mb-6">
+          {/* KPI tiles — attorney-strip spec.
+              "Unread Tasks" tile is held until a real per-attorney
+              open-task count exists (the legalTasks helper has no
+              per-attorney filter today — mine/shared scope is deferred
+              L-9 wiring). Per spec: don't fake the count, so we ship 3
+              tiles. When the real source lands, add a 4th here keyed to
+              that count.
+              "Completed" is decided reviews (accepted + declined) from
+              attorney_intake_reviews, deduped per lead — same source
+              as the simplified-attorney portal's Completed Reviews log. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             {[
-              { icon: FileText, label: "Total Submissions", value: submissions.length, color: "text-blue-400 bg-blue-500/15" },
-              { icon: Clock, label: "Pending Review", value: counts.pending, color: "text-amber-400 bg-amber-400/15" },
-              { icon: CheckCircle, label: "Accepted", value: counts.accepted, color: "text-green-400 bg-green-500/15" },
-              { icon: XCircle, label: "Declined", value: counts.declined, color: "text-red-400 bg-red-500/15" },
+              { icon: Clock,       label: "Attorney Reviews Needed", value: counts.pending,             color: "text-amber-400 bg-amber-400/15" },
+              { icon: CheckCircle, label: "Cases to Present",        value: counts.accepted,            color: "text-green-400 bg-green-500/15" },
+              { icon: FileText,    label: "Completed",               value: completedReviewLeadCount,   color: "text-blue-400 bg-blue-500/15"   },
             ].map(s => (
               <div key={s.label} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center gap-3.5">
                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${s.color}`}>
@@ -4056,9 +4106,17 @@ export default function AttorneyIntakeDashboard({
 
                                   {/* ── SCHEDULE I: MEANS TEST INCOME ── */}
                                   <div className="bg-slate-800/40 rounded-lg border border-slate-700/40 overflow-hidden mb-2">
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40">
-                                      <p className="text-[10px] text-slate-200 uppercase tracking-wider font-bold">Means Test 122c Calculated Income</p>
-                                      <button onClick={() => setIncExpModal({ mode: "income", chapter: "7" })} className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors">View / Edit Income</button>
+                                    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-700/40 gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <p className="text-[10px] text-slate-200 uppercase tracking-wider font-bold">Means Test 122c Calculated Income</p>
+                                        {/* Pre-document screen: payroll deductions are inferred from
+                                            (gross − net) the client typed in. Authoritative means test is
+                                            paystubs/BestCase via the Signing Review LongFormDeductionPanel. */}
+                                        <span className="inline-flex items-center text-[9px] font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                                          Rough / preliminary
+                                        </span>
+                                      </div>
+                                      <button onClick={() => setIncExpModal({ mode: "income", chapter: "7" })} className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors flex-shrink-0">View / Edit Income</button>
                                     </div>
                                     <div className="px-3 pt-2 pb-1.5 space-y-1.5">
                                       {/* Employment / Wage sources */}
@@ -4081,12 +4139,22 @@ export default function AttorneyIntakeDashboard({
                                               <span className="text-slate-500">Gross Pay</span>
                                               <span className="text-slate-300 tabular-nums">{fmt(gross)}/mo</span>
                                             </div>
-                                            {ded > 0 && (
+                                            {/* Payroll deductions = (gross − net). When admin-consult is the
+                                                source, net == gross (normalizer at line ~114 doesn't separate
+                                                them), so the delta is 0 and we don't know real deductions. We
+                                                say so honestly instead of showing "$0 deductions" (which
+                                                misleadingly implies a checked-and-confirmed zero). */}
+                                            {gross > 0 && net === gross ? (
                                               <div className="flex justify-between text-[10px]">
-                                                <span className="text-slate-500">Taxes &amp; Deductions</span>
+                                                <span className="text-slate-500">Payroll deductions</span>
+                                                <span className="text-slate-500 italic">Insufficient data — net not captured</span>
+                                              </div>
+                                            ) : ded > 0 ? (
+                                              <div className="flex justify-between text-[10px]">
+                                                <span className="text-slate-500">Payroll deductions</span>
                                                 <span className="text-rose-400/80 tabular-nums">({fmt(ded)})/mo</span>
                                               </div>
-                                            )}
+                                            ) : null}
                                             <div className="flex justify-between text-[10px] font-semibold border-t border-slate-700/30 mt-0.5 pt-0.5">
                                               <span className="text-slate-400">Net Wages</span>
                                               <span className="text-slate-200 tabular-nums">{fmt(net)}/mo</span>
@@ -4557,12 +4625,18 @@ export default function AttorneyIntakeDashboard({
                                     return (
                                       <div className="rounded-lg border border-slate-700/50 overflow-hidden mb-2">
                                         {/* ── PANEL HEADER ── */}
-                                        <div className="bg-slate-800/80 px-3 py-2.5 border-b border-slate-700/50 flex items-center justify-between">
-                                          <div>
-                                            <p className="text-[11px] font-bold text-white">Means Test 122c Calculated Income</p>
-                                            <p className="text-[9px] text-slate-500 mt-0.5">Official Form 122C-1</p>
+                                        <div className="bg-slate-800/80 px-3 py-2.5 border-b border-slate-700/50 flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-1.5 min-w-0">
+                                            <div className="min-w-0">
+                                              <p className="text-[11px] font-bold text-white">Means Test 122c Calculated Income</p>
+                                              <p className="text-[9px] text-slate-500 mt-0.5">Official Form 122C-1</p>
+                                            </div>
+                                            {/* Pre-document screen — see Ch.7 sibling panel comment. */}
+                                            <span className="inline-flex items-center text-[9px] font-semibold uppercase tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5 flex-shrink-0">
+                                              Rough / preliminary
+                                            </span>
                                           </div>
-                                          <div className="flex gap-2">
+                                          <div className="flex gap-2 flex-shrink-0">
                                             <button onClick={() => setIncExpModal({ mode: "income", chapter: "13" })} className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 transition-colors">View / Edit Income</button>
                                           </div>
                                         </div>
@@ -4639,12 +4713,20 @@ export default function AttorneyIntakeDashboard({
                                                       <span className="text-slate-500">Gross Pay</span>
                                                       <span className="text-slate-300 tabular-nums">{fmt(gross)}/mo</span>
                                                     </div>
-                                                    {ded > 0 && (
+                                                    {/* See sibling Ch.7 panel for the rationale on the
+                                                        gross===net "Insufficient data" branch. Same heuristic
+                                                        applied here. */}
+                                                    {gross > 0 && net === gross ? (
                                                       <div className="flex justify-between text-[10px]">
-                                                        <span className="text-slate-500">Deductions (taxes, benefits)</span>
+                                                        <span className="text-slate-500">Payroll deductions</span>
+                                                        <span className="text-slate-500 italic">Insufficient data — net not captured</span>
+                                                      </div>
+                                                    ) : ded > 0 ? (
+                                                      <div className="flex justify-between text-[10px]">
+                                                        <span className="text-slate-500">Payroll deductions</span>
                                                         <span className="text-rose-400/80 tabular-nums">({fmt(ded)})/mo</span>
                                                       </div>
-                                                    )}
+                                                    ) : null}
                                                     <div className="flex justify-between text-[10px] font-semibold border-t border-slate-700/30 mt-0.5 pt-0.5">
                                                       <span className="text-slate-400">Net Take-Home</span>
                                                       <span className="text-slate-200 tabular-nums">{fmt(net)}/mo</span>

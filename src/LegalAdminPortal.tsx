@@ -31,6 +31,17 @@ import { calcDebtComposition } from "./AttorneyIntakeDashboard";
 import CaseAdvancementStatusBar from "./components/intake-review/CaseAdvancementStatusBar";
 import ClientTimeLog, { useClientTimeLog } from "./components/intake-review/ClientTimeLog";
 import UpdateIntakeInfoModal from "./components/intake-review/UpdateIntakeInfoModal";
+// Simplified attorney portal — read-only Completed Reviews tab (firm-wide
+// history of decided attorney_intake_reviews). Only rendered for the
+// pure-attorney role (isAtty && !isSuperAdmin).
+import AttorneyCompletedReviews from "./legal-portal/AttorneyCompletedReviews";
+// D1 — unified department shell. Intake portal adopts the shared shell
+// (functional-readme §1); inner 14-tab body stays per halfway refactor
+// directive. Sidebar/header chrome now lives in LegalPortalShell.
+import LegalPortalShell from "./legal-portal/LegalPortalShell";
+import type { RailEntry, RailGateContext } from "./legal-portal/railEntries";
+import { scopeFilterForDepartment } from "./lib/departmentScope";
+import type { LucideIcon } from "lucide-react";
 import StaffSettingsPanel, { type StaffSettingsViewerRole } from "./components/staff-settings/StaffSettingsPanel";
 import DepartmentSettingsPanel, { type DepartmentSettingsViewerRole } from "./components/admin-settings/DepartmentSettingsPanel";
 import { setCurrentAttorneyName, clearCurrentAttorneyName, getCurrentAttorneyName } from "./lib/currentAttorney";
@@ -6943,6 +6954,15 @@ function LogContactModal({ lead, onClose, onSaved }: {
 
 // ─── Attorney Review Queue ────────────────────────────────────────────────────
 
+// Simplified attorney review queue. Two sections:
+//   1. Cases Needing Review (status='sent_for_attorney_review')
+//   2. Pending Case Presentations (status='attorney_accepted')
+//
+// D1 removed the prior "Welcome Calls Needed" section per Master Spec v2
+// §4 (welcome call is no longer a pre-signing gate — it's a post-
+// retention task scheduled via the §3 call list once D2 ships). The
+// "Fee Quoted — Follow Up" section and the colored summary tiles were
+// removed in the earlier attorney-strip work.
 function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
   leads: Lead[];
   acceptances: Acceptance[];
@@ -6950,8 +6970,6 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
 }) {
   const needsReview   = leads.filter(l => l.status === "sent_for_attorney_review");
   const readyPresent  = leads.filter(l => l.status === "attorney_accepted");
-  const feeQuoted     = leads.filter(l => l.status === "fee_quoted");
-  const welcomeCalls  = leads.filter(l => ["consultation_scheduled","new","contacted"].includes(l.status));
 
   function hasDecision(lead: Lead) {
     return acceptances.some(a => a.lead_id === lead.id);
@@ -7006,24 +7024,19 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
     );
   }
 
-  const total = needsReview.length + readyPresent.length + feeQuoted.length + welcomeCalls.length;
+  const total = needsReview.length + readyPresent.length;
 
   return (
     <div className="space-y-5">
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {[
-          { label: "Needs Review",      val: needsReview.length,  color: "text-amber-400",   bg: "bg-amber-500/10 border-amber-500/20",   icon: <Scale className="w-4 h-4" /> },
-          { label: "Ready to Present",  val: readyPresent.length, color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20", icon: <UserCheck className="w-4 h-4" /> },
-          { label: "Fee Quoted / FU",   val: feeQuoted.length,    color: "text-orange-400",  bg: "bg-orange-500/10 border-orange-500/20",  icon: <DollarSign className="w-4 h-4" /> },
-          { label: "Welcome Calls",     val: welcomeCalls.length, color: "text-sky-400",     bg: "bg-sky-500/10 border-sky-500/20",        icon: <PhoneCall className="w-4 h-4" /> },
-        ].map(s => (
-          <div key={s.label} className={`rounded-2xl border p-4 ${s.bg}`}>
-            <div className={`${s.color} opacity-70 mb-2`}>{s.icon}</div>
-            <p className="text-2xl font-black text-white">{s.val}</p>
-            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide mt-0.5">{s.label}</p>
-          </div>
-        ))}
+      {/* Caseload summary — single muted line replacing the prior colored
+          4-tile banner. Intentionally low-visual: this surface is for
+          reviewing cases, not for monitoring KPIs. Welcome-call count
+          dropped here per Master Spec v2 §4 — welcome calls live on
+          the §3 call list (D2). */}
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+        <span>{needsReview.length} needing review</span>
+        <span className="text-slate-700">·</span>
+        <span>{readyPresent.length} pending presentation</span>
       </div>
 
       {total === 0 && (
@@ -7033,17 +7046,11 @@ function AttorneyReviewQueue({ leads, acceptances, onSelect }: {
         </div>
       )}
 
-      <Section title="Pending Your Review" desc="Intake complete — awaiting attorney case review and decision"
+      <Section title="Cases Needing Review" desc="Intake complete — awaiting attorney case review and decision"
         leads={needsReview} accent="bg-amber-500/15 text-amber-400" icon={<Scale className="w-3.5 h-3.5 text-amber-400" />} />
 
-      <Section title="Ready to Present to Client" desc="Case accepted — quote fees and present options to client"
+      <Section title="Pending Case Presentations" desc="Case accepted — present options to client (welcome call may be needed first)"
         leads={readyPresent} accent="bg-emerald-500/15 text-emerald-400" icon={<UserCheck className="w-3.5 h-3.5 text-emerald-400" />} />
-
-      <Section title="Fee Quoted — Follow Up" desc="Fee presented — follow up with client on decision"
-        leads={feeQuoted} accent="bg-orange-500/15 text-orange-400" icon={<DollarSign className="w-3.5 h-3.5 text-orange-400" />} />
-
-      <Section title="Welcome Calls" desc="New leads and scheduled consultations awaiting attorney welcome call"
-        leads={welcomeCalls} accent="bg-sky-500/15 text-sky-400" icon={<PhoneCall className="w-3.5 h-3.5 text-sky-400" />} />
     </div>
   );
 }
@@ -8748,6 +8755,11 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
 
   const [leads, setLeads]             = useState<Lead[]>([]);
   const [acceptances, setAcceptances] = useState<Acceptance[]>([]);
+  // attorney_intake_reviews — used by the simplified attorney portal's
+  // Completed Reviews tab (read-only firm-wide history). The fuller
+  // portal uses per-lead lookups elsewhere; this list is the at-mount
+  // snapshot for the history surface.
+  const [attyReviews, setAttyReviews] = useState<IntakeReview[]>([]);
   const [calEvents, setCalEvents]     = useState<CalEvent[]>([]);
   const [availability, setAvailability] = useState<StaffAvailability[]>([]);
   const [timeOff, setTimeOff]         = useState<TimeOff[]>([]);
@@ -8778,10 +8790,25 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // ConsultIntakeModal). On submit the wrapper advances the lead and bounces back.
   const [guidedIntakeLead, setGuidedIntakeLead] = useState<Lead | null>(null);
 
-  // Default tab by role: attorneys land on attorney review queue (unchanged);
-  // legal admins + super admins land on the new dashboard. Pure attorneys
-  // never see the dashboard tab — gated below in TABS.
-  const defaultTab = isAtty && !isSuperAdmin ? "followup" : "dashboard";
+  // Attorney review mode is the simplified review-only experience (Review
+  // Queue + Completed Reviews). Every attorney role lands here by default,
+  // including attorney_super_admin — that's how most working attorneys at
+  // this firm are configured. Toggling it off (header button below) opens
+  // the fuller admin portal for users who also hold admin permissions.
+  // Pure non-attorney roles (legal_admin, super_admin, intake, etc.)
+  // default to admin mode — the toggle isn't shown to them (attorney
+  // review queue isn't theirs to enter).
+  const [attorneyReviewMode, setAttorneyReviewMode] = useState<boolean>(isAtty);
+  // The user can flip back to admin mode in two cases: (1) they hold
+  // admin permissions (canManageLeads || isSuperAdmin), (2) they are an
+  // attorney_super_admin (covered by both). This drives whether the
+  // toggle button renders in the header.
+  const canEnterAdminMode = canManageLeads || isSuperAdmin;
+
+  // Default tab routing follows the mode. Attorneys in review mode land
+  // on the Review Queue; everyone else (and any attorney who toggled
+  // into admin mode) lands on the Dashboard.
+  const defaultTab = attorneyReviewMode ? "followup" : "dashboard";
   // "availability" + "timeoff" were consolidated into "my_schedule"; the
   // union keeps the historical values as safe fallbacks for any external
   // caller passing a stale tab id.
@@ -8789,7 +8816,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   // kept in the union as a fallback target — its nav entry was hidden and
   // the panel moved INSIDE MyScheduleTab, but the standalone render branch
   // still works if anything routes to it programmatically.
-  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "messages" | "staff_tasks" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients" | "staff_settings" | "department_settings">(defaultTab);
+  const [activeTab, setActiveTab]     = useState<"dashboard" | "leads" | "followup" | "calendar" | "messages" | "staff_tasks" | "my_schedule" | "availability" | "timeoff" | "sick_admin" | "manual_clients" | "staff_settings" | "department_settings" | "attorney_completed">(defaultTab);
   // Leads tab now contains both the lead table view and the Follow-Up
   // pipeline (FollowUpQueue) as a sub-section. The standalone Follow-Up
   // tab was removed for legal_admin/super_admin; attorneys still see it
@@ -8819,19 +8846,28 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [ls, acs, evts, avail, toff, staff] = await Promise.all([
-      sbGet<Lead>("intake_leads?order=created_at.desc&limit=200"),
+    const [ls, acs, evts, avail, toff, staff, atr] = await Promise.all([
+      // D1 — Intake department scope (functional-readme §2): potential
+      // clients only. Excludes retained (Legal scope) + closed states.
+      // Real wall = RLS on intake_leads (Canelo).
+      sbGet<Lead>(`intake_leads?${scopeFilterForDepartment("intake")}&order=created_at.desc&limit=200`),
       sbGet<Acceptance>("attorney_case_acceptances?order=created_at.desc&limit=200"),
       sbGet<CalEvent>("calendar_events?department=eq.intake&order=start_time.asc&limit=300"),
       sbGet<StaffAvailability>("staff_availability?department=eq.intake&order=day_of_week.asc"),
       sbGet<TimeOff>("intake_staff_time_off?order=date.asc&limit=100"),
       sbGet<{ id: string; name: string }>("staff_members?is_active=eq.true&select=id,name&order=name.asc"),
+      // attorney_intake_reviews — broad load so the simplified attorney
+      // portal's Completed Reviews tab can render its firm-wide history.
+      // Filtered client-side to decision IN (accepted, declined) inside
+      // buildAttorneyCompletedReviews().
+      sbGet<IntakeReview>("attorney_intake_reviews?order=decided_at.desc.nullslast&limit=300"),
     ]);
     setLeads(ls);
     setAcceptances(acs);
     setCalEvents(evts);
     setAvailability(avail);
     setTimeOff(toff);
+    setAttyReviews(atr);
     setStaffMembers(staff);
     setLoading(false);
   }, []);
@@ -9106,36 +9142,57 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
   });
   const followUpBadge = priorityQueue.length + botQueueLeads.length || null;
 
-  // Tabs visible per role:
-  // legal_admin: Leads, Follow-Up, Calendar, Availability, Time Off
-  // attorney: Follow-Up (review queue), Calendar
-  // attorney_super_admin / super_admin: all tabs
+  // Attorney review mode collapses the portal to two tabs — Review Queue +
+  // Completed Reviews — for ANY attorney role (attorney or
+  // attorney_super_admin). Other admin roles (legal_admin, pure
+  // super_admin without attorney) skip this branch. attorney_super_admin
+  // toggles back to admin mode via the header button to reach Leads /
+  // Calendar / Messages / Settings on demand.
+  //
+  // Tabs visible per mode:
+  // attorneyReviewMode === true:  Review Queue + Completed Reviews ONLY
+  // attorneyReviewMode === false: Dashboard, Leads, Calendar, Messages,
+  //                               My Tasks, My Schedule, Settings (per
+  //                               existing canManageLeads / isSuperAdmin
+  //                               sub-gates)
   const TABS = [
-    // Dashboard — legal_admin / super_admin only. Pure attorneys never see this tab.
-    ...( canManageLeads ? [{ id: "dashboard" as const, label: "Dashboard", icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }] : []),
-    ...( (canManageLeads || isSuperAdmin) && showLeadsTab ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }] : []),
+    // Dashboard — legal_admin / super_admin only, and only in admin mode.
+    ...( canManageLeads && !attorneyReviewMode
+      ? [{ id: "dashboard" as const, label: "Dashboard", icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }]
+      : []),
+    ...( (canManageLeads || isSuperAdmin) && showLeadsTab && !attorneyReviewMode
+      ? [{ id: "leads" as const, label: "Leads", icon: <Users className="w-3.5 h-3.5" />, badge: newLeads.length > 0 ? newLeads.length : null }]
+      : []),
     // V1 — Manual Clients tab HIDDEN from the inner nav (being replaced later).
     //       The render branch + state are intentionally kept intact so flipping
     //       the gate below back to true restores the tab. Do not delete.
     ...(false
       ? [{ id: "manual_clients" as const, label: "Manual Clients", icon: <UserCheck className="w-3.5 h-3.5" />, badge: manualClients.length > 0 ? manualClients.length : null }]
       : []),
-    // Follow-Up tab consolidated into the Leads tab for legal_admin /
-    // super_admin (it lives as a "Follow-Up" sub-nav inside Leads). Attorneys
-    // still see "Review Queue" here because that surface renders the
-    // AttorneyReviewQueue component — different from FollowUpQueue.
+    // Review Queue — surfaces the AttorneyReviewQueue component when an
+    // attorney is in review mode. In admin mode it shows the FollowUpQueue
+    // (the legal_admin/super_admin pipeline view) — same tab id, different
+    // body in the render branch below.
     ...(isAtty
       ? [{ id: "followup" as const, label: "Review Queue", icon: <BellRing className="w-3.5 h-3.5" />, badge: (reviewQueue.length + feeQuotedLeads.length) || null }]
       : []),
-    { id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null },
+    // Completed Reviews — review mode only. Read-only firm-wide history
+    // of decided attorney_intake_reviews.
+    ...(attorneyReviewMode
+      ? [{ id: "attorney_completed" as const, label: "Completed Reviews", icon: <CheckCircle2 className="w-3.5 h-3.5" />, badge: null }]
+      : []),
+    ...(!attorneyReviewMode
+      ? [{ id: "calendar" as const,     label: "Calendar",     icon: <Calendar className="w-3.5 h-3.5" />,  badge: todayConsult.length > 0 ? todayConsult.length : null }]
+      : []),
     // Messages — opens the same ConsolidatedMessagingWidget the dashboard
-    // mounts, full-width here so staff can work the inbox without leaving
-    // the portal.
-    { id: "messages" as const,     label: "Messages",     icon: <MessageCircle className="w-3.5 h-3.5" />, badge: null },
-    // My Tasks — staff-member task page (resolved + outstanding tasks for
-    // the viewer). Also reachable via a link in the dashboard's AllTasks
-    // widget header.
-    { id: "staff_tasks" as const,  label: "My Tasks",     icon: <ListChecks className="w-3.5 h-3.5" />, badge: null },
+    // mounts, full-width here. Hidden in attorney review mode.
+    ...(!attorneyReviewMode
+      ? [{ id: "messages" as const,     label: "Messages",     icon: <MessageCircle className="w-3.5 h-3.5" />, badge: null }]
+      : []),
+    // My Tasks — staff-member task page. Hidden in attorney review mode.
+    ...(!attorneyReviewMode
+      ? [{ id: "staff_tasks" as const,  label: "My Tasks",     icon: <ListChecks className="w-3.5 h-3.5" />, badge: null }]
+      : []),
     // My Schedule consolidates the prior "Availability" + "Time Off" tabs.
     // The Out-of-Office surface (SuperAdminSickPanel) previously had its own
     // nav entry; it now lives INSIDE this tab (super-admin gated).
@@ -9166,106 +9223,125 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
     // as a defensive fallback.
   ];
 
+  // ── D1 — TABS → Sidebar entries adapter ──────────────────────────────
+  //
+  // Convert the TABS array into RailEntry shape so the unified Sidebar
+  // (220px labeled) inside LegalPortalShell renders Intake's nav.
+  // Extracts the LucideIcon component from each TAB's instantiated JSX
+  // icon (t.icon.type). The shared sidebar reads RailEntry.icon as a
+  // component (renders <Icon size={...} />), not as JSX.
+  const sidebarEntries: RailEntry[] = TABS.map(t => {
+    const IconComp = (t.icon as React.ReactElement)?.type as LucideIcon;
+    return {
+      key: t.id,
+      label: t.label,
+      icon: IconComp,
+      badge: t.badge ?? null,
+    };
+  });
+
+  // Rail gate context — every entry's gate is already pre-filtered inside
+  // the TABS array construction (the `...(canManageLeads ? [...] : [])`
+  // spreads). The shared Sidebar's filter is a no-op on these entries.
+  // We still pass a complete context object so the Sidebar type-checks.
+  const railCtx: RailGateContext = {
+    sessionUserType: ROLE_CONFIG[role].label,
+    sessionRole: role,
+    canManageLeads,
+    canManageStaff,
+    isSuperAdmin,
+    canCreateClient,
+  };
+
+  // Header right-action slot — Intake's New Lead button, Admin toggle,
+  // and Refresh. Sign-out is handled by the shell's session.onSignOut
+  // (no longer needs its own button here).
+  const headerActions = (
+    <>
+      {canManageLeads && activeTab === "leads" && (
+        <button
+          onClick={() => setNewLeadWindow(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#16233A', color: '#FFFFFF', border: 'none', borderRadius: 6, padding: '8px 14px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
+        </button>
+      )}
+      {isAtty && canEnterAdminMode && (
+        <button
+          onClick={() => {
+            const next = !attorneyReviewMode;
+            setAttorneyReviewMode(next);
+            setActiveTab(next ? "followup" : "dashboard");
+          }}
+          title={attorneyReviewMode
+            ? "Switch to admin tools (Leads, Calendar, Messages, Settings)"
+            : "Switch back to the attorney review queue"}
+          style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.04)', color: '#FAFAF7', border: '1px solid #1e293b', borderRadius: 6, padding: '8px 12px', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+        >
+          {attorneyReviewMode ? (
+            <>
+              <Shield style={{ width: 14, height: 14, strokeWidth: 1.5 }} />
+              Admin tools
+              <ArrowRight style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+            </>
+          ) : (
+            <>
+              <ArrowLeft style={{ width: 12, height: 12, strokeWidth: 1.5 }} />
+              Back to review queue
+            </>
+          )}
+        </button>
+      )}
+      <button
+        onClick={load}
+        title="Refresh"
+        style={{ background: 'transparent', border: '1px solid #1e293b', borderRadius: 6, padding: 6, cursor: 'pointer' }}
+      >
+        <RefreshCw style={{ width: 14, height: 14, color: '#94a3b8', strokeWidth: 1.5 }} />
+      </button>
+    </>
+  );
+
   return (
-    <div className="min-h-screen text-white" style={{ background: '#0F0F0E' }}>
-      {/* Top bar — 56px, 1px bottom border, no shadow */}
-      <div className="sticky top-0 z-30 px-6" style={{ height: 56, background: '#0F0F0E', borderBottom: '1px solid #2A2A28', display: 'flex', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
-          {/* Issue 3: bare icon, no container */}
-          <Briefcase style={{ width: 20, height: 20, color: '#FAFAF7', strokeWidth: 1.5, flexShrink: 0 }} />
-          <div>
-            <span style={{ fontFamily: "'Fraunces', Georgia, serif", fontWeight: 500, fontSize: 18, letterSpacing: '-0.02em', color: '#FAFAF7' }}>
-              Intake Portal
-            </span>
-          </div>
-          <div className="ml-auto flex items-center gap-3 flex-wrap justify-end">
-            {/* Removed from this top bar (now lives elsewhere or has been retired
-                for this surface): emergency + pending-review chips, the user
-                identity span, and IAmSickButton. The greeting block inside the
-                dashboard already personalizes the surface; the chips were
-                duplicating the badges already shown on the side-nav tabs. */}
-            {canManageLeads && activeTab === "leads" && (
-              <button
-                onClick={() => setNewLeadWindow(true)}
-                style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#111111', color: '#FAFAF7', border: 'none', borderRadius: 4, padding: '8px 14px', fontSize: 13, fontWeight: 500, cursor: 'pointer', transition: 'background 150ms ease-out' }}
-                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = '#1E3A2F'; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = '#111111'; }}
-              >
-                <Plus style={{ width: 14, height: 14, strokeWidth: 1.5 }} /> New Client Lead
-              </button>
-            )}
-            <button onClick={load} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <RefreshCw style={{ width: 14, height: 14, color: '#6B6B66', strokeWidth: 1.5 }} />
-            </button>
-            <button onClick={onLogout} title="Sign out" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 4 }}>
-              <X style={{ width: 14, height: 14, color: '#6B6B66', strokeWidth: 1.5 }} />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Body: sidebar + content */}
-      <div style={{ display: 'flex', minHeight: 'calc(100vh - 56px)' }}>
-
-        {/* Issue 5: Left sidebar nav, 220px, text-only, no icons */}
-        <aside className="hidden lg:flex" style={{ width: 220, flexShrink: 0, borderRight: '1px solid #2A2A28', padding: '24px 0', flexDirection: 'column', gap: 2 }}>
-          {/* Staff identity block in sidebar */}
-          <div style={{ padding: '0 20px 20px', borderBottom: '1px solid #2A2A28', marginBottom: 12 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ width: 32, height: 32, background: '#2A2A28', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <span style={{ fontFamily: "'Inter', system-ui, sans-serif", fontSize: 12, fontWeight: 500, color: '#FAFAF7' }}>
-                  {session.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
-                </span>
-              </div>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 500, color: '#FAFAF7', lineHeight: 1.3 }}>{session.name}</p>
-                <p style={{ fontSize: 11, color: '#6B6B66', marginTop: 1 }}>{ROLE_CONFIG[role].label}</p>
-              </div>
-            </div>
-          </div>
-
-          {TABS.map(t => {
-            const isActive = activeTab === t.id;
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '9px 20px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderLeft: isActive ? '2px solid #1E3A2F' : '2px solid transparent',
-                  cursor: 'pointer',
-                  transition: 'border-color 150ms ease-out',
-                  textAlign: 'left',
-                }}
-              >
-                <span style={{ fontSize: 14, fontWeight: isActive ? 500 : 400, color: isActive ? '#FAFAF7' : '#6B6B66', fontFamily: "'Inter', system-ui, sans-serif", transition: 'color 150ms ease-out' }}>
-                  {t.label}
-                </span>
-                {t.badge != null && (
-                  <span style={{ fontFamily: "'JetBrains Mono', 'Courier New', monospace", fontSize: 11, color: isActive ? '#FAFAF7' : '#6B6B66', marginLeft: 8 }}>
-                    {t.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </aside>
-
-        {/* Main content */}
+    <>
+      <LegalPortalShell
+        // Intake portal — no role tabs (Paralegal/Attorney/Client is a
+        // Legal-department concept; Intake uses tab-based navigation
+        // exclusively).
+        showRoleTabs={false}
+        activeStage={null}
+        railEntries={sidebarEntries}
+        railCtx={railCtx}
+        railActiveKey={activeTab}
+        onRailSelect={(entry) => setActiveTab(entry.key as typeof activeTab)}
+        session={{
+          name: session.name,
+          userType: ROLE_CONFIG[role].label,
+          onSignOut: onLogout,
+        }}
+        departmentLabel="Intake Portal"
+        brandSubtitle="Intake"
+        headerActions={headerActions}
+        // Intake portal body is hardcoded dark (#090e1a / #0d1221 cards)
+        // pending a full restyle. Render the shell chrome dark so the
+        // header + sidebar match the body instead of creating a
+        // white-over-dark mismatch. Legal Department uses the default
+        // light theme.
+        theme="dark"
+      >
+        {/* Main content — preserved from the pre-shell chrome. Halfway
+            refactor per D1 directive #4: outer wrap adopts the shell now,
+            inner 14-tab body stays for incremental refactor. */}
         <div className="flex-1 min-w-0 py-6 px-4 lg:px-8">
           <div className="space-y-5">
 
         {/* Prompt 88 — stat cards row. Hidden on the dashboard tab
             (replaced there by the TopBubbles inside IntakeDashboard).
-            "Fee Quoted / Follow-Up" was removed; "Total Leads Received
-            Today" + "Retained Today" replace the lifetime totals with
-            today-scoped real counts. */}
-        {activeTab !== "dashboard" && (
+            ALSO hidden in attorney review mode — these are intake stats
+            (Leads Received / Need Scheduling / Today Appointments), not
+            attorney review tasks. The attorney's caseload counts live
+            inside AttorneyReviewQueue's muted header line. */}
+        {activeTab !== "dashboard" && !attorneyReviewMode && (
           <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
             {[
               // Real — created_at filtered to today (firm tz).
@@ -9298,9 +9374,10 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
 
         {/* Prompt 88 — leads-by-month bar graph. Uses the same `leads`
             array the stat cards do. Annual = 12 months of selected year;
-            Monthly = days of selected month. Honest empty state if no
-            leads in the period; never fabricated. */}
-        {activeTab !== "dashboard" && (
+            Monthly = days of selected month. Hidden on dashboard tab
+            (replaced by IntakeDashboard) AND in attorney review mode
+            (this is intake telemetry, not review work). */}
+        {activeTab !== "dashboard" && !attorneyReviewMode && (
           <LeadsByMonthChart leads={leads} />
         )}
 
@@ -9575,9 +9652,24 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           </>
         )}
 
-        {/* ── FOLLOW-UP TAB (attorneys only — Review Queue) ── */}
+        {/* ── COMPLETED REVIEWS TAB (attorney review mode — read-only history) ── */}
+        {activeTab === "attorney_completed" && attorneyReviewMode && (
+          <AttorneyCompletedReviews
+            // Local IntakeReview lacks `updated_at` in its TS surface (it
+            // does exist on the DB row); shared AttorneyIntakeReviewRow
+            // requires it. Cast widens structurally — buildAttorney-
+            // CompletedReviews never reads updated_at, only decided_at +
+            // created_at, so this is safe.
+            attorneyIntakeReviews={attyReviews as unknown as Parameters<typeof AttorneyCompletedReviews>[0]["attorneyIntakeReviews"]}
+            intakeLeads={leads}
+            acceptances={acceptances}
+          />
+        )}
+
+        {/* ── FOLLOW-UP TAB (Review Queue for attorneys in review mode;
+             FollowUpQueue otherwise — see attorneyReviewMode state) ── */}
         {activeTab === "followup" && (
-          isAtty && !isSuperAdmin
+          attorneyReviewMode
             ? <AttorneyReviewQueue leads={leads} acceptances={acceptances} onSelect={l => {
                 // Sent for attorney review + has linked submission → route to
                 // AttorneyIntakeDashboard (canonical attorney review surface).
@@ -9763,7 +9855,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           <div className="lg:hidden h-16" />
           </div>{/* end space-y-5 */}
         </div>{/* end main content */}
-      </div>{/* end body flex */}
+      </LegalPortalShell>
 
       {/* Mobile bottom nav — hidden on lg+, horizontal scroll, scrollbar hidden */}
       <nav
@@ -9837,7 +9929,7 @@ function IntakePortalInner({ session, onLogout, onOpenAttorneyReview, onOpenView
           "I'm here" dismiss reach the staffer on every screen now. The
           overlay itself is a createPortal anchor (see IntakePortalInner). */}
       {idleWarningOverlay}
-    </div>
+    </>
   );
 }
 

@@ -19383,24 +19383,30 @@ function DataAssistanceGate({ clientId, clientName, isJoint, onComplete, existin
 // section captures: SSN-history checkbox + previously-used SSNs, ITIN
 // checkbox + ITIN list, and per-debtor signatures. All numeric identifiers
 // render masked to last-4 via the local mask() helper.
+// Prompt — Form 121 converted to READ-ONLY preview. The client cannot edit
+// any field here; SSN/ITIN values shown below are pulled from the petition
+// (and any previously-saved history), and signatures are collected at
+// attorney signing — not in the questionnaire. Old write helpers
+// (updateDebtor / updateSig / Form121SignatureRow) are removed; the form is
+// a confirmation surface only.
 function SectionForm121({ d, u }) {
   const pd = d.petition || {};
-  const isJoint = pd.filingType === "Joint";
+  const isJoint = pd.filingType === "Joint" || pd.filingType === "joint";
   const form121 = d.form121 || {};
 
   const emptyDebtor = { ssn_none: false, ssns: [], itin_none: false, itins: [] };
   const debtor1 = form121.debtor1 || emptyDebtor;
   const debtor2 = form121.debtor2 || emptyDebtor;
-  const signatures = form121.signatures || { debtor1: { name: "", date: "" }, debtor2: { name: "", date: "" } };
-
-  const update = (patch) => u("form121", { ...form121, ...patch });
-  const updateDebtor = (which, patch) =>
-    update({ [which]: { ...(form121[which] || emptyDebtor), ...patch } });
-  const updateSig = (which, patch) =>
-    update({ signatures: { ...signatures, [which]: { ...(signatures[which] || {}), ...patch } } });
 
   const debtor1Name = [pd.firstName, pd.lastName].filter(Boolean).join(" ") || "Debtor 1";
-  const debtor2Name = isJoint ? ([pd.spouseFirstName, pd.spouseLastName].filter(Boolean).join(" ") || "Debtor 2") : null;
+  const debtor2Name = isJoint ? ([pd.spouseFirst, pd.spouseLast].filter(Boolean).join(" ") || "Debtor 2") : null;
+
+  // Affirmation — single checkbox at the bottom that the client has
+  // reviewed the preview. Persists to data.form121.{affirmed, affirmedAt}.
+  const affirmed = !!form121.affirmed;
+  const affirmedAt = form121.affirmedAt || "";
+  const toggleAffirm = (checked) =>
+    u("form121", { ...form121, affirmed: checked, affirmedAt: checked ? new Date().toISOString() : "" });
 
   return (
     <div className="space-y-6">
@@ -19412,144 +19418,105 @@ function SectionForm121({ d, u }) {
           </svg>
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Form 121 — Statement About Your Social Security Numbers</p>
-            <p>This form records your full SSN/ITIN for the court, the U.S. Trustee, your case trustee, and your creditors. It is <strong>filed separately and kept under seal</strong> — it does not appear in your public case file on PACER. After filing, the public record shows only the last 4 digits. Review your full number below to confirm it's correct before filing.</p>
+            <p>This form records your full SSN/ITIN for the court, the U.S. Trustee, your case trustee, and your creditors. It is <strong>filed separately and kept under seal</strong> — it does not appear in your public case file on PACER. After filing, the public record shows only the last 4 digits.</p>
+            <p className="mt-2"><strong>This is a preview — you cannot edit it.</strong> The numbers below are pulled from the Voluntary Petition you already completed. If anything is wrong, fix it on the petition or contact your attorney. Signatures are collected by your firm at signing — not here.</p>
           </div>
         </div>
       </div>
 
-      {/* Part 1 — Names + Part 2 — Identifiers, per debtor */}
-      <Form121DebtorBlock
+      {/* Part 1 — Names + Part 2 — Identifiers, per debtor (READ-ONLY) */}
+      <Form121DebtorPreview
         label="Debtor 1"
         name={debtor1Name}
         debtor={debtor1}
         petitionSsn={pd.ssn}
-        onUpdate={(patch) => updateDebtor("debtor1", patch)}
       />
       {isJoint && (
-        <Form121DebtorBlock
+        <Form121DebtorPreview
           label="Debtor 2"
           name={debtor2Name}
           debtor={debtor2}
           petitionSsn={pd.spouseSsn}
-          onUpdate={(patch) => updateDebtor("debtor2", patch)}
         />
       )}
 
-      {/* Part 3 — Signatures */}
+      {/* Part 3 — Signature placeholder */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
-        <h3 className="text-base font-semibold text-white mb-1">Part 3 — Signatures</h3>
-        <p className="text-xs text-slate-400 mb-4">Under penalty of perjury, the information above is true and correct.</p>
-        <Form121SignatureRow
-          label={`${debtor1Name} (Debtor 1)`}
-          sig={signatures.debtor1}
-          onUpdate={(patch) => updateSig("debtor1", patch)}
-        />
-        {isJoint && (
-          <Form121SignatureRow
-            label={`${debtor2Name} (Debtor 2)`}
-            sig={signatures.debtor2}
-            onUpdate={(patch) => updateSig("debtor2", patch)}
-          />
-        )}
+        <h3 className="text-base font-semibold text-white mb-2">Part 3 — Signatures</h3>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          Under penalty of perjury, the debtor(s) declare the information above is true and correct.
+          <strong className="text-slate-300"> Signatures are collected by your firm at signing — not in the questionnaire.</strong>
+        </p>
       </div>
+
+      {/* Affirmation */}
+      <ConfirmAffirmation
+        affirmed={affirmed}
+        affirmedAt={affirmedAt}
+        onToggle={toggleAffirm}
+        label="I have reviewed the Social Security / ITIN information above and confirm it is accurate. I understand my attorney will sign and file this form on my behalf."
+      />
     </div>
   );
 }
 
-function Form121DebtorBlock({ label, name, debtor, petitionSsn, onUpdate }) {
-  const ssns = Array.isArray(debtor.ssns) ? debtor.ssns : [];
-  const itins = Array.isArray(debtor.itins) ? debtor.itins : [];
-  const ssnDisabled = !!debtor.ssn_none;
-  const itinDisabled = !!debtor.itin_none;
-
-  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed";
+function Form121DebtorPreview({ label, name, debtor, petitionSsn }) {
+  const ssns = Array.isArray(debtor.ssns) ? debtor.ssns.filter(Boolean) : [];
+  const itins = Array.isArray(debtor.itins) ? debtor.itins.filter(Boolean) : [];
+  const ssnNone = !!debtor.ssn_none;
+  const itinNone = !!debtor.itin_none;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
       <h3 className="text-base font-semibold text-white">{label} — <span className="text-slate-300">{name}</span></h3>
 
-      {/* SSN section */}
+      {/* SSN section — read-only display */}
       <div className="mt-5 border-t border-slate-800 pt-5">
-        <div className="flex items-center justify-between mb-3 gap-4">
-          <p className="text-sm font-semibold text-slate-200">Social Security Numbers used</p>
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={ssnDisabled}
-              onChange={(e) => onUpdate({ ssn_none: e.target.checked })}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-            I do not have an SSN and have never used one
-          </label>
-        </div>
-        <div className={ssnDisabled ? "opacity-40 pointer-events-none" : ""}>
-          {petitionSsn ? (
-            <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 flex items-center justify-between">
-              <span className="text-sm text-slate-300">Current SSN (from petition): <span className="font-mono">{petitionSsn}</span></span>
-              <span className="text-[10px] text-slate-500 uppercase tracking-wider">Source: Voluntary Petition</span>
-            </div>
-          ) : !ssnDisabled && (
-            <p className="text-xs text-amber-400 mb-2">No SSN on file in the Voluntary Petition. Enter it there, or check the box if the debtor has never had an SSN.</p>
-          )}
-          {ssns.map((ssn, i) => (
-            <div key={i} className="flex items-center gap-2 mb-2">
-              <input type="text" value={ssn} disabled={ssnDisabled}
-                onChange={(e) => { const next = [...ssns]; next[i] = e.target.value; onUpdate({ ssns: next }); }}
-                placeholder="Previously used SSN (full number)" className={inputCls}/>
-              <button type="button" onClick={() => onUpdate({ ssns: ssns.filter((_, j) => j !== i) })}
-                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
-            </div>
-          ))}
-          <button type="button" disabled={ssnDisabled}
-            onClick={() => onUpdate({ ssns: [...ssns, ""] })}
-            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add previously-used SSN</button>
-        </div>
+        <p className="text-sm font-semibold text-slate-200 mb-3">Social Security Number(s)</p>
+        {ssnNone ? (
+          <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 text-sm italic text-slate-400">
+            No SSN — has never had one (marked on the petition).
+          </div>
+        ) : (
+          <>
+            {petitionSsn ? (
+              <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 flex items-center justify-between gap-3">
+                <span className="text-sm text-slate-300">Current SSN: <span className="font-mono text-white">{petitionSsn}</span></span>
+                <span className="text-[10px] text-slate-500 uppercase tracking-wider whitespace-nowrap">From Voluntary Petition</span>
+              </div>
+            ) : (
+              <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-2 text-sm italic text-slate-500">
+                Not on file — your attorney will complete before filing.
+              </div>
+            )}
+            {ssns.length > 0 && (
+              <>
+                <p className="text-xs text-slate-500 mt-3 mb-1.5 uppercase tracking-wider">Previously used SSN(s)</p>
+                {ssns.map((ssn, i) => (
+                  <div key={i} className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-1.5 text-sm text-slate-300 font-mono">{ssn}</div>
+                ))}
+              </>
+            )}
+          </>
+        )}
       </div>
 
-      {/* ITIN section */}
+      {/* ITIN section — read-only display */}
       <div className="mt-5 border-t border-slate-800 pt-5">
-        <div className="flex items-center justify-between mb-3 gap-4">
-          <p className="text-sm font-semibold text-slate-200">ITINs (Individual Taxpayer ID Numbers) used</p>
-          <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-            <input type="checkbox" checked={itinDisabled}
-              onChange={(e) => onUpdate({ itin_none: e.target.checked })}
-              className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-amber-500 focus:ring-amber-500 focus:ring-offset-slate-900"/>
-            I have never had an ITIN
-          </label>
-        </div>
-        <div className={itinDisabled ? "opacity-40 pointer-events-none" : ""}>
-          {itins.length === 0 && !itinDisabled && (
-            <p className="text-xs text-slate-500 mb-2">No ITINs entered. Click "Add ITIN" if the debtor has ever been issued one.</p>
-          )}
-          {itins.map((itin, i) => (
-            <div key={i} className="flex items-center gap-2 mb-2">
-              <input type="text" value={itin} disabled={itinDisabled}
-                onChange={(e) => { const next = [...itins]; next[i] = e.target.value; onUpdate({ itins: next }); }}
-                placeholder="ITIN (9 digits)" className={inputCls}/>
-              <button type="button" onClick={() => onUpdate({ itins: itins.filter((_, j) => j !== i) })}
-                className="text-xs text-red-400 hover:text-red-300 px-2 py-2">Remove</button>
-            </div>
-          ))}
-          <button type="button" disabled={itinDisabled}
-            onClick={() => onUpdate({ itins: [...itins, ""] })}
-            className="text-xs text-amber-400 hover:text-amber-300 font-semibold disabled:opacity-40">+ Add ITIN</button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Form121SignatureRow({ label, sig, onUpdate }) {
-  const inputCls = "w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-amber-500 focus:outline-none";
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3 pb-3 border-b border-slate-800 last:border-b-0 last:mb-0 last:pb-0">
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">{label} — Signed name</label>
-        <input type="text" value={sig?.name || ""}
-          onChange={(e) => onUpdate({ name: e.target.value })}
-          placeholder="Type your full legal name" className={inputCls}/>
-      </div>
-      <div>
-        <label className="text-xs text-slate-400 mb-1 block">Date</label>
-        <input type="date" value={sig?.date || ""}
-          onChange={(e) => onUpdate({ date: e.target.value })} className={inputCls}/>
+        <p className="text-sm font-semibold text-slate-200 mb-3">ITIN(s) (Individual Taxpayer ID Numbers)</p>
+        {itinNone ? (
+          <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 text-sm italic text-slate-400">
+            No ITIN — never issued (marked on the petition).
+          </div>
+        ) : itins.length === 0 ? (
+          <div className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 text-sm italic text-slate-500">
+            None on file.
+          </div>
+        ) : (
+          itins.map((itin, i) => (
+            <div key={i} className="bg-slate-800/40 border border-slate-700 rounded-lg px-3 py-2 mb-1.5 text-sm text-slate-300 font-mono">{itin}</div>
+          ))
+        )}
       </div>
     </div>
   );
@@ -19637,6 +19604,7 @@ function SectionAZLocalForms({ d, u, docStatus }) {
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Local Form 1007-2 — Declaration of Evidence of Payments (60 days)</p>
             <p>Filed with your Arizona bankruptcy petition. It declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares the actual declaration</strong> based on the pay stubs you upload. The firm redacts any Social Security numbers, names of minor children, dates of birth, and financial account numbers before filing.</p>
+            <p className="mt-2"><strong className="text-amber-100">The final filed copy will include your attached pay stubs.</strong> Every pay advice you upload for the 60 days before filing is attached to this form when it's filed with the court — that's what makes it a "declaration of evidence." Make sure the Document Upload section has all your pay stubs for that 60-day window.</p>
           </div>
         </div>
       </div>
@@ -20008,6 +19976,7 @@ function SectionWAE1007_1({ d, u, docStatus }) {
           <div className="text-sm text-slate-200 leading-relaxed">
             <p className="font-semibold text-amber-200 mb-1">Local Form 1007-1 — Declaration Regarding Payments</p>
             <p>Local Form 1007-1 declares whether you received pay advices or other evidence of payment from any employer in the 60 days before filing. <strong>Your firm prepares and files this declaration</strong>; attach your pay stubs in the Document Upload section and confirm below.</p>
+            <p className="mt-2"><strong className="text-amber-100">The final filed copy will include your attached pay stubs.</strong> Every pay advice you upload for the 60-day window is attached to this declaration when it's filed with the court — that's what makes it "evidence of payment." Make sure the Document Upload section has all your pay stubs for that period.</p>
           </div>
         </div>
       </div>

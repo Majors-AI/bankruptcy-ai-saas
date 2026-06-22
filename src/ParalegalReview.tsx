@@ -10,7 +10,9 @@ import {
 
 const SUPABASE_URL  = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const CLIENT_ID     = "client-demo";
+// Removed CLIENT_ID = "client-demo" const (formerly line 13) — see §12
+// matter-spine slice. The hardcoded default masked real "no case
+// selected" states; callers now pass leadId via props.
 
 // ─── REST helpers ─────────────────────────────────────────────────────────────
 
@@ -1628,17 +1630,38 @@ interface ParalegalReviewProps {
    */
   layout?: 'full' | 'embedded';
   /**
-   * The client whose review session this is. Defaults to 'client-demo' so
-   * existing standalone-route + demo behavior is preserved. Real callers
-   * should pass an actual clients.id (UUID) sourced from App.tsx's
-   * impersonateClient or a future session/selection context.
+   * Case spine id — the canonical `intake_leads.id` per §3 / §12 of
+   * docs/schema-changes-for-canelo.md. PREFERRED case key when set.
+   * Plumbed by LegalDepartmentPortal from `selectedLeadId` (sub-phase 1
+   * reads it from `?lead=<uuid>` in the URL; sub-phase 2 Queue replaces
+   * that with a case-row click).
+   */
+  leadId?: string;
+  /**
+   * Legacy client id. Used as the case key when `leadId` is absent.
+   * Once §12 S2 ships (`paralegal_reviews.lead_id` column) and all
+   * callers pass `leadId`, this prop deprecates.
    */
   clientId?: string;
 }
 
 export default function ParalegalReview(
-  { layout = 'full', clientId = 'client-demo' }: ParalegalReviewProps = {},
+  { layout = 'full', leadId, clientId }: ParalegalReviewProps = {},
 ) {
+  // Case-key resolution per docs/schema-changes-for-canelo.md §12.
+  // See the matching block in src/components/SigningReview.tsx for the
+  // full rationale — same pattern.
+  //
+  // INTERIM table-by-table column choice:
+  //   - intake_submissions HAS both `lead_id` and `client_id` — when
+  //     leadId is the source, query by `lead_id` (canonical column).
+  //   - paralegal_reviews has only `client_id` text today (S2 adds
+  //     `lead_id`). Use caseKey as the client_id value — seed scripts
+  //     populate the convention.
+  //   - client_documents has only `client_id` text today (S3 adds
+  //     `lead_id`). Same interim convention.
+  const caseKey = leadId ?? clientId ?? null;
+  const caseKeyIsLeadId = !!leadId;
   const fullChrome = layout !== 'embedded';
   const fontStyle = fullChrome ? { fontFamily: "'Trebuchet MS', sans-serif" } : undefined;
   const [review, setReview]                 = useState<ParalegalReview | null>(null);
@@ -1655,13 +1678,20 @@ export default function ParalegalReview(
   const [disclosureExpanded, setDisclosureExpanded] = useState(true);
   const [activeTab, setActiveTab]           = useState<ReviewTab>("petition_data");
 
-  async function startReview(paralegalName: string, clientId: string) {
+  async function startReview(paralegalName: string, effectiveCaseKey: string) {
+    if (!effectiveCaseKey) {
+      // Modal validation guards this, but be defensive.
+      return;
+    }
     setLoading(true);
     setShowStart(false);
 
+    // paralegal_reviews and client_documents use `client_id` text today;
+    // §12 S2/S3 add lead_id columns. Until then, caseKey is the
+    // client_id value by convention.
     const [existingReviews, clientDocs] = await Promise.all([
-      api.get(`paralegal_reviews?client_id=eq.${clientId}&status=eq.in_progress&order=created_at.desc&limit=1`),
-      api.get(`client_documents?client_id=eq.${clientId}&order=uploaded_at.desc`),
+      api.get(`paralegal_reviews?client_id=eq.${effectiveCaseKey}&status=eq.in_progress&order=created_at.desc&limit=1`),
+      api.get(`client_documents?client_id=eq.${effectiveCaseKey}&order=uploaded_at.desc`),
     ]);
 
     let r: ParalegalReview;
@@ -1669,7 +1699,7 @@ export default function ParalegalReview(
       r = existingReviews[0];
     } else {
       const created = await api.post("paralegal_reviews", {
-        client_id: clientId,
+        client_id: effectiveCaseKey,
         paralegal_name: paralegalName,
         status: "in_progress",
       });
@@ -1688,8 +1718,13 @@ export default function ParalegalReview(
       setLineConfs(lConfs ?? []);
     }
 
-    // Load intake submission for this client (use most recent submitted one)
-    const intakeData = await api.get(`intake_submissions?order=submitted_at.desc&limit=1`);
+    // Load THIS case's intake submission (not just any most-recent one).
+    // The pre-§12 code at this point queried `?order=submitted_at.desc&limit=1`
+    // with no filter — broken for multi-case use. Now scoped properly.
+    const filterColumn = caseKeyIsLeadId ? "lead_id" : "client_id";
+    const intakeData = await api.get(
+      `intake_submissions?${filterColumn}=eq.${effectiveCaseKey}&order=submitted_at.desc&limit=1`,
+    );
     if (intakeData?.[0]) setIntake(intakeData[0]);
 
     setDocs(clientDocs ?? []);
@@ -1893,7 +1928,7 @@ export default function ParalegalReview(
         className={fullChrome ? "min-h-screen bg-[#0a0e1a]" : ""}
         style={fontStyle}
       >
-        <StartReviewModal initialClientId={clientId} onStart={startReview} onClose={() => {}} />
+        <StartReviewModal initialClientId={caseKey ?? ''} onStart={startReview} onClose={() => {}} />
       </div>
     );
   }
